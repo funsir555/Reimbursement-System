@@ -1,0 +1,52 @@
+# Git忽略文件
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+
+# 编译输出
+target/
+build/
+dist/
+node_modules/
+*.class
+*.jar
+*.war
+*.ear
+
+# 日志
+*.log
+logs/
+
+# 本地配置
+application-local.yml
+application-dev.yml
+.env
+.env.local
+
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*~
+
+# 测试报告
+test-output/
+coverage/
+.nyc_output/
+
+# 依赖锁定（可选保留）
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
