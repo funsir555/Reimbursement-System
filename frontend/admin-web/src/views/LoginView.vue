@@ -267,6 +267,7 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, View, Hide, Iphone, Message, Check, Money, TrendCharts } from '@element-plus/icons-vue'
+import { authApi } from '@/api'
 
 const router = useRouter()
 
@@ -287,14 +288,57 @@ const codeForm = reactive({
 })
 
 const handleLogin = async () => {
+  // 表单验证
+  if (loginType.value === 'password') {
+    if (!loginForm.username.trim()) {
+      ElMessage.warning('请输入用户名')
+      return
+    }
+    if (!loginForm.password) {
+      ElMessage.warning('请输入密码')
+      return
+    }
+  } else {
+    if (!codeForm.phone.trim()) {
+      ElMessage.warning('请输入手机号')
+      return
+    }
+    if (!codeForm.code.trim()) {
+      ElMessage.warning('请输入验证码')
+      return
+    }
+  }
+
   loading.value = true
   
-  // 模拟登录
-  setTimeout(() => {
+  try {
+    if (loginType.value === 'password') {
+      // 调用真实登录接口
+      const res = await authApi.loginByPassword(loginForm.username, loginForm.password)
+      
+      if (res.code === 200) {
+        // 保存token
+        localStorage.setItem('token', res.data.token)
+        localStorage.setItem('user', JSON.stringify({
+          userId: res.data.userId,
+          username: res.data.username,
+          name: res.data.name
+        }))
+        
+        ElMessage.success('登录成功')
+        router.push('/dashboard')
+      } else {
+        ElMessage.error(res.message || '登录失败')
+      }
+    } else {
+      // 验证码登录（暂不支持）
+      ElMessage.info('验证码登录功能开发中')
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '登录失败，请检查用户名和密码')
+  } finally {
     loading.value = false
-    ElMessage.success('登录成功')
-    router.push('/dashboard')
-  }, 1000)
+  }
 }
 
 const sendCode = () => {

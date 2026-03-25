@@ -1,10 +1,10 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6" v-loading="loading">
     <!-- 页面标题 -->
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">首页</h1>
-        <p class="text-gray-500 mt-1">欢迎回来，张经理！今日待处理事项概览</p>
+        <p class="text-gray-500 mt-1">欢迎回来，{{ dashboard?.user.name || dashboard?.user.username || '同事' }}！今日待处理事项概览</p>
       </div>
       <div class="text-right">
         <p class="text-sm text-gray-500">{{ currentDate }}</p>
@@ -18,8 +18,8 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500 mb-1">待我审批</p>
-            <p class="text-3xl font-bold text-blue-600">12</p>
-            <p class="text-xs text-gray-400 mt-2">较昨日 +3</p>
+            <p class="text-3xl font-bold text-blue-600">{{ dashboard?.pendingApprovalCount || 0 }}</p>
+            <p class="text-xs text-gray-400 mt-2">较昨日 +{{ dashboard?.pendingApprovalDelta || 0 }}</p>
           </div>
           <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
             <el-icon :size="24" class="text-blue-600"><Timer /></el-icon>
@@ -32,8 +32,8 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500 mb-1">本月报销</p>
-            <p class="text-3xl font-bold text-green-600">¥8,520</p>
-            <p class="text-xs text-gray-400 mt-2">共 6 笔</p>
+            <p class="text-3xl font-bold text-green-600">¥{{ formatCurrency(dashboard?.monthlyExpenseAmount || 0) }}</p>
+            <p class="text-xs text-gray-400 mt-2">共 {{ dashboard?.monthlyExpenseCount || 0 }} 笔</p>
           </div>
           <div class="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
             <el-icon :size="24" class="text-green-600"><Money /></el-icon>
@@ -46,8 +46,8 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500 mb-1">发票数量</p>
-            <p class="text-3xl font-bold text-purple-600">156</p>
-            <p class="text-xs text-gray-400 mt-2">本月新增 23 张</p>
+            <p class="text-3xl font-bold text-purple-600">{{ dashboard?.invoiceCount || 0 }}</p>
+            <p class="text-xs text-gray-400 mt-2">本月新增 {{ dashboard?.monthlyInvoiceCount || 0 }} 张</p>
           </div>
           <div class="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
             <el-icon :size="24" class="text-purple-600"><Ticket /></el-icon>
@@ -60,8 +60,8 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500 mb-1">预算剩余</p>
-            <p class="text-3xl font-bold text-orange-600">¥45,200</p>
-            <p class="text-xs text-gray-400 mt-2">本月预算使用率 32%</p>
+            <p class="text-3xl font-bold text-orange-600">¥{{ formatCurrency(dashboard?.budgetRemaining || 0) }}</p>
+            <p class="text-xs text-gray-400 mt-2">本月预算使用率 {{ dashboard?.budgetUsageRate || 0 }}%</p>
           </div>
           <div class="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center">
             <el-icon :size="24" class="text-orange-600"><Wallet /></el-icon>
@@ -107,7 +107,7 @@
           </div>
         </template>
         
-        <el-table :data="recentExpenses" style="width: 100%">
+        <el-table :data="dashboard?.recentExpenses || []" style="width: 100%">
           <el-table-column prop="no" label="单号" width="140">
             <template #default="{ row }">
               <span class="text-blue-600 cursor-pointer hover:underline">{{ row.no }}</span>
@@ -148,13 +148,13 @@
         <template #header>
           <div class="flex items-center justify-between">
             <span class="font-semibold">待我审批</span>
-            <el-tag type="danger" size="small">12 待处理</el-tag>
+            <el-tag type="danger" size="small">{{ dashboard?.pendingApprovalCount || 0 }} 待处理</el-tag>
           </div>
         </template>
         
         <div class="space-y-4">
           <div 
-            v-for="item in pendingApprovals" 
+            v-for="item in dashboard?.pendingApprovals || []" 
             :key="item.id"
             class="flex items-center justify-between p-4 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors cursor-pointer"
           >
@@ -178,14 +178,14 @@
         <template #header>
           <div class="flex items-center justify-between">
             <span class="font-semibold">发票异常提醒</span>
-            <el-tag type="warning" size="small">3 待处理</el-tag>
+            <el-tag type="warning" size="small">{{ (dashboard?.invoiceAlerts || []).length }} 待处理</el-tag>
           </div>
         </template>
         
         
         <div class="space-y-4">
           <div 
-            v-for="item in invoiceAlerts" 
+            v-for="item in dashboard?.invoiceAlerts || []" 
             :key="item.id"
             class="flex items-start gap-4 p-4 rounded-lg bg-gray-50 hover:bg-orange-50 transition-colors"
           >
@@ -208,11 +208,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { dashboardApi, type DashboardData } from '@/api'
 import {
   Money, Ticket, Document, Plus, ArrowRight,
   Timer, Wallet, Warning
 } from '@element-plus/icons-vue'
+
+const loading = ref(false)
+const dashboard = ref<DashboardData | null>(null)
 
 const currentDate = computed(() => {
   const date = new Date()
@@ -251,60 +256,23 @@ const quickActions = [
   }
 ]
 
-const recentExpenses = ref([
-  { no: 'BX20250323001', type: '差旅费', amount: 2850, date: '2025-03-23', status: '审批中' },
-  { no: 'BX20250322002', type: '办公费', amount: 456, date: '2025-03-22', status: '已通过' },
-  { no: 'BX20250321001', type: '招待费', amount: 1280, date: '2025-03-21', status: '已通过' },
-  { no: 'BX20250320001', type: '交通费', amount: 68, date: '2025-03-20', status: '已驳回' },
-])
-
-const pendingApprovals = ref([
-  {
-    id: 1,
-    title: '上海出差费用报销',
-    submitter: '李明',
-    time: '10分钟前',
-    amount: 3245,
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=1'
-  },
-  {
-    id: 2,
-    title: '客户招待费用',
-    submitter: '王芳',
-    time: '30分钟前',
-    amount: 1580,
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=2'
-  },
-  {
-    id: 3,
-    title: '季度办公用品采购',
-    submitter: '张伟',
-    time: '1小时前',
-    amount: 8920,
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=3'
+onMounted(async () => {
+  loading.value = true
+  try {
+    const res = await dashboardApi.getOverview()
+    if (res.code === 200) {
+      dashboard.value = res.data
+      return
+    }
+    ElMessage.error(res.message || '加载首页数据失败')
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载首页数据失败')
+  } finally {
+    loading.value = false
   }
-])
+})
 
-const invoiceAlerts = ref([
-  {
-    id: 1,
-    title: '发票重复报销',
-    desc: '发票代码：011001900211，该发票已于 2025-03-15 报销',
-    time: '30分钟前'
-  },
-  {
-    id: 2,
-    title: '发票验真失败',
-    desc: '发票代码：031001900211，国家税务总局查验失败',
-    time: '1小时前'
-  },
-  {
-    id: 3,
-    title: '发票即将过期',
-    desc: '3张发票将在7天内超过报销期限',
-    time: '2小时前'
-  }
-])
+const formatCurrency = (amount: number) => amount.toLocaleString()
 
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {

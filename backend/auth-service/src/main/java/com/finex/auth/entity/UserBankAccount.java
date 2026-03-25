@@ -8,33 +8,27 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("sys_user")
-public class User {
+@TableName("sys_user_bank_account")
+public class UserBankAccount {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String username;
+    private Long userId;
 
-    private String password;
+    private String bankName;
 
-    private String name;
+    private String branchName;
 
-    private String phone;
+    private String accountName;
 
-    private String email;
+    private String accountNo;
 
-    private Long deptId;
+    private String accountType;
 
-    private String position;
-
-    private String laborRelationBelong;
+    private Integer defaultAccount;
 
     private Integer status;
-
-    private String wecomUserId;
-
-    private String dingtalkUserId;
 
     private LocalDateTime createdAt;
 

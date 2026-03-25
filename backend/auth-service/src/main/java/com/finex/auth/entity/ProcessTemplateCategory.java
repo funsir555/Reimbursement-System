@@ -8,33 +8,21 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("sys_user")
-public class User {
+@TableName("pm_template_category")
+public class ProcessTemplateCategory {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String username;
+    private String categoryCode;
 
-    private String password;
+    private String categoryName;
 
-    private String name;
+    private String categoryDescription;
 
-    private String phone;
-
-    private String email;
-
-    private Long deptId;
-
-    private String position;
-
-    private String laborRelationBelong;
+    private Integer sortOrder;
 
     private Integer status;
-
-    private String wecomUserId;
-
-    private String dingtalkUserId;
 
     private LocalDateTime createdAt;
 

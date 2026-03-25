@@ -113,10 +113,51 @@ html, body, #app {
 
 .el-menu {
   border-right: none !important;
+  background-color: transparent !important;
+}
+
+.el-menu-item,
+.el-sub-menu__title {
+  border-right: 3px solid transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .el-menu-item.is-active {
   background-color: #eff6ff !important;
   color: #2563eb !important;
   border-right: 3px solid #2563eb;
+}
+
+.el-menu-item.is-active .el-icon {
+  color: #2563eb !important;
+}
+
+.el-sub-menu.is-active > .el-sub-menu__title {
+  background-color: transparent !important;
+  color: #4b5563 !important;
+  border-right-color: transparent !important;
+}
+
+.el-sub-menu.is-active > .el-sub-menu__title .el-icon {
+  color: inherit !important;
+}
+
+.el-menu--inline {
+  margin-left: 18px !important;
+  padding-left: 10px !important;
+  border-left: 1px solid #d1d5db !important;
+}
+
+.menu-level-1 > .el-sub-menu__title,
+.menu-level-1.el-menu-item {
+  font-weight: 600;
+}
+
+.menu-level-2 > .el-sub-menu__title,
+.menu-level-2.el-menu-item {
+  color: #374151 !important;
+}
+
+.menu-level-3.el-menu-item {
+  color: #6b7280 !important;
 }

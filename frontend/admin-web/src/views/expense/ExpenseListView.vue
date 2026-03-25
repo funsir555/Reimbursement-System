@@ -34,14 +34,14 @@
           start-placeholder="开始日期"
           end-placeholder="结束日期"
         />
-        <el-button type="primary" :icon="Search">查询</el-button>
-        <el-button :icon="Refresh">重置</el-button>
+        <el-button type="primary" :icon="Search" @click="currentPage = 1">查询</el-button>
+        <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
       </div>
     </el-card>
 
     <!-- 数据表格 -->
     <el-card>
-      <el-table :data="expenseList" style="width: 100%" v-loading="loading">
+      <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading">
         <el-table-column prop="no" label="报销单号" width="150">
           <template #default="{ row }">
             <span class="text-blue-600 cursor-pointer hover:underline font-medium">
@@ -92,7 +92,7 @@
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 50, 100]"
-          :total="total"
+          :total="filteredExpenseList.length"
           layout="total, sizes, prev, pager, next"
         />
       </div>
@@ -101,24 +101,63 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { expenseApi, type ExpenseSummary } from '@/api'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 
 const searchQuery = ref('')
 const filterStatus = ref('')
-const dateRange = ref([])
+const dateRange = ref<string[]>([])
 const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(56)
+const expenseList = ref<ExpenseSummary[]>([])
 
-const expenseList = ref([
-  { no: 'BX20250323001', type: '差旅费', reason: '上海出差费用', amount: 2850, date: '2025-03-23', status: '审批中' },
-  { no: 'BX20250322002', type: '办公费', reason: '办公用品采购', amount: 456, date: '2025-03-22', status: '已通过' },
-  { no: 'BX20250321001', type: '招待费', reason: '客户接待费用', amount: 1280, date: '2025-03-21', status: '已通过' },
-  { no: 'BX20250320001', type: '交通费', reason: '市内交通', amount: 68, date: '2025-03-20', status: '已驳回' },
-  { no: 'BX20250319001', type: '差旅费', reason: '北京出差费用', amount: 5200, date: '2025-03-19', status: '已通过' },
-])
+onMounted(async () => {
+  loading.value = true
+  try {
+    const res = await expenseApi.list()
+    if (res.code === 200) {
+      expenseList.value = res.data
+      return
+    }
+    ElMessage.error(res.message || '加载报销列表失败')
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载报销列表失败')
+  } finally {
+    loading.value = false
+  }
+})
+
+const filteredExpenseList = computed(() => {
+  return expenseList.value.filter((item) => {
+    const matchedKeyword =
+      !searchQuery.value ||
+      item.no.includes(searchQuery.value) ||
+      item.reason.includes(searchQuery.value)
+
+    const matchedStatus =
+      !filterStatus.value ||
+      (filterStatus.value === 'pending' && item.status === '审批中') ||
+      (filterStatus.value === 'approved' && item.status === '已通过') ||
+      (filterStatus.value === 'rejected' && item.status === '已驳回') ||
+      (filterStatus.value === 'draft' && item.status === '草稿')
+
+    const [startDate, endDate] = dateRange.value
+    const matchedDate =
+      !startDate ||
+      !endDate ||
+      (item.date >= startDate && item.date <= endDate)
+
+    return matchedKeyword && matchedStatus && matchedDate
+  })
+})
+
+const pagedExpenseList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredExpenseList.value.slice(start, start + pageSize.value)
+})
 
 const getTypeTagType = (type: string) => {
   const map: Record<string, string> = {
@@ -138,6 +177,13 @@ const getStatusType = (status: string) => {
     '草稿': 'info'
   }
   return map[status] || 'info'
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  filterStatus.value = ''
+  dateRange.value = []
+  currentPage.value = 1
 }
 
 defineEmits(['new-expense'])

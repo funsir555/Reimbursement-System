@@ -60,14 +60,14 @@
           <el-option label="待验真" value="pending" />
           <el-option label="验真失败" value="failed" />
         </el-select>
-        <el-button type="primary" :icon="Search">查询</el-button>
-        <el-button :icon="Refresh">重置</el-button>
+        <el-button type="primary" :icon="Search" @click="currentPage = 1">查询</el-button>
+        <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
       </div>
     </el-card>
 
     <!-- 发票列表 -->
     <el-card>
-      <el-table :data="invoiceList" style="width: 100%">
+      <el-table :data="pagedInvoiceList" style="width: 100%" v-loading="loading">
         <el-table-column prop="code" label="发票代码" width="120" />
         <el-table-column prop="number" label="发票号码" width="120" />
         <el-table-column prop="type" label="发票类型" width="140">
@@ -102,7 +102,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="total"
+          :total="filteredInvoiceList.length"
           layout="total, prev, pager, next"
         />
       </div>
@@ -111,22 +111,62 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { invoiceApi, type InvoiceSummary } from '@/api'
 import { Upload, Search, Refresh } from '@element-plus/icons-vue'
 
 const searchQuery = ref('')
 const filterType = ref('')
 const filterStatus = ref('')
+const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(156)
+const invoiceList = ref<InvoiceSummary[]>([])
 
-const invoiceList = ref([
-  { code: '011001900211', number: '12345678', type: '增值税普通发票', seller: '北京科技有限公司', amount: 2850, date: '2025-03-20', status: '已验真' },
-  { code: '031001900211', number: '87654321', type: '增值税专用发票', seller: '上海贸易有限公司', amount: 5200, date: '2025-03-18', status: '已验真' },
-  { code: '011001900211', number: '11112222', type: '电子发票', seller: '广州服务公司', amount: 1280, date: '2025-03-15', status: '待验真' },
-  { code: '031001900211', number: '33334444', type: '增值税普通发票', seller: '深圳电子公司', amount: 680, date: '2025-03-10', status: '验真失败' },
-])
+onMounted(async () => {
+  loading.value = true
+  try {
+    const res = await invoiceApi.list()
+    if (res.code === 200) {
+      invoiceList.value = res.data
+      return
+    }
+    ElMessage.error(res.message || '加载发票列表失败')
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载发票列表失败')
+  } finally {
+    loading.value = false
+  }
+})
+
+const filteredInvoiceList = computed(() => {
+  return invoiceList.value.filter((item) => {
+    const matchedKeyword =
+      !searchQuery.value ||
+      item.code.includes(searchQuery.value) ||
+      item.number.includes(searchQuery.value)
+
+    const matchedType =
+      !filterType.value ||
+      (filterType.value === 'special' && item.type === '增值税专用发票') ||
+      (filterType.value === 'normal' && item.type === '增值税普通发票') ||
+      (filterType.value === 'electronic' && item.type === '电子发票')
+
+    const matchedStatus =
+      !filterStatus.value ||
+      (filterStatus.value === 'verified' && item.status === '已验真') ||
+      (filterStatus.value === 'pending' && item.status === '待验真') ||
+      (filterStatus.value === 'failed' && item.status === '验真失败')
+
+    return matchedKeyword && matchedType && matchedStatus
+  })
+})
+
+const pagedInvoiceList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredInvoiceList.value.slice(start, start + pageSize.value)
+})
 
 const getVerifyType = (status: string) => {
   const map: Record<string, string> = {
@@ -135,5 +175,12 @@ const getVerifyType = (status: string) => {
     '验真失败': 'danger'
   }
   return map[status] || 'info'
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  filterType.value = ''
+  filterStatus.value = ''
+  currentPage.value = 1
 }
 </script>
