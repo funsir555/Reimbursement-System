@@ -1,4 +1,7 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router'
+import { authApi } from '@/api'
+import { hasAnyPermission, readStoredUser, resolveFirstAccessiblePath } from '@/utils/permissions'
 import LoginView from '../views/LoginView.vue'
 import MainLayout from '../layouts/MainLayout.vue'
 
@@ -6,15 +9,24 @@ function placeholderRoute(
   path: string,
   name: string,
   title: string,
-  description: string
+  description: string,
+  permissionCode: string
 ): RouteRecordRaw {
   return {
     path,
     name,
     component: () => import('../views/PlaceholderView.vue'),
-    meta: { title, description }
+    meta: { title, description, permissionCode }
   }
 }
+
+const settingsPermissionCodes = [
+  'settings:menu',
+  'settings:organization:view',
+  'settings:employees:view',
+  'settings:roles:view',
+  'settings:companies:view'
+]
 
 const routes: RouteRecordRaw[] = [
   {
@@ -32,58 +44,63 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('../views/DashboardView.vue'),
-        meta: { title: '首页' }
+        meta: { title: 'Dashboard', permissionCode: 'dashboard:view' }
       },
       {
         path: 'profile',
         name: 'profile',
         component: () => import('../views/profile/PersonalCenterView.vue'),
-        meta: { title: '个人中心' }
+        meta: { title: 'Profile', permissionCode: 'profile:view' }
       },
-      placeholderRoute('expense/create', 'expense-create', '新建报销', '这里将承载报销单创建、附件上传与提交审批流程。'),
+      placeholderRoute('expense/create', 'expense-create', 'Create Expense', 'Create expense forms', 'expense:create:view'),
       {
         path: 'expense/list',
         name: 'expense-list',
         component: () => import('../views/expense/ExpenseListView.vue'),
-        meta: { title: '我的报销' }
+        meta: { title: 'Expense List', permissionCode: 'expense:list:view' }
       },
-      placeholderRoute('expense/approval', 'expense-approval', '待我审批', '这里将展示当前待你审批的报销单据与流转节点。'),
-      placeholderRoute('expense/payment/bank-link', 'expense-bank-link', '银企直连', '这里将接入支付指令、付款回单和银企直连能力。'),
-      placeholderRoute('expense/documents', 'expense-documents', '单据查询', '这里将集中查询报销单、审批单与相关业务单据。'),
-      placeholderRoute('expense/voucher-generation', 'expense-voucher-generation', '凭证生成', '这里将根据报销结果自动生成财务凭证。'),
+      placeholderRoute('expense/approval', 'expense-approval', 'Expense Approval', 'Pending approvals', 'expense:approval:view'),
+      placeholderRoute('expense/payment/bank-link', 'expense-bank-link', 'Bank Link', 'Bank payment integration', 'expense:payment:bank_link:view'),
+      placeholderRoute('expense/documents', 'expense-documents', 'Expense Documents', 'Document query center', 'expense:documents:view'),
+      placeholderRoute('expense/voucher-generation', 'expense-voucher-generation', 'Voucher Generation', 'Generate vouchers', 'expense:voucher_generation:view'),
       {
         path: 'expense/workbench/process-management',
         name: 'expense-workbench-process-management',
         component: () => import('../views/process/ProcessManagementView.vue'),
-        meta: { title: '流程管理' }
+        meta: { title: 'Process Management', permissionCode: 'expense:process_management:view' }
       },
       {
         path: 'expense/workbench/process-management/create/:templateType',
         name: 'expense-workbench-process-management-create',
         component: () => import('../views/process/ProcessTemplateCreateView.vue'),
-        meta: { title: '新建单据模板' }
+        meta: { title: 'Create Process Template', permissionCode: 'expense:process_management:view' }
       },
-      placeholderRoute('expense/workbench/budget-management', 'expense-workbench-budget-management', '预算管理', '这里将维护预算科目、额度和控制规则。'),
-      placeholderRoute('finance/general-ledger/new-voucher', 'finance-new-voucher', '新建凭证', '这里将支持财务人员录入与生成总账凭证。'),
-      placeholderRoute('finance/general-ledger/query-voucher', 'finance-query-voucher', '查询凭证', '这里将支持按期间、科目和状态查询凭证。'),
-      placeholderRoute('finance/general-ledger/review-voucher', 'finance-review-voucher', '审核凭证', '这里将支持凭证审核、反审核和状态跟踪。'),
-      placeholderRoute('finance/general-ledger/balance-sheet', 'finance-ledger-balance-sheet', '余额表', '这里将展示总账科目的余额表与期间数据。'),
-      placeholderRoute('finance/fixed-assets', 'finance-fixed-assets', '固定资产', '这里将管理固定资产卡片、折旧和处置。'),
-      placeholderRoute('finance/reports/balance-sheet', 'finance-reports-balance-sheet', '资产负债表', '这里将生成资产负债表。'),
-      placeholderRoute('finance/reports/income-statement', 'finance-reports-income-statement', '利润表', '这里将生成利润表。'),
-      placeholderRoute('finance/reports/cash-flow', 'finance-reports-cash-flow', '现金流量表', '这里将生成现金流量表。'),
-      placeholderRoute('finance/archives/customers', 'finance-archives-customers', '客户档案', '这里将维护客户基础资料与往来信息。'),
-      placeholderRoute('finance/archives/suppliers', 'finance-archives-suppliers', '供应商档案', '这里将维护供应商基础资料与结算信息。'),
-      placeholderRoute('finance/archives/employees', 'finance-archives-employees', '员工档案', '这里将维护员工基础资料与财务归属信息。'),
-      placeholderRoute('finance/archives/departments', 'finance-archives-departments', '部门档案', '这里将维护部门组织和财务归属关系。'),
+      placeholderRoute('expense/workbench/budget-management', 'expense-workbench-budget-management', 'Budget Management', 'Budget management', 'expense:budget_management:view'),
+      placeholderRoute('finance/general-ledger/new-voucher', 'finance-new-voucher', 'New Voucher', 'Create finance vouchers', 'finance:general_ledger:new_voucher:view'),
+      placeholderRoute('finance/general-ledger/query-voucher', 'finance-query-voucher', 'Query Voucher', 'Query vouchers', 'finance:general_ledger:query_voucher:view'),
+      placeholderRoute('finance/general-ledger/review-voucher', 'finance-review-voucher', 'Review Voucher', 'Review vouchers', 'finance:general_ledger:review_voucher:view'),
+      placeholderRoute('finance/general-ledger/balance-sheet', 'finance-ledger-balance-sheet', 'Ledger Balance Sheet', 'Ledger balance sheet', 'finance:general_ledger:balance_sheet:view'),
+      placeholderRoute('finance/fixed-assets', 'finance-fixed-assets', 'Fixed Assets', 'Fixed assets', 'finance:fixed_assets:view'),
+      placeholderRoute('finance/reports/balance-sheet', 'finance-reports-balance-sheet', 'Balance Sheet Report', 'Balance sheet report', 'finance:reports:balance_sheet:view'),
+      placeholderRoute('finance/reports/income-statement', 'finance-reports-income-statement', 'Income Statement', 'Income statement', 'finance:reports:income_statement:view'),
+      placeholderRoute('finance/reports/cash-flow', 'finance-reports-cash-flow', 'Cash Flow', 'Cash flow report', 'finance:reports:cash_flow:view'),
+      placeholderRoute('finance/archives/customers', 'finance-archives-customers', 'Customer Archive', 'Customer archive', 'finance:archives:customers:view'),
+      placeholderRoute('finance/archives/suppliers', 'finance-archives-suppliers', 'Supplier Archive', 'Supplier archive', 'finance:archives:suppliers:view'),
+      placeholderRoute('finance/archives/employees', 'finance-archives-employees', 'Employee Archive', 'Employee archive', 'finance:archives:employees:view'),
+      placeholderRoute('finance/archives/departments', 'finance-archives-departments', 'Department Archive', 'Department archive', 'finance:archives:departments:view'),
       {
         path: 'archives/invoices',
         name: 'archives-invoices',
         component: () => import('../views/invoice/InvoiceListView.vue'),
-        meta: { title: '发票管理' }
+        meta: { title: 'Invoice Archive', permissionCode: 'archives:invoices:view' }
       },
-      placeholderRoute('archives/account-books', 'archives-account-books', '账套管理', '这里将维护账套、期间和会计主体配置。'),
-      placeholderRoute('settings', 'settings', '系统设置', '这里将维护系统级参数、基础配置与运行选项。')
+      placeholderRoute('archives/account-books', 'archives-account-books', 'Account Books', 'Account books', 'archives:account_books:view'),
+      {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('../views/settings/SystemSettingsView.vue'),
+        meta: { title: 'System Settings', permissionCodes: settingsPermissionCodes }
+      }
     ]
   }
 ]
@@ -93,14 +110,55 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
-  if (!to.meta.public) {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      return next('/login')
-    }
+function routePermissionCodes(to: RouteLocationNormalized): string[] {
+  const permissionCode = typeof to.meta.permissionCode === 'string' ? [to.meta.permissionCode] : []
+  const permissionCodes = Array.isArray(to.meta.permissionCodes)
+    ? to.meta.permissionCodes.filter((item): item is string => typeof item === 'string')
+    : []
+  return [...permissionCode, ...permissionCodes]
+}
+
+async function ensureCurrentUser() {
+  const cachedUser = readStoredUser()
+  if (cachedUser?.permissionCodes?.length) {
+    return cachedUser
   }
-  next()
+
+  const res = await authApi.getCurrentUser()
+  localStorage.setItem('user', JSON.stringify(res.data))
+  return res.data
+}
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) {
+    return true
+  }
+
+  const token = localStorage.getItem('token')
+  if (!token) {
+    return '/login'
+  }
+
+  const requiredCodes = routePermissionCodes(to)
+  if (!requiredCodes.length) {
+    return true
+  }
+
+  try {
+    const currentUser = await ensureCurrentUser()
+    if (hasAnyPermission(requiredCodes, currentUser)) {
+      return true
+    }
+
+    const fallbackPath = resolveFirstAccessiblePath(currentUser)
+    if (fallbackPath !== to.fullPath) {
+      ElMessage.warning('当前账号没有访问该页面的权限')
+      return fallbackPath
+    }
+    return true
+  } catch {
+    return '/login'
+  }
 })
 
 export default router

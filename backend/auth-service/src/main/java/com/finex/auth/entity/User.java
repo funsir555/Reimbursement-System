@@ -24,6 +24,8 @@ public class User {
 
     private String email;
 
+    private String companyId;
+
     private Long deptId;
 
     private String position;
@@ -32,9 +34,17 @@ public class User {
 
     private Integer status;
 
+    private String sourceType;
+
+    private Integer syncManaged;
+
     private String wecomUserId;
 
     private String dingtalkUserId;
+
+    private String feishuUserId;
+
+    private LocalDateTime lastSyncAt;
 
     private LocalDateTime createdAt;
 

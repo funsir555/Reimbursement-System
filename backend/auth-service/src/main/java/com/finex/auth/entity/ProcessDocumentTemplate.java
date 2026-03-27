@@ -42,19 +42,9 @@ public class ProcessDocumentTemplate {
 
     private String paymentMode;
 
-    private Integer splitPayment;
-
-    private String travelForm;
-
     private String allocationForm;
 
     private String aiAuditMode;
-
-    private String relationRemark;
-
-    private String validationRemark;
-
-    private String installmentRemark;
 
     private String highlights;
 

@@ -19,4 +19,14 @@ public interface UserService extends IService<User> {
      * 根据用户名查询用户
      */
     User getByUsername(String username);
+
+    /**
+     * 当前用户角色编码
+     */
+    java.util.List<String> getRoleCodes(Long userId);
+
+    /**
+     * 当前用户权限编码
+     */
+    java.util.List<String> getPermissionCodes(Long userId);
 }

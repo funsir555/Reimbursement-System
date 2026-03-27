@@ -1,21 +1,27 @@
 package com.finex.auth.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.ApprovalSummaryVO;
 import com.finex.auth.dto.DashboardVO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.dto.InvoiceAlertVO;
 import com.finex.auth.dto.InvoiceSummaryVO;
 import com.finex.auth.dto.UserProfileVO;
+import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.entity.User;
+import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.service.MvpDataService;
 import com.finex.auth.service.UserService;
+import com.finex.auth.support.AsyncTaskSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +30,7 @@ public class MvpDataServiceImpl implements MvpDataService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final UserService userService;
+    private final AsyncTaskRecordMapper asyncTaskRecordMapper;
 
     @Override
     public UserProfileVO getCurrentUser(Long userId) {
@@ -36,6 +43,9 @@ public class MvpDataServiceImpl implements MvpDataService {
         profile.setEmail(user.getEmail());
         profile.setPosition(StrUtil.blankToDefault(user.getPosition(), "员工"));
         profile.setLaborRelationBelong(StrUtil.blankToDefault(user.getLaborRelationBelong(), "总部"));
+        profile.setCompanyId(user.getCompanyId());
+        profile.setRoles(userService.getRoleCodes(userId));
+        profile.setPermissionCodes(userService.getPermissionCodes(userId));
         return profile;
     }
 
@@ -70,36 +80,16 @@ public class MvpDataServiceImpl implements MvpDataService {
         LocalDate today = LocalDate.now();
 
         return List.of(
-                expense("BX" + today.format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "001",
-                        "差旅费",
-                        getDisplayName(user) + "华东出差费用",
-                        1800D + userFactor * 350D,
-                        today.minusDays(1),
-                        "审批中"),
-                expense("BX" + today.minusDays(2).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "002",
-                        "办公费",
-                        getDisplayName(user) + "办公用品采购",
-                        320D + userFactor * 68D,
-                        today.minusDays(2),
-                        "已通过"),
-                expense("BX" + today.minusDays(4).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "003",
-                        "招待费",
-                        getDisplayName(user) + "客户接待费用",
-                        960D + userFactor * 120D,
-                        today.minusDays(4),
-                        "已通过"),
-                expense("BX" + today.minusDays(6).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "004",
-                        "交通费",
-                        getDisplayName(user) + "市内交通",
-                        48D + userFactor * 12D,
-                        today.minusDays(6),
-                        "已驳回"),
-                expense("BX" + today.minusDays(9).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "005",
-                        "差旅费",
-                        getDisplayName(user) + "华北出差费用",
-                        3200D + userFactor * 420D,
-                        today.minusDays(9),
-                        "已通过")
+                expense("BX" + today.format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "001", "差旅费",
+                        getDisplayName(user) + "华东出差费用", 1800D + userFactor * 350D, today.minusDays(1), "审批中"),
+                expense("BX" + today.minusDays(2).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "002", "办公费",
+                        getDisplayName(user) + "办公用品采购", 320D + userFactor * 68D, today.minusDays(2), "已通过"),
+                expense("BX" + today.minusDays(4).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "003", "招待费",
+                        getDisplayName(user) + "客户接待费用", 960D + userFactor * 120D, today.minusDays(4), "已通过"),
+                expense("BX" + today.minusDays(6).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "004", "交通费",
+                        getDisplayName(user) + "市内交通", 48D + userFactor * 12D, today.minusDays(6), "已驳回"),
+                expense("BX" + today.minusDays(9).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "005", "差旅费",
+                        getDisplayName(user) + "华北出差费用", 3200D + userFactor * 420D, today.minusDays(9), "已通过")
         );
     }
 
@@ -109,28 +99,26 @@ public class MvpDataServiceImpl implements MvpDataService {
         int userFactor = Math.max(1, userId.intValue());
         LocalDate today = LocalDate.now();
 
-        return List.of(
-                invoice("011001900211", "12345678", "增值税普通发票",
-                        getDisplayName(user) + "科技有限公司",
-                        1600D + userFactor * 240D,
-                        today.minusDays(3),
-                        "已验真"),
-                invoice("031001900211", "87654321", "增值税专用发票",
-                        getDisplayName(user) + "贸易有限公司",
-                        3200D + userFactor * 360D,
-                        today.minusDays(5),
-                        "已验真"),
-                invoice("011001900212", "11112222", "电子发票",
-                        getDisplayName(user) + "服务公司",
-                        680D + userFactor * 100D,
-                        today.minusDays(7),
-                        "待验真"),
-                invoice("031001900213", "33334444", "增值税普通发票",
-                        getDisplayName(user) + "电子公司",
-                        420D + userFactor * 80D,
-                        today.minusDays(12),
-                        "验真失败")
+        List<InvoiceSummaryVO> invoices = List.of(
+                invoice("011001900211", "12345678", "增值税普通发票", getDisplayName(user) + "科技有限公司",
+                        1600D + userFactor * 240D, today.minusDays(3), "已验真", "已识别"),
+                invoice("031001900211", "87654321", "增值税专用发票", getDisplayName(user) + "贸易有限公司",
+                        3200D + userFactor * 360D, today.minusDays(5), "已验真", "已识别"),
+                invoice("011001900212", "11112222", "电子发票", getDisplayName(user) + "服务公司",
+                        680D + userFactor * 100D, today.minusDays(7), "待验真", "待识别"),
+                invoice("031001900213", "33334444", "增值税普通发票", getDisplayName(user) + "电子公司",
+                        420D + userFactor * 80D, today.minusDays(12), "验真失败", "识别失败")
         );
+
+        Map<String, AsyncTaskRecord> verifyTasks = latestTaskMap(userId, AsyncTaskSupport.TASK_TYPE_INVOICE_VERIFY);
+        Map<String, AsyncTaskRecord> ocrTasks = latestTaskMap(userId, AsyncTaskSupport.TASK_TYPE_INVOICE_OCR);
+
+        invoices.forEach(invoice -> {
+            String businessKey = AsyncTaskSupport.buildInvoiceBusinessKey(invoice.getCode(), invoice.getNumber());
+            applyVerifyStatus(invoice, verifyTasks.get(businessKey));
+            applyOcrStatus(invoice, ocrTasks.get(businessKey));
+        });
+        return invoices;
     }
 
     private List<ApprovalSummaryVO> buildPendingApprovals(User user) {
@@ -144,15 +132,9 @@ public class MvpDataServiceImpl implements MvpDataService {
 
     private List<InvoiceAlertVO> buildInvoiceAlerts(User user) {
         return List.of(
-                alert(1L, "发票重复报销",
-                        "用户 " + getDisplayName(user) + " 名下存在疑似重复报销发票，请尽快核对。",
-                        "30分钟前"),
-                alert(2L, "发票验真失败",
-                        "有 1 张发票调用税务验真失败，建议稍后重试。",
-                        "1小时前"),
-                alert(3L, "发票即将过期",
-                        "有 3 张发票将在 7 天内超出报销时限。",
-                        "2小时前")
+                alert(1L, "发票重复报销", "用户 " + getDisplayName(user) + " 名下存在疑似重复报销发票，请尽快核对。", "30分钟前"),
+                alert(2L, "发票验真失败", "本月 1 张发票调用税务验真失败，建议稍后重试。", "1小时前"),
+                alert(3L, "发票即将过期", "本月 3 张发票将在 7 天内超出报销时限。", "2小时前")
         );
     }
 
@@ -168,7 +150,7 @@ public class MvpDataServiceImpl implements MvpDataService {
     }
 
     private InvoiceSummaryVO invoice(String code, String number, String type, String seller,
-                                     Double amount, LocalDate date, String status) {
+                                     Double amount, LocalDate date, String status, String ocrStatus) {
         InvoiceSummaryVO summary = new InvoiceSummaryVO();
         summary.setCode(code);
         summary.setNumber(number);
@@ -177,7 +159,55 @@ public class MvpDataServiceImpl implements MvpDataService {
         summary.setAmount(amount);
         summary.setDate(date.format(DATE_FORMATTER));
         summary.setStatus(status);
+        summary.setOcrStatus(ocrStatus);
         return summary;
+    }
+
+    private Map<String, AsyncTaskRecord> latestTaskMap(Long userId, String taskType) {
+        List<AsyncTaskRecord> records = asyncTaskRecordMapper.selectList(
+                Wrappers.<AsyncTaskRecord>lambdaQuery()
+                        .eq(AsyncTaskRecord::getUserId, userId)
+                        .eq(AsyncTaskRecord::getTaskType, taskType)
+                        .orderByDesc(AsyncTaskRecord::getCreatedAt, AsyncTaskRecord::getId)
+        );
+
+        Map<String, AsyncTaskRecord> latestMap = new LinkedHashMap<>();
+        for (AsyncTaskRecord record : records) {
+            if (record.getBusinessKey() != null && !latestMap.containsKey(record.getBusinessKey())) {
+                latestMap.put(record.getBusinessKey(), record);
+            }
+        }
+        return latestMap;
+    }
+
+    private void applyVerifyStatus(InvoiceSummaryVO invoice, AsyncTaskRecord task) {
+        if (task == null) {
+            return;
+        }
+        if (AsyncTaskSupport.isActive(task.getStatus())) {
+            invoice.setStatus("验真中");
+            return;
+        }
+        if (AsyncTaskSupport.TASK_STATUS_SUCCESS.equalsIgnoreCase(task.getStatus())) {
+            invoice.setStatus("已验真");
+            return;
+        }
+        invoice.setStatus("验真失败");
+    }
+
+    private void applyOcrStatus(InvoiceSummaryVO invoice, AsyncTaskRecord task) {
+        if (task == null) {
+            return;
+        }
+        if (AsyncTaskSupport.isActive(task.getStatus())) {
+            invoice.setOcrStatus("识别中");
+            return;
+        }
+        if (AsyncTaskSupport.TASK_STATUS_SUCCESS.equalsIgnoreCase(task.getStatus())) {
+            invoice.setOcrStatus("已识别");
+            return;
+        }
+        invoice.setOcrStatus("识别失败");
     }
 
     private ApprovalSummaryVO approval(Long id, String title, String submitter, String time, Double amount, int avatarSeed) {

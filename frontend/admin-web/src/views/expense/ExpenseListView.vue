@@ -1,22 +1,25 @@
 <template>
   <div class="space-y-6">
-    <!-- 页面标题 -->
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">我的报销</h1>
-        <p class="text-gray-500 mt-1">管理您的所有报销单据</p>
+        <p class="mt-1 text-gray-500">管理您提交的报销单据</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="$emit('new-expense')">
+      <el-button
+        v-if="canAny(['expense:create:view', 'expense:create:create'])"
+        type="primary"
+        :icon="Plus"
+        @click="$emit('new-expense')"
+      >
         新建报销
       </el-button>
     </div>
 
-    <!-- 搜索筛选区 -->
     <el-card>
       <div class="flex flex-wrap gap-4">
         <el-input
           v-model="searchQuery"
-          placeholder="搜索单号/事由"
+          placeholder="搜索单号或事由"
           class="w-64"
           :prefix-icon="Search"
         />
@@ -39,17 +42,16 @@
       </div>
     </el-card>
 
-    <!-- 数据表格 -->
     <el-card>
       <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading">
         <el-table-column prop="no" label="报销单号" width="150">
           <template #default="{ row }">
-            <span class="text-blue-600 cursor-pointer hover:underline font-medium">
+            <span class="cursor-pointer font-medium text-blue-600 hover:underline">
               {{ row.no }}
             </span>
           </template>
         </el-table-column>
-        
+
         <el-table-column prop="type" label="报销类型" width="100">
           <template #default="{ row }">
             <el-tag size="small" :type="getTypeTagType(row.type)">
@@ -57,17 +59,17 @@
             </el-tag>
           </template>
         </el-table-column>
-        
+
         <el-table-column prop="reason" label="报销事由" show-overflow-tooltip />
-        
+
         <el-table-column prop="amount" label="金额" width="120">
           <template #default="{ row }">
             <span class="font-bold text-gray-800">¥{{ row.amount.toLocaleString() }}</span>
           </template>
         </el-table-column>
-        
+
         <el-table-column prop="date" label="提交日期" width="120" />
-        
+
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">
@@ -75,19 +77,18 @@
             </el-tag>
           </template>
         </el-table-column>
-        
-        <el-table-column label="操作" width="180" fixed="right">
+
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small">查看</el-button>
-            <el-button v-if="row.status === '草稿'" link type="primary" size="small">编辑</el-button>
-            <el-button v-if="row.status === '草稿'" link type="danger" size="small">删除</el-button>
-            <el-button v-if="row.status === '已驳回'" link type="warning" size="small">重新提交</el-button>
+            <el-button v-if="row.status === '草稿' && can('expense:list:edit')" link type="primary" size="small">编辑</el-button>
+            <el-button v-if="row.status === '草稿' && can('expense:list:delete')" link type="danger" size="small">删除</el-button>
+            <el-button v-if="row.status === '已驳回' && can('expense:list:submit')" link type="warning" size="small">重新提交</el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
-      <div class="flex justify-end mt-6">
+      <div class="mt-6 flex justify-end">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -104,6 +105,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { expenseApi, type ExpenseSummary } from '@/api'
+import { hasAnyPermission, hasPermission, readStoredUser } from '@/utils/permissions'
 import { Plus, Search, Refresh } from '@element-plus/icons-vue'
 
 const searchQuery = ref('')
@@ -113,16 +115,16 @@ const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const expenseList = ref<ExpenseSummary[]>([])
+const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
+
+const can = (code: string) => hasPermission(code, permissionCodes.value)
+const canAny = (codes: string[]) => hasAnyPermission(codes, permissionCodes.value)
 
 onMounted(async () => {
   loading.value = true
   try {
     const res = await expenseApi.list()
-    if (res.code === 200) {
-      expenseList.value = res.data
-      return
-    }
-    ElMessage.error(res.message || '加载报销列表失败')
+    expenseList.value = res.data
   } catch (error: any) {
     ElMessage.error(error.message || '加载报销列表失败')
   } finally {
@@ -130,8 +132,8 @@ onMounted(async () => {
   }
 })
 
-const filteredExpenseList = computed(() => {
-  return expenseList.value.filter((item) => {
+const filteredExpenseList = computed(() =>
+  expenseList.value.filter((item) => {
     const matchedKeyword =
       !searchQuery.value ||
       item.no.includes(searchQuery.value) ||
@@ -145,14 +147,11 @@ const filteredExpenseList = computed(() => {
       (filterStatus.value === 'draft' && item.status === '草稿')
 
     const [startDate, endDate] = dateRange.value
-    const matchedDate =
-      !startDate ||
-      !endDate ||
-      (item.date >= startDate && item.date <= endDate)
+    const matchedDate = !startDate || !endDate || (item.date >= startDate && item.date <= endDate)
 
     return matchedKeyword && matchedStatus && matchedDate
   })
-})
+)
 
 const pagedExpenseList = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -161,20 +160,20 @@ const pagedExpenseList = computed(() => {
 
 const getTypeTagType = (type: string) => {
   const map: Record<string, string> = {
-    '差旅费': 'primary',
-    '交通费': 'success',
-    '招待费': 'warning',
-    '办公费': 'info'
+    差旅费: 'primary',
+    交通费: 'success',
+    招待费: 'warning',
+    办公费: 'info'
   }
   return map[type] || ''
 }
 
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {
-    '审批中': 'warning',
-    '已通过': 'success',
-    '已驳回': 'danger',
-    '草稿': 'info'
+    审批中: 'warning',
+    已通过: 'success',
+    已驳回: 'danger',
+    草稿: 'info'
   }
   return map[status] || 'info'
 }

@@ -2,6 +2,9 @@ package com.finex.auth.dto;
 
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 public class UserProfileVO {
 
@@ -18,4 +21,10 @@ public class UserProfileVO {
     private String position;
 
     private String laborRelationBelong;
+
+    private String companyId;
+
+    private List<String> roles = new ArrayList<>();
+
+    private List<String> permissionCodes = new ArrayList<>();
 }

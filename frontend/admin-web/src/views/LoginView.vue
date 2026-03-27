@@ -322,7 +322,9 @@ const handleLogin = async () => {
         localStorage.setItem('user', JSON.stringify({
           userId: res.data.userId,
           username: res.data.username,
-          name: res.data.name
+          name: res.data.name,
+          roles: res.data.roles || [],
+          permissionCodes: res.data.permissionCodes || []
         }))
         
         ElMessage.success('登录成功')

@@ -111,6 +111,9 @@ public class UserCenterServiceImpl implements UserCenterService {
         profile.setEmail(user.getEmail());
         profile.setPosition(StrUtil.blankToDefault(user.getPosition(), "员工"));
         profile.setLaborRelationBelong(StrUtil.blankToDefault(user.getLaborRelationBelong(), "总部"));
+        profile.setCompanyId(user.getCompanyId());
+        profile.setRoles(userService.getRoleCodes(user.getId()));
+        profile.setPermissionCodes(userService.getPermissionCodes(user.getId()));
         return profile;
     }
 

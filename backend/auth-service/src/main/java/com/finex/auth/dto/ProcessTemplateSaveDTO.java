@@ -21,8 +21,6 @@ public class ProcessTemplateSaveDTO {
 
     private String category;
 
-    private String numberingRule;
-
     private String iconColor;
 
     private Boolean enabled;
@@ -33,10 +31,6 @@ public class ProcessTemplateSaveDTO {
 
     private String paymentMode;
 
-    private Boolean splitPayment;
-
-    private String travelForm;
-
     private String allocationForm;
 
     private List<String> expenseTypes;
@@ -45,11 +39,7 @@ public class ProcessTemplateSaveDTO {
 
     private List<String> scopeOptions;
 
-    private List<String> tagOptions;
+    private String tagOption;
 
-    private String relationRemark;
-
-    private String validationRemark;
-
-    private String installmentRemark;
+    private String installmentOption;
 }

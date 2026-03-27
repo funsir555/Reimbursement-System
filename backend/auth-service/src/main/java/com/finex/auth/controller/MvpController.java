@@ -4,6 +4,7 @@ import com.finex.auth.dto.DashboardVO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.dto.InvoiceSummaryVO;
 import com.finex.auth.dto.UserProfileVO;
+import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.MvpDataService;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,15 +15,17 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * MVP 动态数据控制器
- */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class MvpController {
 
+    private static final String DASHBOARD_VIEW = "dashboard:view";
+    private static final String EXPENSE_LIST_VIEW = "expense:list:view";
+    private static final String INVOICE_VIEW = "archives:invoices:view";
+
     private final MvpDataService mvpDataService;
+    private final AccessControlService accessControlService;
 
     @GetMapping("/me")
     public Result<UserProfileVO> me(HttpServletRequest request) {
@@ -31,16 +34,19 @@ public class MvpController {
 
     @GetMapping("/dashboard")
     public Result<DashboardVO> dashboard(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), DASHBOARD_VIEW);
         return Result.success(mvpDataService.getDashboard(getCurrentUserId(request)));
     }
 
     @GetMapping("/expenses")
     public Result<List<ExpenseSummaryVO>> expenses(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_LIST_VIEW);
         return Result.success(mvpDataService.listExpenses(getCurrentUserId(request)));
     }
 
     @GetMapping("/invoices")
     public Result<List<InvoiceSummaryVO>> invoices(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), INVOICE_VIEW);
         return Result.success(mvpDataService.listInvoices(getCurrentUserId(request)));
     }
 

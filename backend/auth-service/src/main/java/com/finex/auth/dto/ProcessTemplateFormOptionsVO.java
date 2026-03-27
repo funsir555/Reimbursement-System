@@ -16,7 +16,7 @@ public class ProcessTemplateFormOptionsVO {
 
     private List<ProcessFormOptionVO> categoryOptions;
 
-    private List<ProcessFormOptionVO> numberingRules;
+    private String numberingRulePreview;
 
     private List<ProcessFormOptionVO> printModes;
 
@@ -24,15 +24,15 @@ public class ProcessTemplateFormOptionsVO {
 
     private List<ProcessFormOptionVO> paymentModes;
 
-    private List<ProcessFormOptionVO> travelForms;
-
     private List<ProcessFormOptionVO> allocationForms;
 
-    private List<ProcessFormOptionVO> expenseTypes;
+    private List<ProcessExpenseTypeTreeVO> expenseTypes;
 
     private List<ProcessFormOptionVO> aiAuditModes;
 
     private List<ProcessFormOptionVO> scopeOptions;
 
     private List<ProcessFormOptionVO> tagOptions;
+
+    private List<ProcessFormOptionVO> installmentOptions;
 }

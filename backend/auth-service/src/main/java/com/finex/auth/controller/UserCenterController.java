@@ -3,6 +3,7 @@ package com.finex.auth.controller;
 import com.finex.auth.dto.ChangePasswordDTO;
 import com.finex.auth.dto.DownloadCenterVO;
 import com.finex.auth.dto.PersonalCenterVO;
+import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.UserCenterService;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,15 +20,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class UserCenterController {
 
+    private static final String PROFILE_VIEW = "profile:view";
+    private static final String PROFILE_DOWNLOADS_VIEW = "profile:downloads:view";
+    private static final String PROFILE_PASSWORD_UPDATE = "profile:password:update";
+
     private final UserCenterService userCenterService;
+    private final AccessControlService accessControlService;
 
     @GetMapping("/profile")
     public Result<PersonalCenterVO> profile(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROFILE_VIEW);
         return Result.success(userCenterService.getPersonalCenter(getCurrentUserId(request)));
     }
 
     @GetMapping("/downloads")
     public Result<DownloadCenterVO> downloads(HttpServletRequest request) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), PROFILE_VIEW, PROFILE_DOWNLOADS_VIEW);
         return Result.success(userCenterService.getDownloadCenter(getCurrentUserId(request)));
     }
 
@@ -36,6 +44,7 @@ public class UserCenterController {
             @Valid @RequestBody ChangePasswordDTO dto,
             HttpServletRequest request
     ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROFILE_PASSWORD_UPDATE);
         userCenterService.changePassword(getCurrentUserId(request), dto);
         return Result.success("密码修改成功", Boolean.TRUE);
     }

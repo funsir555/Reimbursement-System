@@ -21,4 +21,6 @@ public class InvoiceSummaryVO {
     private String date;
 
     private String status;
+
+    private String ocrStatus;
 }
