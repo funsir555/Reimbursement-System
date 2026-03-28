@@ -22,9 +22,18 @@ import com.finex.auth.dto.ProcessExpenseTypeDetailVO;
 import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
 import com.finex.auth.dto.ProcessExpenseTypeTreeVO;
+import com.finex.auth.dto.ProcessFlowDetailVO;
+import com.finex.auth.dto.ProcessFlowMetaVO;
+import com.finex.auth.dto.ProcessFlowResolveApproversDTO;
+import com.finex.auth.dto.ProcessFlowResolveApproversVO;
+import com.finex.auth.dto.ProcessFlowSaveDTO;
+import com.finex.auth.dto.ProcessFlowSceneSaveDTO;
+import com.finex.auth.dto.ProcessFlowSceneVO;
+import com.finex.auth.dto.ProcessFlowSummaryVO;
 import com.finex.auth.dto.ProcessFormOptionVO;
 import com.finex.auth.dto.ProcessTemplateCardVO;
 import com.finex.auth.dto.ProcessTemplateCategoryVO;
+import com.finex.auth.dto.ProcessTemplateDetailVO;
 import com.finex.auth.dto.ProcessTemplateFormOptionsVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.dto.ProcessTemplateSaveResultVO;
@@ -47,6 +56,7 @@ import com.finex.auth.mapper.ProcessTemplateCategoryMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.ProcessFlowDesignService;
 import com.finex.auth.service.ProcessManagementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -78,7 +88,14 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private static final String HIGHLIGHT_SEPARATOR = "|";
 
     private static final String DEFAULT_NUMBERING_RULE_CODE = "FX_DATE_4SEQ";
-    private static final String DEFAULT_NUMBERING_RULE_PREVIEW = "FX+年+月+日+4位数字（如：FX202503251234）";
+    private static final String DEFAULT_NUMBERING_RULE_PREVIEW = "FX+\u5e74+\u6708+\u65e5+4\u4f4d\u6570\u5b57\uff08\u5982\uff1aFX202503251234\uff09";
+    private static final String DEFAULT_TEMPLATE_COLOR = "blue";
+    private static final String SCOPE_TYPE_DEPARTMENT = "SCOPE_DEPARTMENT";
+    private static final String SCOPE_TYPE_EXPENSE_TYPE = "SCOPE_EXPENSE_TYPE";
+    private static final String SCOPE_TYPE_AMOUNT_MIN = "SCOPE_AMOUNT_MIN";
+    private static final String SCOPE_TYPE_AMOUNT_MAX = "SCOPE_AMOUNT_MAX";
+    private static final String SCOPE_TYPE_TAG_ARCHIVE = "TAG_ARCHIVE";
+    private static final String SCOPE_TYPE_INSTALLMENT_ARCHIVE = "INSTALLMENT_ARCHIVE";
 
     private static final String ARCHIVE_TYPE_SELECT = "SELECT";
     private static final String ARCHIVE_TYPE_AUTO_RULE = "AUTO_RULE";
@@ -131,24 +148,24 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     );
 
     private static final Map<String, String> OPERATOR_LABELS = Map.ofEntries(
-            Map.entry("EQ", "等于"),
-            Map.entry("NE", "不等于"),
-            Map.entry("IN", "属于"),
-            Map.entry("NOT_IN", "不属于"),
-            Map.entry("GT", "大于"),
-            Map.entry("GE", "大于等于"),
-            Map.entry("LT", "小于"),
-            Map.entry("LE", "小于等于"),
-            Map.entry("BETWEEN", "介于"),
-            Map.entry("CONTAINS", "包含")
+            Map.entry("EQ", "\u7b49\u4e8e"),
+            Map.entry("NE", "\u4e0d\u7b49\u4e8e"),
+            Map.entry("IN", "\u5c5e\u4e8e"),
+            Map.entry("NOT_IN", "\u4e0d\u5c5e\u4e8e"),
+            Map.entry("GT", "\u5927\u4e8e"),
+            Map.entry("GE", "\u5927\u4e8e\u7b49\u4e8e"),
+            Map.entry("LT", "\u5c0f\u4e8e"),
+            Map.entry("LE", "\u5c0f\u4e8e\u7b49\u4e8e"),
+            Map.entry("BETWEEN", "\u4ecb\u4e8e"),
+            Map.entry("CONTAINS", "\u5305\u542b")
     );
 
     private static final List<RuleFieldDefinition> RULE_FIELD_DEFINITIONS = List.of(
-            new RuleFieldDefinition("submitterDeptId", "提单人部门", FIELD_VALUE_TYPE_DEPARTMENT, List.of("EQ", "NE", "IN", "NOT_IN")),
-            new RuleFieldDefinition("submitterPosition", "提单人岗位", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN", "CONTAINS")),
-            new RuleFieldDefinition("laborRelationBelong", "劳动关系归属", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN", "CONTAINS")),
-            new RuleFieldDefinition("documentType", "单据类型", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN")),
-            new RuleFieldDefinition("amount", "金额", FIELD_VALUE_TYPE_NUMBER, List.of("EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN"))
+            new RuleFieldDefinition("submitterDeptId", "\u63d0\u5355\u4eba\u90e8\u95e8", FIELD_VALUE_TYPE_DEPARTMENT, List.of("EQ", "NE", "IN", "NOT_IN")),
+            new RuleFieldDefinition("submitterPosition", "\u63d0\u5355\u4eba\u5c97\u4f4d", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN", "CONTAINS")),
+            new RuleFieldDefinition("laborRelationBelong", "\u52b3\u52a8\u5173\u7cfb\u5f52\u5c5e", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN", "CONTAINS")),
+            new RuleFieldDefinition("documentType", "\u5355\u636e\u7c7b\u578b", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN")),
+            new RuleFieldDefinition("amount", "\u91d1\u989d", FIELD_VALUE_TYPE_NUMBER, List.of("EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN"))
     );
 
     private static final Map<String, RuleFieldDefinition> RULE_FIELD_MAP = RULE_FIELD_DEFINITIONS.stream()
@@ -163,6 +180,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private final ProcessExpenseTypeMapper processExpenseTypeMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
+    private final ProcessFlowDesignService processFlowDesignService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -195,9 +213,9 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     @Override
     public List<ProcessTemplateTypeVO> getTemplateTypes() {
         return List.of(
-                templateType("report", "报销单", "费用报销", "适用于员工报销、差旅报销与团队费用归集等场景。", "blue"),
-                templateType("application", "申请单", "业务申请", "适用于预算申请、付款申请、项目申请等事前流程。", "cyan"),
-                templateType("loan", "借款单", "借支管理", "适用于备用金借支、项目借款及后续核销归还场景。", "orange")
+                templateType("report", "\u62a5\u9500\u5355", "\u8d39\u7528\u62a5\u9500", "\u9002\u7528\u4e8e\u5458\u5de5\u62a5\u9500\u3001\u5dee\u65c5\u62a5\u9500\u4e0e\u56e2\u961f\u8d39\u7528\u5f52\u96c6\u7b49\u573a\u666f\u3002", "blue"),
+                templateType("application", "\u7533\u8bf7\u5355", "\u4e1a\u52a1\u7533\u8bf7", "\u9002\u7528\u4e8e\u9884\u7b97\u7533\u8bf7\u3001\u4ed8\u6b3e\u7533\u8bf7\u3001\u9879\u76ee\u7533\u8bf7\u7b49\u4e8b\u524d\u6d41\u7a0b\u3002", "cyan"),
+                templateType("loan", "\u501f\u6b3e\u5355", "\u501f\u652f\u7ba1\u7406", "\u9002\u7528\u4e8e\u5907\u7528\u91d1\u501f\u652f\u3001\u9879\u76ee\u501f\u6b3e\u53ca\u540e\u7eed\u6838\u9500\u5f52\u8fd8\u573a\u666f\u3002", "orange")
         );
     }
 
@@ -208,41 +226,38 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         options.setTemplateTypeLabel(resolveTemplateTypeLabel(templateType));
         options.setCategoryOptions(loadTemplateCategoryOptions());
         options.setNumberingRulePreview(DEFAULT_NUMBERING_RULE_PREVIEW);
+        options.setFormDesignOptions(loadFormDesignOptions(templateType));
+        options.setApprovalFlows(processFlowDesignService.listPublishedFlowOptions());
         options.setPrintModes(List.of(
-                option("默认打印模板", "default-print"),
-                option("横版摘要模板", "landscape-summary"),
-                option("财务归档模板", "finance-archive")
-        ));
-        options.setApprovalFlows(List.of(
-                option("标准报销流程", "normal-expense-flow"),
-                option("对公付款流程", "public-payment-flow"),
-                option("借款与归还流程", "loan-return-flow")
+                option("\u9ed8\u8ba4\u6253\u5370\u6a21\u677f", "default-print"),
+                option("\u6a2a\u7248\u6458\u8981\u6a21\u677f", "landscape-summary"),
+                option("\u8d22\u52a1\u5f52\u6863\u6a21\u677f", "finance-archive")
         ));
         options.setPaymentModes(List.of(
-                option("不生成付款单", "none"),
-                option("生成对私付款单", "private-payment"),
-                option("生成对公付款单", "public-payment")
+                option("\u4e0d\u751f\u6210\u4ed8\u6b3e\u5355", "none"),
+                option("\u751f\u6210\u5bf9\u79c1\u4ed8\u6b3e\u5355", "private-payment"),
+                option("\u751f\u6210\u5bf9\u516c\u4ed8\u6b3e\u5355", "public-payment")
         ));
         options.setAllocationForms(List.of(
-                option("默认分摊表", "allocation-default"),
-                option("项目分摊表", "allocation-project"),
-                option("部门分摊表", "allocation-department")
+                option("\u9ed8\u8ba4\u5206\u644a\u8868", "allocation-default"),
+                option("\u9879\u76ee\u5206\u644a\u8868", "allocation-project"),
+                option("\u90e8\u95e8\u5206\u644a\u8868", "allocation-department")
         ));
         options.setExpenseTypes(loadEnabledExpenseTypeTree());
+        options.setDepartmentOptions(loadDepartmentOptions());
         options.setAiAuditModes(List.of(
-                option("关闭 AI 审核", "disabled"),
-                option("标准风险识别", "standard"),
-                option("严格风险识别", "strict")
+                option("\u5173\u95ed AI \u5ba1\u6838", "disabled"),
+                option("\u6807\u51c6\u98ce\u9669\u8bc6\u522b", "standard"),
+                option("\u4e25\u683c\u98ce\u9669\u8bc6\u522b", "strict")
         ));
-        options.setScopeOptions(List.of(
-                option("限定部门使用", "department"),
-                option("限定岗位使用", "position"),
-                option("限定费用类型使用", "expense-type"),
-                option("限定金额区间", "amount-range")
-        ));
-        options.setTagOptions(loadSelectArchiveOptions(DEFAULT_TAG_ARCHIVE_CODE));
-        options.setInstallmentOptions(loadSelectArchiveOptions(DEFAULT_INSTALLMENT_ARCHIVE_CODE));
+        options.setTagOptions(loadEnabledArchiveOptions());
+        options.setInstallmentOptions(loadEnabledArchiveOptions());
         return options;
+    }
+
+    @Override
+    public ProcessTemplateDetailVO getTemplateDetail(Long id) {
+        return buildTemplateDetail(requireTemplate(id));
     }
 
     @Override
@@ -252,8 +267,13 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         String templateType = normalize(dto.getTemplateType(), "report");
         boolean enabled = dto.getEnabled() == null || dto.getEnabled();
 
-        Map<String, String> tagLabelMap = selectArchiveLabelMap(DEFAULT_TAG_ARCHIVE_CODE);
-        Map<String, String> installmentLabelMap = selectArchiveLabelMap(DEFAULT_INSTALLMENT_ARCHIVE_CODE);
+        validateTemplateScope(dto);
+
+        Map<String, String> departmentLabelMap = departmentLabelMap();
+        Map<String, String> expenseTypeLabelMap = expenseTypeLabelMap();
+        Map<String, String> archiveLabelMap = enabledArchiveLabelMap();
+        Map<String, String> flowLabelMap = processFlowDesignService.publishedFlowLabelMap();
+        String approvalFlowCode = resolveApprovalFlowCode(dto.getApprovalFlow(), flowLabelMap);
 
         ProcessDocumentTemplate template = new ProcessDocumentTemplate();
         template.setTemplateCode(buildTemplateCode());
@@ -263,31 +283,63 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         template.setCategoryCode(categoryCode);
         template.setTemplateDescription(resolveDescription(dto));
         template.setNumberingRule(DEFAULT_NUMBERING_RULE_CODE);
-        template.setIconColor(normalize(dto.getIconColor(), "blue"));
+        template.setFormDesignCode(resolveFormDesignCode(dto.getFormDesign(), templateType));
+        template.setIconColor(DEFAULT_TEMPLATE_COLOR);
         template.setEnabled(enabled ? 1 : 0);
         template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
         template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
-        template.setApprovalFlow(normalize(dto.getApprovalFlow(), "normal-expense-flow"));
-        template.setFlowName(resolveFlowLabel(template.getApprovalFlow()));
+        template.setApprovalFlow(approvalFlowCode);
+        template.setFlowName(flowLabelMap.get(approvalFlowCode));
         template.setPaymentMode(normalize(dto.getPaymentMode(), "none"));
         template.setAllocationForm(normalize(dto.getAllocationForm(), "allocation-default"));
         template.setAiAuditMode(normalize(dto.getAiAuditMode(), "disabled"));
-        template.setHighlights(String.join(HIGHLIGHT_SEPARATOR, buildHighlights(dto, tagLabelMap, installmentLabelMap)));
-        template.setOwnerName(normalize(operatorName, "流程管理员"));
+        template.setHighlights(String.join(HIGHLIGHT_SEPARATOR, buildHighlights(dto, archiveLabelMap)));
+        template.setOwnerName(normalize(operatorName, "\u6d41\u7a0b\u7ba1\u7406\u5458"));
         template.setSortOrder(nextSortOrder(categoryCode));
         templateMapper.insert(template);
 
-        saveScopeItems(template.getId(), "EXPENSE_TYPE", dto.getExpenseTypes(), expenseTypeLabelMap());
-        saveScopeItems(template.getId(), "SCOPE_OPTION", dto.getScopeOptions(), scopeLabelMap());
-        saveSingleScopeItem(template.getId(), "TAG_OPTION", dto.getTagOption(), tagLabelMap);
-        saveSingleScopeItem(template.getId(), "INSTALLMENT_OPTION", dto.getInstallmentOption(), installmentLabelMap);
+        replaceTemplateScopes(template.getId(), dto, departmentLabelMap, expenseTypeLabelMap, archiveLabelMap);
+        return buildTemplateSaveResult(template);
+    }
 
-        ProcessTemplateSaveResultVO result = new ProcessTemplateSaveResultVO();
-        result.setId(template.getId());
-        result.setTemplateCode(template.getTemplateCode());
-        result.setTemplateName(template.getTemplateName());
-        result.setStatus(template.getPublishStatus());
-        return result;
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessTemplateSaveResultVO updateTemplate(Long id, ProcessTemplateSaveDTO dto, String operatorName) {
+        ProcessDocumentTemplate template = requireTemplate(id);
+        String categoryCode = normalize(dto.getCategory(), template.getCategoryCode());
+        String templateType = normalize(dto.getTemplateType(), template.getTemplateType());
+        boolean enabled = dto.getEnabled() == null || dto.getEnabled();
+
+        validateTemplateScope(dto);
+
+        Map<String, String> departmentLabelMap = departmentLabelMap();
+        Map<String, String> expenseTypeLabelMap = expenseTypeLabelMap();
+        Map<String, String> archiveLabelMap = enabledArchiveLabelMap();
+        Map<String, String> flowLabelMap = processFlowDesignService.publishedFlowLabelMap();
+        String approvalFlowCode = resolveApprovalFlowCode(dto.getApprovalFlow(), flowLabelMap);
+
+        template.setTemplateName(trimToEmpty(dto.getTemplateName()));
+        template.setTemplateType(templateType);
+        template.setTemplateTypeLabel(resolveTemplateTypeLabel(templateType));
+        template.setCategoryCode(categoryCode);
+        template.setTemplateDescription(resolveDescription(dto));
+        template.setNumberingRule(DEFAULT_NUMBERING_RULE_CODE);
+        template.setFormDesignCode(resolveFormDesignCode(dto.getFormDesign(), templateType));
+        template.setIconColor(DEFAULT_TEMPLATE_COLOR);
+        template.setEnabled(enabled ? 1 : 0);
+        template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
+        template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
+        template.setApprovalFlow(approvalFlowCode);
+        template.setFlowName(flowLabelMap.get(approvalFlowCode));
+        template.setPaymentMode(normalize(dto.getPaymentMode(), "none"));
+        template.setAllocationForm(normalize(dto.getAllocationForm(), "allocation-default"));
+        template.setAiAuditMode(normalize(dto.getAiAuditMode(), "disabled"));
+        template.setHighlights(String.join(HIGHLIGHT_SEPARATOR, buildHighlights(dto, archiveLabelMap)));
+        template.setOwnerName(normalize(operatorName, template.getOwnerName()));
+        templateMapper.updateById(template);
+
+        replaceTemplateScopes(template.getId(), dto, departmentLabelMap, expenseTypeLabelMap, archiveLabelMap);
+        return buildTemplateSaveResult(template);
     }
 
     @Override
@@ -380,8 +432,17 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                             .in(ProcessTemplateScope::getOptionCode, itemCodes)
             );
             if (referencedCount != null && referencedCount > 0) {
-                throw new IllegalStateException("当前档案结果已被模板引用，无法删除");
+                throw new IllegalStateException("\u5f53\u524d\u6863\u6848\u7ed3\u679c\u9879\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664\u6863\u6848");
             }
+        }
+
+        Long archiveReferencedCount = scopeMapper.selectCount(
+                Wrappers.<ProcessTemplateScope>lambdaQuery()
+                        .in(ProcessTemplateScope::getOptionType, List.of(SCOPE_TYPE_TAG_ARCHIVE, SCOPE_TYPE_INSTALLMENT_ARCHIVE))
+                        .eq(ProcessTemplateScope::getOptionCode, archive.getArchiveCode())
+        );
+        if (archiveReferencedCount != null && archiveReferencedCount > 0) {
+            throw new IllegalStateException("\u5f53\u524d\u6863\u6848\u5df2\u88ab\u6a21\u677f\u4f5c\u4e3a\u6807\u7b7e\u6216\u5206\u671f\u4ed8\u6b3e\u6765\u6e90\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
         }
 
         deleteArchiveChildren(id);
@@ -393,8 +454,8 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     public ProcessCustomArchiveMetaVO getCustomArchiveMeta() {
         ProcessCustomArchiveMetaVO meta = new ProcessCustomArchiveMetaVO();
         meta.setArchiveTypeOptions(List.of(
-                option("提供选择", ARCHIVE_TYPE_SELECT),
-                option("自动划分", ARCHIVE_TYPE_AUTO_RULE)
+                option("\u63d0\u4f9b\u9009\u62e9", ARCHIVE_TYPE_SELECT),
+                option("\u81ea\u52a8\u5212\u5206", ARCHIVE_TYPE_AUTO_RULE)
         ));
         meta.setOperatorOptions(OPERATOR_KEYS.stream().map(key -> {
             ProcessCustomArchiveOperatorVO operator = new ProcessCustomArchiveOperatorVO();
@@ -444,19 +505,19 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         meta.setDepartmentOptions(loadDepartmentOptions());
         meta.setUserOptions(loadUserOptions());
         meta.setInvoiceFreeOptions(List.of(
-                configOption(EXPENSE_TYPE_INVOICE_FREE, "免票", "默认无需上传发票，且费用自动标记为免票"),
-                configOption(EXPENSE_TYPE_INVOICE_REQUIRED, "不免票", "根据费用表单中发票组件的必填性进行判断")
+                configOption(EXPENSE_TYPE_INVOICE_FREE, "\u514d\u7968", "\u9ed8\u8ba4\u65e0\u9700\u4e0a\u4f20\u53d1\u7968\uff0c\u4e14\u8d39\u7528\u81ea\u52a8\u6807\u8bb0\u4e3a\u514d\u7968"),
+                configOption(EXPENSE_TYPE_INVOICE_REQUIRED, "\u4e0d\u514d\u7968", "\u6839\u636e\u8d39\u7528\u8868\u5355\u4e2d\u53d1\u7968\u7ec4\u4ef6\u7684\u5fc5\u586b\u6027\u8fdb\u884c\u5224\u65ad")
         ));
         meta.setTaxDeductionOptions(List.of(
-                configOption(EXPENSE_TYPE_TAX_DEFAULT, "遵循默认抵扣和转出逻辑", "本费用类型下继续使用系统默认的发票抵扣与转出规则"),
-                configOption(EXPENSE_TYPE_TAX_SPECIAL_NO_DEDUCT_NEED_OUT, "专票不抵扣且需要转出", "上传专票时默认不抵扣且需要转出，其余票种遵循默认抵扣转出逻辑"),
-                configOption(EXPENSE_TYPE_TAX_SPECIAL_NO_DEDUCT_NEED_OUT_OTHERS_NONE, "专票转出，其余票种不抵扣不转出", "上传专票时默认不抵扣且需要转出；上传其余发票不抵扣不转出"),
-                configOption(EXPENSE_TYPE_TAX_ALL_NO_DEDUCT_NO_OUT, "任何票种都不抵扣且无需转出", "无论上传任何票种，默认不抵扣，且无需转出"),
-                configOption(EXPENSE_TYPE_TAX_HAS_DEDUCT_NO_DEDUCT_NEED_OUT, "有抵扣税额时不抵扣且需转出", "上传有抵扣税额的发票时，默认不抵扣，且需要转出")
+                configOption(EXPENSE_TYPE_TAX_DEFAULT, "\u9075\u5faa\u9ed8\u8ba4\u62b5\u6263\u548c\u8f6c\u51fa\u903b\u8f91", "\u6cbf\u7528\u7cfb\u7edf\u9ed8\u8ba4\u7684\u62b5\u6263\u4e0e\u8f6c\u51fa\u5904\u7406\u903b\u8f91"),
+                configOption(EXPENSE_TYPE_TAX_SPECIAL_NO_DEDUCT_NEED_OUT, "\u4e0a\u4f20\u4e13\u7968\u65f6\u9ed8\u8ba4\u4e0d\u62b5\u6263\u4e14\u9700\u8981\u8f6c\u51fa\uff0c\u5176\u4ed6\u53d1\u7968\u9075\u5faa\u9ed8\u8ba4\u903b\u8f91", "\u9002\u7528\u4e8e\u798f\u5229\u8d39\u5f00\u4e13\u7968\u7b49\u573a\u666f"),
+                configOption(EXPENSE_TYPE_TAX_SPECIAL_NO_DEDUCT_NEED_OUT_OTHERS_NONE, "\u4e0a\u4f20\u4e13\u7968\u65f6\u9ed8\u8ba4\u4e0d\u62b5\u6263\u4e14\u9700\u8981\u8f6c\u51fa\uff0c\u5176\u4ed6\u53d1\u7968\u4e0d\u62b5\u6263\u4e0d\u8f6c\u51fa", "\u9002\u7528\u4e8e\u62a5\u9500\u798f\u5229\u8d39\u7b49\u573a\u666f"),
+                configOption(EXPENSE_TYPE_TAX_ALL_NO_DEDUCT_NO_OUT, "\u65e0\u8bba\u4e0a\u4f20\u4efb\u4f55\u7968\u79cd\uff0c\u9ed8\u8ba4\u4e0d\u62b5\u6263\u4e14\u65e0\u9700\u8f6c\u51fa", "\u9002\u7528\u4e8e\u5ba2\u6237\u673a\u7968\u7b49\u573a\u666f"),
+                configOption(EXPENSE_TYPE_TAX_HAS_DEDUCT_NO_DEDUCT_NEED_OUT, "\u4e0a\u4f20\u6709\u62b5\u6263\u7a0e\u989d\u7684\u53d1\u7968\u65f6\uff0c\u9ed8\u8ba4\u4e0d\u62b5\u6263\u4e14\u9700\u8981\u8f6c\u51fa", "\u9002\u7528\u4e8e\u5ba2\u6237\u98de\u673a\u706b\u8f66\u798f\u5229\u8d39\u7b49\u573a\u666f")
         ));
         meta.setTaxSeparationOptions(List.of(
-                configOption(EXPENSE_TYPE_TAX_SEPARATE, "价税分离", "费用录入时金额和税额分开展示"),
-                configOption(EXPENSE_TYPE_TAX_NOT_SEPARATE, "价税不分离", "费用录入时按含税金额处理")
+                configOption(EXPENSE_TYPE_TAX_SEPARATE, "\u4ef7\u7a0e\u5206\u79bb", "\u8d39\u7528\u91d1\u989d\u4e0e\u7a0e\u989d\u5206\u5f00\u5904\u7406"),
+                configOption(EXPENSE_TYPE_TAX_NOT_SEPARATE, "\u4ef7\u7a0e\u4e0d\u5206\u79bb", "\u8d39\u7528\u91d1\u989d\u4e0e\u7a0e\u989d\u5408\u5e76\u5904\u7406")
         ));
         return meta;
     }
@@ -512,19 +573,69 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     public Boolean deleteExpenseType(Long id) {
         ProcessExpenseType expenseType = requireExpenseType(id);
         if (hasExpenseTypeChildren(id)) {
-            throw new IllegalStateException("当前费用类型存在下级节点，无法删除");
+            throw new IllegalStateException("\u5f53\u524d\u8d39\u7528\u7c7b\u578b\u4e0b\u5b58\u5728\u5b50\u7ea7\u8282\u70b9\uff0c\u4e0d\u80fd\u5220\u9664");
         }
         if (isExpenseTypeReferenced(expenseType)) {
-            throw new IllegalStateException("当前费用类型已被模板引用，无法删除");
+            throw new IllegalStateException("\u5f53\u524d\u8d39\u7528\u7c7b\u578b\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
         }
         processExpenseTypeMapper.deleteById(id);
         return Boolean.TRUE;
     }
+    @Override
+    public List<ProcessFlowSummaryVO> listFlows() {
+        return processFlowDesignService.listFlows();
+    }
+
+    @Override
+    public ProcessFlowMetaVO getFlowMeta() {
+        return processFlowDesignService.getFlowMeta();
+    }
+
+    @Override
+    public ProcessFlowDetailVO getFlowDetail(Long id) {
+        return processFlowDesignService.getFlowDetail(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessFlowDetailVO createFlow(ProcessFlowSaveDTO dto) {
+        return processFlowDesignService.createFlow(dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessFlowDetailVO updateFlow(Long id, ProcessFlowSaveDTO dto) {
+        return processFlowDesignService.updateFlow(id, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessFlowDetailVO publishFlow(Long id) {
+        return processFlowDesignService.publishFlow(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean updateFlowStatus(Long id, String status) {
+        return processFlowDesignService.updateFlowStatus(id, status);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessFlowSceneVO createFlowScene(ProcessFlowSceneSaveDTO dto) {
+        return processFlowDesignService.createFlowScene(dto);
+    }
+
+    @Override
+    public ProcessFlowResolveApproversVO resolveFlowApprovers(ProcessFlowResolveApproversDTO dto) {
+        return processFlowDesignService.resolveApprovers(dto);
+    }
+
     private List<ProcessCenterNavItemVO> buildNavItems() {
         return List.of(
-                navItem("document-flow", "单据与流程", "统一维护模板、审批流和单据能力"),
-                navItem("custom-archive", "自定义档案", "维护标签档案、分期付款档案和自动划分规则"),
-                navItem("expense-type", "费用类型", "维护费用类型树及发票税务配置")
+                navItem("document-flow", "\u5355\u636e\u4e0e\u6d41\u7a0b", "\u7ef4\u62a4\u5355\u636e\u6a21\u677f\u3001\u5ba1\u6279\u6d41\u7a0b\u548c\u76f8\u5173\u914d\u7f6e\u80fd\u529b"),
+                navItem("custom-archive", "\u81ea\u5b9a\u4e49\u6863\u6848", "\u7ef4\u62a4\u6807\u7b7e\u3001\u5206\u671f\u4ed8\u6b3e\u7b49\u4e1a\u52a1\u914d\u7f6e\u6863\u6848"),
+                navItem("expense-type", "\u8d39\u7528\u7c7b\u578b", "\u7ef4\u62a4\u8d39\u7528\u7c7b\u578b\u6811\u548c\u53d1\u7968\u7a0e\u52a1\u914d\u7f6e")
         );
     }
 
@@ -557,7 +668,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             ProcessTemplateCategoryVO card = new ProcessTemplateCategoryVO();
             card.setCode(category.getCategoryCode());
             card.setName(category.getCategoryName());
-            card.setDescription(normalize(category.getCategoryDescription(), "暂无说明"));
+            card.setDescription(normalize(category.getCategoryDescription(), "\u7ef4\u62a4\u8be5\u5206\u7c7b\u4e0b\u7684\u6d41\u7a0b\u6a21\u677f"));
             card.setTemplateCount(categoryTemplates.size());
             card.setTemplates(buildTemplateCards(categoryTemplates, category.getCategoryName()));
             result.add(card);
@@ -570,7 +681,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             ProcessTemplateCategoryVO card = new ProcessTemplateCategoryVO();
             card.setCode(entry.getKey());
             card.setName(entry.getKey());
-            card.setDescription("未分组模板");
+            card.setDescription("\u672a\u5f52\u7c7b\u6a21\u677f");
             card.setTemplateCount(entry.getValue().size());
             card.setTemplates(buildTemplateCards(entry.getValue(), entry.getKey()));
             result.add(card);
@@ -584,21 +695,122 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             card.setId(template.getId());
             card.setTemplateCode(template.getTemplateCode());
             card.setName(template.getTemplateName());
+            card.setTemplateTypeCode(template.getTemplateType());
             card.setTemplateType(normalize(template.getTemplateTypeLabel(), resolveTemplateTypeLabel(template.getTemplateType())));
             card.setBusinessDomain(categoryName);
-            card.setDescription(normalize(template.getTemplateDescription(), "暂无说明"));
+            card.setDescription(normalize(template.getTemplateDescription(), "\u7ef4\u62a4\u8be5\u6a21\u677f\u7684\u914d\u7f6e\u8bf4\u660e"));
             card.setHighlights(splitHighlights(template.getHighlights()));
-            card.setFlowName(normalize(template.getFlowName(), "标准审批流程"));
+            card.setFlowName(normalize(template.getFlowName(), "\u672a\u8bbe\u7f6e\u5ba1\u6279\u6d41\u7a0b"));
             card.setUpdatedAt(formatDateTime(template.getUpdatedAt()));
-            card.setOwner(normalize(template.getOwnerName(), "流程管理员"));
+            card.setOwner(normalize(template.getOwnerName(), "\u6d41\u7a0b\u7ba1\u7406\u5458"));
             card.setColor(resolveColor(template.getIconColor()));
             return card;
         }).toList();
     }
 
+    private ProcessTemplateDetailVO buildTemplateDetail(ProcessDocumentTemplate template) {
+        Map<String, List<ProcessTemplateScope>> scopeMap = loadTemplateScopeMap(template.getId());
+
+        ProcessTemplateDetailVO detail = new ProcessTemplateDetailVO();
+        detail.setId(template.getId());
+        detail.setTemplateCode(template.getTemplateCode());
+        detail.setTemplateType(template.getTemplateType());
+        detail.setTemplateTypeLabel(normalize(template.getTemplateTypeLabel(), resolveTemplateTypeLabel(template.getTemplateType())));
+        detail.setTemplateName(template.getTemplateName());
+        detail.setTemplateDescription(template.getTemplateDescription());
+        detail.setCategory(template.getCategoryCode());
+        detail.setEnabled(template.getEnabled() == null || template.getEnabled() == 1);
+        detail.setFormDesign(template.getFormDesignCode());
+        detail.setPrintMode(template.getPrintMode());
+        detail.setApprovalFlow(template.getApprovalFlow());
+        detail.setPaymentMode(template.getPaymentMode());
+        detail.setAllocationForm(template.getAllocationForm());
+        detail.setAiAuditMode(template.getAiAuditMode());
+        detail.setScopeDeptIds(extractScopeCodes(scopeMap.get(SCOPE_TYPE_DEPARTMENT)));
+        detail.setScopeExpenseTypeCodes(extractScopeCodes(scopeMap.get(SCOPE_TYPE_EXPENSE_TYPE)));
+        detail.setAmountMin(parseScopeAmount(scopeMap.get(SCOPE_TYPE_AMOUNT_MIN)));
+        detail.setAmountMax(parseScopeAmount(scopeMap.get(SCOPE_TYPE_AMOUNT_MAX)));
+        detail.setTagOption(resolveArchiveScopeCode(scopeMap.get(SCOPE_TYPE_TAG_ARCHIVE), scopeMap.get("TAG_OPTION")));
+        detail.setInstallmentOption(resolveArchiveScopeCode(scopeMap.get(SCOPE_TYPE_INSTALLMENT_ARCHIVE), scopeMap.get("INSTALLMENT_OPTION")));
+        return detail;
+    }
+
+    private ProcessTemplateSaveResultVO buildTemplateSaveResult(ProcessDocumentTemplate template) {
+        ProcessTemplateSaveResultVO result = new ProcessTemplateSaveResultVO();
+        result.setId(template.getId());
+        result.setTemplateCode(template.getTemplateCode());
+        result.setTemplateName(template.getTemplateName());
+        result.setStatus(template.getPublishStatus());
+        return result;
+    }
+
+    private Map<String, List<ProcessTemplateScope>> loadTemplateScopeMap(Long templateId) {
+        return scopeMapper.selectList(
+                Wrappers.<ProcessTemplateScope>lambdaQuery()
+                        .eq(ProcessTemplateScope::getTemplateId, templateId)
+                        .orderByAsc(ProcessTemplateScope::getSortOrder, ProcessTemplateScope::getId)
+        ).stream().collect(Collectors.groupingBy(
+                ProcessTemplateScope::getOptionType,
+                LinkedHashMap::new,
+                Collectors.toList()
+        ));
+    }
+
+    private List<String> extractScopeCodes(List<ProcessTemplateScope> scopes) {
+        if (scopes == null || scopes.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return scopes.stream()
+                .map(ProcessTemplateScope::getOptionCode)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private BigDecimal parseScopeAmount(List<ProcessTemplateScope> scopes) {
+        String value = firstScopeCode(scopes);
+        if (value == null) {
+            return null;
+        }
+        return new BigDecimal(value);
+    }
+
+    private String firstScopeCode(List<ProcessTemplateScope> scopes) {
+        if (scopes == null || scopes.isEmpty()) {
+            return null;
+        }
+        return trimToNull(scopes.get(0).getOptionCode());
+    }
+
+    private String resolveArchiveScopeCode(List<ProcessTemplateScope> archiveScopes, List<ProcessTemplateScope> legacyScopes) {
+        String archiveCode = firstScopeCode(archiveScopes);
+        if (archiveCode != null) {
+            return archiveCode;
+        }
+
+        String legacyItemCode = firstScopeCode(legacyScopes);
+        if (legacyItemCode == null) {
+            return "";
+        }
+        return normalize(findArchiveCodeByLegacyItemCode(legacyItemCode), "");
+    }
+
+    private String findArchiveCodeByLegacyItemCode(String itemCode) {
+        ProcessCustomArchiveItem item = customArchiveItemMapper.selectOne(
+                Wrappers.<ProcessCustomArchiveItem>lambdaQuery()
+                        .eq(ProcessCustomArchiveItem::getItemCode, itemCode)
+                        .last("limit 1")
+        );
+        if (item == null) {
+            return null;
+        }
+
+        ProcessCustomArchiveDesign archive = customArchiveDesignMapper.selectById(item.getArchiveId());
+        return archive == null ? null : archive.getArchiveCode();
+    }
+
     private List<String> splitHighlights(String highlights) {
         if (trimToNull(highlights) == null) {
-            return List.of("标准审批链路");
+            return List.of("\u6682\u65e0\u4eae\u70b9");
         }
         return List.of(highlights.split("\\|")).stream()
                 .map(String::trim)
@@ -617,37 +829,86 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             return options;
         }
         return List.of(
-                option("员工费用类", "employee-expense"),
-                option("企业往来类", "enterprise-payment"),
-                option("事项申请类", "business-application")
+                option("\u5458\u5de5\u62a5\u9500", "employee-expense"),
+                option("\u5bf9\u516c\u4ed8\u6b3e", "enterprise-payment"),
+                option("\u4e1a\u52a1\u7533\u8bf7", "business-application")
         );
+    }
+
+    private List<ProcessFormOptionVO> loadFormDesignOptions(String templateType) {
+        return switch (normalize(templateType, "report")) {
+            case "application" -> List.of(
+                    option("\u6807\u51c6\u7533\u8bf7\u8868\u5355", "application-standard-form"),
+                    option("\u9879\u76ee\u7533\u8bf7\u8868\u5355", "application-project-form"),
+                    option("\u5bf9\u516c\u7533\u8bf7\u8868\u5355", "application-public-form")
+            );
+            case "loan" -> List.of(
+                    option("\u6807\u51c6\u501f\u6b3e\u8868\u5355", "loan-standard-form"),
+                    option("\u5dee\u65c5\u501f\u6b3e\u8868\u5355", "loan-travel-form"),
+                    option("\u5907\u7528\u91d1\u501f\u6b3e\u8868\u5355", "loan-petty-cash-form")
+            );
+            default -> List.of(
+                    option("\u6807\u51c6\u62a5\u9500\u8868\u5355", "expense-standard-form"),
+                    option("\u5dee\u65c5\u62a5\u9500\u8868\u5355", "expense-travel-form"),
+                    option("\u5bf9\u516c\u62a5\u9500\u8868\u5355", "expense-public-form")
+            );
+        };
+    }
+
+    private String resolveFormDesignCode(String formDesign, String templateType) {
+        List<ProcessFormOptionVO> options = loadFormDesignOptions(templateType);
+        String normalized = trimToNull(formDesign);
+        if (normalized == null) {
+            return options.get(0).getValue();
+        }
+        boolean matched = options.stream().anyMatch(option -> Objects.equals(option.getValue(), normalized));
+        if (!matched) {
+            throw new IllegalArgumentException("\u6240\u9009\u8868\u5355\u8bbe\u8ba1\u4e0d\u5b58\u5728\u6216\u4e0d\u5c5e\u4e8e\u5f53\u524d\u6a21\u677f\u7c7b\u578b");
+        }
+        return normalized;
+    }
+
+    private void validateTemplateScope(ProcessTemplateSaveDTO dto) {
+        validateSelectableIds(normalizeIdList(dto.getScopeDeptIds()), loadValidDepartmentIdSet(), "\u90e8\u95e8");
+        validateSelectableIds(normalizeIdList(dto.getScopeExpenseTypeCodes()), loadValidExpenseTypeCodeSet(), "\u8d39\u7528\u7c7b\u578b");
+
+        BigDecimal amountMin = dto.getAmountMin();
+        BigDecimal amountMax = dto.getAmountMax();
+        if (amountMin != null && amountMin.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("\u6700\u5c0f\u91d1\u989d\u4e0d\u80fd\u5c0f\u4e8e 0");
+        }
+        if (amountMax != null && amountMax.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("\u6700\u5927\u91d1\u989d\u4e0d\u80fd\u5c0f\u4e8e 0");
+        }
+        if (amountMin != null && amountMax != null && amountMin.compareTo(amountMax) > 0) {
+            throw new IllegalArgumentException("\u9650\u5b9a\u91d1\u989d\u533a\u95f4\u4e0d\u5408\u6cd5\uff0c\u6700\u5c0f\u91d1\u989d\u4e0d\u80fd\u5927\u4e8e\u6700\u5927\u91d1\u989d");
+        }
     }
 
     private List<String> buildHighlights(
             ProcessTemplateSaveDTO dto,
-            Map<String, String> tagLabelMap,
-            Map<String, String> installmentLabelMap
+            Map<String, String> archiveLabelMap
     ) {
         LinkedHashSet<String> highlights = new LinkedHashSet<>();
-        highlights.add("支持移动端提单");
+        highlights.add("\u79fb\u52a8\u7aef\u63d0\u5355");
         if (!"none".equalsIgnoreCase(normalize(dto.getPaymentMode(), "none"))) {
-            highlights.add("联动付款单");
+            highlights.add("\u4ed8\u6b3e\u5355\u8054\u52a8");
         }
         if (!"disabled".equalsIgnoreCase(normalize(dto.getAiAuditMode(), "disabled"))) {
-            highlights.add("AI 审核");
+            highlights.add("AI \u5ba1\u6838");
         }
 
-        String tagLabel = tagLabelMap.get(trimToEmpty(dto.getTagOption()));
+        String tagLabel = archiveLabelMap.get(trimToEmpty(dto.getTagOption()));
         if (tagLabel != null) {
             highlights.add(tagLabel);
         }
-        String installmentLabel = installmentLabelMap.get(trimToEmpty(dto.getInstallmentOption()));
+        String installmentLabel = archiveLabelMap.get(trimToEmpty(dto.getInstallmentOption()));
         if (installmentLabel != null) {
             highlights.add(installmentLabel);
         }
 
         while (highlights.size() < 3) {
-            highlights.add("标准审批链路");
+            highlights.add("\u6682\u65e0\u4eae\u70b9");
         }
         return highlights.stream().limit(3).toList();
     }
@@ -680,6 +941,24 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         scopeMapper.insert(scope);
     }
 
+    private void replaceTemplateScopes(
+            Long templateId,
+            ProcessTemplateSaveDTO dto,
+            Map<String, String> departmentLabelMap,
+            Map<String, String> expenseTypeLabelMap,
+            Map<String, String> archiveLabelMap
+    ) {
+        scopeMapper.delete(
+                Wrappers.<ProcessTemplateScope>lambdaQuery()
+                        .eq(ProcessTemplateScope::getTemplateId, templateId)
+        );
+        saveScopeItems(templateId, SCOPE_TYPE_DEPARTMENT, dto.getScopeDeptIds(), departmentLabelMap);
+        saveScopeItems(templateId, SCOPE_TYPE_EXPENSE_TYPE, dto.getScopeExpenseTypeCodes(), expenseTypeLabelMap);
+        saveAmountScopeItems(templateId, dto.getAmountMin(), dto.getAmountMax());
+        saveSingleScopeItem(templateId, SCOPE_TYPE_TAG_ARCHIVE, dto.getTagOption(), archiveLabelMap);
+        saveSingleScopeItem(templateId, SCOPE_TYPE_INSTALLMENT_ARCHIVE, dto.getInstallmentOption(), archiveLabelMap);
+    }
+
     private int nextSortOrder(String categoryCode) {
         List<ProcessDocumentTemplate> templates = templateMapper.selectList(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
@@ -698,24 +977,28 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         if (description != null) {
             return description;
         }
-        return resolveTemplateTypeLabel(dto.getTemplateType()) + "模板";
+        return resolveTemplateTypeLabel(dto.getTemplateType()) + "\u6a21\u677f";
     }
 
     private String resolveTemplateTypeLabel(String templateType) {
         return switch (normalize(templateType, "report")) {
-            case "application" -> "申请单";
-            case "loan" -> "借款单";
-            default -> "报销单";
+            case "application" -> "\u7533\u8bf7\u5355";
+            case "loan" -> "\u501f\u6b3e\u5355";
+            default -> "\u62a5\u9500\u5355";
         };
     }
 
-    private String resolveFlowLabel(String approvalFlow) {
-        return switch (normalize(approvalFlow, "normal-expense-flow")) {
-            case "public-payment-flow" -> "对公付款流程";
-            case "loan-return-flow" -> "借款与归还流程";
-            default -> "标准报销流程";
-        };
+    private String resolveApprovalFlowCode(String approvalFlow, Map<String, String> flowLabelMap) {
+        String flowCode = trimToNull(approvalFlow);
+        if (flowCode == null) {
+            throw new IllegalArgumentException("\u8bf7\u9009\u62e9\u5ba1\u6279\u6d41\u7a0b");
+        }
+        if (!flowLabelMap.containsKey(flowCode)) {
+            throw new IllegalArgumentException("\u5ba1\u6279\u6d41\u7a0b\u4e0d\u5b58\u5728\u6216\u5c1a\u672a\u53d1\u5e03");
+        }
+        return flowCode;
     }
+
 
     private String resolveColor(String iconColor) {
         return switch (normalize(iconColor, "blue")) {
@@ -745,13 +1028,58 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         ));
     }
 
+    private Map<String, String> departmentLabelMap() {
+        return loadDepartmentOptions().stream().collect(Collectors.toMap(
+                ProcessFormOptionVO::getValue,
+                ProcessFormOptionVO::getLabel,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    private void saveAmountScopeItems(Long templateId, BigDecimal amountMin, BigDecimal amountMax) {
+        if (amountMin != null) {
+            saveSingleScopeValue(templateId, SCOPE_TYPE_AMOUNT_MIN, amountMin.stripTrailingZeros().toPlainString(), "\u6700\u5c0f\u91d1\u989d", 1);
+        }
+        if (amountMax != null) {
+            saveSingleScopeValue(templateId, SCOPE_TYPE_AMOUNT_MAX, amountMax.stripTrailingZeros().toPlainString(), "\u6700\u5927\u91d1\u989d", 2);
+        }
+    }
+
+    private void saveSingleScopeValue(Long templateId, String optionType, String optionCode, String optionLabel, int sortOrder) {
+        ProcessTemplateScope scope = new ProcessTemplateScope();
+        scope.setTemplateId(templateId);
+        scope.setOptionType(optionType);
+        scope.setOptionCode(optionCode);
+        scope.setOptionLabel(optionLabel);
+        scope.setSortOrder(sortOrder);
+        scopeMapper.insert(scope);
+    }
+
     private Map<String, String> scopeLabelMap() {
         Map<String, String> labelMap = new LinkedHashMap<>();
-        labelMap.put("department", "限定部门使用");
-        labelMap.put("position", "限定岗位使用");
-        labelMap.put("expense-type", "限定费用类型使用");
-        labelMap.put("amount-range", "限定金额区间");
+        labelMap.put("department", "\u9650\u5b9a\u90e8\u95e8\u4f7f\u7528");
+        labelMap.put("position", "\u9650\u5b9a\u5c97\u4f4d\u4f7f\u7528");
+        labelMap.put("expense-type", "\u9650\u5b9a\u8d39\u7528\u7c7b\u578b\u4f7f\u7528");
+        labelMap.put("amount-range", "\u9650\u5b9a\u91d1\u989d");
         return labelMap;
+    }
+
+    private List<ProcessFormOptionVO> loadEnabledArchiveOptions() {
+        return customArchiveDesignMapper.selectList(
+                Wrappers.<ProcessCustomArchiveDesign>lambdaQuery()
+                        .eq(ProcessCustomArchiveDesign::getStatus, 1)
+                        .orderByDesc(ProcessCustomArchiveDesign::getUpdatedAt, ProcessCustomArchiveDesign::getId)
+        ).stream().map(archive -> option(archive.getArchiveName(), archive.getArchiveCode())).toList();
+    }
+
+    private Map<String, String> enabledArchiveLabelMap() {
+        return loadEnabledArchiveOptions().stream().collect(Collectors.toMap(
+                ProcessFormOptionVO::getValue,
+                ProcessFormOptionVO::getLabel,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
     }
 
     private List<ProcessFormOptionVO> loadSelectArchiveOptions(String archiveCode) {
@@ -781,10 +1109,19 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                 LinkedHashMap::new
         ));
     }
+
+    private ProcessDocumentTemplate requireTemplate(Long id) {
+        ProcessDocumentTemplate template = templateMapper.selectById(id);
+        if (template == null) {
+            throw new IllegalStateException("模板不存在");
+        }
+        return template;
+    }
+
     private ProcessCustomArchiveDesign requireCustomArchive(Long id) {
         ProcessCustomArchiveDesign archive = customArchiveDesignMapper.selectById(id);
         if (archive == null) {
-            throw new IllegalStateException("未找到对应的自定义档案");
+            throw new IllegalStateException("\u81ea\u5b9a\u4e49\u6863\u6848\u4e0d\u5b58\u5728");
         }
         return archive;
     }
@@ -796,7 +1133,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                         .last("limit 1")
         );
         if (archive == null) {
-            throw new IllegalStateException("未找到对应的自定义档案");
+            throw new IllegalStateException("\u81ea\u5b9a\u4e49\u6863\u6848\u4e0d\u5b58\u5728");
         }
         return archive;
     }
@@ -869,15 +1206,15 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     private void validateCustomArchive(ProcessCustomArchiveSaveDTO dto) {
         if (!Set.of(ARCHIVE_TYPE_SELECT, ARCHIVE_TYPE_AUTO_RULE).contains(trimToEmpty(dto.getArchiveType()))) {
-            throw new IllegalArgumentException("自定义档案类型仅支持 SELECT 或 AUTO_RULE");
+            throw new IllegalArgumentException("闂傚倸鍊烽懗鍫曞储瑜旈妴鍐╂償閵忋埄娲稿┑鐘诧工閻楀﹪宕戦埡鍛厽闁逛即娼ф晶浼存煃缂佹ɑ绀€妞ゎ叀娉曢幑鍕瑹椤栨艾澹勯梻渚€鈧偛鑻晶顕€鏌涙繝鍐╁€愰柕鍡楁噺缁虹晫绮欓崸妤€鏁归梻渚€娼ф蹇曠礊閸℃鐒介柛顐ｆ礃閳锋垿鏌熼懖鈺佷粶濠碘€冲悑閵囧嫰骞嬪┑鍡╀紑闂佸憡甯楃敮妤呭箚閺冨牆惟闁靛／鍐╂啟濠碉紕鍋戦崐鏍偋濡ゅ啰鐭欓柟杈鹃檮閸?SELECT 闂?AUTO_RULE");
         }
         if (dto.getItems() == null || dto.getItems().isEmpty()) {
-            throw new IllegalArgumentException("请至少配置一个结果项");
+            throw new IllegalArgumentException("\u8bf7\u81f3\u5c11\u6dfb\u52a0\u4e00\u4e2a\u7ed3\u679c\u9879");
         }
 
         for (ProcessCustomArchiveItemDTO item : dto.getItems()) {
             if (trimToNull(item.getItemName()) == null) {
-                throw new IllegalArgumentException("结果项名称不能为空");
+                throw new IllegalArgumentException("\u7ed3\u679c\u9879\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
             }
             if (ARCHIVE_TYPE_AUTO_RULE.equals(dto.getArchiveType())) {
                 validateRules(item.getRules());
@@ -887,26 +1224,26 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     private void validateRules(List<ProcessCustomArchiveRuleDTO> rules) {
         if (rules == null || rules.isEmpty()) {
-            throw new IllegalArgumentException("自动划分档案的每个结果项至少需要一条规则");
+            throw new IllegalArgumentException("\u81ea\u52a8\u5212\u5206\u7c7b\u578b\u5fc5\u987b\u914d\u7f6e\u89c4\u5219");
         }
         for (ProcessCustomArchiveRuleDTO rule : rules) {
             if (rule.getGroupNo() == null || rule.getGroupNo() < 1) {
-                throw new IllegalArgumentException("规则组必须为大于 0 的整数");
+                throw new IllegalArgumentException("\u89c4\u5219\u7ec4\u5e8f\u53f7\u5fc5\u987b\u5927\u4e8e 0");
             }
             RuleFieldDefinition definition = RULE_FIELD_MAP.get(rule.getFieldKey());
             if (definition == null) {
-                throw new IllegalArgumentException("存在不支持的规则字段: " + rule.getFieldKey());
+                throw new IllegalArgumentException("\u4e0d\u652f\u6301\u7684\u89c4\u5219\u5b57\u6bb5: " + rule.getFieldKey());
             }
             if (!definition.operatorKeys().contains(rule.getOperator())) {
-                throw new IllegalArgumentException("字段 " + definition.label() + " 不支持操作符 " + rule.getOperator());
+                throw new IllegalArgumentException("\u5b57\u6bb5 " + definition.label() + " \u4e0d\u652f\u6301\u64cd\u4f5c\u7b26 " + rule.getOperator());
             }
             if (rule.getCompareValue() == null) {
-                throw new IllegalArgumentException("规则比较值不能为空");
+                throw new IllegalArgumentException("\u89c4\u5219\u6bd4\u8f83\u503c\u4e0d\u80fd\u4e3a\u7a7a");
             }
             if ("BETWEEN".equals(rule.getOperator())) {
                 Object compareValue = rule.getCompareValue();
                 if (!(compareValue instanceof List<?> valueList) || valueList.size() < 2) {
-                    throw new IllegalArgumentException("BETWEEN 操作符需要提供两个边界值");
+                    throw new IllegalArgumentException("BETWEEN \u64cd\u4f5c\u7b26\u9700\u8981\u4f20\u5165\u4e24\u4e2a\u6bd4\u8f83\u503c");
                 }
             }
         }
@@ -999,7 +1336,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         try {
             return objectMapper.writeValueAsString(compareValue);
         } catch (Exception ex) {
-            throw new IllegalStateException("规则比较值序列化失败", ex);
+            throw new IllegalStateException("\u5e8f\u5217\u5316\u89c4\u5219\u6bd4\u8f83\u503c\u5931\u8d25", ex);
         }
     }
 
@@ -1010,7 +1347,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         try {
             return objectMapper.readValue(compareValue, Object.class);
         } catch (Exception ex) {
-            throw new IllegalStateException("规则比较值反序列化失败", ex);
+            throw new IllegalStateException("\u53cd\u5e8f\u5217\u5316\u89c4\u5219\u6bd4\u8f83\u503c\u5931\u8d25", ex);
         }
     }
 
@@ -1136,9 +1473,9 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     private String resolveArchiveTypeLabel(String archiveType) {
         if (ARCHIVE_TYPE_AUTO_RULE.equals(archiveType)) {
-            return "自动划分";
+            return "\u81ea\u52a8\u5212\u5206";
         }
-        return "提供选择";
+        return "\u63d0\u4f9b\u9009\u62e9";
     }
     private List<ProcessExpenseType> loadAllExpenseTypes() {
         return processExpenseTypeMapper.selectList(
@@ -1212,48 +1549,48 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private void validateExpenseType(ProcessExpenseTypeSaveDTO dto, ProcessExpenseType existing) {
         String expenseCode = trimToEmpty(dto.getExpenseCode());
         if (!expenseCode.matches("\\d{6}(\\d{2})?")) {
-            throw new IllegalArgumentException("费用类型编码仅支持 6 位或 8 位数字");
+            throw new IllegalArgumentException("\u8d39\u7528\u7c7b\u578b\u7f16\u7801\u5fc5\u987b\u4e3a 6 \u4f4d\u6216 8 \u4f4d\u6570\u5b57");
         }
 
         if (!EXPENSE_TYPE_INVOICE_MODES.contains(trimToEmpty(dto.getInvoiceFreeMode()))) {
-            throw new IllegalArgumentException("不支持的免票配置");
+            throw new IllegalArgumentException("\u662f\u5426\u514d\u7968\u914d\u7f6e\u4e0d\u5408\u6cd5");
         }
         if (!EXPENSE_TYPE_TAX_MODES.contains(trimToEmpty(dto.getTaxDeductionMode()))) {
-            throw new IllegalArgumentException("不支持的税额抵扣与转出配置");
+            throw new IllegalArgumentException("\u7a0e\u989d\u62b5\u6263\u4e0e\u8f6c\u51fa\u914d\u7f6e\u4e0d\u5408\u6cd5");
         }
         if (!EXPENSE_TYPE_SEPARATION_MODES.contains(trimToEmpty(dto.getTaxSeparationMode()))) {
-            throw new IllegalArgumentException("不支持的价税分离配置");
+            throw new IllegalArgumentException("\u4ef7\u7a0e\u5206\u79bb\u89c4\u5219\u914d\u7f6e\u4e0d\u5408\u6cd5");
         }
 
         ProcessExpenseType duplicated = findExpenseTypeByCode(expenseCode);
         if (duplicated != null && (existing == null || !Objects.equals(duplicated.getId(), existing.getId()))) {
-            throw new IllegalArgumentException("费用类型编码已存在");
+            throw new IllegalArgumentException("\u8d39\u7528\u7c7b\u578b\u7f16\u7801\u5df2\u5b58\u5728");
         }
 
         ProcessExpenseType parentExpenseType = null;
         if (expenseCode.length() == 8) {
             parentExpenseType = findExpenseTypeByCode(expenseCode.substring(0, 6));
             if (parentExpenseType == null) {
-                throw new IllegalArgumentException("8 位费用类型编码必须先存在对应的 6 位上级编码");
+                throw new IllegalArgumentException("8 \u4f4d\u8d39\u7528\u7c7b\u578b\u7f16\u7801\u5fc5\u987b\u5148\u5b58\u5728\u5bf9\u5e94\u7684 6 \u4f4d\u7236\u7ea7\u7f16\u7801");
             }
         }
 
         if (existing != null && !Objects.equals(existing.getExpenseCode(), expenseCode)) {
             if (hasExpenseTypeChildren(existing.getId())) {
-                throw new IllegalStateException("当前费用类型存在下级节点，不能直接修改编码");
+                throw new IllegalStateException("\u5f53\u524d\u8d39\u7528\u7c7b\u578b\u5b58\u5728\u5b50\u7ea7\u8282\u70b9\uff0c\u4e0d\u80fd\u4fee\u6539\u7f16\u7801");
             }
             if (isExpenseTypeReferenced(existing)) {
-                throw new IllegalStateException("当前费用类型已被模板引用，不能直接修改编码");
+                throw new IllegalStateException("\u5f53\u524d\u8d39\u7528\u7c7b\u578b\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u4fee\u6539\u7f16\u7801");
             }
         }
 
         Integer targetStatus = normalizeStatus(dto.getStatus());
         if (targetStatus == 1 && parentExpenseType != null && !Objects.equals(parentExpenseType.getStatus(), 1)) {
-            throw new IllegalStateException("上级费用类型未启用，当前二级费用类型不能启用");
+            throw new IllegalStateException("\u7236\u7ea7\u8d39\u7528\u7c7b\u578b\u672a\u542f\u7528\uff0c\u5b50\u7ea7\u4e0d\u80fd\u76f4\u63a5\u542f\u7528");
         }
 
-        validateSelectableIds(normalizeIdList(dto.getScopeDeptIds()), loadValidDepartmentIdSet(), "部门");
-        validateSelectableIds(normalizeIdList(dto.getScopeUserIds()), loadValidUserIdSet(), "人员");
+        validateSelectableIds(normalizeIdList(dto.getScopeDeptIds()), loadValidDepartmentIdSet(), "\u90e8\u95e8");
+        validateSelectableIds(normalizeIdList(dto.getScopeUserIds()), loadValidUserIdSet(), "\u4eba\u5458");
     }
 
     private void applyExpenseTypeBase(ProcessExpenseType expenseType, ProcessExpenseTypeSaveDTO dto) {
@@ -1280,7 +1617,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         }
         ProcessExpenseType parentExpenseType = processExpenseTypeMapper.selectById(expenseType.getParentId());
         if (parentExpenseType != null && !Objects.equals(parentExpenseType.getStatus(), 1)) {
-            throw new IllegalStateException("上级费用类型未启用，当前节点不能启用");
+            throw new IllegalStateException("\u7236\u7ea7\u8d39\u7528\u7c7b\u578b\u672a\u542f\u7528\uff0c\u5b50\u7ea7\u4e0d\u80fd\u542f\u7528");
         }
     }
 
@@ -1301,7 +1638,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private ProcessExpenseType requireExpenseType(Long id) {
         ProcessExpenseType expenseType = processExpenseTypeMapper.selectById(id);
         if (expenseType == null) {
-            throw new IllegalStateException("未找到对应的费用类型");
+            throw new IllegalStateException("\u8d39\u7528\u7c7b\u578b\u4e0d\u5b58\u5728");
         }
         return expenseType;
     }
@@ -1354,7 +1691,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                         .eq(User::getStatus, 1)
                         .orderByAsc(User::getId)
         ).stream().map(user -> {
-            String label = trimToNull(user.getName()) != null ? user.getName() : normalize(user.getUsername(), "未命名人员");
+            String label = trimToNull(user.getName()) != null ? user.getName() : normalize(user.getUsername(), "\u672a\u547d\u540d\u7528\u6237");
             if (trimToNull(user.getUsername()) != null && !Objects.equals(label, user.getUsername())) {
                 label = label + " (" + user.getUsername() + ")";
             }
@@ -1378,10 +1715,17 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         ).stream().map(item -> String.valueOf(item.getId())).collect(Collectors.toSet());
     }
 
+    private Set<String> loadValidExpenseTypeCodeSet() {
+        return loadEnabledExpenseTypes().stream()
+                .map(ProcessExpenseType::getExpenseCode)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
     private void validateSelectableIds(List<String> selectedIds, Set<String> validIds, String fieldName) {
         for (String selectedId : selectedIds) {
             if (!validIds.contains(selectedId)) {
-                throw new IllegalArgumentException(fieldName + "范围中存在无效数据: " + selectedId);
+                throw new IllegalArgumentException(fieldName + " \u9009\u62e9\u9879\u4e0d\u5b58\u5728: " + selectedId);
             }
         }
     }
@@ -1404,7 +1748,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         try {
             return objectMapper.writeValueAsString(normalizeIdList(values));
         } catch (Exception ex) {
-            throw new IllegalStateException("范围数据序列化失败", ex);
+            throw new IllegalStateException("\u5e8f\u5217\u5316\u8303\u56f4\u6570\u636e\u5931\u8d25", ex);
         }
     }
 
@@ -1417,7 +1761,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             });
             return normalizeIdList(values);
         } catch (Exception ex) {
-            throw new IllegalStateException("范围数据反序列化失败", ex);
+            throw new IllegalStateException("\u53cd\u5e8f\u5217\u5316\u8303\u56f4\u6570\u636e\u5931\u8d25", ex);
         }
     }
 

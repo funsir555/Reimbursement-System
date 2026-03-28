@@ -1,24 +1,21 @@
 server:
-  port: 8081
+  port: ${FINEX_AUTH_SERVICE_PORT:8081}
 
 spring:
   application:
     name: auth-service
-  
   datasource:
-    url: jdbc:mysql://localhost:3306/finex_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
+    url: ${FINEX_DB_URL:jdbc:mysql://localhost:3306/finex_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${FINEX_DB_USERNAME:root}
+    password: ${FINEX_DB_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
 
-# MyBatis Plus
 mybatis-plus:
   configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: ${FINEX_MYBATIS_LOG_IMPL:org.apache.ibatis.logging.nologging.NoLoggingImpl}
     map-underscore-to-camel-case: true
   global-config:
     db-config:
@@ -27,7 +24,16 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# 日志
+finex:
+  security:
+    jwt-secret: ${FINEX_JWT_SECRET:}
+  async:
+    core-pool-size: ${FINEX_ASYNC_CORE_POOL_SIZE:4}
+    max-pool-size: ${FINEX_ASYNC_MAX_POOL_SIZE:8}
+    queue-capacity: ${FINEX_ASYNC_QUEUE_CAPACITY:200}
+    thread-name-prefix: ${FINEX_ASYNC_THREAD_NAME_PREFIX:finex-async-}
+    await-termination-seconds: ${FINEX_ASYNC_AWAIT_TERMINATION_SECONDS:30}
+
 logging:
   level:
-    com.finex: debug
+    com.finex: ${FINEX_LOG_LEVEL:info}

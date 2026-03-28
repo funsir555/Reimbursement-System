@@ -243,6 +243,94 @@ export interface InvoiceSummary {
   ocrStatus: string
 }
 
+export interface FinanceVoucherOption {
+  value: string
+  label: string
+}
+
+export interface FinanceVoucherEntry {
+  inid?: number
+  cdigest: string
+  ccode: string
+  cdeptId?: string
+  cpersonId?: string
+  ccusId?: string
+  csupId?: string
+  citemClass?: string
+  citemId?: string
+  cexchName?: string
+  nfrat?: number
+  md?: number
+  mc?: number
+  ndS?: number
+  ncS?: number
+}
+
+export interface FinanceVoucherForm {
+  companyId: string
+  iperiod: number
+  csign: string
+  inoId?: number
+  dbillDate: string
+  idoc: number
+  cbill: string
+  ctext1?: string
+  ctext2?: string
+  entries: FinanceVoucherEntry[]
+}
+
+export type FinanceVoucherSavePayload = FinanceVoucherForm
+
+export interface FinanceVoucherMeta {
+  companyOptions: FinanceVoucherOption[]
+  departmentOptions: FinanceVoucherOption[]
+  employeeOptions: FinanceVoucherOption[]
+  voucherTypeOptions: FinanceVoucherOption[]
+  currencyOptions: FinanceVoucherOption[]
+  accountOptions: FinanceVoucherOption[]
+  customerOptions: FinanceVoucherOption[]
+  supplierOptions: FinanceVoucherOption[]
+  projectClassOptions: FinanceVoucherOption[]
+  projectOptions: FinanceVoucherOption[]
+  defaultCompanyId?: string
+  defaultBillDate: string
+  defaultPeriod: number
+  defaultVoucherType: string
+  suggestedVoucherNo: number
+  defaultMaker: string
+  defaultAttachedDocCount: number
+  defaultCurrency: string
+}
+
+export interface FinanceVoucherDetail {
+  voucherNo: string
+  companyId: string
+  iperiod: number
+  csign: string
+  inoId: number
+  dbillDate: string
+  idoc: number
+  cbill: string
+  ctext1?: string
+  ctext2?: string
+  status: string
+  totalDebit: number
+  totalCredit: number
+  entries: FinanceVoucherEntry[]
+}
+
+export interface FinanceVoucherSaveResult {
+  voucherNo: string
+  companyId: string
+  iperiod: number
+  csign: string
+  inoId: number
+  entryCount: number
+  totalDebit: number
+  totalCredit: number
+  status: string
+}
+
 export interface DashboardData {
   user: UserProfile
   pendingApprovalCount: number
@@ -275,6 +363,7 @@ export interface ProcessTemplateCard {
   id: number
   templateCode: string
   name: string
+  templateTypeCode: string
   templateType: string
   businessDomain: string
   description: string
@@ -317,13 +406,14 @@ export interface ProcessTemplateFormOptions {
   templateTypeLabel: string
   categoryOptions: ProcessFormOption[]
   numberingRulePreview: string
+  formDesignOptions: ProcessFormOption[]
   printModes: ProcessFormOption[]
   approvalFlows: ProcessFormOption[]
   paymentModes: ProcessFormOption[]
   allocationForms: ProcessFormOption[]
   expenseTypes: ProcessExpenseTypeTreeNode[]
+  departmentOptions: ProcessFormOption[]
   aiAuditModes: ProcessFormOption[]
-  scopeOptions: ProcessFormOption[]
   tagOptions: ProcessFormOption[]
   installmentOptions: ProcessFormOption[]
 }
@@ -333,17 +423,25 @@ export interface ProcessTemplateSavePayload {
   templateName: string
   templateDescription: string
   category: string
-  iconColor: string
   enabled: boolean
+  formDesign: string
   printMode: string
   approvalFlow: string
   paymentMode: string
   allocationForm: string
-  expenseTypes: string[]
   aiAuditMode: string
-  scopeOptions: string[]
+  scopeDeptIds: string[]
+  scopeExpenseTypeCodes: string[]
+  amountMin?: number
+  amountMax?: number
   tagOption: string
   installmentOption: string
+}
+
+export interface ProcessTemplateDetail extends ProcessTemplateSavePayload {
+  id: number
+  templateCode: string
+  templateTypeLabel: string
 }
 
 export interface ProcessTemplateSaveResult {
@@ -353,12 +451,191 @@ export interface ProcessTemplateSaveResult {
   status: string
 }
 
+export interface ProcessFlowConfigOption {
+  value: string
+  label: string
+  description: string
+}
+
+export interface ProcessFlowConditionField {
+  key: string
+  label: string
+  valueType: string
+  operatorKeys: string[]
+}
+
+export interface ProcessFlowCondition {
+  fieldKey: string
+  operator: string
+  compareValue: unknown
+}
+
+export interface ProcessFlowConditionGroup {
+  groupNo: number
+  conditions: ProcessFlowCondition[]
+}
+
+export interface ProcessFlowRoute {
+  routeKey: string
+  sourceNodeKey: string
+  targetNodeKey?: string
+  routeName: string
+  priority: number
+  defaultRoute: boolean
+  conditionGroups: ProcessFlowConditionGroup[]
+}
+
+export interface ProcessFlowManagerConfig {
+  ruleMode?: string
+  deptSource?: string
+  managerLevel?: number | string
+  orgTreeLookupEnabled?: boolean
+  orgTreeLookupLevel?: number | string
+  formDeptManagerEnabled?: boolean
+}
+
+export interface ProcessFlowDesignatedMemberConfig {
+  userIds?: unknown
+}
+
+export interface ProcessFlowManualSelectConfig {
+  candidateScope?: string
+}
+
+export interface ProcessFlowNodeConfig {
+  approverType?: string
+  missingHandler?: string
+  approvalMode?: string
+  opinionDefaults?: string[]
+  specialSettings?: string[]
+  managerConfig: ProcessFlowManagerConfig
+  designatedMemberConfig: ProcessFlowDesignatedMemberConfig
+  manualSelectConfig: ProcessFlowManualSelectConfig
+  receiverType?: string
+  receiverUserIds?: unknown
+  timing?: string
+  executorType?: string
+  executorUserIds?: unknown
+  paymentAction?: string
+  [key: string]: unknown
+}
+
+export interface ProcessFlowNode {
+  nodeKey: string
+  nodeType: string
+  nodeName: string
+  sceneId?: number
+  parentNodeKey?: string
+  displayOrder: number
+  config: ProcessFlowNodeConfig
+}
+
+export interface ProcessFlowSummary {
+  id: number
+  flowCode: string
+  flowName: string
+  flowDescription?: string
+  status: string
+  statusLabel: string
+  currentVersionNo?: number
+  updatedAt: string
+}
+
+export interface ProcessFlowScene {
+  id: number
+  sceneCode: string
+  sceneName: string
+  sceneDescription?: string
+  status: number
+}
+
+export interface ProcessFlowDetail {
+  id?: number
+  flowCode?: string
+  flowName: string
+  flowDescription?: string
+  status: string
+  statusLabel?: string
+  editableVersionId?: number
+  editableVersionNo?: number
+  publishedVersionId?: number
+  publishedVersionNo?: number
+  hasDraftVersion?: boolean
+  nodes: ProcessFlowNode[]
+  routes: ProcessFlowRoute[]
+}
+
+export interface ProcessFlowMeta {
+  nodeTypeOptions: ProcessFormOption[]
+  sceneOptions: ProcessFlowScene[]
+  approvalApproverTypeOptions: ProcessFormOption[]
+  approvalManagerRuleModeOptions: ProcessFormOption[]
+  approvalManagerDeptSourceOptions: ProcessFormOption[]
+  approvalManagerLevelOptions: ProcessFormOption[]
+  approvalManagerLookupLevelOptions: ProcessFormOption[]
+  approvalManualCandidateScopeOptions: ProcessFormOption[]
+  ccReceiverTypeOptions: ProcessFormOption[]
+  paymentExecutorTypeOptions: ProcessFormOption[]
+  missingHandlerOptions: ProcessFormOption[]
+  approvalModeOptions: ProcessFormOption[]
+  defaultApprovalOpinions: string[]
+  approvalSpecialOptions: ProcessFlowConfigOption[]
+  ccTimingOptions: ProcessFormOption[]
+  ccSpecialOptions: ProcessFlowConfigOption[]
+  paymentActionOptions: ProcessFormOption[]
+  paymentSpecialOptions: ProcessFlowConfigOption[]
+  branchOperatorOptions: ProcessFormOption[]
+  branchConditionFields: ProcessFlowConditionField[]
+  departmentOptions: ProcessFormOption[]
+  userOptions: ProcessFormOption[]
+  expenseTypeOptions: ProcessFormOption[]
+  archiveOptions: ProcessFormOption[]
+}
+
+export interface ProcessFlowSavePayload {
+  flowName: string
+  flowDescription?: string
+  nodes: ProcessFlowNode[]
+  routes: ProcessFlowRoute[]
+}
+
+export interface ProcessFlowStatusPayload {
+  status: string
+}
+
+export interface ProcessFlowResolveApproversPayload {
+  flowId: number
+  nodeKey: string
+  context: Record<string, unknown>
+}
+
+export interface ProcessFlowResolvedUser {
+  userId: number
+  userName: string
+  deptId?: number
+  deptName?: string
+}
+
+export interface ProcessFlowResolveApproversResult {
+  resolutionType: string
+  nextAction?: string
+  approverUserIds: number[]
+  approverUsers: ProcessFlowResolvedUser[]
+  trace: string[]
+}
+
+export interface ProcessFlowSceneSavePayload {
+  sceneName: string
+  sceneDescription?: string
+  status?: number
+}
+
 export interface ProcessCustomArchiveRule {
   id?: number
   groupNo: number
   fieldKey: string
   operator: string
-  compareValue: any
+  compareValue: unknown
 }
 
 export interface ProcessCustomArchiveItem {
@@ -611,6 +888,18 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<ApiRe
   return payload
 }
 
+function buildQueryString(params: Record<string, string | number | undefined | null>) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return
+    }
+    search.append(key, String(value))
+  })
+  const query = search.toString()
+  return query ? `?${query}` : ''
+}
+
 export const authApi = {
   loginByPassword: (username: string, password: string) =>
     request<LoginResponse>('/auth/login', {
@@ -632,13 +921,67 @@ export const invoiceApi = {
   list: () => request<InvoiceSummary[]>('/auth/invoices')
 }
 
+export const financeApi = {
+  getVoucherMeta: (params: { companyId?: string; billDate?: string; csign?: string } = {}) =>
+    request<FinanceVoucherMeta>(`/auth/finance/vouchers/meta${buildQueryString(params)}`),
+  getVoucherDetail: (voucherNo: string) =>
+    request<FinanceVoucherDetail>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}`),
+  createVoucher: (payload: FinanceVoucherSavePayload) =>
+    request<FinanceVoucherSaveResult>('/auth/finance/vouchers', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+}
+
 export const processApi = {
   getOverview: () => request<ProcessCenterOverview>('/auth/process-management/overview'),
   getTemplateTypes: () => request<ProcessTemplateTypeOption[]>('/auth/process-management/template-types'),
   getFormOptions: (templateType: string) =>
     request<ProcessTemplateFormOptions>(`/auth/process-management/form-options?templateType=${templateType}`),
+  getTemplateDetail: (id: number) =>
+    request<ProcessTemplateDetail>(`/auth/process-management/templates/${id}`),
   createTemplate: (payload: ProcessTemplateSavePayload) =>
     request<ProcessTemplateSaveResult>('/auth/process-management/templates', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateTemplate: (id: number, payload: ProcessTemplateSavePayload) =>
+    request<ProcessTemplateSaveResult>(`/auth/process-management/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  listFlows: () =>
+    request<ProcessFlowSummary[]>('/auth/process-management/flows'),
+  getFlowMeta: () =>
+    request<ProcessFlowMeta>('/auth/process-management/flows/meta'),
+  getFlowDetail: (id: number) =>
+    request<ProcessFlowDetail>(`/auth/process-management/flows/${id}`),
+  createFlow: (payload: ProcessFlowSavePayload) =>
+    request<ProcessFlowDetail>('/auth/process-management/flows', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateFlow: (id: number, payload: ProcessFlowSavePayload) =>
+    request<ProcessFlowDetail>(`/auth/process-management/flows/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  publishFlow: (id: number) =>
+    request<ProcessFlowDetail>(`/auth/process-management/flows/${id}/publish`, {
+      method: 'POST'
+    }),
+  updateFlowStatus: (id: number, payload: ProcessFlowStatusPayload) =>
+    request<boolean>(`/auth/process-management/flows/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    }),
+  resolveFlowApprovers: (payload: ProcessFlowResolveApproversPayload) =>
+    request<ProcessFlowResolveApproversResult>('/auth/process-management/flows/resolve-approvers', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  createFlowScene: (payload: ProcessFlowSceneSavePayload) =>
+    request<ProcessFlowScene>('/auth/process-management/flow-scenes', {
       method: 'POST',
       body: JSON.stringify(payload)
     }),

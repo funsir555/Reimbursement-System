@@ -16,6 +16,8 @@ public class ProcessTemplateCardVO {
 
     private String name;
 
+    private String templateTypeCode;
+
     private String templateType;
 
     private String businessDomain;

@@ -18,6 +18,8 @@ public class ProcessTemplateFormOptionsVO {
 
     private String numberingRulePreview;
 
+    private List<ProcessFormOptionVO> formDesignOptions;
+
     private List<ProcessFormOptionVO> printModes;
 
     private List<ProcessFormOptionVO> approvalFlows;
@@ -28,9 +30,9 @@ public class ProcessTemplateFormOptionsVO {
 
     private List<ProcessExpenseTypeTreeVO> expenseTypes;
 
-    private List<ProcessFormOptionVO> aiAuditModes;
+    private List<ProcessFormOptionVO> departmentOptions;
 
-    private List<ProcessFormOptionVO> scopeOptions;
+    private List<ProcessFormOptionVO> aiAuditModes;
 
     private List<ProcessFormOptionVO> tagOptions;
 

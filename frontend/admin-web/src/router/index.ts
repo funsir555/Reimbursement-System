@@ -75,8 +75,31 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/process/ProcessTemplateCreateView.vue'),
         meta: { title: 'Create Process Template', permissionCode: 'expense:process_management:view' }
       },
+      {
+        path: 'expense/workbench/process-management/edit/:templateType/:id',
+        name: 'expense-workbench-process-management-edit',
+        component: () => import('../views/process/ProcessTemplateCreateView.vue'),
+        meta: { title: 'Edit Process Template', permissionCode: 'expense:process_management:view' }
+      },
+      {
+        path: 'expense/workbench/process-management/flow-designer/create',
+        name: 'expense-workbench-process-flow-create',
+        component: () => import('../views/process/ProcessFlowDesignerView.vue'),
+        meta: { title: 'Process Flow Designer', permissionCode: 'expense:process_management:view' }
+      },
+      {
+        path: 'expense/workbench/process-management/flow-designer/:id',
+        name: 'expense-workbench-process-flow-edit',
+        component: () => import('../views/process/ProcessFlowDesignerView.vue'),
+        meta: { title: 'Process Flow Designer', permissionCode: 'expense:process_management:view' }
+      },
       placeholderRoute('expense/workbench/budget-management', 'expense-workbench-budget-management', 'Budget Management', 'Budget management', 'expense:budget_management:view'),
-      placeholderRoute('finance/general-ledger/new-voucher', 'finance-new-voucher', 'New Voucher', 'Create finance vouchers', 'finance:general_ledger:new_voucher:view'),
+      {
+        path: 'finance/general-ledger/new-voucher',
+        name: 'finance-new-voucher',
+        component: () => import('../views/finance/FinanceNewVoucherView.vue'),
+        meta: { title: 'New Voucher', description: 'Create finance vouchers', permissionCode: 'finance:general_ledger:new_voucher:view' }
+      },
       placeholderRoute('finance/general-ledger/query-voucher', 'finance-query-voucher', 'Query Voucher', 'Query vouchers', 'finance:general_ledger:query_voucher:view'),
       placeholderRoute('finance/general-ledger/review-voucher', 'finance-review-voucher', 'Review Voucher', 'Review vouchers', 'finance:general_ledger:review_voucher:view'),
       placeholderRoute('finance/general-ledger/balance-sheet', 'finance-ledger-balance-sheet', 'Ledger Balance Sheet', 'Ledger balance sheet', 'finance:general_ledger:balance_sheet:view'),

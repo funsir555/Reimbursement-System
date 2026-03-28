@@ -5,12 +5,19 @@ import com.finex.auth.dto.LoginVO;
 import com.finex.auth.service.UserService;
 import com.finex.common.Result;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 认证控制器
  */
+@Slf4j
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -27,8 +34,9 @@ public class AuthController {
         try {
             LoginVO loginVO = userService.login(loginDTO);
             return Result.success("登录成功", loginVO);
-        } catch (RuntimeException e) {
-            return Result.error(e.getMessage());
+        } catch (RuntimeException ex) {
+            log.error("Login failed for username={}", loginDTO.getUsername(), ex);
+            return Result.error(resolveLoginErrorMessage(ex));
         }
     }
 
@@ -38,5 +46,34 @@ public class AuthController {
     @GetMapping("/test")
     public Result<String> test() {
         return Result.success("服务运行正常");
+    }
+
+    private String resolveLoginErrorMessage(RuntimeException ex) {
+        if (ex.getMessage() != null && !ex.getMessage().isBlank()) {
+            return ex.getMessage();
+        }
+
+        Throwable rootCause = ex;
+        while (rootCause.getCause() != null) {
+            rootCause = rootCause.getCause();
+        }
+
+        String rootMessage = rootCause.getMessage();
+        if (rootMessage != null) {
+            String lowerCaseMessage = rootMessage.toLowerCase();
+            if (lowerCaseMessage.contains("access denied")) {
+                return "数据库连接失败，请检查 FINEX_DB_USERNAME 和 FINEX_DB_PASSWORD 配置";
+            }
+            if (lowerCaseMessage.contains("communications link failure")
+                    || lowerCaseMessage.contains("connection refused")
+                    || lowerCaseMessage.contains("the driver has not received any packets")) {
+                return "数据库未连接，请确认 MySQL 已启动且 FINEX_DB_URL 配置正确";
+            }
+            if (lowerCaseMessage.contains("unknown database")) {
+                return "数据库 finex_db 不存在，请先执行初始化 SQL";
+            }
+        }
+
+        return "登录失败，请检查数据库配置和初始化状态";
     }
 }

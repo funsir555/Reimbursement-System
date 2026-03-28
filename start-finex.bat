@@ -3,6 +3,29 @@ setlocal
 
 set "ROOT=%~dp0"
 
+if exist "%ROOT%backend\.env.local.cmd" (
+  call "%ROOT%backend\.env.local.cmd"
+  echo [finex] Loaded backend\.env.local.cmd
+) else (
+  echo [finex] No backend\.env.local.cmd found. Using current environment variables.
+)
+
+if not defined FINEX_DB_URL set "FINEX_DB_URL=jdbc:mysql://localhost:3306/finex_db?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai"
+if not defined FINEX_DB_USERNAME set "FINEX_DB_USERNAME=root"
+if not defined FINEX_DB_PASSWORD set "FINEX_DB_PASSWORD=123456"
+
+if not defined FINEX_JWT_SECRET (
+  echo [finex] FINEX_JWT_SECRET is not set. auth-service will use a temporary in-memory secret for this run.
+)
+
+echo [finex] Compiling backend/common for local classpath consistency...
+call mvn -f "%ROOT%backend\common\pom.xml" -DskipTests compile
+if errorlevel 1 (
+  echo [finex] Failed to compile backend/common
+  endlocal
+  exit /b 1
+)
+
 echo [finex] Checking occupied backend ports...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ports = 8080,8081; " ^

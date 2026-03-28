@@ -3,6 +3,7 @@ package com.finex.auth.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -21,9 +22,9 @@ public class ProcessTemplateSaveDTO {
 
     private String category;
 
-    private String iconColor;
-
     private Boolean enabled;
+
+    private String formDesign;
 
     private String printMode;
 
@@ -33,11 +34,15 @@ public class ProcessTemplateSaveDTO {
 
     private String allocationForm;
 
-    private List<String> expenseTypes;
-
     private String aiAuditMode;
 
-    private List<String> scopeOptions;
+    private List<String> scopeDeptIds;
+
+    private List<String> scopeExpenseTypeCodes;
+
+    private BigDecimal amountMin;
+
+    private BigDecimal amountMax;
 
     private String tagOption;
 

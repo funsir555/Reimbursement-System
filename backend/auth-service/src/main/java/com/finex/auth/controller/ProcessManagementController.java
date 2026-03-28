@@ -13,6 +13,16 @@ import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
 import com.finex.auth.dto.ProcessExpenseTypeStatusDTO;
 import com.finex.auth.dto.ProcessExpenseTypeTreeVO;
+import com.finex.auth.dto.ProcessFlowDetailVO;
+import com.finex.auth.dto.ProcessFlowMetaVO;
+import com.finex.auth.dto.ProcessFlowResolveApproversDTO;
+import com.finex.auth.dto.ProcessFlowResolveApproversVO;
+import com.finex.auth.dto.ProcessFlowSaveDTO;
+import com.finex.auth.dto.ProcessFlowSceneSaveDTO;
+import com.finex.auth.dto.ProcessFlowSceneVO;
+import com.finex.auth.dto.ProcessFlowStatusDTO;
+import com.finex.auth.dto.ProcessFlowSummaryVO;
+import com.finex.auth.dto.ProcessTemplateDetailVO;
 import com.finex.auth.dto.ProcessTemplateFormOptionsVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.dto.ProcessTemplateSaveResultVO;
@@ -71,6 +81,15 @@ public class ProcessManagementController {
         return Result.success(processManagementService.getFormOptions(templateType));
     }
 
+    @GetMapping("/templates/{id}")
+    public Result<ProcessTemplateDetailVO> templateDetail(
+            @PathVariable Long id,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.getTemplateDetail(id));
+    }
+
     @PostMapping("/templates")
     public Result<ProcessTemplateSaveResultVO> createTemplate(
             @Valid @RequestBody ProcessTemplateSaveDTO dto,
@@ -80,6 +99,19 @@ public class ProcessManagementController {
         return Result.success(
                 "模板保存成功",
                 processManagementService.saveTemplate(dto, getCurrentUsername(request))
+        );
+    }
+
+    @PutMapping("/templates/{id}")
+    public Result<ProcessTemplateSaveResultVO> updateTemplate(
+            @PathVariable Long id,
+            @Valid @RequestBody ProcessTemplateSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success(
+                "模板更新成功",
+                processManagementService.updateTemplate(id, dto, getCurrentUsername(request))
         );
     }
 
@@ -202,6 +234,77 @@ public class ProcessManagementController {
     public Result<Boolean> deleteExpenseType(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
         return Result.success("Expense type deleted", processManagementService.deleteExpenseType(id));
+    }
+
+    @GetMapping("/flows")
+    public Result<List<ProcessFlowSummaryVO>> listFlows(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.listFlows());
+    }
+
+    @GetMapping("/flows/meta")
+    public Result<ProcessFlowMetaVO> flowMeta(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.getFlowMeta());
+    }
+
+    @GetMapping("/flows/{id}")
+    public Result<ProcessFlowDetailVO> flowDetail(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.getFlowDetail(id));
+    }
+
+    @PostMapping("/flows")
+    public Result<ProcessFlowDetailVO> createFlow(
+            @Valid @RequestBody ProcessFlowSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
+        return Result.success("流程创建成功", processManagementService.createFlow(dto));
+    }
+
+    @PutMapping("/flows/{id}")
+    public Result<ProcessFlowDetailVO> updateFlow(
+            @PathVariable Long id,
+            @Valid @RequestBody ProcessFlowSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("流程保存成功", processManagementService.updateFlow(id, dto));
+    }
+
+    @PostMapping("/flows/{id}/publish")
+    public Result<ProcessFlowDetailVO> publishFlow(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), PROCESS_CREATE, PROCESS_EDIT, PROCESS_PUBLISH);
+        return Result.success("流程发布成功", processManagementService.publishFlow(id));
+    }
+
+    @PatchMapping("/flows/{id}/status")
+    public Result<Boolean> updateFlowStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody ProcessFlowStatusDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), PROCESS_DISABLE, PROCESS_PUBLISH);
+        return Result.success("流程状态更新成功", processManagementService.updateFlowStatus(id, dto.getStatus()));
+    }
+
+    @PostMapping("/flow-scenes")
+    public Result<ProcessFlowSceneVO> createFlowScene(
+            @Valid @RequestBody ProcessFlowSceneSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
+        return Result.success("流程场景创建成功", processManagementService.createFlowScene(dto));
+    }
+
+    @PostMapping("/flows/resolve-approvers")
+    public Result<ProcessFlowResolveApproversVO> resolveFlowApprovers(
+            @Valid @RequestBody ProcessFlowResolveApproversDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.resolveFlowApprovers(dto));
     }
 
     private Long getCurrentUserId(HttpServletRequest request) {

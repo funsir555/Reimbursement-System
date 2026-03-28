@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS pm_document_template (
     category_code VARCHAR(64) NOT NULL COMMENT '鍒嗙被缂栫爜',
     template_description VARCHAR(500) COMMENT '妯℃澘璇存槑',
     numbering_rule VARCHAR(64) COMMENT '缂栧彿瑙勫垯',
+    form_design_code VARCHAR(64) COMMENT '表单设计编码',
     icon_color VARCHAR(32) DEFAULT 'blue' COMMENT '涓婚鑹?,
     enabled TINYINT DEFAULT 1 COMMENT '鏄惁鍚敤',
     publish_status VARCHAR(16) DEFAULT 'ENABLED' COMMENT '鍙戝竷鐘舵€?,
@@ -223,6 +224,9 @@ ALTER TABLE pm_document_template
     ADD COLUMN IF NOT EXISTS numbering_rule VARCHAR(64) COMMENT '缂栧彿瑙勫垯' AFTER template_description;
 
 ALTER TABLE pm_document_template
+    ADD COLUMN IF NOT EXISTS form_design_code VARCHAR(64) COMMENT '表单设计编码' AFTER numbering_rule;
+
+ALTER TABLE pm_document_template
     ADD COLUMN IF NOT EXISTS allocation_form VARCHAR(64) COMMENT '鍒嗘憡琛ㄥ崟' AFTER payment_mode;
 
 ALTER TABLE pm_document_template
@@ -235,7 +239,7 @@ ALTER TABLE pm_document_template
 CREATE TABLE IF NOT EXISTS pm_template_scope (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '鑼冨洿鏄庣粏ID',
     template_id BIGINT NOT NULL COMMENT '妯℃澘ID',
-    option_type VARCHAR(32) NOT NULL COMMENT '鏄庣粏绫诲瀷:EXPENSE_TYPE/SCOPE_OPTION/TAG_OPTION/INSTALLMENT_OPTION',
+    option_type VARCHAR(32) NOT NULL COMMENT '明细类型:SCOPE_DEPARTMENT/SCOPE_EXPENSE_TYPE/SCOPE_AMOUNT_MIN/SCOPE_AMOUNT_MAX/TAG_OPTION/INSTALLMENT_OPTION',
     option_code VARCHAR(64) NOT NULL COMMENT '閫夐」缂栫爜',
     option_label VARCHAR(64) NOT NULL COMMENT '閫夐」鍚嶇О',
     sort_order INT DEFAULT 0 COMMENT '鎺掑簭鍙?,
@@ -518,44 +522,44 @@ WHERE a.archive_code = 'PROCESS_DEPT_AUTO_RULE'
 
 INSERT INTO pm_document_template (
     template_code, template_name, template_type, template_type_label, category_code,
-    template_description, numbering_rule, icon_color, enabled, publish_status, print_mode,
+    template_description, numbering_rule, form_design_code, icon_color, enabled, publish_status, print_mode,
     approval_flow, flow_name, payment_mode, allocation_form, ai_audit_mode, highlights,
     owner_name, sort_order
 )
 VALUES
     (
         'PUB-EXP-01', '瀵瑰叕宸梾浠樻', 'report', '鎶ラ攢鍗?, 'enterprise-payment',
-        '閫傜敤浜庝緵搴斿晢鍨粯宸梾璐圭敤鍚庣殑缁熶竴鎶ラ攢涓庝粯娆炬祦杞€?, 'FX_DATE_4SEQ', 'blue', 1, 'ENABLED', 'default-print',
+        '閫傜敤浜庝緵搴斿晢鍨粯宸梾璐圭敤鍚庣殑缁熶竴鎶ラ攢涓庝粯娆炬祦杞€?, 'FX_DATE_4SEQ', 'expense-public-form', 'blue', 1, 'ENABLED', 'default-print',
         'public-payment-flow', '瀵瑰叕浠樻娴佺▼', 'public-payment', 'allocation-default', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐AI 瀹℃牳',
         '娴佺▼涓績', 10
     ),
     (
         'PUB-APP-02', '瀵瑰叕浠樻鐢宠', 'application', '鐢宠鍗?, 'enterprise-payment',
-        '鐢ㄤ簬閲囪喘棰勪粯娆俱€佹湇鍔′粯娆惧拰闃舵灏炬鐨勫鎵广€?, 'FX_DATE_4SEQ', 'cyan', 1, 'ENABLED', 'finance-archive',
+        '鐢ㄤ簬閲囪喘棰勪粯娆俱€佹湇鍔′粯娆惧拰闃舵灏炬鐨勫鎵广€?, 'FX_DATE_4SEQ', 'application-public-form', 'cyan', 1, 'ENABLED', 'finance-archive',
         'public-payment-flow', '瀵瑰叕浠樻娴佺▼', 'public-payment', 'allocation-project', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐鏍囧噯瀹℃壒閾捐矾',
         '璐㈠姟鍏变韩', 20
     ),
     (
         'EMP-EXP-11', '鏍囧噯鍛樺伐鎶ラ攢', 'report', '鎶ラ攢鍗?, 'employee-expense',
-        '瑕嗙洊宸梾銆佷氦閫氥€佷綇瀹裤€佸姙鍏瓑甯歌鍛樺伐璐圭敤銆?, 'FX_DATE_4SEQ', 'blue', 1, 'ENABLED', 'default-print',
+        '瑕嗙洊宸梾銆佷氦閫氥€佷綇瀹裤€佸姙鍏瓑甯歌鍛樺伐璐圭敤銆?, 'FX_DATE_4SEQ', 'expense-standard-form', 'blue', 1, 'ENABLED', 'default-print',
         'normal-expense-flow', '鏍囧噯鎶ラ攢娴佺▼', 'none', 'allocation-default', 'standard', '鏀寔绉诲姩绔彁鍗晐AI 瀹℃牳|鏍囧噯瀹℃壒閾捐矾',
         '璐圭敤涓績', 10
     ),
     (
         'EMP-LOAN-13', '鍛樺伐鍊熸鍗?, 'loan', '鍊熸鍗?, 'employee-expense',
-        '閫傜敤浜庝复鏃跺€熸敮銆佸樊鏃呭€熸鍜屽鐢ㄩ噾鏍搁攢銆?, 'FX_DATE_4SEQ', 'orange', 1, 'ENABLED', 'default-print',
+        '閫傜敤浜庝复鏃跺€熸敮銆佸樊鏃呭€熸鍜屽鐢ㄩ噾鏍搁攢銆?, 'FX_DATE_4SEQ', 'loan-standard-form', 'orange', 1, 'ENABLED', 'default-print',
         'loan-return-flow', '鍊熸涓庡綊杩樻祦绋?, 'private-payment', 'allocation-default', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐鍒嗘湡浠樻',
         '璐圭敤涓績', 20
     ),
     (
         'BIZ-APP-21', '椤圭洰绔嬮」鐢宠', 'application', '鐢宠鍗?, 'business-application',
-        '鐢ㄤ簬椤圭洰绔嬮」銆侀绠楀喕缁撳拰璺ㄩ儴闂ㄥ崗鍚屽鎵广€?, 'FX_DATE_4SEQ', 'blue', 1, 'ENABLED', 'finance-archive',
+        '鐢ㄤ簬椤圭洰绔嬮」銆侀绠楀喕缁撳拰璺ㄩ儴闂ㄥ崗鍚屽鎵广€?, 'FX_DATE_4SEQ', 'application-project-form', 'blue', 1, 'ENABLED', 'finance-archive',
         'normal-expense-flow', '椤圭洰绔嬮」娴佺▼', 'none', 'allocation-project', 'strict', '鏀寔绉诲姩绔彁鍗晐AI 瀹℃牳|鏍囧噯瀹℃壒閾捐矾',
         '椤圭洰绠＄悊', 10
     ),
     (
         'BIZ-EXP-23', '鍚堝悓浠樻鎶ラ攢', 'report', '鎶ラ攢鍗?, 'business-application',
-        '鐢ㄤ簬鍚堝悓鎵ц涓殑浠樻鎶ラ攢涓庡彴璐﹁褰曘€?, 'FX_DATE_4SEQ', 'blue', 0, 'DRAFT', 'finance-archive',
+        '鐢ㄤ簬鍚堝悓鎵ц涓殑浠樻鎶ラ攢涓庡彴璐﹁褰曘€?, 'FX_DATE_4SEQ', 'expense-public-form', 'blue', 0, 'DRAFT', 'finance-archive',
         'public-payment-flow', '鍚堝悓浠樻娴佺▼', 'public-payment', 'allocation-project', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐AI 瀹℃牳',
         '鍚堝悓绠＄悊', 20
     )
@@ -566,6 +570,7 @@ ON DUPLICATE KEY UPDATE
     category_code = VALUES(category_code),
     template_description = VALUES(template_description),
     numbering_rule = VALUES(numbering_rule),
+    form_design_code = VALUES(form_design_code),
     icon_color = VALUES(icon_color),
     enabled = VALUES(enabled),
     publish_status = VALUES(publish_status),

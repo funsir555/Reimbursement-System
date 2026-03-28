@@ -28,6 +28,8 @@ public class ProcessDocumentTemplate {
 
     private String numberingRule;
 
+    private String formDesignCode;
+
     private String iconColor;
 
     private Integer enabled;

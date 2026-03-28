@@ -9,6 +9,8 @@ import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import lombok.extern.slf4j.Slf4j;
 
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.Date;
 
 /**
@@ -17,27 +19,35 @@ import java.util.Date;
 @Slf4j
 public class JwtUtil {
 
-    /**
-     * 密钥
-     */
-    private static final String SECRET = "finex-secret-key-2025";
+    private static final String SECRET_ENV = "FINEX_JWT_SECRET";
 
-    /**
-     * 签发者
-     */
+    private static final String SECRET_PROPERTY = "finex.jwt.secret";
+
     private static final String ISSUER = "finex";
 
-    /**
-     * Token过期时间（7天）
-     */
     private static final long EXPIRE_DAYS = 7;
 
-    /**
-     * 生成Token
-     */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    private static volatile String configuredSecret;
+
+    private static volatile String generatedFallbackSecret;
+
+    private static volatile boolean fallbackSecretLogged;
+
+    private JwtUtil() {
+    }
+
+    public static void configureSecret(String secret) {
+        if (StrUtil.isNotBlank(secret)) {
+            configuredSecret = secret.trim();
+        }
+    }
+
     public static String generateToken(Long userId, String username) {
         Date now = new Date();
         Date expireTime = DateUtil.offsetDay(now, (int) EXPIRE_DAYS);
+        String secret = resolveSecret();
 
         return JWT.create()
                 .withIssuer(ISSUER)
@@ -45,56 +55,86 @@ public class JwtUtil {
                 .withClaim("username", username)
                 .withIssuedAt(now)
                 .withExpiresAt(expireTime)
-                .sign(Algorithm.HMAC256(SECRET));
+                .sign(Algorithm.HMAC256(secret));
     }
 
-    /**
-     * 验证Token
-     */
     public static boolean verify(String token) {
         if (StrUtil.isBlank(token)) {
             return false;
         }
         try {
-            JWTVerifier verifier = JWT.require(Algorithm.HMAC256(SECRET))
+            JWTVerifier verifier = JWT.require(Algorithm.HMAC256(resolveSecret()))
                     .withIssuer(ISSUER)
                     .build();
             verifier.verify(token);
             return true;
         } catch (JWTVerificationException e) {
-            log.warn("Token验证失败: {}", e.getMessage());
+            log.warn("Token verification failed: {}", e.getMessage());
             return false;
         }
     }
 
-    /**
-     * 解析Token
-     */
     public static DecodedJWT decode(String token) {
         return JWT.decode(token);
     }
 
-    /**
-     * 获取用户ID
-     */
     public static Long getUserId(String token) {
         DecodedJWT jwt = decode(token);
         return jwt.getClaim("userId").asLong();
     }
 
-    /**
-     * 获取用户名
-     */
     public static String getUsername(String token) {
         DecodedJWT jwt = decode(token);
         return jwt.getClaim("username").asString();
     }
 
-    /**
-     * Token是否过期
-     */
     public static boolean isExpired(String token) {
         DecodedJWT jwt = decode(token);
         return jwt.getExpiresAt().before(new Date());
+    }
+
+    private static String resolveSecret() {
+        String secret = firstNonBlank(
+                configuredSecret,
+                System.getProperty(SECRET_PROPERTY),
+                System.getenv(SECRET_ENV)
+        );
+        if (StrUtil.isNotBlank(secret)) {
+            return secret;
+        }
+
+        if (generatedFallbackSecret == null) {
+            synchronized (JwtUtil.class) {
+                if (generatedFallbackSecret == null) {
+                    generatedFallbackSecret = createEphemeralSecret();
+                }
+            }
+        }
+
+        if (!fallbackSecretLogged) {
+            synchronized (JwtUtil.class) {
+                if (!fallbackSecretLogged) {
+                    log.warn("JWT secret is not configured. Using an ephemeral in-memory secret for this process only.");
+                    fallbackSecretLogged = true;
+                }
+            }
+        }
+
+        return generatedFallbackSecret;
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (StrUtil.isNotBlank(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private static String createEphemeralSecret() {
+        byte[] bytes = new byte[32];
+        SECURE_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }

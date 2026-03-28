@@ -29,6 +29,7 @@ application-local.yml
 application-dev.yml
 .env
 .env.local
+.env.local.cmd
 
 # 操作系统
 .DS_Store

@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-1 gap-6 xl:grid-cols-[320px,minmax(0,1fr)]">
+  <div class="grid grid-cols-1 gap-6 xl:grid-cols-[380px,minmax(0,1fr)]">
     <el-card class="!rounded-3xl !shadow-sm">
       <template #header>
         <div class="flex items-center justify-between gap-3">
@@ -18,6 +18,7 @@
           <el-tree
             v-if="filteredTree.length"
             ref="treeRef"
+            class="expense-type-tree"
             :data="filteredTree"
             node-key="id"
             highlight-current
@@ -27,12 +28,12 @@
             @node-click="handleNodeClick"
           >
             <template #default="{ data }">
-              <div class="flex min-w-0 flex-1 items-center justify-between gap-3 py-1">
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-medium text-slate-800">{{ data.expenseName }}</p>
-                  <p class="truncate font-mono text-xs text-slate-400">{{ data.expenseCode }}</p>
+              <div class="expense-tree-node">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-[14px] font-semibold leading-6 text-slate-800">{{ data.expenseName }}</p>
+                  <p class="truncate font-mono text-[12px] leading-5 text-slate-400">{{ data.expenseCode }}</p>
                 </div>
-                <el-tag :type="data.status === 1 ? 'success' : 'info'" size="small">
+                <el-tag class="shrink-0" :type="data.status === 1 ? 'success' : 'info'" size="small">
                   {{ data.status === 1 ? '启用' : '停用' }}
                 </el-tag>
               </div>
@@ -226,7 +227,11 @@ import {
   type ProcessExpenseTypeTreeNode
 } from '@/api'
 
-const treeRef = ref<any>()
+type ExpenseTypeTreeInstance = {
+  setCurrentKey: (key: number | null) => void
+}
+
+const treeRef = ref<ExpenseTypeTreeInstance | null>(null)
 const loadingTree = ref(false)
 const loadingDetail = ref(false)
 const saving = ref(false)
@@ -237,6 +242,10 @@ const activeAnchor = ref<'basic' | 'invoice-tax'>('basic')
 const treeData = ref<ProcessExpenseTypeTreeNode[]>([])
 const meta = ref<ProcessExpenseTypeMeta | null>(null)
 const form = ref<ProcessExpenseTypeDetail | null>(null)
+
+function resolveErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
 
 const createEmptyForm = (): ProcessExpenseTypeDetail => ({
   expenseCode: '',
@@ -290,8 +299,8 @@ const loadInitialData = async (preferredId?: number) => {
       form.value = createEmptyForm()
       activeExpenseTypeId.value = undefined
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载费用类型失败')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '加载费用类型失败'))
   } finally {
     loadingTree.value = false
   }
@@ -317,8 +326,8 @@ const selectExpenseType = async (id: number) => {
     activeExpenseTypeId.value = id
     await nextTick()
     treeRef.value?.setCurrentKey(id)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载费用类型详情失败')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '加载费用类型详情失败'))
   } finally {
     loadingDetail.value = false
   }
@@ -363,8 +372,8 @@ const saveExpenseType = async () => {
 
     ElMessage.success(form.value.id ? '费用类型已更新' : '费用类型已创建')
     await loadInitialData(res.data.id)
-  } catch (error: any) {
-    ElMessage.error(error.message || '保存费用类型失败')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '保存费用类型失败'))
   } finally {
     saving.value = false
   }
@@ -383,9 +392,9 @@ const deleteExpenseType = async () => {
     form.value = null
     activeExpenseTypeId.value = undefined
     await loadInitialData()
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除费用类型失败')
+      ElMessage.error(resolveErrorMessage(error, '删除费用类型失败'))
     }
   }
 }
@@ -435,5 +444,30 @@ const filterTree = (nodes: ProcessExpenseTypeTreeNode[], search: string): Proces
   border-color: rgb(37 99 235 / 1);
   box-shadow: 0 18px 40px rgba(37, 99, 235, 0.12);
   background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.expense-tree-node {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px 8px 0;
+}
+
+:deep(.expense-type-tree .el-tree-node__content) {
+  min-height: 62px;
+  align-items: flex-start;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+:deep(.expense-type-tree .el-tree-node__expand-icon) {
+  margin-top: 10px;
+}
+
+:deep(.expense-type-tree .el-tag) {
+  margin-top: 4px;
 }
 </style>

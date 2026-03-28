@@ -8,14 +8,15 @@
 
     <div class="flex-1 space-y-6">
       <template v-if="activeSection === 'document-flow'">
-        <section class="overflow-hidden rounded-[32px] bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white shadow-lg">
+        <section
+          class="overflow-hidden rounded-[32px] bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white shadow-lg"
+        >
           <div class="flex flex-col gap-6 px-8 py-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p class="text-sm uppercase tracking-[0.22em] text-blue-100">Flow Studio</p>
               <h1 class="mt-3 text-3xl font-bold">单据与流程</h1>
               <p class="mt-3 max-w-2xl leading-7 text-blue-50/90">
-                把单据模板、审批流、付款规则和 AI 审核能力统一放在同一个工作区中，
-                让财务同事能够更快梳理流程、维护模板并推动业务上线。
+                把单据模板、审批流程、付款规则和 AI 审核能力统一放在同一个工作区中，让财务同事能够更快梳理流程、维护模板并推动业务上线。
               </p>
             </div>
 
@@ -50,7 +51,9 @@
         <el-card class="!rounded-3xl !shadow-sm">
           <div class="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
             <div class="flex flex-wrap gap-3">
-              <el-button v-if="canCreateTemplates" type="primary" :icon="Plus" @click="openTemplateDialog">添加单据</el-button>
+              <el-button v-if="canCreateTemplates" type="primary" :icon="Plus" @click="openTemplateDialog">
+                添加单据
+              </el-button>
               <el-button v-if="canEditTemplates" :icon="CopyDocument">复制分类</el-button>
             </div>
 
@@ -138,7 +141,7 @@
                 </div>
 
                 <div class="mt-5 flex gap-3">
-                  <el-button type="primary" text>查看配置</el-button>
+                  <el-button type="primary" text @click="openTemplateEdit(template)">修改配置</el-button>
                   <el-button v-if="canEditTemplates" text>复制模板</el-button>
                 </div>
               </el-card>
@@ -163,7 +166,7 @@
                 <el-icon :size="30"><Tools /></el-icon>
               </div>
               <h2 class="mt-6 text-2xl font-semibold text-slate-800">{{ currentNavLabel }}</h2>
-              <p class="mt-3 text-slate-500 leading-7">
+              <p class="mt-3 leading-7 text-slate-500">
                 {{ currentNavTip }}
               </p>
             </div>
@@ -194,7 +197,12 @@ import {
   Tools,
   TrendCharts
 } from '@element-plus/icons-vue'
-import { processApi, type ProcessCenterOverview, type ProcessTemplateTypeOption } from '@/api'
+import {
+  processApi,
+  type ProcessCenterOverview,
+  type ProcessTemplateCard,
+  type ProcessTemplateTypeOption
+} from '@/api'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import CustomArchiveManagementPanel from '@/components/process/CustomArchiveManagementPanel.vue'
 import ExpenseTypeManagementPanel from '@/components/process/ExpenseTypeManagementPanel.vue'
@@ -223,14 +231,9 @@ const activeSection = computed(() => {
   return typeof section === 'string' ? section : 'document-flow'
 })
 
-const currentNav = computed(() =>
-  overview.value?.navItems.find((item) => item.key === activeSection.value)
-)
-
+const currentNav = computed(() => overview.value?.navItems.find((item) => item.key === activeSection.value))
 const currentNavLabel = computed(() => currentNav.value?.label || '流程配置')
-const currentNavTip = computed(
-  () => currentNav.value?.tip || '这个配置模块正在建设中，后续会继续补齐真实能力。'
-)
+const currentNavTip = computed(() => currentNav.value?.tip || '这个配置模块正在建设中，后续会继续补齐真实能力。')
 
 const summaryCards = computed(() => {
   if (!overview.value) {
@@ -277,8 +280,8 @@ const filteredCategories = computed(() => {
   return overview.value.categories
     .filter((category) => activeCategory.value === 'all' || category.code === activeCategory.value)
     .map((category) => {
+      const keyword = searchKeyword.value.trim()
       const templates = category.templates.filter((template) => {
-        const keyword = searchKeyword.value.trim()
         if (!keyword) {
           return true
         }
@@ -299,6 +302,10 @@ const filteredCategories = computed(() => {
     .filter((category) => category.templates.length > 0)
 })
 
+function resolveErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
 onMounted(async () => {
   try {
     const [overviewRes, typeRes] = await Promise.all([
@@ -308,8 +315,8 @@ onMounted(async () => {
 
     overview.value = overviewRes.data
     templateTypes.value = typeRes.data
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载流程管理页面失败')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '加载流程管理页面失败'))
   }
 })
 
@@ -333,6 +340,23 @@ const handleTemplateSelect = (templateType: string) => {
   router.push({
     name: 'expense-workbench-process-management-create',
     params: { templateType }
+  })
+}
+
+const openTemplateEdit = (template: ProcessTemplateCard) => {
+  if (!template.templateTypeCode) {
+    ElMessage.warning('当前模板缺少类型信息，暂时无法进入修改配置')
+    return
+  }
+
+  router.push({
+    name: 'expense-workbench-process-management-create',
+    params: {
+      templateType: template.templateTypeCode
+    },
+    query: {
+      templateId: String(template.id)
+    }
   })
 }
 </script>
