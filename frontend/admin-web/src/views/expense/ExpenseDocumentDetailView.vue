@@ -4,16 +4,16 @@
       <div class="space-y-5">
         <button type="button" class="flex items-center gap-2 text-sm text-blue-600" @click="goBack">
           <el-icon><ArrowLeft /></el-icon>
-          ??????
+          返回我的报销
         </button>
 
         <div class="pt-1">
           <div class="flex flex-wrap items-center gap-3">
             <h1 class="text-3xl font-bold text-slate-800">{{ detail?.documentTitle || route.params.documentCode }}</h1>
-            <el-tag :type="statusTagType(detail?.status || '')" effect="plain">{{ detail?.statusLabel || '???' }}</el-tag>
+            <el-tag :type="statusTagType(detail?.status || '')" effect="plain">{{ detail?.statusLabel || '未知' }}</el-tag>
           </div>
           <p class="mt-3 text-sm leading-7 text-slate-500">
-            ???{{ detail?.documentCode || route.params.documentCode }}?????{{ detail?.submitterName || '-' }}??????{{ detail?.submittedAt || '-' }}
+            单号：{{ detail?.documentCode || route.params.documentCode }} ｜ 提单人：{{ detail?.submitterName || '-' }} ｜ 提交时间：{{ detail?.submittedAt || '-' }}
           </p>
         </div>
       </div>
@@ -24,10 +24,10 @@
         <template #header>
           <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="text-lg font-semibold text-slate-800">鍗曟嵁琛ㄥ崟</p>
-              <p class="mt-1 text-sm text-slate-500">???????????????</p>
+              <p class="text-lg font-semibold text-slate-800">单据表单</p>
+              <p class="mt-1 text-sm text-slate-500">根据提交时保存的表单快照回看单据内容。</p>
             </div>
-            <el-tag effect="plain">???{{ amountText }}</el-tag>
+            <el-tag effect="plain">金额：{{ amountText }}</el-tag>
           </div>
         </template>
 
@@ -38,40 +38,40 @@
             :form-data="detail.formData"
             :department-options="detail.departmentOptions"
           />
-          <el-empty v-else description="???????" :image-size="96" />
+          <el-empty v-else description="暂无单据数据" :image-size="96" />
         </div>
       </el-card>
 
       <el-card class="!rounded-3xl !shadow-sm">
         <template #header>
           <div>
-            <p class="text-lg font-semibold text-slate-800">瀹℃壒娴佺▼</p>
-            <p class="mt-1 text-sm text-slate-500">鐪熷疄浠诲姟鐘舵€佷笌瀹℃壒杞ㄨ抗</p>
+            <p class="text-lg font-semibold text-slate-800">审批流程</p>
+            <p class="mt-1 text-sm text-slate-500">真实任务状态与审批轨迹</p>
           </div>
         </template>
 
         <div class="approval-scroll space-y-5">
           <div class="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             <div class="grid grid-cols-1 gap-3 text-sm text-slate-600">
-              <div>?????{{ detail?.currentNodeName || '???' }}</div>
-              <div>?????{{ detail?.templateName || '-' }}</div>
-              <div>褰撳墠鐘舵€侊細{{ detail?.statusLabel || '-' }}</div>
+              <div>当前节点：{{ detail?.currentNodeName || '未开始' }}</div>
+              <div>模板名称：{{ detail?.templateName || '-' }}</div>
+              <div>当前状态：{{ detail?.statusLabel || '-' }}</div>
             </div>
           </div>
 
           <div v-if="approvableTasks.length" class="rounded-[24px] border border-amber-200 bg-amber-50 p-4">
-            <p class="text-sm font-semibold text-amber-800">寰呮垜瀹℃壒</p>
-            <p class="mt-1 text-xs leading-6 text-amber-700">???? {{ approvableTasks.length }} ???????</p>
+            <p class="text-sm font-semibold text-amber-800">待我审批</p>
+            <p class="mt-1 text-xs leading-6 text-amber-700">当前有 {{ approvableTasks.length }} 条待处理任务</p>
             <div class="mt-3 flex flex-wrap gap-2">
-              <el-button size="small" type="success" @click="handleTaskAction('approve')">閫氳繃</el-button>
-              <el-button size="small" type="danger" @click="handleTaskAction('reject')">椹冲洖</el-button>
+              <el-button size="small" type="success" @click="handleTaskAction('approve')">通过</el-button>
+              <el-button size="small" type="danger" @click="handleTaskAction('reject')">驳回</el-button>
             </div>
           </div>
 
           <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <p class="text-sm font-semibold text-slate-800">娴佺▼姒傝</p>
-              <el-tag size="small" effect="plain">{{ flowOutline.length }} ???</el-tag>
+              <p class="text-sm font-semibold text-slate-800">流程概览</p>
+              <el-tag size="small" effect="plain">{{ flowOutline.length }} 个节点</el-tag>
             </div>
             <div v-if="flowOutline.length" class="space-y-2">
               <div
@@ -89,13 +89,13 @@
                 </div>
               </div>
             </div>
-            <el-empty v-else description="???????" :image-size="72" />
+            <el-empty v-else description="暂无流程节点" :image-size="72" />
           </div>
 
           <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <p class="text-sm font-semibold text-slate-800">瀹℃壒杞ㄨ抗</p>
-              <el-tag size="small" effect="plain">{{ detail?.actionLogs.length || 0 }} ?</el-tag>
+              <p class="text-sm font-semibold text-slate-800">审批轨迹</p>
+              <el-tag size="small" effect="plain">{{ detail?.actionLogs.length || 0 }} 条</el-tag>
             </div>
 
             <el-timeline v-if="detail?.actionLogs.length">
@@ -111,7 +111,7 @@
                 </div>
               </el-timeline-item>
             </el-timeline>
-            <el-empty v-else description="鏆傛棤瀹℃壒杞ㄨ抗" :image-size="72" />
+            <el-empty v-else description="暂无审批轨迹" :image-size="72" />
           </div>
         </div>
       </el-card>
@@ -141,7 +141,7 @@ const loading = ref(false)
 const detail = ref<ExpenseDocumentDetail | null>(null)
 const storedUser = (readStoredUser() || {}) as { userId?: number; permissionCodes?: string[] }
 
-const amountText = computed(() => `楼 ${(detail.value?.totalAmount || 0).toFixed(2)}`)
+const amountText = computed(() => `¥ ${(detail.value?.totalAmount || 0).toFixed(2)}`)
 const currentUserId = computed(() => Number(storedUser.userId || 0))
 const permissionCodes = computed(() => storedUser.permissionCodes || [])
 const approvableTasks = computed(() =>
@@ -184,7 +184,7 @@ async function loadDetail() {
     const res = await expenseApi.getDetail(String(route.params.documentCode || ''))
     detail.value = res.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '鍔犺浇鍗曟嵁璇︽儏澶辫触'))
+    ElMessage.error(resolveErrorMessage(error, '加载单据详情失败'))
   } finally {
     loading.value = false
   }
@@ -321,7 +321,7 @@ function buildFlowOutline(
     const baseItem: FlowOutlineItem = {
       key: node.nodeKey,
       label: node.nodeName,
-      description: node.nodeType === 'BRANCH' ? '鍒嗘敮鍒ゆ柇鑺傜偣' : '',
+      description: node.nodeType === 'BRANCH' ? '分支判断节点' : '',
       status
     }
 
@@ -348,7 +348,7 @@ function buildFlowOutline(
           {
             key: route.routeKey,
             label: route.routeName,
-            description: '鍒嗘敮娉抽亾',
+            description: '分支泳道',
             status: routeStatus
           },
           ...childrenItems

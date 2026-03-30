@@ -14,17 +14,18 @@
           <div class="flex flex-col gap-6 px-8 py-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p class="text-sm uppercase tracking-[0.22em] text-blue-100">Flow Studio</p>
-              <h1 class="mt-3 text-3xl font-bold">?????</h1>
+              <h1 class="mt-3 text-3xl font-bold">单据与流程</h1>
               <p class="mt-3 max-w-2xl leading-7 text-blue-50/90">
-                鎶婂崟鎹ā鏉裤€佸鎵规祦绋嬨€佷粯娆捐鍒欏拰 AI 瀹℃牳鑳藉姏缁熶竴鏀惧湪鍚屼竴涓伐浣滃尯涓紝璁╄储鍔″悓浜嬭兘澶熸洿蹇⒊鐞嗘祦绋嬨€佺淮鎶ゆā鏉垮苟鎺ㄥ姩涓氬姟涓婄嚎銆?              </p>
+                把单据模板、审批流程、付款规则和 AI 审核能力统一收口到同一个工作区里，让财务同事能够更快梳理流程、维护模板并推动业务上线。
+              </p>
             </div>
 
             <div class="flex flex-wrap gap-3">
               <el-button v-if="canCreateTemplates" type="primary" class="hero-primary-btn" @click="openTemplateDialog">
-                娣诲姞鍗曟嵁
+                添加单据
               </el-button>
               <el-button v-if="canEditTemplates" class="hero-secondary-btn">
-                鎵归噺褰掓。
+                批量归档
               </el-button>
             </div>
           </div>
@@ -51,21 +52,21 @@
           <div class="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
             <div class="flex flex-wrap gap-3">
               <el-button v-if="canCreateTemplates" type="primary" :icon="Plus" @click="openTemplateDialog">
-                娣诲姞鍗曟嵁
+                添加单据
               </el-button>
-              <el-button v-if="canEditTemplates" :icon="CopyDocument">澶嶅埗鍒嗙被</el-button>
+              <el-button v-if="canEditTemplates" :icon="CopyDocument">复制分类</el-button>
             </div>
 
             <div class="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
               <el-input
                 v-model="searchKeyword"
-                placeholder="鎼滅储鍗曟嵁鍚嶇О銆佹ā鏉跨被鍨嬫垨娴佺▼鍚嶇О"
+                placeholder="搜索单据名称、模板类型或流程名称"
                 class="w-full sm:w-80"
                 :prefix-icon="Search"
                 clearable
               />
               <el-select v-model="activeCategory" class="w-full sm:w-52">
-                <el-option label="鍏ㄩ儴鍒嗙被" value="all" />
+                <el-option label="全部分类" value="all" />
                 <el-option
                   v-for="category in overview?.categories || []"
                   :key="category.code"
@@ -85,7 +86,8 @@
                 <p class="mt-1 text-sm text-slate-400">{{ category.description }}</p>
               </div>
               <span class="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-500">
-                {{ category.templateCount }} 涓ā鏉?              </span>
+                {{ category.templateCount }} 个模板
+              </span>
             </div>
 
             <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
@@ -125,25 +127,25 @@
 
                 <div class="mt-5 space-y-2 rounded-2xl bg-slate-50 px-4 py-3">
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-slate-400">缁戝畾娴佺▼</span>
+                    <span class="text-slate-400">绑定流程</span>
                     <span class="font-medium text-slate-700">{{ template.flowName }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-slate-400">???</span>
+                    <span class="text-slate-400">模板负责人</span>
                     <span class="text-slate-700">{{ template.owner }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-slate-400">鏇存柊鏃堕棿</span>
+                    <span class="text-slate-400">更新时间</span>
                     <span class="text-slate-700">{{ template.updatedAt }}</span>
                   </div>
                 </div>
 
                 <div class="mt-5 flex flex-wrap justify-end gap-3">
                   <el-button v-if="canEditTemplates" text type="danger" @click="confirmDeleteTemplate(template)">
-                    鍒犻櫎妯℃澘
+                    删除模板
                   </el-button>
-                  <el-button type="primary" text @click="openTemplateEdit(template)">淇敼閰嶇疆</el-button>
-                  <el-button v-if="canEditTemplates" text>澶嶅埗妯℃澘</el-button>
+                  <el-button type="primary" text @click="openTemplateEdit(template)">修改配置</el-button>
+                  <el-button v-if="canEditTemplates" text>复制模板</el-button>
                 </div>
               </el-card>
             </div>
@@ -322,7 +324,7 @@ const handleSectionChange = (section: string) => {
 
 const openTemplateDialog = () => {
   if (!canCreateTemplates.value) {
-    ElMessage.warning('褰撳墠璐﹀彿娌℃湁鏂板娴佺▼妯℃澘鏉冮檺')
+    ElMessage.warning('当前账号没有新增单据模板权限')
     return
   }
   templateDialogVisible.value = true

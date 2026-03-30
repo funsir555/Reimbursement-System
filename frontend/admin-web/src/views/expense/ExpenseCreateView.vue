@@ -3,9 +3,10 @@
     <section class="rounded-[32px] border border-slate-100 bg-white px-8 py-7 shadow-sm">
       <div class="flex flex-col gap-5">
         <div>
-          <h1 class="text-3xl font-bold text-slate-800">?????</h1>
+          <h1 class="text-3xl font-bold text-slate-800">新建审批单</h1>
           <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-500">
-            鍏堥€夋嫨妯℃澘锛屽啀鎸夌粦瀹氱殑琛ㄥ崟璁捐鍔ㄦ€佸～鍐欍€備繚瀛樺嵆鐢熸晥鐨勮〃鍗曘€佹祦绋嬪拰鍏变韩瀛楁浼氱洿鎺ュ湪杩欓噷娓叉煋銆?          </p>
+            先选择模板，再按绑定的表单设计动态填写。保存即生效的表单、流程和共享字段会直接在这里渲染。
+          </p>
         </div>
       </div>
     </section>
@@ -14,14 +15,14 @@
       <el-card class="!rounded-3xl !shadow-sm">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 class="text-xl font-semibold text-slate-800">閫夋嫨瀹℃壒妯℃澘</h2>
-            <p class="mt-2 text-sm text-slate-500">???????????????????</p>
+            <h2 class="text-xl font-semibold text-slate-800">选择审批模板</h2>
+            <p class="mt-2 text-sm text-slate-500">请选择一个已启用的单据模板，系统会根据绑定的表单与流程自动生成提单内容。</p>
           </div>
 
           <el-input
             v-model="templateKeyword"
             clearable
-            placeholder="鎼滅储妯℃澘鍚嶇О"
+            placeholder="搜索模板名称"
             class="max-w-[320px]"
           />
         </div>
@@ -40,15 +41,15 @@
               <p class="text-lg font-semibold text-slate-800">{{ template.templateName }}</p>
               <p class="mt-2 text-sm text-slate-500">{{ template.templateTypeLabel }}</p>
             </div>
-            <el-tag effect="plain">{{ template.categoryCode || '榛樿鍒嗙被' }}</el-tag>
+            <el-tag effect="plain">{{ template.categoryCode || '默认分类' }}</el-tag>
           </div>
           <p class="mt-6 text-sm leading-6 text-slate-500">
-            ?????{{ template.formDesignCode || '???????' }}
+            表单编码：{{ template.formDesignCode || '未绑定表单' }}
           </p>
         </button>
       </div>
 
-      <el-empty v-if="!filteredTemplates.length" description="褰撳墠娌℃湁鍙敤妯℃澘" :image-size="96" />
+      <el-empty v-if="!filteredTemplates.length" description="当前没有可用模板" :image-size="96" />
     </div>
 
     <template v-else>
@@ -58,22 +59,23 @@
             <div class="flex flex-wrap items-center gap-3">
               <h2 class="text-2xl font-semibold text-slate-800">{{ templateDetail?.templateName }}</h2>
               <el-tag effect="plain">{{ templateDetail?.templateTypeLabel }}</el-tag>
-              <el-tag v-if="templateDetail?.flowName" type="success" effect="plain">???{{ templateDetail?.flowName }}</el-tag>
+              <el-tag v-if="templateDetail?.flowName" type="success" effect="plain">流程：{{ templateDetail?.flowName }}</el-tag>
             </div>
             <p class="mt-3 text-sm leading-7 text-slate-500">
-              {{ templateDetail?.templateDescription || '??????????' }}
+              {{ templateDetail?.templateDescription || '暂无模板说明' }}
             </p>
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
-            <el-button @click="selectedTemplateCode = ''">閲嶆柊閫夋嫨妯℃澘</el-button>
+            <el-button @click="selectedTemplateCode = ''">重新选择模板</el-button>
             <el-button
               type="primary"
               :loading="submitting"
               :disabled="!canSubmit"
               @click="submitDocument"
             >
-              鎻愪氦瀹℃壒鍗?            </el-button>
+              提交审批单
+            </el-button>
           </div>
         </div>
       </el-card>
@@ -82,9 +84,9 @@
         <div class="space-y-6">
           <div class="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
             <div class="grid grid-cols-1 gap-4 text-sm text-slate-600 xl:grid-cols-3">
-              <div>?????{{ templateDetail?.formName || '?????' }}</div>
-              <div>褰撳墠缁勪欢鏁帮細{{ blocks.length }}</div>
-              <div>閲戦姹囨€伙細{{ totalAmountText }}</div>
+              <div>表单名称：{{ templateDetail?.formName || '未命名表单' }}</div>
+              <div>当前组件数：{{ blocks.length }}</div>
+              <div>金额汇总：{{ totalAmountText }}</div>
             </div>
           </div>
 
@@ -134,16 +136,16 @@
                     type="date"
                     value-format="YYYY-MM-DDTHH:mm:ss"
                     class="w-full"
-                    placeholder="璇烽€夋嫨鏃ユ湡"
+                    placeholder="请选择日期"
                   />
                   <el-date-picker
                     v-else-if="controlType(block) === 'DATE_RANGE'"
                     v-model="formValues[block.fieldKey]"
                     type="daterange"
                     value-format="YYYY-MM-DDTHH:mm:ss"
-                    range-separator="?"
-                    start-placeholder="????"
-                    end-placeholder="缁撴潫鏃ユ湡"
+                    range-separator="至"
+                    start-placeholder="开始日期"
+                    end-placeholder="结束日期"
                     class="w-full"
                   />
                   <el-select
@@ -207,8 +209,8 @@
                     v-else-if="controlType(block) === 'SWITCH'"
                     v-model="formValues[block.fieldKey]"
                     inline-prompt
-                    active-text="寮€"
-                    inactive-text="?"
+                    active-text="开"
+                    inactive-text="关"
                   />
                   <el-upload
                     v-else-if="controlType(block) === 'ATTACHMENT' || controlType(block) === 'IMAGE'"
@@ -221,10 +223,10 @@
                     @change="handleFileChange(block, $event)"
                     @remove="handleFileRemove(block)"
                   >
-                    <el-button>閫夋嫨鏂囦欢</el-button>
+                    <el-button>选择文件</el-button>
                     <template #tip>
                       <div class="mt-2 text-xs text-slate-400">
-                        ?? {{ Number(block.props.maxCount || 1) }} ????? {{ Number(block.props.maxSizeMb || 1) }} MB?
+                        最多 {{ Number(block.props.maxCount || 1) }} 个文件，单个不超过 {{ Number(block.props.maxSizeMb || 1) }} MB
                       </div>
                     </template>
                   </el-upload>
@@ -244,7 +246,7 @@
                       reserve-keyword
                       clearable
                       class="w-full"
-                      placeholder="???????"
+                      placeholder="请选择往来单位"
                       :remote-method="loadVendorOptions"
                       :loading="vendorOptionsLoading"
                     >
@@ -260,7 +262,7 @@
                         </div>
                       </el-option>
                     </el-select>
-                    <el-button plain @click="openVendorDialog">??????</el-button>
+                    <el-button plain @click="openVendorDialog">新增往来单位</el-button>
                   </div>
                 </template>
 
@@ -272,7 +274,7 @@
                     reserve-keyword
                     clearable
                     class="w-full"
-                    placeholder="??????"
+                    placeholder="请选择收款人"
                     :remote-method="loadPayeeOptions"
                     :loading="payeeOptionsLoading"
                   >
@@ -298,7 +300,7 @@
                     reserve-keyword
                     clearable
                     class="w-full"
-                    placeholder="璇烽€夋嫨鏀舵璐︽埛"
+                    placeholder="请选择收款账户"
                     :remote-method="loadPayeeAccountOptions"
                     :loading="payeeAccountOptionsLoading"
                   >
@@ -325,7 +327,7 @@
                     clearable
                     filterable
                     class="w-full"
-                    :placeholder="`璇烽€夋嫨${block.label}`"
+                    :placeholder="`请选择${block.label}`"
                   >
                     <el-option
                       v-for="item in departmentOptions"
@@ -338,7 +340,7 @@
                     v-if="String(formValues[block.fieldKey] || '').trim()"
                     class="mt-2 text-xs leading-6 text-slate-400"
                   >
-                    褰撳墠褰掑睘閮ㄩ棬锛歿{ departmentLabel(String(formValues[block.fieldKey] || '')) }}
+                    当前归属部门：{{ departmentLabel(String(formValues[block.fieldKey] || '')) }}
                   </p>
                 </template>
 
@@ -347,7 +349,7 @@
                     v-model="formValues[block.fieldKey]"
                     maxlength="120"
                     show-word-limit
-                    placeholder="?????????"
+                    placeholder="请输入银行推送摘要"
                   />
                 </template>
 
@@ -356,7 +358,7 @@
                     v-model="formValues[block.fieldKey]"
                     clearable
                     class="w-full"
-                    :placeholder="`璇烽€夋嫨${block.label}`"
+                    :placeholder="`请选择${block.label}`"
                   >
                     <el-option
                       v-for="item in sharedArchiveItems(block)"
@@ -377,47 +379,47 @@
       </el-card>
     </template>
 
-    <el-dialog v-model="vendorDialogVisible" title="??????" width="760px" destroy-on-close>
+    <el-dialog v-model="vendorDialogVisible" title="新增往来单位" width="760px" destroy-on-close>
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <el-form-item label="?????" required class="!mb-0">
-          <el-input v-model="vendorDraft.cVenName" placeholder="璇疯緭鍏ヤ緵搴斿晢鍚嶇О" />
+        <el-form-item label="往来单位名称" required class="!mb-0">
+          <el-input v-model="vendorDraft.cVenName" placeholder="请输入往来单位名称" />
         </el-form-item>
-        <el-form-item label="?????" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenAbbName" placeholder="?????" />
+        <el-form-item label="往来单位简称" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenAbbName" placeholder="请输入简称" />
         </el-form-item>
-        <el-form-item label="绾崇◣浜虹櫥璁板彿" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenRegCode" placeholder="璇疯緭鍏ョ撼绋庡彿" />
+        <el-form-item label="纳税人登记号" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenRegCode" placeholder="请输入纳税号" />
         </el-form-item>
-        <el-form-item label="???" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenPerson" placeholder="璇疯緭鍏ヨ仈绯讳汉" />
+        <el-form-item label="联系人" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenPerson" placeholder="请输入联系人" />
         </el-form-item>
-        <el-form-item label="鐢佃瘽" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenPhone" placeholder="?????" />
+        <el-form-item label="电话" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenPhone" placeholder="请输入联系电话" />
         </el-form-item>
-        <el-form-item label="鍏徃涓讳綋缂栫爜" class="!mb-0">
-          <el-input v-model="vendorDraft.companyId" placeholder="?????????" />
+        <el-form-item label="公司主体编码" class="!mb-0">
+          <el-input v-model="vendorDraft.companyId" placeholder="请输入公司主体编码" />
         </el-form-item>
-        <el-form-item label="寮€鎴峰湴鍧€" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenAddress" placeholder="璇疯緭鍏ュ紑鎴峰湴鍧€" />
+        <el-form-item label="开户地址" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenAddress" placeholder="请输入开户地址" />
         </el-form-item>
-        <el-form-item label="????" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenBank" placeholder="???????" />
+        <el-form-item label="开户行" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenBank" placeholder="请输入开户行" />
         </el-form-item>
-        <el-form-item label="閾惰璐﹀彿" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenAccount" placeholder="???????" />
+        <el-form-item label="银行账号" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenAccount" placeholder="请输入银行账号" />
         </el-form-item>
-        <el-form-item label="閾惰琛屽彿" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenBankNub" placeholder="???????" />
+        <el-form-item label="银行行号" class="!mb-0">
+          <el-input v-model="vendorDraft.cVenBankNub" placeholder="请输入银行行号" />
         </el-form-item>
-        <el-form-item label="澶囨敞" class="xl:col-span-2 !mb-0">
-          <el-input v-model="vendorDraft.cMemo" type="textarea" :rows="3" placeholder="?????" />
+        <el-form-item label="备注" class="xl:col-span-2 !mb-0">
+          <el-input v-model="vendorDraft.cMemo" type="textarea" :rows="3" placeholder="请输入备注" />
         </el-form-item>
       </div>
 
       <template #footer>
         <div class="flex justify-end gap-3">
-          <el-button @click="vendorDialogVisible = false">鍙栨秷</el-button>
-          <el-button type="primary" :loading="vendorSaving" @click="createVendor">??????</el-button>
+          <el-button @click="vendorDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="vendorSaving" @click="createVendor">新增往来单位</el-button>
         </div>
       </template>
     </el-dialog>
@@ -501,7 +503,7 @@ const totalAmount = computed(() =>
     return sum + (Number.isFinite(value) ? value : 0)
   }, 0)
 )
-const totalAmountText = computed(() => `楼 ${totalAmount.value.toFixed(2)}`)
+const totalAmountText = computed(() => `¥ ${totalAmount.value.toFixed(2)}`)
 
 void loadPage()
 
@@ -514,7 +516,7 @@ async function loadPage() {
       await loadTemplateDetail(selectedTemplateCode.value)
     }
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '鍔犺浇妯℃澘鍒楄〃澶辫触'))
+    ElMessage.error(resolveErrorMessage(error, '加载模板列表失败'))
   } finally {
     loading.value = false
   }
@@ -537,7 +539,7 @@ async function loadTemplateDetail(templateCode: string) {
       loadPayeeAccountOptions('')
     ])
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '鍔犺浇妯℃澘璇︽儏澶辫触'))
+    ElMessage.error(resolveErrorMessage(error, '加载模板详情失败'))
     selectedTemplateCode.value = ''
     templateDetail.value = null
   } finally {
@@ -582,7 +584,7 @@ function optionItems(block: ProcessFormDesignBlock) {
 }
 
 function placeholderOf(block: ProcessFormDesignBlock) {
-  return String(block.props.placeholder || `???${block.label}`)
+  return String(block.props.placeholder || `请输入${block.label}`)
 }
 
 function businessCode(block: ProcessFormDesignBlock) {
@@ -642,7 +644,7 @@ async function loadPayeeAccountOptions(keyword: string) {
     const res = await expenseCreateApi.listPayeeAccountOptions(keyword)
     payeeAccountOptions.value = res.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '鍔犺浇鏀舵璐︽埛澶辫触'))
+    ElMessage.error(resolveErrorMessage(error, '加载收款账户失败'))
   } finally {
     payeeAccountOptionsLoading.value = false
   }
@@ -675,7 +677,7 @@ async function createVendor() {
       Object.entries(vendorDraft).filter(([, value]) => value !== undefined && value !== null && value !== '')
     ) as FinanceVendorSavePayload
     const res = await expenseCreateApi.createVendor(payload)
-    ElMessage.success('寰€鏉ュ崟浣嶅凡鏂板')
+    ElMessage.success('往来单位已新增')
     vendorDialogVisible.value = false
     resetVendorDraft()
     await loadVendorOptions('')
@@ -735,7 +737,7 @@ async function submitDocument() {
       }
     }
     const res = await expenseCreateApi.submit(payload)
-    ElMessage.success(`鎻愪氦鎴愬姛锛屽崟鍙凤細${res.data.documentCode}`)
+    ElMessage.success(`提交成功，单号：${res.data.documentCode}`)
     selectedTemplateCode.value = ''
     templateDetail.value = null
     await router.push('/expense/list')
@@ -758,7 +760,7 @@ function validateRequiredFields() {
     if (value !== undefined && value !== null && String(value).trim() !== '') {
       continue
     }
-    return `璇峰～鍐欙細${block.label}`
+    return `请填写：${block.label}`
   }
   return ''
 }
@@ -766,7 +768,7 @@ function validateRequiredFields() {
 function deriveDocumentReason() {
   const preferredBlock = blocks.value.find((block) => {
     const label = block.label.toLowerCase()
-    return label.includes('浜嬬敱') || label.includes('璇存槑') || label.includes('鎽樿')
+    return label.includes('事由') || label.includes('说明') || label.includes('摘要')
   })
   if (preferredBlock) {
     const value = formValues[preferredBlock.fieldKey]

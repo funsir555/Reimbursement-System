@@ -1,6 +1,6 @@
 <template>
   <div class="voucher-page">
-    <div class="voucher-shell">
+    <section class="voucher-toolbar-panel">
       <header class="voucher-page-header">
         <h1>记账凭证</h1>
       </header>
