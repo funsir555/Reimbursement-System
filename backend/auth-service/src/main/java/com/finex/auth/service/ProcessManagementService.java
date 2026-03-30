@@ -11,6 +11,9 @@ import com.finex.auth.dto.ProcessExpenseTypeDetailVO;
 import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
 import com.finex.auth.dto.ProcessExpenseTypeTreeVO;
+import com.finex.auth.dto.ProcessFormDesignDetailVO;
+import com.finex.auth.dto.ProcessFormDesignSaveDTO;
+import com.finex.auth.dto.ProcessFormDesignSummaryVO;
 import com.finex.auth.dto.ProcessFlowDetailVO;
 import com.finex.auth.dto.ProcessFlowMetaVO;
 import com.finex.auth.dto.ProcessFlowResolveApproversDTO;
@@ -41,6 +44,8 @@ public interface ProcessManagementService {
 
     ProcessTemplateSaveResultVO updateTemplate(Long id, ProcessTemplateSaveDTO dto, String operatorName);
 
+    Boolean deleteTemplate(Long id);
+
     List<ProcessCustomArchiveSummaryVO> listCustomArchives();
 
     ProcessCustomArchiveDetailVO getCustomArchiveDetail(Long id);
@@ -70,6 +75,16 @@ public interface ProcessManagementService {
     Boolean updateExpenseTypeStatus(Long id, Integer status);
 
     Boolean deleteExpenseType(Long id);
+
+    List<ProcessFormDesignSummaryVO> listFormDesigns(String templateType);
+
+    ProcessFormDesignDetailVO getFormDesignDetail(Long id);
+
+    ProcessFormDesignDetailVO createFormDesign(ProcessFormDesignSaveDTO dto);
+
+    ProcessFormDesignDetailVO updateFormDesign(Long id, ProcessFormDesignSaveDTO dto);
+
+    Boolean deleteFormDesign(Long id);
 
     List<ProcessFlowSummaryVO> listFlows();
 

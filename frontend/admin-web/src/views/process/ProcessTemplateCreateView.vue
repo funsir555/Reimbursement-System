@@ -396,6 +396,7 @@ import {
   processApi,
   type ProcessCenterNavItem,
   type ProcessExpenseTypeTreeNode,
+  type ProcessFormDesignSummary,
   type ProcessFlowSummary,
   type ProcessFormOption,
   type ProcessTemplateDetail,
@@ -427,6 +428,7 @@ const defaultNumberingRulePreview = 'FX+年+月+日+4位数字（如：FX2025032
 const navItems = ref<ProcessCenterNavItem[]>([])
 const options = ref<ProcessTemplateFormOptions | null>(null)
 const flowSummaries = ref<ProcessFlowSummary[]>([])
+const formDesignSummaries = ref<ProcessFormDesignSummary[]>([])
 const saving = ref(false)
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 
@@ -512,6 +514,15 @@ const flowSummaryMap = computed(() => {
   })
   return map
 })
+const formDesignSummaryMap = computed(() => {
+  const map = new Map<string, ProcessFormDesignSummary>()
+  formDesignSummaries.value.forEach((item) => {
+    if (item.formCode) {
+      map.set(item.formCode, item)
+    }
+  })
+  return map
+})
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
@@ -532,6 +543,13 @@ watch(
   () => route.query.createdFlowCode,
   () => {
     applyCreatedFlowCodeFromRoute()
+  }
+)
+
+watch(
+  () => route.query.createdFormCode,
+  () => {
+    applyCreatedFormCodeFromRoute()
   }
 )
 
@@ -650,18 +668,21 @@ async function loadPage() {
       ? processApi.getTemplateDetail(templateId.value)
       : Promise.resolve(null)
 
-    const [overviewRes, optionRes, detailRes, flowRes] = await Promise.all([
+    const [overviewRes, optionRes, detailRes, flowRes, formDesignRes] = await Promise.all([
       processApi.getOverview(),
       processApi.getFormOptions(templateType.value),
       detailRequest,
-      processApi.listFlows()
+      processApi.listFlows(),
+      processApi.listFormDesigns(templateType.value)
     ])
 
     navItems.value = overviewRes.data.navItems
     options.value = optionRes.data
     flowSummaries.value = flowRes.data
+    formDesignSummaries.value = formDesignRes.data
     initializeForm(optionRes.data, detailRes?.data || null)
     applyCreatedFlowCodeFromRoute()
+    applyCreatedFormCodeFromRoute()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载模板配置页面失败'))
   }
@@ -685,6 +706,18 @@ function applyCreatedFlowCodeFromRoute() {
   form.approvalFlow = createdFlowCode
   const nextQuery = { ...route.query }
   delete nextQuery.createdFlowCode
+  router.replace({ query: nextQuery })
+}
+
+function applyCreatedFormCodeFromRoute() {
+  const createdFormCode = typeof route.query.createdFormCode === 'string' ? route.query.createdFormCode : ''
+  if (!createdFormCode) {
+    return
+  }
+
+  form.formDesign = createdFormCode
+  const nextQuery = { ...route.query }
+  delete nextQuery.createdFormCode
   router.replace({ query: nextQuery })
 }
 
@@ -724,6 +757,20 @@ function confirmOptionDialog() {
 }
 
 function showCreateEntry() {
+  if (optionDialog.field === 'formDesign') {
+    saveTemplateDraft()
+    optionDialog.visible = false
+    router.push({
+      name: 'expense-workbench-process-form-create',
+      query: {
+        from: templateId.value !== null ? 'template-edit' : 'template-create',
+        templateType: templateType.value,
+        returnTo: route.fullPath
+      }
+    })
+    return
+  }
+
   if (optionDialog.field === 'approvalFlow') {
     saveTemplateDraft()
     optionDialog.visible = false
@@ -742,6 +789,27 @@ function showCreateEntry() {
 }
 
 function showOptionEdit(item: ProcessFormOption) {
+  if (optionDialog.field === 'formDesign') {
+    const formDesign = formDesignSummaryMap.value.get(item.value)
+    if (!formDesign?.id) {
+      ElMessage.warning('当前表单设计缺少可编辑详情，请刷新后重试')
+      return
+    }
+
+    saveTemplateDraft()
+    optionDialog.visible = false
+    router.push({
+      name: 'expense-workbench-process-form-edit',
+      params: { id: formDesign.id },
+      query: {
+        from: templateId.value !== null ? 'template-edit' : 'template-create',
+        templateType: templateType.value,
+        returnTo: route.fullPath
+      }
+    })
+    return
+  }
+
   if (optionDialog.field === 'approvalFlow') {
     const flow = flowSummaryMap.value.get(item.value)
     if (!flow?.id) {
@@ -866,6 +934,11 @@ const saveTemplate = async () => {
 
   if (!form.approvalFlow) {
     ElMessage.warning('请先选择审批流程')
+    return
+  }
+
+  if (!form.formDesign) {
+    ElMessage.warning('请先选择表单设计')
     return
   }
 

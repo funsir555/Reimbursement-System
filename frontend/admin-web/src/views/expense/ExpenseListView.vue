@@ -3,13 +3,13 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-800">我的报销</h1>
-        <p class="mt-1 text-gray-500">管理您提交的报销单据</p>
+        <p class="mt-1 text-gray-500">管理你提交的报销单据</p>
       </div>
       <el-button
         v-if="canAny(['expense:create:view', 'expense:create:create'])"
         type="primary"
         :icon="Plus"
-        @click="$emit('new-expense')"
+        @click="goCreateExpense"
       >
         新建报销
       </el-button>
@@ -44,15 +44,15 @@
 
     <el-card>
       <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading">
-        <el-table-column prop="no" label="报销单号" width="150">
+        <el-table-column prop="no" label="报销单号" width="160">
           <template #default="{ row }">
-            <span class="cursor-pointer font-medium text-blue-600 hover:underline">
+            <button class="cursor-pointer font-medium text-blue-600 hover:underline" type="button" @click="openDetail(row)">
               {{ row.no }}
-            </span>
+            </button>
           </template>
         </el-table-column>
 
-        <el-table-column prop="type" label="报销类型" width="100">
+        <el-table-column prop="type" label="报销类型" width="120">
           <template #default="{ row }">
             <el-tag size="small" :type="getTypeTagType(row.type)">
               {{ row.type }}
@@ -62,9 +62,9 @@
 
         <el-table-column prop="reason" label="报销事由" show-overflow-tooltip />
 
-        <el-table-column prop="amount" label="金额" width="120">
+        <el-table-column prop="amount" label="金额" width="140">
           <template #default="{ row }">
-            <span class="font-bold text-gray-800">¥{{ row.amount.toLocaleString() }}</span>
+            <span class="font-bold text-gray-800">¥ {{ row.amount.toLocaleString() }}</span>
           </template>
         </el-table-column>
 
@@ -80,7 +80,7 @@
 
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small">查看</el-button>
+            <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
             <el-button v-if="row.status === '草稿' && can('expense:list:edit')" link type="primary" size="small">编辑</el-button>
             <el-button v-if="row.status === '草稿' && can('expense:list:delete')" link type="danger" size="small">删除</el-button>
             <el-button v-if="row.status === '已驳回' && can('expense:list:submit')" link type="warning" size="small">重新提交</el-button>
@@ -103,10 +103,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { expenseApi, type ExpenseSummary } from '@/api'
 import { hasAnyPermission, hasPermission, readStoredUser } from '@/utils/permissions'
-import { Plus, Search, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 
 const searchQuery = ref('')
 const filterStatus = ref('')
@@ -116,6 +117,7 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const expenseList = ref<ExpenseSummary[]>([])
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
+const router = useRouter()
 
 const can = (code: string) => hasPermission(code, permissionCodes.value)
 const canAny = (codes: string[]) => hasAnyPermission(codes, permissionCodes.value)
@@ -158,7 +160,7 @@ const pagedExpenseList = computed(() => {
   return filteredExpenseList.value.slice(start, start + pageSize.value)
 })
 
-const getTypeTagType = (type: string) => {
+function getTypeTagType(type: string) {
   const map: Record<string, string> = {
     差旅费: 'primary',
     交通费: 'success',
@@ -168,7 +170,7 @@ const getTypeTagType = (type: string) => {
   return map[type] || ''
 }
 
-const getStatusType = (status: string) => {
+function getStatusType(status: string) {
   const map: Record<string, string> = {
     审批中: 'warning',
     已通过: 'success',
@@ -178,12 +180,23 @@ const getStatusType = (status: string) => {
   return map[status] || 'info'
 }
 
-const resetFilters = () => {
+function resetFilters() {
   searchQuery.value = ''
   filterStatus.value = ''
   dateRange.value = []
   currentPage.value = 1
 }
 
-defineEmits(['new-expense'])
+function goCreateExpense() {
+  void router.push('/expense/create')
+}
+
+function openDetail(row: ExpenseSummary) {
+  const documentCode = row.documentCode || row.no
+  if (!documentCode) {
+    ElMessage.warning('未找到单据编码')
+    return
+  }
+  void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+}
 </script>

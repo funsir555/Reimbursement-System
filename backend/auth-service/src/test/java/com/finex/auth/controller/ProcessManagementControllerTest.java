@@ -1,6 +1,7 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
+import com.finex.auth.dto.ProcessFormDesignSummaryVO;
 import com.finex.auth.dto.ProcessFlowDetailVO;
 import com.finex.auth.dto.ProcessFlowSummaryVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
@@ -114,6 +115,50 @@ class ProcessManagementControllerTest {
                                   "flowName": "",
                                   "nodes": [],
                                   "routes": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+
+        verifyNoInteractions(processManagementService, accessControlService);
+    }
+
+    @Test
+    void listFormDesignsReturnsDataAndChecksPermission() throws Exception {
+        ProcessFormDesignSummaryVO formDesign = new ProcessFormDesignSummaryVO();
+        formDesign.setId(8L);
+        formDesign.setFormCode("FD202603280001");
+        formDesign.setFormName("差旅报销表单");
+        formDesign.setTemplateType("report");
+
+        doNothing().when(accessControlService).requirePermission(1L, "expense:process_management:view");
+        when(processManagementService.listFormDesigns("report")).thenReturn(List.of(formDesign));
+
+        mockMvc.perform(get("/auth/process-management/form-designs")
+                        .requestAttr("currentUserId", 1L)
+                        .param("templateType", "report"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].formCode").value("FD202603280001"))
+                .andExpect(jsonPath("$.data[0].formName").value("差旅报销表单"));
+
+        verify(accessControlService).requirePermission(1L, "expense:process_management:view");
+        verify(processManagementService).listFormDesigns("report");
+    }
+
+    @Test
+    void createFormDesignRejectsBlankName() throws Exception {
+        mockMvc.perform(post("/auth/process-management/form-designs")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateType": "report",
+                                  "formName": "",
+                                  "schema": {
+                                    "layoutMode": "TWO_COLUMN",
+                                    "blocks": []
+                                  }
                                 }
                                 """))
                 .andExpect(status().isOk())

@@ -5,6 +5,7 @@ import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.dto.InvoiceSummaryVO;
 import com.finex.auth.dto.UserProfileVO;
 import com.finex.auth.service.AccessControlService;
+import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.auth.service.MvpDataService;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,6 +26,7 @@ public class MvpController {
     private static final String INVOICE_VIEW = "archives:invoices:view";
 
     private final MvpDataService mvpDataService;
+    private final ExpenseDocumentService expenseDocumentService;
     private final AccessControlService accessControlService;
 
     @GetMapping("/me")
@@ -41,7 +43,7 @@ public class MvpController {
     @GetMapping("/expenses")
     public Result<List<ExpenseSummaryVO>> expenses(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_LIST_VIEW);
-        return Result.success(mvpDataService.listExpenses(getCurrentUserId(request)));
+        return Result.success(expenseDocumentService.listExpenseSummaries(getCurrentUserId(request)));
     }
 
     @GetMapping("/invoices")

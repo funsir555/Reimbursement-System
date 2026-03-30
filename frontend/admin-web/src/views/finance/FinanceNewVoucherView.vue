@@ -1,179 +1,236 @@
 <template>
-  <div class="space-y-6">
-    <section class="rounded-[28px] border border-slate-100 bg-white px-8 py-7 shadow-sm">
-      <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-        <div class="space-y-4">
-          <button type="button" class="inline-flex items-center gap-2 text-sm text-blue-600" @click="goBack">
-            <el-icon><ArrowLeft /></el-icon>
-            返回上一页
-          </button>
-          <div class="flex flex-wrap items-center gap-3">
-            <h1 class="text-3xl font-bold text-slate-800">新增凭证</h1>
-            <el-tag type="warning" effect="plain">未记账</el-tag>
-            <el-tag effect="plain">未审核</el-tag>
-          </div>
-          <p class="max-w-3xl leading-7 text-slate-500">
-            按用友 U8 常见制单方式录入凭证。当前支持手工录入、校验平衡、暂存草稿与正式保存，审核与记账入口已预留扩展位。
-          </p>
-          <div class="flex flex-wrap gap-3">
-            <el-button :icon="RefreshRight" @click="handleNewVoucher">新增</el-button>
-            <el-button :icon="Files" @click="handleSaveDraft">暂存</el-button>
-            <el-button :icon="CircleCheck" @click="handleValidate">校验平衡</el-button>
-            <el-button type="primary" :loading="saving" :icon="Select" @click="handleSave">保存</el-button>
-            <el-button @click="goVoucherList">返回列表</el-button>
-          </div>
+  <div class="voucher-page">
+    <div class="voucher-shell">
+      <header class="voucher-page-header">
+        <h1>记账凭证</h1>
+      </header>
+
+      <section class="voucher-toolbar-panel">
+        <div
+          v-for="group in toolbarGroups"
+          :key="group.key"
+          class="toolbar-group"
+          :class="group.key === 'primary' ? 'toolbar-group-primary' : ''"
+        >
+          <template v-for="action in group.actions" :key="action.key">
+            <el-button
+              :type="action.emphasis === 'primary' ? 'primary' : action.emphasis === 'secondary' ? 'info' : 'default'"
+              :plain="action.emphasis === 'secondary'"
+              :loading="action.key === 'save' ? saving : false"
+              class="toolbar-button"
+              :class="{
+                'toolbar-button-large toolbar-button-accent': action.emphasis === 'secondary',
+                'toolbar-button-large toolbar-button-primary': action.emphasis === 'primary'
+              }"
+              @click="handleToolbarAction(action.key)"
+            >
+              <el-icon :size="action.emphasis ? 18 : 16">
+                <component :is="action.icon" />
+              </el-icon>
+              <span>{{ action.label }}</span>
+            </el-button>
+          </template>
         </div>
+      </section>
 
-        <div class="toolbar-secondary">
-          <el-button :icon="DocumentCopy" @click="showStaticAction('复制凭证')">复制凭证</el-button>
-          <el-button :icon="Upload" @click="showStaticAction('导入模板')">导入模板</el-button>
-          <el-button :icon="Paperclip" @click="showStaticAction('附件')">附件</el-button>
-          <el-button :icon="Printer" @click="showStaticAction('打印')">打印</el-button>
-          <el-dropdown trigger="click">
-            <el-button :icon="MoreFilled">更多</el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="showStaticAction('红字冲销')">红字冲销</el-dropdown-item>
-                <el-dropdown-item @click="showStaticAction('自动编号策略切换')">自动编号策略切换</el-dropdown-item>
-                <el-dropdown-item @click="showStaticAction('外部凭证字段')">外部凭证字段</el-dropdown-item>
-                <el-dropdown-item @click="showStaticAction('打印模板')">打印模板</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-      </div>
-    </section>
-
-    <el-card class="!rounded-3xl !border-slate-100 !shadow-sm">
-      <template #header>
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p class="text-lg font-semibold text-slate-800">凭证头</p>
-            <p class="mt-1 text-sm text-slate-400">制单信息与凭证编号由公司、期间、凭证类别共同确定。</p>
-          </div>
-          <div class="flex flex-wrap items-center gap-3">
-            <div class="voucher-code-chip">
-              <span class="label">凭证字号</span>
-              <strong>{{ voucherCodeText }}</strong>
-            </div>
-            <div class="voucher-code-chip">
-              <span class="label">平衡状态</span>
-              <strong :class="isBalanced ? 'text-emerald-600' : 'text-amber-600'">{{ isBalanced ? '已平衡' : '待校验' }}</strong>
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-4">
-        <el-form-item label="公司主体" required>
-          <el-select v-model="form.companyId" filterable placeholder="请选择公司主体">
-            <el-option
-              v-for="item in voucherMeta?.companyOptions || []"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="会计期间" required>
-          <el-input-number v-model="form.iperiod" :min="1" :max="12" :controls="false" class="w-full" />
-        </el-form-item>
-
-        <el-form-item label="凭证类别" required>
-          <el-select v-model="form.csign" placeholder="请选择凭证类别">
-            <el-option
-              v-for="item in voucherMeta?.voucherTypeOptions || []"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item label="凭证编号">
-          <el-input :model-value="String(form.inoId || '')" readonly />
-        </el-form-item>
-
-        <el-form-item label="制单日期" required>
-          <el-date-picker
-            v-model="form.dbillDate"
-            type="date"
-            value-format="YYYY-MM-DD"
-            format="YYYY-MM-DD"
-            class="w-full"
-          />
-        </el-form-item>
-
-        <el-form-item label="附件张数">
-          <el-input-number v-model="form.idoc" :min="0" :controls="false" class="w-full" />
-        </el-form-item>
-
-        <el-form-item label="制单人">
-          <el-input v-model="form.cbill" readonly />
-        </el-form-item>
-
-        <el-form-item label="校验结果">
-          <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-            <span v-if="validationErrors.length === 0" class="text-emerald-600">当前无阻断错误，可直接保存。</span>
-            <span v-else class="text-amber-600">存在 {{ validationErrors.length }} 个待处理问题，请先修正。</span>
-          </div>
-        </el-form-item>
-
-        <el-form-item label="凭证头自定义项 1" class="xl:col-span-2">
-          <el-input v-model="form.ctext1" placeholder="例如：单据来源、业务批次" />
-        </el-form-item>
-
-        <el-form-item label="凭证头自定义项 2" class="xl:col-span-2">
-          <el-input v-model="form.ctext2" placeholder="例如：凭证备注、来源说明" />
-        </el-form-item>
-      </div>
-    </el-card>
-
-    <el-card class="!rounded-3xl !border-slate-100 !shadow-sm">
-      <template #header>
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p class="text-lg font-semibold text-slate-800">分录明细</p>
-            <p class="mt-1 text-sm text-slate-400">支持摘要、科目、辅助核算、币种汇率与数量金额联动录入。</p>
-          </div>
-          <div class="flex flex-wrap gap-3">
-            <el-button :icon="Plus" @click="appendEntry">新增分录</el-button>
-            <el-button @click="fillSampleVoucher">填充示例</el-button>
-          </div>
-        </div>
-      </template>
-
-      <div class="voucher-table-wrap">
-        <el-table :data="form.entries" border row-key="localId" class="voucher-entry-table">
-          <el-table-column label="#" width="60" fixed="left">
-            <template #default="{ $index }">
-              <span class="font-medium text-slate-600">{{ $index + 1 }}</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column label="摘要" min-width="220" fixed="left">
-            <template #default="{ row }">
-              <el-input v-model="row.cdigest" placeholder="请输入摘要" />
-            </template>
-          </el-table-column>
-
-          <el-table-column label="科目编码" min-width="220" fixed="left">
-            <template #default="{ row }">
-              <el-select v-model="row.ccode" filterable placeholder="选择科目">
+      <section class="voucher-info-band">
+        <div class="voucher-info-main">
+          <div class="voucher-info-grid">
+            <label class="voucher-info-field">
+              <span>公司</span>
+              <el-select v-model="form.companyId" filterable placeholder="请选择公司">
                 <el-option
-                  v-for="item in voucherMeta?.accountOptions || []"
+                  v-for="item in voucherMeta?.companyOptions || []"
                   :key="item.value"
                   :label="item.label"
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="部门" min-width="190">
-            <template #default="{ row }">
-              <el-select v-model="row.cdeptId" filterable clearable placeholder="部门">
+            <label class="voucher-info-field voucher-info-code">
+              <span>凭证字号</span>
+              <div class="voucher-code-box">{{ voucherCodeText }}</div>
+            </label>
+
+            <label class="voucher-info-field">
+              <span>凭证类别</span>
+              <el-select v-model="form.csign" placeholder="请选择类别">
+                <el-option
+                  v-for="item in voucherMeta?.voucherTypeOptions || []"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </label>
+
+            <label class="voucher-info-field voucher-info-period">
+              <span>期间</span>
+              <el-input-number v-model="form.iperiod" :min="1" :max="12" :controls="false" />
+            </label>
+
+            <label class="voucher-info-field">
+              <span>制单日期</span>
+              <el-date-picker
+                v-model="form.dbillDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                format="YYYY-MM-DD"
+              />
+            </label>
+
+            <label class="voucher-info-field voucher-info-attach">
+              <span>附件张数</span>
+              <el-input-number v-model="form.idoc" :min="0" :controls="false" />
+            </label>
+
+            <label class="voucher-info-field">
+              <span>制单</span>
+              <el-input v-model="form.cbill" readonly />
+            </label>
+
+            <label class="voucher-info-field">
+              <span>说明一</span>
+              <el-input v-model="form.ctext1" placeholder="可录入批次、来源等信息" />
+            </label>
+
+            <label class="voucher-info-field">
+              <span>说明二</span>
+              <el-input v-model="form.ctext2" placeholder="可录入补充说明" />
+            </label>
+          </div>
+        </div>
+
+        <aside class="voucher-info-side">
+          <div class="status-chip" :class="isBalanced ? 'status-chip-balanced' : 'status-chip-warning'">
+            <span>平衡状态</span>
+            <strong>{{ isBalanced ? '已平衡' : '待校验' }}</strong>
+          </div>
+          <div class="status-chip">
+            <span>有效分录</span>
+            <strong>{{ effectiveEntryCount }}</strong>
+          </div>
+          <div class="status-chip">
+            <span>暂存状态</span>
+            <strong>{{ hasDraft ? '已暂存' : '未暂存' }}</strong>
+          </div>
+          <div class="voucher-validation-tip">
+            <p v-if="validationErrors.length === 0">当前无阻断问题，可直接保存。</p>
+            <p v-else>当前有 {{ validationErrors.length }} 个待处理问题。</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="voucher-ledger-card">
+        <div class="voucher-ledger-header">
+          <div class="voucher-ledger-title">记账区域</div>
+          <div class="voucher-ledger-summary">
+            <span>借方合计 {{ moneyText(totalDebit) }}</span>
+            <span>贷方合计 {{ moneyText(totalCredit) }}</span>
+            <span :class="balanceGap === 0 ? 'text-emerald-600' : 'text-amber-600'">
+              差额 {{ moneyText(Math.abs(balanceGap)) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="voucher-grid">
+          <div class="voucher-grid-header voucher-grid-layout">
+            <div>摘要</div>
+            <div>科目名称</div>
+            <div>借方金额</div>
+            <div>贷方金额</div>
+          </div>
+
+          <div class="voucher-grid-body">
+            <div
+              v-for="(row, index) in form.entries"
+              :key="row.localId"
+              class="voucher-grid-row voucher-grid-layout"
+              :class="{ 'voucher-grid-row-active': selectedRowIndex === index }"
+              tabindex="0"
+              @click="selectRow(index)"
+              @focus="selectRow(index)"
+              @keydown="handleGridKeydown($event, index)"
+            >
+              <div class="voucher-cell">
+                <div class="voucher-row-index">{{ index + 1 }}</div>
+                <el-input
+                  v-model="row.cdigest"
+                  placeholder="请输入摘要"
+                  @focus="selectRow(index)"
+                  @keydown="handleGridKeydown($event, index)"
+                />
+              </div>
+
+              <div class="voucher-cell">
+                <el-select
+                  v-model="row.ccode"
+                  filterable
+                  clearable
+                  placeholder="选择科目"
+                  @focus="selectRow(index)"
+                  @visible-change="selectRow(index)"
+                >
+                  <el-option
+                    v-for="item in voucherMeta?.accountOptions || []"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
+                <span class="voucher-subject-tip">{{ resolveAccountLabel(row.ccode) }}</span>
+              </div>
+
+              <div class="voucher-cell amount-cell">
+                <el-input-number
+                  v-model="row.md"
+                  :min="0"
+                  :precision="2"
+                  :controls="false"
+                  placeholder="0.00"
+                  @focus="selectRow(index)"
+                  @keydown="handleAmountKeydown($event, index, 'md')"
+                />
+              </div>
+
+              <div class="voucher-cell amount-cell">
+                <el-input-number
+                  v-model="row.mc"
+                  :min="0"
+                  :precision="2"
+                  :controls="false"
+                  placeholder="0.00"
+                  @focus="selectRow(index)"
+                  @keydown="handleAmountKeydown($event, index, 'mc')"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="voucher-grid-footer voucher-grid-layout">
+            <div class="voucher-footer-label">合计</div>
+            <div class="voucher-footer-label">{{ currentRowLabel }}</div>
+            <div class="voucher-footer-amount">{{ moneyText(totalDebit) }}</div>
+            <div class="voucher-footer-amount">{{ moneyText(totalCredit) }}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="voucher-lower">
+        <div class="voucher-assist-card">
+          <div class="voucher-section-head">
+            <div>
+              <h2>辅助信息</h2>
+              <p>围绕当前选中分录录入部门、人员、客商、项目与扩展信息。</p>
+            </div>
+            <div class="voucher-current-row">当前行 {{ selectedRowIndex + 1 }}</div>
+          </div>
+
+          <div class="assist-grid">
+            <label class="assist-field">
+              <span>部门</span>
+              <el-select v-model="selectedRow.cdeptId" filterable clearable placeholder="选择部门">
                 <el-option
                   v-for="item in voucherMeta?.departmentOptions || []"
                   :key="item.value"
@@ -181,12 +238,11 @@
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="职员" min-width="190">
-            <template #default="{ row }">
-              <el-select v-model="row.cpersonId" filterable clearable placeholder="职员">
+            <label class="assist-field">
+              <span>个人</span>
+              <el-select v-model="selectedRow.cpersonId" filterable clearable placeholder="选择人员">
                 <el-option
                   v-for="item in voucherMeta?.employeeOptions || []"
                   :key="item.value"
@@ -194,12 +250,11 @@
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="客户" min-width="190">
-            <template #default="{ row }">
-              <el-select v-model="row.ccusId" filterable clearable placeholder="客户">
+            <label class="assist-field">
+              <span>客户</span>
+              <el-select v-model="selectedRow.ccusId" filterable clearable placeholder="选择客户">
                 <el-option
                   v-for="item in voucherMeta?.customerOptions || []"
                   :key="item.value"
@@ -207,12 +262,11 @@
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="供应商" min-width="190">
-            <template #default="{ row }">
-              <el-select v-model="row.csupId" filterable clearable placeholder="供应商">
+            <label class="assist-field">
+              <span>供应商</span>
+              <el-select v-model="selectedRow.csupId" filterable clearable placeholder="选择供应商">
                 <el-option
                   v-for="item in voucherMeta?.supplierOptions || []"
                   :key="item.value"
@@ -220,12 +274,11 @@
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="项目大类" min-width="180">
-            <template #default="{ row }">
-              <el-select v-model="row.citemClass" filterable clearable placeholder="项目大类">
+            <label class="assist-field">
+              <span>项目大类</span>
+              <el-select v-model="selectedRow.citemClass" filterable clearable placeholder="选择项目大类">
                 <el-option
                   v-for="item in voucherMeta?.projectClassOptions || []"
                   :key="item.value"
@@ -233,12 +286,11 @@
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="项目" min-width="180">
-            <template #default="{ row }">
-              <el-select v-model="row.citemId" filterable clearable placeholder="项目">
+            <label class="assist-field">
+              <span>项目</span>
+              <el-select v-model="selectedRow.citemId" filterable clearable placeholder="选择项目">
                 <el-option
                   v-for="item in voucherMeta?.projectOptions || []"
                   :key="item.value"
@@ -246,12 +298,11 @@
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="币种" min-width="130">
-            <template #default="{ row }">
-              <el-select v-model="row.cexchName" placeholder="币种">
+            <label class="assist-field">
+              <span>币种</span>
+              <el-select v-model="selectedRow.cexchName" placeholder="币种">
                 <el-option
                   v-for="item in voucherMeta?.currencyOptions || []"
                   :key="item.value"
@@ -259,131 +310,134 @@
                   :value="item.value"
                 />
               </el-select>
-            </template>
-          </el-table-column>
+            </label>
 
-          <el-table-column label="汇率" min-width="130">
-            <template #default="{ row }">
-              <el-input-number v-model="row.nfrat" :min="0.000001" :precision="6" :controls="false" class="w-full" />
-            </template>
-          </el-table-column>
+            <label class="assist-field">
+              <span>汇率</span>
+              <el-input-number v-model="selectedRow.nfrat" :min="0.000001" :precision="6" :controls="false" />
+            </label>
 
-          <el-table-column label="借方金额" min-width="150">
-            <template #default="{ row }">
-              <el-input-number v-model="row.md" :min="0" :precision="2" :controls="false" class="w-full" />
-            </template>
-          </el-table-column>
+            <label class="assist-field">
+              <span>数量</span>
+              <el-input-number
+                v-model="selectedQuantity"
+                :min="0"
+                :precision="6"
+                :controls="false"
+                placeholder="数量"
+              />
+            </label>
 
-          <el-table-column label="贷方金额" min-width="150">
-            <template #default="{ row }">
-              <el-input-number v-model="row.mc" :min="0" :precision="2" :controls="false" class="w-full" />
-            </template>
-          </el-table-column>
+            <label class="assist-field">
+              <span>单价</span>
+              <el-input-number
+                v-model="selectedRow.unitPrice"
+                :min="0"
+                :precision="6"
+                :controls="false"
+                placeholder="单价"
+              />
+            </label>
 
-          <el-table-column label="数量借方" min-width="140">
-            <template #default="{ row }">
-              <el-input-number v-model="row.ndS" :min="0" :precision="6" :controls="false" class="w-full" />
-            </template>
-          </el-table-column>
+            <label class="assist-field">
+              <span>票号</span>
+              <el-input v-model="selectedRow.ticketNo" placeholder="录入票号" />
+            </label>
 
-          <el-table-column label="数量贷方" min-width="140">
-            <template #default="{ row }">
-              <el-input-number v-model="row.ncS" :min="0" :precision="6" :controls="false" class="w-full" />
-            </template>
-          </el-table-column>
-
-          <el-table-column label="操作" width="120" fixed="right">
-            <template #default="{ row, $index }">
-              <div class="flex items-center gap-2">
-                <el-button circle :icon="Plus" @click="insertEntryAfter($index)" />
-                <el-button circle :icon="Delete" @click="removeEntry(row.localId)" />
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </el-card>
-
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr),360px]">
-      <el-card class="!rounded-3xl !border-slate-100 !shadow-sm">
-        <template #header>
-          <div class="flex items-center gap-2 text-slate-800">
-            <el-icon><Warning /></el-icon>
-            <span class="font-semibold">校验与提示</span>
+            <label class="assist-field">
+              <span>业务日期</span>
+              <el-date-picker
+                v-model="selectedRow.bizDate"
+                type="date"
+                value-format="YYYY-MM-DD"
+                format="YYYY-MM-DD"
+              />
+            </label>
           </div>
-        </template>
 
-        <div v-if="validationErrors.length" class="space-y-3">
-          <div v-for="item in validationErrors" :key="item" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            {{ item }}
-          </div>
-        </div>
-        <el-empty v-else description="当前校验通过，可继续保存或暂存草稿。" />
-      </el-card>
-
-      <el-card class="!rounded-3xl !border-slate-100 !shadow-sm">
-        <template #header>
-          <div class="flex items-center gap-2 text-slate-800">
-            <el-icon><DataAnalysis /></el-icon>
-            <span class="font-semibold">汇总区</span>
-          </div>
-        </template>
-
-        <div class="summary-grid">
-          <div class="summary-item">
-            <span>有效分录</span>
-            <strong>{{ effectiveEntryCount }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>借方合计</span>
-            <strong>{{ moneyText(totalDebit) }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>贷方合计</span>
-            <strong>{{ moneyText(totalCredit) }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>差额</span>
-            <strong :class="balanceGap === 0 ? 'text-emerald-600' : 'text-amber-600'">{{ moneyText(balanceGap) }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>草稿状态</span>
-            <strong>{{ hasDraft ? '已暂存' : '未暂存' }}</strong>
-          </div>
-          <div class="summary-item">
-            <span>最后校验</span>
-            <strong>{{ lastValidatedAt || '尚未校验' }}</strong>
-          </div>
+          <label class="assist-field assist-field-wide">
+            <span>备注</span>
+            <el-input v-model="selectedRow.lineRemark" type="textarea" :rows="3" placeholder="当前分录备注" />
+          </label>
         </div>
 
-        <div class="mt-6 flex flex-wrap gap-3">
-          <el-button :icon="CircleCheck" @click="handleValidate">重新校验</el-button>
-          <el-button type="primary" :loading="saving" :icon="Select" @click="handleSave">保存凭证</el-button>
+        <div class="voucher-side-card">
+          <div class="voucher-section-head">
+            <div>
+              <h2>校验与提示</h2>
+              <p>保存前会按借贷平衡、行内容完整性与汇率规则自动校验。</p>
+            </div>
+          </div>
+
+          <div v-if="validationErrors.length" class="validation-list">
+            <div v-for="item in validationErrors" :key="item" class="validation-item">
+              {{ item }}
+            </div>
+          </div>
+          <el-empty v-else description="当前尚无阻断项" />
+
+          <div class="side-summary">
+            <div class="side-summary-item">
+              <span>借方合计</span>
+              <strong>{{ moneyText(totalDebit) }}</strong>
+            </div>
+            <div class="side-summary-item">
+              <span>贷方合计</span>
+              <strong>{{ moneyText(totalCredit) }}</strong>
+            </div>
+            <div class="side-summary-item">
+              <span>最后校验</span>
+              <strong>{{ lastValidatedAt || '尚未校验' }}</strong>
+            </div>
+          </div>
         </div>
-      </el-card>
+      </section>
+
+      <footer class="voucher-signature">
+        <span>记账：&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        <span>审核：&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        <span>出纳：&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        <span>制单：{{ form.cbill || '当前用户' }}</span>
+        <span>末级：&nbsp;&nbsp;&nbsp;&nbsp;</span>
+      </footer>
     </div>
+
+    <el-dialog
+      v-model="actionDialog.visible"
+      :title="actionDialog.title"
+      width="420px"
+      destroy-on-close
+    >
+      <div class="action-dialog-content">
+        <p>{{ actionDialog.description }}</p>
+        <p class="action-dialog-subtle">本轮先保留成熟入口，后续可直接接入正式业务流程。</p>
+      </div>
+      <template #footer>
+        <el-button @click="actionDialog.visible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import type { Component } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowLeft,
-  CircleCheck,
-  DataAnalysis,
+  CircleClose,
+  Coin,
   Delete,
   DocumentCopy,
-  Files,
-  MoreFilled,
-  Paperclip,
+  Download,
   Plus,
   Printer,
-  RefreshRight,
+  RefreshLeft,
+  Search,
   Select,
-  Upload,
-  Warning
+  Tickets,
+  Top,
+  TrendCharts,
+  Tools
 } from '@element-plus/icons-vue'
 import {
   financeApi,
@@ -393,17 +447,43 @@ import {
   type FinanceVoucherSavePayload
 } from '@/api'
 
+type ToolbarActionKey =
+  | 'new'
+  | 'print'
+  | 'export'
+  | 'copy'
+  | 'reverse'
+  | 'void'
+  | 'insert'
+  | 'delete'
+  | 'searchReplace'
+  | 'cashFlow'
+  | 'save'
+  | 'assist'
+  | 'balance'
+  | 'calculator'
+
 type VoucherEntryRow = FinanceVoucherEntry & {
   localId: string
+  ticketNo?: string
+  bizDate?: string
+  lineRemark?: string
+  unitPrice?: number
 }
 
 type VoucherFormState = Omit<FinanceVoucherForm, 'entries'> & {
   entries: VoucherEntryRow[]
 }
 
-const DRAFT_STORAGE_KEY = 'finance-new-voucher-draft'
+interface ToolbarAction {
+  key: ToolbarActionKey
+  label: string
+  icon: Component
+  emphasis?: 'primary' | 'secondary'
+}
 
-const router = useRouter()
+const DRAFT_STORAGE_KEY = 'finance-new-voucher-draft'
+const MIN_ENTRY_ROWS = 8
 
 const loading = ref(false)
 const saving = ref(false)
@@ -412,6 +492,12 @@ const voucherMeta = ref<FinanceVoucherMeta | null>(null)
 const validationErrors = ref<string[]>([])
 const hasDraft = ref(false)
 const lastValidatedAt = ref('')
+const selectedRowIndex = ref(0)
+const actionDialog = reactive({
+  visible: false,
+  title: '',
+  description: ''
+})
 let entrySeed = 0
 
 const form = reactive<VoucherFormState>({
@@ -424,8 +510,45 @@ const form = reactive<VoucherFormState>({
   cbill: '',
   ctext1: '',
   ctext2: '',
-  entries: []
+  entries: ensureMinimumRows([createEntry('CNY', 1), createEntry('CNY', 2)], 'CNY')
 })
+
+const toolbarGroups: Array<{ key: string; actions: ToolbarAction[] }> = [
+  {
+    key: 'primary',
+    actions: [
+      { key: 'new', label: '增加', icon: Plus, emphasis: 'secondary' as const }
+    ]
+  },
+  {
+    key: 'edit',
+    actions: [
+      { key: 'print', label: '打印', icon: Printer },
+      { key: 'export', label: '输出', icon: Download },
+      { key: 'copy', label: '复制', icon: DocumentCopy },
+      { key: 'reverse', label: '冲销', icon: RefreshLeft },
+      { key: 'void', label: '作废', icon: CircleClose },
+      { key: 'insert', label: '插入行', icon: Top },
+      { key: 'delete', label: '删除行', icon: Delete }
+    ]
+  },
+  {
+    key: 'actions',
+    actions: [
+      { key: 'searchReplace', label: '查找替换', icon: Search },
+      { key: 'cashFlow', label: '现金流量', icon: TrendCharts },
+      { key: 'save', label: '保存', icon: Select, emphasis: 'primary' as const }
+    ]
+  },
+  {
+    key: 'tools',
+    actions: [
+      { key: 'assist', label: '辅助明细', icon: Tickets },
+      { key: 'balance', label: '余额', icon: Coin },
+      { key: 'calculator', label: '计算器', icon: Tools }
+    ]
+  }
+]
 
 const effectiveRows = computed(() => form.entries.filter((item) => !isEntryBlank(item)))
 const effectiveEntryCount = computed(() => effectiveRows.value.length)
@@ -433,11 +556,37 @@ const totalDebit = computed(() => sumRows(effectiveRows.value, 'md'))
 const totalCredit = computed(() => sumRows(effectiveRows.value, 'mc'))
 const balanceGap = computed(() => Number((totalDebit.value - totalCredit.value).toFixed(2)))
 const isBalanced = computed(() => effectiveEntryCount.value >= 2 && balanceGap.value === 0 && validationErrors.value.length === 0)
-const voucherCodeText = computed(() => `${form.csign || '--'}-${String(form.inoId || '').padStart(4, '0') || '----'}`)
+const voucherCodeText = computed(() => `${form.csign || '记'}-${String(form.inoId || '').padStart(4, '0') || '0000'}`)
 
-function resolveErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
-}
+const selectedRow = computed<VoucherEntryRow>(() => {
+  const index = Math.min(selectedRowIndex.value, form.entries.length - 1)
+  return form.entries[index] as VoucherEntryRow
+})
+
+const selectedQuantity = computed<number | undefined>({
+  get() {
+    return selectedRow.value.md ? selectedRow.value.ndS : selectedRow.value.ncS
+  },
+  set(value) {
+    if (selectedRow.value.md) {
+      selectedRow.value.ndS = value
+      selectedRow.value.ncS = undefined
+      return
+    }
+    if (selectedRow.value.mc) {
+      selectedRow.value.ncS = value
+      selectedRow.value.ndS = undefined
+      return
+    }
+    selectedRow.value.ndS = value
+    selectedRow.value.ncS = undefined
+  }
+})
+
+const currentRowLabel = computed(() => {
+  const row = selectedRow.value
+  return row.ccode ? resolveAccountLabel(row.ccode) : '当前行'
+})
 
 watch(
   () => form.dbillDate,
@@ -462,9 +611,22 @@ watch(
   }
 )
 
+watch(
+  () => form.entries.length,
+  () => {
+    if (selectedRowIndex.value >= form.entries.length) {
+      selectedRowIndex.value = Math.max(0, form.entries.length - 1)
+    }
+  }
+)
+
 onMounted(async () => {
   await loadMeta()
 })
+
+function resolveErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
 
 async function loadMeta() {
   loading.value = true
@@ -501,7 +663,11 @@ function resetFormFromMeta(meta: FinanceVoucherMeta) {
   form.cbill = meta.defaultMaker
   form.ctext1 = ''
   form.ctext2 = ''
-  form.entries = [createEntry(meta.defaultCurrency, 1), createEntry(meta.defaultCurrency, 2)]
+  form.entries = ensureMinimumRows([
+    createEntry(meta.defaultCurrency, 1),
+    createEntry(meta.defaultCurrency, 2)
+  ], meta.defaultCurrency)
+  selectedRowIndex.value = 0
 }
 
 function applyDraft(draft: FinanceVoucherSavePayload, meta: FinanceVoucherMeta) {
@@ -514,10 +680,13 @@ function applyDraft(draft: FinanceVoucherSavePayload, meta: FinanceVoucherMeta) 
   form.cbill = draft.cbill || meta.defaultMaker
   form.ctext1 = draft.ctext1 || ''
   form.ctext2 = draft.ctext2 || ''
-  form.entries =
-    draft.entries?.length > 0
+  form.entries = ensureMinimumRows(
+    draft.entries?.length
       ? draft.entries.map((item, index) => createEntryFromValue(item, meta.defaultCurrency, index + 1))
-      : [createEntry(meta.defaultCurrency, 1), createEntry(meta.defaultCurrency, 2)]
+      : [createEntry(meta.defaultCurrency, 1), createEntry(meta.defaultCurrency, 2)],
+    meta.defaultCurrency
+  )
+  selectedRowIndex.value = 0
 }
 
 function createEntry(defaultCurrency: string, rowNo: number): VoucherEntryRow {
@@ -538,7 +707,11 @@ function createEntry(defaultCurrency: string, rowNo: number): VoucherEntryRow {
     md: undefined,
     mc: undefined,
     ndS: undefined,
-    ncS: undefined
+    ncS: undefined,
+    ticketNo: '',
+    bizDate: '',
+    lineRemark: '',
+    unitPrice: undefined
   }
 }
 
@@ -551,6 +724,17 @@ function createEntryFromValue(entry: FinanceVoucherEntry, defaultCurrency: strin
     cexchName: entry.cexchName || defaultCurrency,
     nfrat: entry.nfrat ?? 1
   }
+}
+
+function ensureMinimumRows(entries: VoucherEntryRow[], defaultCurrency: string) {
+  const nextEntries = [...entries]
+  while (nextEntries.length < MIN_ENTRY_ROWS) {
+    nextEntries.push(createEntry(defaultCurrency, nextEntries.length + 1))
+  }
+  return nextEntries.map((item, index) => ({
+    ...item,
+    inid: index + 1
+  }))
 }
 
 function readDraft(): FinanceVoucherSavePayload | null {
@@ -640,7 +824,7 @@ function validateVoucher(showToast = false) {
       errors.push(`第 ${rowNo} 行摘要不能为空`)
     }
     if (!row.ccode) {
-      errors.push(`第 ${rowNo} 行请选择科目编码`)
+      errors.push(`第 ${rowNo} 行请选择科目`)
     }
     if (debit > 0 && credit > 0) {
       errors.push(`第 ${rowNo} 行借贷不能同时填写`)
@@ -689,7 +873,10 @@ function isEntryBlank(row: VoucherEntryRow) {
     !row.md &&
     !row.mc &&
     !row.ndS &&
-    !row.ncS
+    !row.ncS &&
+    !row.ticketNo &&
+    !row.lineRemark &&
+    !row.unitPrice
 }
 
 function sumRows(rows: FinanceVoucherEntry[], field: 'md' | 'mc') {
@@ -743,20 +930,38 @@ async function refreshSuggestedVoucherNo() {
   }
 }
 
+function selectRow(index: number) {
+  selectedRowIndex.value = Math.max(0, Math.min(index, form.entries.length - 1))
+}
+
 function appendEntry() {
-  form.entries.push(createEntry(voucherMeta.value?.defaultCurrency || 'CNY', form.entries.length + 1))
+  const currency = voucherMeta.value?.defaultCurrency || 'CNY'
+  form.entries.push(createEntry(currency, form.entries.length + 1))
+  form.entries = ensureMinimumRows(form.entries, currency)
+  selectRow(form.entries.length - 1)
 }
 
 function insertEntryAfter(index: number) {
-  form.entries.splice(index + 1, 0, createEntry(voucherMeta.value?.defaultCurrency || 'CNY', index + 2))
+  const currency = voucherMeta.value?.defaultCurrency || 'CNY'
+  form.entries.splice(index + 1, 0, createEntry(currency, index + 2))
+  form.entries = ensureMinimumRows(form.entries, currency)
+  selectRow(index + 1)
 }
 
-function removeEntry(localId: string) {
-  if (form.entries.length <= 2) {
-    ElMessage.warning('至少保留两行分录')
+function removeSelectedEntry() {
+  if (!form.entries.length) {
     return
   }
-  form.entries = form.entries.filter((item) => item.localId !== localId)
+
+  const effectiveCount = effectiveRows.value.length
+  if (effectiveCount <= 2 && !isEntryBlank(selectedRow.value)) {
+    ElMessage.warning('至少保留两条有效分录')
+    return
+  }
+
+  form.entries.splice(selectedRowIndex.value, 1)
+  form.entries = ensureMinimumRows(form.entries, voucherMeta.value?.defaultCurrency || 'CNY')
+  selectRow(Math.max(0, selectedRowIndex.value - 1))
 }
 
 async function handleNewVoucher() {
@@ -816,50 +1021,80 @@ async function handleSave() {
   }
 }
 
-function fillSampleVoucher() {
-  const currency = voucherMeta.value?.defaultCurrency || 'CNY'
-  form.entries = [
-    createEntryFromValue(
-      {
-        cdigest: '报销办公用品',
-        ccode: '5601',
-        cdeptId: voucherMeta.value?.departmentOptions?.[0]?.value,
-        cpersonId: voucherMeta.value?.employeeOptions?.[0]?.value,
-        cexchName: currency,
-        nfrat: 1,
-        md: 1280,
-        mc: undefined
-      },
-      currency,
-      1
-    ),
-    createEntryFromValue(
-      {
-        cdigest: '支付办公用品报销',
-        ccode: '1002',
-        cexchName: currency,
-        nfrat: 1,
-        md: undefined,
-        mc: 1280
-      },
-      currency,
-      2
-    )
-  ]
-  validationErrors.value = []
-  lastValidatedAt.value = ''
+function handleToolbarAction(action: ToolbarActionKey) {
+  if (action === 'new') {
+    void handleNewVoucher()
+    return
+  }
+  if (action === 'insert') {
+    insertEntryAfter(selectedRowIndex.value)
+    return
+  }
+  if (action === 'delete') {
+    removeSelectedEntry()
+    return
+  }
+  if (action === 'save') {
+    void handleSave()
+    return
+  }
+
+  const placeholders: Record<Exclude<ToolbarActionKey, 'new' | 'insert' | 'delete' | 'save'>, { title: string; description: string }> = {
+    print: { title: '打印', description: '后续可接入正式打印模板与套打配置，本期先保留统一入口。' },
+    export: { title: '输出', description: '后续可扩展为 Excel、PDF 或外部接口输出。' },
+    copy: { title: '复制', description: '后续可按原凭证复制摘要、科目和金额，支持快速成单。' },
+    reverse: { title: '冲销', description: '后续可接入红字冲销与反向凭证生成流程。' },
+    void: { title: '作废', description: '后续可接入作废状态流转和权限校验。' },
+    searchReplace: { title: '查找替换', description: '后续可在分录摘要、科目和辅助项中做批量查找替换。' },
+    cashFlow: { title: '现金流量', description: '后续可关联现金流量项目并形成补录面板。' },
+    assist: { title: '辅助明细', description: '当前下方辅助区已可录入基础信息，后续可扩展为侧边明细抽屉。' },
+    balance: { title: '余额', description: '后续可联动余额查询与科目实时余额提示。' },
+    calculator: { title: '计算器', description: '后续可接入悬浮计算器或公式辅助输入能力。' }
+  }
+
+  const config = placeholders[action]
+  actionDialog.title = config.title
+  actionDialog.description = config.description
+  actionDialog.visible = true
 }
 
-function showStaticAction(label: string) {
-  ElMessage.info(`${label}入口已预留，后续可继续扩展。`)
+function handleGridKeydown(event: KeyboardEvent, index: number) {
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    selectRow(index - 1)
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    selectRow(index + 1)
+  }
+  if (event.key === 'Insert') {
+    event.preventDefault()
+    insertEntryAfter(index)
+  }
 }
 
-function goVoucherList() {
-  router.push('/finance/general-ledger/query-voucher')
+function handleAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 'mc') {
+  handleGridKeydown(event, index)
+  const row = form.entries[index]
+  if (!row) {
+    return
+  }
+  if (field === 'md' && row.md) {
+    row.mc = undefined
+    row.ncS = undefined
+  }
+  if (field === 'mc' && row.mc) {
+    row.md = undefined
+    row.ndS = undefined
+  }
 }
 
-function goBack() {
-  router.back()
+function resolveAccountLabel(code?: string) {
+  if (!code) {
+    return '未选择科目'
+  }
+  const option = voucherMeta.value?.accountOptions.find((item) => item.value === code)
+  return option?.label || code
 }
 
 function moneyText(value: number) {
@@ -871,60 +1106,523 @@ function moneyText(value: number) {
 </script>
 
 <style scoped>
-.toolbar-secondary {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 12px;
+.voucher-page {
+  height: 100%;
 }
 
-.voucher-code-chip {
+.voucher-shell {
   display: flex;
-  min-width: 148px;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 16px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.1), transparent 28%),
+    linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%);
+  padding: 22px;
+}
+
+.voucher-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.voucher-page-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e3a5f;
+  letter-spacing: 0.28em;
+}
+
+.voucher-toolbar-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  border-radius: 22px;
+  border: 1px solid #d8e2f0;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 14px 16px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.05);
+}
+
+.toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-group + .toolbar-group {
+  position: relative;
+  padding-left: 16px;
+}
+
+.toolbar-group + .toolbar-group::before {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  height: 36px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent 0%, #d5deea 22%, #d5deea 78%, transparent 100%);
+  content: '';
+}
+
+.toolbar-button {
+  height: 40px;
+  min-width: 96px;
+  border-radius: 14px;
+  border-color: #d6e0ec;
+  background: #fff;
+  color: #365070;
+  font-weight: 600;
+}
+
+.toolbar-button-large {
+  height: 52px;
+  min-width: 130px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+
+.toolbar-button-accent {
+  border-color: #9cbbe3;
+  background: linear-gradient(180deg, #f0f7ff 0%, #e4efff 100%);
+  color: #24528a;
+  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.14);
+}
+
+.toolbar-button-primary {
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.2);
+}
+
+.voucher-info-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 16px;
+}
+
+.voucher-info-main,
+.voucher-info-side,
+.voucher-ledger-card,
+.voucher-assist-card,
+.voucher-side-card {
+  border-radius: 24px;
+  border: 1px solid #d8e2f0;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+}
+
+.voucher-info-main,
+.voucher-assist-card,
+.voucher-side-card {
+  padding: 18px;
+}
+
+.voucher-info-grid,
+.assist-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.voucher-info-field,
+.assist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  grid-column: span 3;
+}
+
+.voucher-info-field span,
+.assist-field span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5f7391;
+}
+
+.voucher-info-code,
+.voucher-info-attach,
+.voucher-info-period {
+  grid-column: span 2;
+}
+
+.voucher-code-box {
+  display: flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid #cfe0f5;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  font-weight: 700;
+  color: #24466f;
+}
+
+.voucher-info-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+}
+
+.status-chip {
+  display: flex;
   flex-direction: column;
   gap: 4px;
   border-radius: 18px;
-  border: 1px solid #dbeafe;
-  background: linear-gradient(135deg, #eff6ff, #f8fafc);
-  padding: 12px 16px;
+  border: 1px solid #d8e2f0;
+  background: linear-gradient(180deg, #f8fbff 0%, #f2f6fc 100%);
+  padding: 12px 14px;
 }
 
-.voucher-code-chip .label {
+.status-chip span {
   font-size: 12px;
-  color: #64748b;
+  color: #67809d;
 }
 
-.voucher-table-wrap {
-  overflow-x: auto;
+.status-chip strong {
+  color: #1d3557;
+  font-size: 16px;
 }
 
-.voucher-entry-table {
-  min-width: 1980px;
+.status-chip-balanced {
+  border-color: #bae6c7;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf3 100%);
 }
 
-.summary-grid {
+.status-chip-warning {
+  border-color: #fde68a;
+  background: linear-gradient(180deg, #fff9db 0%, #fff7c4 100%);
+}
+
+.voucher-validation-tip {
+  margin-top: auto;
+  border-radius: 18px;
+  background: #f5f8fd;
+  padding: 12px 14px;
+  color: #546a87;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.voucher-ledger-card {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 18px;
+}
+
+.voucher-ledger-header,
+.voucher-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.voucher-ledger-title,
+.voucher-section-head h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1d3557;
+}
+
+.voucher-ledger-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: #5d7491;
+  font-size: 13px;
+}
+
+.voucher-grid {
+  margin-top: 16px;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid #d7e0eb;
+  background: #fdfefe;
+}
+
+.voucher-grid-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(280px, 1.4fr) minmax(160px, 0.8fr) minmax(160px, 0.8fr);
 }
 
-.summary-item {
+.voucher-grid-header,
+.voucher-grid-footer {
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #f3f7fd 0%, #edf3fb 100%);
+  color: #49627f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.voucher-grid-header > div,
+.voucher-grid-footer > div {
+  padding: 12px 14px;
+}
+
+.voucher-grid-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.56) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.voucher-grid-row {
+  min-height: 72px;
+  border-top: 1px solid #e4ebf4;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.voucher-grid-row:first-child {
+  border-top: 0;
+}
+
+.voucher-grid-row:hover {
+  background: rgba(239, 246, 255, 0.72);
+}
+
+.voucher-grid-row-active {
+  background: rgba(219, 234, 254, 0.5);
+  box-shadow: inset 4px 0 0 #4f8ad8;
+}
+
+.voucher-grid-row:focus {
+  outline: none;
+}
+
+.voucher-cell {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 6px;
-  border-radius: 18px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  padding: 14px 16px;
+  padding: 10px 12px;
 }
 
-.summary-item span {
+.voucher-row-index {
   font-size: 12px;
-  color: #64748b;
+  color: #7c8fa7;
 }
 
-.summary-item strong {
-  font-size: 18px;
-  color: #0f172a;
+.voucher-subject-tip {
+  min-height: 18px;
+  color: #788ca6;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.voucher-footer-label {
+  color: #39557a;
+}
+
+.voucher-footer-amount {
+  text-align: right;
+  color: #173a61;
+  font-family: Consolas, Monaco, monospace;
+}
+
+.voucher-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+}
+
+.voucher-section-head p {
+  margin-top: 6px;
+  color: #7b8ea6;
+  font-size: 13px;
+}
+
+.voucher-current-row {
+  border-radius: 999px;
+  background: #edf4ff;
+  padding: 8px 12px;
+  color: #31598d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.assist-field-wide {
+  margin-top: 14px;
+}
+
+.validation-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.validation-item {
+  border-radius: 16px;
+  border: 1px solid #f2d59c;
+  background: #fff8e8;
+  padding: 11px 12px;
+  color: #9a6700;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.side-summary {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.side-summary-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 16px;
+  background: #f5f8fd;
+  padding: 11px 12px;
+  color: #5d7390;
+  font-size: 13px;
+}
+
+.side-summary-item strong {
+  color: #173a61;
+  font-size: 15px;
+}
+
+.voucher-signature {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 18px;
+  border: 1px solid #d8e2f0;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 14px 16px;
+  color: #4a627f;
+  font-size: 13px;
+}
+
+.action-dialog-content {
+  color: #506680;
+  line-height: 1.8;
+}
+
+.action-dialog-subtle {
+  margin-top: 8px;
+  color: #8a9bb1;
+  font-size: 12px;
+}
+
+:deep(.voucher-info-field .el-input__wrapper),
+:deep(.voucher-info-field .el-select__wrapper),
+:deep(.voucher-info-field .el-date-editor),
+:deep(.assist-field .el-input__wrapper),
+:deep(.assist-field .el-select__wrapper),
+:deep(.assist-field .el-date-editor),
+:deep(.voucher-cell .el-input__wrapper),
+:deep(.voucher-cell .el-select__wrapper) {
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px #d8e2f0 inset;
+}
+
+:deep(.voucher-cell .el-input-number),
+:deep(.voucher-cell .el-input-number .el-input__wrapper),
+:deep(.assist-field .el-input-number),
+:deep(.assist-field .el-input-number .el-input__wrapper),
+:deep(.voucher-info-field .el-input-number),
+:deep(.voucher-info-field .el-input-number .el-input__wrapper) {
+  width: 100%;
+}
+
+@media (max-width: 1440px) {
+  .voucher-info-band,
+  .voucher-lower {
+    grid-template-columns: 1fr;
+  }
+
+  .voucher-info-side {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .voucher-validation-tip {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .voucher-shell {
+    padding: 16px;
+  }
+
+  .voucher-page-header h1 {
+    font-size: 24px;
+    letter-spacing: 0.18em;
+  }
+
+  .voucher-info-grid,
+  .assist-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .voucher-info-field,
+  .assist-field {
+    grid-column: span 3;
+  }
+
+  .voucher-grid-layout {
+    min-width: 860px;
+  }
+}
+
+@media (max-width: 768px) {
+  .voucher-toolbar-panel {
+    gap: 10px;
+  }
+
+  .toolbar-group {
+    width: 100%;
+  }
+
+  .toolbar-group + .toolbar-group {
+    padding-left: 0;
+    padding-top: 10px;
+  }
+
+  .toolbar-group + .toolbar-group::before {
+    left: 0;
+    top: 0;
+    height: 1px;
+    width: 100%;
+  }
+
+  .voucher-info-grid,
+  .assist-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voucher-info-field,
+  .assist-field,
+  .voucher-info-code,
+  .voucher-info-attach,
+  .voucher-info-period {
+    grid-column: span 2;
+  }
+
+  .voucher-info-side {
+    grid-template-columns: 1fr;
+  }
+
+  .voucher-signature {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

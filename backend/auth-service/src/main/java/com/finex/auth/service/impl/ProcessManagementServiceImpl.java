@@ -22,6 +22,9 @@ import com.finex.auth.dto.ProcessExpenseTypeDetailVO;
 import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
 import com.finex.auth.dto.ProcessExpenseTypeTreeVO;
+import com.finex.auth.dto.ProcessFormDesignDetailVO;
+import com.finex.auth.dto.ProcessFormDesignSaveDTO;
+import com.finex.auth.dto.ProcessFormDesignSummaryVO;
 import com.finex.auth.dto.ProcessFlowDetailVO;
 import com.finex.auth.dto.ProcessFlowMetaVO;
 import com.finex.auth.dto.ProcessFlowResolveApproversDTO;
@@ -56,6 +59,7 @@ import com.finex.auth.mapper.ProcessTemplateCategoryMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.ProcessFormDesignService;
 import com.finex.auth.service.ProcessFlowDesignService;
 import com.finex.auth.service.ProcessManagementService;
 import lombok.RequiredArgsConstructor;
@@ -180,6 +184,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private final ProcessExpenseTypeMapper processExpenseTypeMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
+    private final ProcessFormDesignService processFormDesignService;
     private final ProcessFlowDesignService processFlowDesignService;
     private final ObjectMapper objectMapper;
 
@@ -192,6 +197,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         );
         List<ProcessDocumentTemplate> templates = templateMapper.selectList(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .eq(ProcessDocumentTemplate::getEnabled, 1)
                         .orderByAsc(ProcessDocumentTemplate::getSortOrder, ProcessDocumentTemplate::getId)
         );
 
@@ -257,7 +263,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     @Override
     public ProcessTemplateDetailVO getTemplateDetail(Long id) {
-        return buildTemplateDetail(requireTemplate(id));
+        return buildTemplateDetail(requireActiveTemplate(id));
     }
 
     @Override
@@ -305,7 +311,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProcessTemplateSaveResultVO updateTemplate(Long id, ProcessTemplateSaveDTO dto, String operatorName) {
-        ProcessDocumentTemplate template = requireTemplate(id);
+        ProcessDocumentTemplate template = requireActiveTemplate(id);
         String categoryCode = normalize(dto.getCategory(), template.getCategoryCode());
         String templateType = normalize(dto.getTemplateType(), template.getTemplateType());
         boolean enabled = dto.getEnabled() == null || dto.getEnabled();
@@ -340,6 +346,20 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
         replaceTemplateScopes(template.getId(), dto, departmentLabelMap, expenseTypeLabelMap, archiveLabelMap);
         return buildTemplateSaveResult(template);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean deleteTemplate(Long id) {
+        ProcessDocumentTemplate template = requireTemplate(id);
+        template.setEnabled(0);
+        template.setPublishStatus("DRAFT");
+        templateMapper.updateById(template);
+        scopeMapper.delete(
+                Wrappers.<ProcessTemplateScope>lambdaQuery()
+                        .eq(ProcessTemplateScope::getTemplateId, id)
+        );
+        return Boolean.TRUE;
     }
 
     @Override
@@ -581,6 +601,35 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         processExpenseTypeMapper.deleteById(id);
         return Boolean.TRUE;
     }
+
+    @Override
+    public List<ProcessFormDesignSummaryVO> listFormDesigns(String templateType) {
+        return processFormDesignService.listFormDesigns(templateType);
+    }
+
+    @Override
+    public ProcessFormDesignDetailVO getFormDesignDetail(Long id) {
+        return processFormDesignService.getFormDesignDetail(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessFormDesignDetailVO createFormDesign(ProcessFormDesignSaveDTO dto) {
+        return processFormDesignService.createFormDesign(dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessFormDesignDetailVO updateFormDesign(Long id, ProcessFormDesignSaveDTO dto) {
+        return processFormDesignService.updateFormDesign(id, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean deleteFormDesign(Long id) {
+        return processFormDesignService.deleteFormDesign(id);
+    }
+
     @Override
     public List<ProcessFlowSummaryVO> listFlows() {
         return processFlowDesignService.listFlows();
@@ -836,36 +885,11 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     }
 
     private List<ProcessFormOptionVO> loadFormDesignOptions(String templateType) {
-        return switch (normalize(templateType, "report")) {
-            case "application" -> List.of(
-                    option("\u6807\u51c6\u7533\u8bf7\u8868\u5355", "application-standard-form"),
-                    option("\u9879\u76ee\u7533\u8bf7\u8868\u5355", "application-project-form"),
-                    option("\u5bf9\u516c\u7533\u8bf7\u8868\u5355", "application-public-form")
-            );
-            case "loan" -> List.of(
-                    option("\u6807\u51c6\u501f\u6b3e\u8868\u5355", "loan-standard-form"),
-                    option("\u5dee\u65c5\u501f\u6b3e\u8868\u5355", "loan-travel-form"),
-                    option("\u5907\u7528\u91d1\u501f\u6b3e\u8868\u5355", "loan-petty-cash-form")
-            );
-            default -> List.of(
-                    option("\u6807\u51c6\u62a5\u9500\u8868\u5355", "expense-standard-form"),
-                    option("\u5dee\u65c5\u62a5\u9500\u8868\u5355", "expense-travel-form"),
-                    option("\u5bf9\u516c\u62a5\u9500\u8868\u5355", "expense-public-form")
-            );
-        };
+        return processFormDesignService.listFormDesignOptions(templateType);
     }
 
     private String resolveFormDesignCode(String formDesign, String templateType) {
-        List<ProcessFormOptionVO> options = loadFormDesignOptions(templateType);
-        String normalized = trimToNull(formDesign);
-        if (normalized == null) {
-            return options.get(0).getValue();
-        }
-        boolean matched = options.stream().anyMatch(option -> Objects.equals(option.getValue(), normalized));
-        if (!matched) {
-            throw new IllegalArgumentException("\u6240\u9009\u8868\u5355\u8bbe\u8ba1\u4e0d\u5b58\u5728\u6216\u4e0d\u5c5e\u4e8e\u5f53\u524d\u6a21\u677f\u7c7b\u578b");
-        }
-        return normalized;
+        return processFormDesignService.resolveFormDesignCode(formDesign, templateType);
     }
 
     private void validateTemplateScope(ProcessTemplateSaveDTO dto) {
@@ -1114,6 +1138,14 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         ProcessDocumentTemplate template = templateMapper.selectById(id);
         if (template == null) {
             throw new IllegalStateException("模板不存在");
+        }
+        return template;
+    }
+
+    private ProcessDocumentTemplate requireActiveTemplate(Long id) {
+        ProcessDocumentTemplate template = requireTemplate(id);
+        if (!Objects.equals(template.getEnabled(), 1)) {
+            throw new IllegalStateException("模板不存在或已停用");
         }
         return template;
     }

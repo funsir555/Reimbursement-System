@@ -8,6 +8,8 @@ import lombok.Data;
 @Data
 public class ExpenseSummaryVO {
 
+    private String documentCode;
+
     private String no;
 
     private String type;

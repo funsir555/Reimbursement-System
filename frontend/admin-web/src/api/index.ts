@@ -208,11 +208,255 @@ export interface SystemSettingsBootstrapData {
 }
 
 export interface ExpenseSummary {
+  documentCode: string
   no: string
   type: string
   reason: string
   amount: number
   date: string
+  status: string
+}
+
+export interface ExpenseApprovalTask {
+  id: number
+  documentCode: string
+  nodeKey: string
+  nodeName: string
+  nodeType: string
+  assigneeUserId: number
+  assigneeName: string
+  status: string
+  taskBatchNo: string
+  approvalMode?: string
+  actionComment?: string
+  createdAt?: string
+  handledAt?: string
+}
+
+export interface ExpenseApprovalLog {
+  id: number
+  documentCode: string
+  nodeKey?: string
+  nodeName?: string
+  actionType: string
+  actorUserId?: number
+  actorName?: string
+  actionComment?: string
+  payload: Record<string, unknown>
+  createdAt?: string
+}
+
+export interface ExpenseApprovalPendingItem {
+  taskId: number
+  documentCode: string
+  documentTitle: string
+  documentReason?: string
+  templateName?: string
+  submitterName?: string
+  amount: number
+  nodeKey: string
+  nodeName: string
+  status: string
+  submittedAt?: string
+  taskCreatedAt?: string
+}
+
+export interface ExpenseApprovalActionPayload {
+  comment?: string
+}
+
+export interface ExpenseDocumentDetail {
+  documentCode: string
+  documentTitle: string
+  documentReason?: string
+  status: string
+  statusLabel: string
+  totalAmount: number
+  submitterUserId?: number
+  submitterName?: string
+  templateName?: string
+  templateType?: string
+  currentNodeKey?: string
+  currentNodeName?: string
+  currentTaskType?: string
+  submittedAt?: string
+  finishedAt?: string
+  templateSnapshot: Record<string, unknown>
+  formSchemaSnapshot: ProcessFormDesignSchema
+  formData: Record<string, unknown>
+  flowSnapshot: {
+    flowName?: string
+    flowDescription?: string
+    nodes?: ProcessFlowNode[]
+    routes?: ProcessFlowRoute[]
+    [key: string]: unknown
+  }
+  departmentOptions: ProcessFormOption[]
+  currentTasks: ExpenseApprovalTask[]
+  actionLogs: ExpenseApprovalLog[]
+}
+
+export interface FinanceVendorSummary {
+  cVenCode: string
+  cVenName: string
+  cVenAbbName?: string
+  cVCCode?: string
+  cVenPerson?: string
+  cVenPhone?: string
+  cVenBank?: string
+  cVenAccount?: string
+  companyId?: string
+  active: boolean
+  dEndDate?: string
+  updatedAt?: string
+}
+
+export interface FinanceVendorDetail extends FinanceVendorSummary {
+  cTrade?: string
+  cVenAddress?: string
+  cVenRegCode?: string
+  cVenBankNub?: string
+  cVenHand?: string
+  cVenEmail?: string
+  cMemo?: string
+  cBarCode?: string
+  cCreatePerson?: string
+  cDCCode?: string
+  cModifyPerson?: string
+  cRelCustomer?: string
+  cVenBankCode?: string
+  cVenBP?: string
+  cVenDefine3?: string
+  cVenDefine4?: string
+  cVenDefine5?: string
+  cVenDefine6?: string
+  cVenDefine7?: string
+  cVenDefine8?: string
+  cVenDefine9?: string
+  cVenDefine10?: string
+  cVenDefine11?: number
+  cVenDefine12?: number
+  cVenDefine13?: number
+  cVenDefine14?: number
+  cVenDefine15?: string
+  cVenDefine16?: string
+  cVenDepart?: string
+  cVenFax?: string
+  cVenHeadCode?: string
+  cVenIAddress?: string
+  cVenIType?: string
+  cVenLPerson?: string
+  cVenPayCond?: string
+  cVenPostCode?: string
+  cVenPPerson?: string
+  cVenTradeCCode?: string
+  cVenWhCode?: string
+  dBusinessEDate?: string
+  dBusinessSDate?: string
+  dLastDate?: string
+  dLicenceEDate?: string
+  dLicenceSDate?: string
+  dLRDate?: string
+  dModifyDate?: string
+  dProxyEDate?: string
+  dProxySDate?: string
+  dVenDevDate?: string
+  fRegistFund?: number
+  iAPMoney?: number
+  iBusinessADays?: number
+  iEmployeeNum?: number
+  iFrequency?: number
+  iGradeABC?: number
+  iId?: number
+  iLastMoney?: number
+  iLicenceADays?: number
+  iLRMoney?: number
+  iProxyADays?: number
+  iVenCreDate?: number
+  iVenCreGrade?: string
+  iVenCreLine?: number
+  iVenDisRate?: number
+  bBusinessDate?: number
+  bLicenceDate?: number
+  bPassGMP?: number
+  bProxyDate?: number
+  bProxyForeign?: number
+  bVenCargo?: number
+  bVenService?: number
+  bVenTax?: number
+  createdAt?: string
+  [key: string]: unknown
+}
+
+export type FinanceVendorSavePayload = Partial<FinanceVendorDetail> & {
+  cVenCode?: string
+  cVenName: string
+}
+
+export interface ExpenseCreateTemplateSummary {
+  templateCode: string
+  templateName: string
+  templateType: string
+  templateTypeLabel: string
+  categoryCode: string
+  formDesignCode?: string
+}
+
+export interface ExpenseCreateVendorOption {
+  value: string
+  label: string
+  secondaryLabel?: string
+  cVenCode: string
+  cVenName: string
+  cVenAbbName?: string
+}
+
+export interface ExpenseCreatePayeeOption {
+  value: string
+  label: string
+  sourceType: string
+  sourceCode: string
+  secondaryLabel?: string
+}
+
+export interface ExpenseCreatePayeeAccountOption {
+  value: string
+  label: string
+  sourceType: string
+  ownerCode: string
+  ownerName: string
+  bankName?: string
+  accountName?: string
+  accountNoMasked?: string
+  secondaryLabel?: string
+}
+
+export interface ExpenseCreateTemplateDetail {
+  templateCode: string
+  templateName: string
+  templateType: string
+  templateTypeLabel: string
+  categoryCode: string
+  templateDescription?: string
+  formDesignCode?: string
+  approvalFlowCode?: string
+  flowName?: string
+  formName?: string
+  schema: ProcessFormDesignSchema
+  sharedArchives: ProcessCustomArchiveDetail[]
+  departmentOptions: ProcessFormOption[]
+  currentUserDeptId?: string
+  currentUserDeptName?: string
+}
+
+export interface ExpenseDocumentSubmitPayload {
+  templateCode: string
+  formData: Record<string, unknown>
+}
+
+export interface ExpenseDocumentSubmitResult {
+  id: number
+  documentCode: string
   status: string
 }
 
@@ -449,6 +693,63 @@ export interface ProcessTemplateSaveResult {
   templateCode: string
   templateName: string
   status: string
+}
+
+export type ProcessFormPermissionValue = 'EDITABLE' | 'READONLY' | 'HIDDEN'
+
+export type ProcessFormPermissionStage =
+  | 'DRAFT_BEFORE_SUBMIT'
+  | 'RESUBMIT_AFTER_RETURN'
+  | 'IN_APPROVAL'
+  | 'ARCHIVED'
+
+export interface ProcessFormSceneOverride {
+  sceneId: number
+  permission: ProcessFormPermissionValue
+}
+
+export interface ProcessFormFieldPermission {
+  fixedStages: Record<ProcessFormPermissionStage, ProcessFormPermissionValue>
+  sceneOverrides: ProcessFormSceneOverride[]
+}
+
+export interface ProcessFormDesignBlock {
+  blockId: string
+  fieldKey: string
+  kind: 'CONTROL' | 'BUSINESS_COMPONENT' | 'SHARED_FIELD'
+  label: string
+  span: number
+  helpText?: string
+  required: boolean
+  defaultValue?: unknown
+  props: Record<string, unknown>
+  permission: ProcessFormFieldPermission
+}
+
+export interface ProcessFormDesignSchema {
+  layoutMode: string
+  blocks: ProcessFormDesignBlock[]
+}
+
+export interface ProcessFormDesignSummary {
+  id: number
+  formCode: string
+  formName: string
+  templateType: string
+  templateTypeLabel: string
+  formDescription?: string
+  updatedAt: string
+}
+
+export interface ProcessFormDesignDetail extends ProcessFormDesignSummary {
+  schema: ProcessFormDesignSchema
+}
+
+export interface ProcessFormDesignSavePayload {
+  templateType: string
+  formName: string
+  formDescription?: string
+  schema: ProcessFormDesignSchema
 }
 
 export interface ProcessFlowConfigOption {
@@ -888,7 +1189,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<ApiRe
   return payload
 }
 
-function buildQueryString(params: Record<string, string | number | undefined | null>) {
+function buildQueryString(params: Record<string, string | number | boolean | undefined | null>) {
   const search = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') {
@@ -914,7 +1215,23 @@ export const dashboardApi = {
 }
 
 export const expenseApi = {
-  list: () => request<ExpenseSummary[]>('/auth/expenses')
+  list: () => request<ExpenseSummary[]>('/auth/expenses'),
+  getDetail: (documentCode: string) =>
+    request<ExpenseDocumentDetail>(`/auth/expenses/${encodeURIComponent(documentCode)}`)
+}
+
+export const expenseApprovalApi = {
+  listPending: () => request<ExpenseApprovalPendingItem[]>('/auth/expense-approval/pending'),
+  approve: (taskId: number, payload: ExpenseApprovalActionPayload = {}) =>
+    request<ExpenseDocumentDetail>(`/auth/expense-approval/tasks/${taskId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  reject: (taskId: number, payload: ExpenseApprovalActionPayload = {}) =>
+    request<ExpenseDocumentDetail>(`/auth/expense-approval/tasks/${taskId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
 }
 
 export const invoiceApi = {
@@ -928,6 +1245,50 @@ export const financeApi = {
     request<FinanceVoucherDetail>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}`),
   createVoucher: (payload: FinanceVoucherSavePayload) =>
     request<FinanceVoucherSaveResult>('/auth/finance/vouchers', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+}
+
+export const financeArchiveApi = {
+  listSuppliers: (params: { keyword?: string; includeDisabled?: boolean } = {}) =>
+    request<FinanceVendorSummary[]>(`/auth/finance/archives/suppliers${buildQueryString(params)}`),
+  getSupplierDetail: (vendorCode: string) =>
+    request<FinanceVendorDetail>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}`),
+  createSupplier: (payload: FinanceVendorSavePayload) =>
+    request<FinanceVendorDetail>('/auth/finance/archives/suppliers', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateSupplier: (vendorCode: string, payload: FinanceVendorSavePayload) =>
+    request<FinanceVendorDetail>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  disableSupplier: (vendorCode: string) =>
+    request<boolean>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}`, {
+      method: 'DELETE'
+    })
+}
+
+export const expenseCreateApi = {
+  listTemplates: () =>
+    request<ExpenseCreateTemplateSummary[]>('/auth/expenses/create/templates'),
+  getTemplateDetail: (templateCode: string) =>
+    request<ExpenseCreateTemplateDetail>(`/auth/expenses/create/templates/${encodeURIComponent(templateCode)}`),
+  listVendorOptions: (keyword?: string) =>
+    request<ExpenseCreateVendorOption[]>(`/auth/expenses/create/vendors/options${buildQueryString({ keyword })}`),
+  createVendor: (payload: FinanceVendorSavePayload) =>
+    request<FinanceVendorDetail>('/auth/expenses/create/vendors', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  listPayeeOptions: (keyword?: string) =>
+    request<ExpenseCreatePayeeOption[]>(`/auth/expenses/create/payees/options${buildQueryString({ keyword })}`),
+  listPayeeAccountOptions: (keyword?: string) =>
+    request<ExpenseCreatePayeeAccountOption[]>(`/auth/expenses/create/payee-accounts/options${buildQueryString({ keyword })}`),
+  submit: (payload: ExpenseDocumentSubmitPayload) =>
+    request<ExpenseDocumentSubmitResult>('/auth/expenses/create/documents', {
       method: 'POST',
       body: JSON.stringify(payload)
     })
@@ -949,6 +1310,28 @@ export const processApi = {
     request<ProcessTemplateSaveResult>(`/auth/process-management/templates/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
+    }),
+  deleteTemplate: (id: number) =>
+    request<boolean>(`/auth/process-management/templates/${id}`, {
+      method: 'DELETE'
+    }),
+  listFormDesigns: (templateType?: string) =>
+    request<ProcessFormDesignSummary[]>(`/auth/process-management/form-designs${buildQueryString({ templateType })}`),
+  getFormDesignDetail: (id: number) =>
+    request<ProcessFormDesignDetail>(`/auth/process-management/form-designs/${id}`),
+  createFormDesign: (payload: ProcessFormDesignSavePayload) =>
+    request<ProcessFormDesignDetail>('/auth/process-management/form-designs', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateFormDesign: (id: number, payload: ProcessFormDesignSavePayload) =>
+    request<ProcessFormDesignDetail>(`/auth/process-management/form-designs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  deleteFormDesign: (id: number) =>
+    request<boolean>(`/auth/process-management/form-designs/${id}`, {
+      method: 'DELETE'
     }),
   listFlows: () =>
     request<ProcessFlowSummary[]>('/auth/process-management/flows'),

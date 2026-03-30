@@ -13,6 +13,9 @@ import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
 import com.finex.auth.dto.ProcessExpenseTypeStatusDTO;
 import com.finex.auth.dto.ProcessExpenseTypeTreeVO;
+import com.finex.auth.dto.ProcessFormDesignDetailVO;
+import com.finex.auth.dto.ProcessFormDesignSaveDTO;
+import com.finex.auth.dto.ProcessFormDesignSummaryVO;
 import com.finex.auth.dto.ProcessFlowDetailVO;
 import com.finex.auth.dto.ProcessFlowMetaVO;
 import com.finex.auth.dto.ProcessFlowResolveApproversDTO;
@@ -113,6 +116,12 @@ public class ProcessManagementController {
                 "模板更新成功",
                 processManagementService.updateTemplate(id, dto, getCurrentUsername(request))
         );
+    }
+
+    @DeleteMapping("/templates/{id}")
+    public Result<Boolean> deleteTemplate(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("妯℃澘鍒犻櫎鎴愬姛", processManagementService.deleteTemplate(id));
     }
 
     @GetMapping("/custom-archives")
@@ -234,6 +243,49 @@ public class ProcessManagementController {
     public Result<Boolean> deleteExpenseType(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
         return Result.success("Expense type deleted", processManagementService.deleteExpenseType(id));
+    }
+
+    @GetMapping("/form-designs")
+    public Result<List<ProcessFormDesignSummaryVO>> listFormDesigns(
+            @RequestParam(required = false) String templateType,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.listFormDesigns(templateType));
+    }
+
+    @GetMapping("/form-designs/{id}")
+    public Result<ProcessFormDesignDetailVO> formDesignDetail(
+            @PathVariable Long id,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.getFormDesignDetail(id));
+    }
+
+    @PostMapping("/form-designs")
+    public Result<ProcessFormDesignDetailVO> createFormDesign(
+            @Valid @RequestBody ProcessFormDesignSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
+        return Result.success("表单设计保存成功", processManagementService.createFormDesign(dto));
+    }
+
+    @PutMapping("/form-designs/{id}")
+    public Result<ProcessFormDesignDetailVO> updateFormDesign(
+            @PathVariable Long id,
+            @Valid @RequestBody ProcessFormDesignSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("表单设计更新成功", processManagementService.updateFormDesign(id, dto));
+    }
+
+    @DeleteMapping("/form-designs/{id}")
+    public Result<Boolean> deleteFormDesign(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("表单设计删除成功", processManagementService.deleteFormDesign(id));
     }
 
     @GetMapping("/flows")

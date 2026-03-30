@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="flex items-start gap-6">
     <process-workbench-sidebar
       :items="overview?.navItems || []"
@@ -14,18 +14,17 @@
           <div class="flex flex-col gap-6 px-8 py-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p class="text-sm uppercase tracking-[0.22em] text-blue-100">Flow Studio</p>
-              <h1 class="mt-3 text-3xl font-bold">单据与流程</h1>
+              <h1 class="mt-3 text-3xl font-bold">?????</h1>
               <p class="mt-3 max-w-2xl leading-7 text-blue-50/90">
-                把单据模板、审批流程、付款规则和 AI 审核能力统一放在同一个工作区中，让财务同事能够更快梳理流程、维护模板并推动业务上线。
-              </p>
+                鎶婂崟鎹ā鏉裤€佸鎵规祦绋嬨€佷粯娆捐鍒欏拰 AI 瀹℃牳鑳藉姏缁熶竴鏀惧湪鍚屼竴涓伐浣滃尯涓紝璁╄储鍔″悓浜嬭兘澶熸洿蹇⒊鐞嗘祦绋嬨€佺淮鎶ゆā鏉垮苟鎺ㄥ姩涓氬姟涓婄嚎銆?              </p>
             </div>
 
             <div class="flex flex-wrap gap-3">
               <el-button v-if="canCreateTemplates" type="primary" class="hero-primary-btn" @click="openTemplateDialog">
-                添加单据
+                娣诲姞鍗曟嵁
               </el-button>
               <el-button v-if="canEditTemplates" class="hero-secondary-btn">
-                批量归档
+                鎵归噺褰掓。
               </el-button>
             </div>
           </div>
@@ -52,21 +51,21 @@
           <div class="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
             <div class="flex flex-wrap gap-3">
               <el-button v-if="canCreateTemplates" type="primary" :icon="Plus" @click="openTemplateDialog">
-                添加单据
+                娣诲姞鍗曟嵁
               </el-button>
-              <el-button v-if="canEditTemplates" :icon="CopyDocument">复制分类</el-button>
+              <el-button v-if="canEditTemplates" :icon="CopyDocument">澶嶅埗鍒嗙被</el-button>
             </div>
 
             <div class="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
               <el-input
                 v-model="searchKeyword"
-                placeholder="搜索单据名称、模板类型或流程名称"
+                placeholder="鎼滅储鍗曟嵁鍚嶇О銆佹ā鏉跨被鍨嬫垨娴佺▼鍚嶇О"
                 class="w-full sm:w-80"
                 :prefix-icon="Search"
                 clearable
               />
               <el-select v-model="activeCategory" class="w-full sm:w-52">
-                <el-option label="全部分类" value="all" />
+                <el-option label="鍏ㄩ儴鍒嗙被" value="all" />
                 <el-option
                   v-for="category in overview?.categories || []"
                   :key="category.code"
@@ -86,8 +85,7 @@
                 <p class="mt-1 text-sm text-slate-400">{{ category.description }}</p>
               </div>
               <span class="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-500">
-                {{ category.templateCount }} 个模板
-              </span>
+                {{ category.templateCount }} 涓ā鏉?              </span>
             </div>
 
             <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
@@ -127,22 +125,25 @@
 
                 <div class="mt-5 space-y-2 rounded-2xl bg-slate-50 px-4 py-3">
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-slate-400">绑定流程</span>
+                    <span class="text-slate-400">缁戝畾娴佺▼</span>
                     <span class="font-medium text-slate-700">{{ template.flowName }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-slate-400">维护人</span>
+                    <span class="text-slate-400">???</span>
                     <span class="text-slate-700">{{ template.owner }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-slate-400">更新时间</span>
+                    <span class="text-slate-400">鏇存柊鏃堕棿</span>
                     <span class="text-slate-700">{{ template.updatedAt }}</span>
                   </div>
                 </div>
 
-                <div class="mt-5 flex gap-3">
-                  <el-button type="primary" text @click="openTemplateEdit(template)">修改配置</el-button>
-                  <el-button v-if="canEditTemplates" text>复制模板</el-button>
+                <div class="mt-5 flex flex-wrap justify-end gap-3">
+                  <el-button v-if="canEditTemplates" text type="danger" @click="confirmDeleteTemplate(template)">
+                    鍒犻櫎妯℃澘
+                  </el-button>
+                  <el-button type="primary" text @click="openTemplateEdit(template)">淇敼閰嶇疆</el-button>
+                  <el-button v-if="canEditTemplates" text>澶嶅埗妯℃澘</el-button>
                 </div>
               </el-card>
             </div>
@@ -186,7 +187,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleCheckFilled,
   CopyDocument,
@@ -230,53 +231,48 @@ const activeSection = computed(() => {
   const section = route.query.section
   return typeof section === 'string' ? section : 'document-flow'
 })
-
 const currentNav = computed(() => overview.value?.navItems.find((item) => item.key === activeSection.value))
-const currentNavLabel = computed(() => currentNav.value?.label || '流程配置')
-const currentNavTip = computed(() => currentNav.value?.tip || '这个配置模块正在建设中，后续会继续补齐真实能力。')
-
+const currentNavLabel = computed(() => currentNav.value?.label || '\u6d41\u7a0b\u914d\u7f6e')
+const currentNavTip = computed(() => currentNav.value?.tip || '\u8fd9\u4e2a\u914d\u7f6e\u6a21\u5757\u6b63\u5728\u5efa\u8bbe\u4e2d\uff0c\u540e\u7eed\u4f1a\u7ee7\u7eed\u8865\u9f50\u771f\u5b9e\u80fd\u529b\u3002')
 const summaryCards = computed(() => {
   if (!overview.value) {
     return []
   }
-
   return [
     {
-      label: '模板总数',
+      label: '\u6a21\u677f\u603b\u6570',
       value: overview.value.summary.totalTemplates,
-      tip: '已纳入流程中心维护的全部单据模板',
+      tip: '\u5df2\u7eb3\u5165\u6d41\u7a0b\u4e2d\u5fc3\u7ef4\u62a4\u7684\u5168\u90e8\u5355\u636e\u6a21\u677f',
       icon: Files,
       bg: 'linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)'
     },
     {
-      label: '已启用模板',
+      label: '\u5df2\u542f\u7528\u6a21\u677f',
       value: overview.value.summary.enabledTemplates,
-      tip: '当前已正式投入使用的模板数量',
+      tip: '\u5f53\u524d\u6b63\u5f0f\u6295\u5165\u4f7f\u7528\u7684\u6a21\u677f\u6570\u91cf',
       icon: CircleCheckFilled,
       bg: 'linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%)'
     },
     {
-      label: '草稿模板',
+      label: '\u8349\u7a3f\u6a21\u677f',
       value: overview.value.summary.draftTemplates,
-      tip: '待继续完善并发布的模板',
+      tip: '\u5f85\u7ee7\u7eed\u5b8c\u5584\u5e76\u53d1\u5e03\u7684\u6a21\u677f',
       icon: Document,
       bg: 'linear-gradient(135deg, #ea580c 0%, #fdba74 100%)'
     },
     {
-      label: 'AI 审核接入',
+      label: 'AI \u5ba1\u6838\u63a5\u5165',
       value: overview.value.summary.aiAuditTemplates,
-      tip: '已启用 AI 风险识别能力的模板',
+      tip: '\u5df2\u542f\u7528 AI \u98ce\u9669\u8bc6\u522b\u80fd\u529b\u7684\u6a21\u677f',
       icon: TrendCharts,
       bg: 'linear-gradient(135deg, #7c3aed 0%, #c4b5fd 100%)'
     }
   ]
 })
-
 const filteredCategories = computed(() => {
   if (!overview.value) {
     return []
   }
-
   return overview.value.categories
     .filter((category) => activeCategory.value === 'all' || category.code === activeCategory.value)
     .map((category) => {
@@ -285,14 +281,12 @@ const filteredCategories = computed(() => {
         if (!keyword) {
           return true
         }
-
         return (
           template.name.includes(keyword) ||
           template.templateType.includes(keyword) ||
           template.flowName.includes(keyword)
         )
       })
-
       return {
         ...category,
         templateCount: templates.length,
@@ -301,25 +295,24 @@ const filteredCategories = computed(() => {
     })
     .filter((category) => category.templates.length > 0)
 })
-
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
-
 onMounted(async () => {
+  await loadOverview()
+})
+async function loadOverview() {
   try {
     const [overviewRes, typeRes] = await Promise.all([
       processApi.getOverview(),
       processApi.getTemplateTypes()
     ])
-
     overview.value = overviewRes.data
     templateTypes.value = typeRes.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载流程管理页面失败'))
+    ElMessage.error(resolveErrorMessage(error, '\u52a0\u8f7d\u6d41\u7a0b\u7ba1\u7406\u9875\u9762\u5931\u8d25'))
   }
-})
-
+}
 const handleSectionChange = (section: string) => {
   router.replace({
     path: '/expense/workbench/process-management',
@@ -329,7 +322,7 @@ const handleSectionChange = (section: string) => {
 
 const openTemplateDialog = () => {
   if (!canCreateTemplates.value) {
-    ElMessage.warning('当前账号没有新增流程模板权限')
+    ElMessage.warning('褰撳墠璐﹀彿娌℃湁鏂板娴佺▼妯℃澘鏉冮檺')
     return
   }
   templateDialogVisible.value = true
@@ -345,10 +338,9 @@ const handleTemplateSelect = (templateType: string) => {
 
 const openTemplateEdit = (template: ProcessTemplateCard) => {
   if (!template.templateTypeCode) {
-    ElMessage.warning('当前模板缺少类型信息，暂时无法进入修改配置')
+    ElMessage.warning('\u5f53\u524d\u6a21\u677f\u7f3a\u5c11\u7c7b\u578b\u4fe1\u606f\uff0c\u6682\u65f6\u65e0\u6cd5\u8fdb\u5165\u4fee\u6539\u914d\u7f6e')
     return
   }
-
   router.push({
     name: 'expense-workbench-process-management-create',
     params: {
@@ -358,6 +350,27 @@ const openTemplateEdit = (template: ProcessTemplateCard) => {
       templateId: String(template.id)
     }
   })
+}
+const confirmDeleteTemplate = async (template: ProcessTemplateCard) => {
+  try {
+    await ElMessageBox.confirm(
+      '\u786e\u8ba4\u5220\u9664\u6a21\u677f\u201c' + template.name + '\u201d\u5417\uff1f\u5220\u9664\u540e\u5361\u7247\u5c06\u4ece\u7ba1\u7406\u9875\u9690\u85cf\uff0c\u5386\u53f2\u5355\u636e\u4e0d\u53d7\u5f71\u54cd\u3002',
+      '\u5220\u9664\u6a21\u677f',
+      {
+        type: 'warning',
+        confirmButtonText: '\u786e\u8ba4\u5220\u9664',
+        cancelButtonText: '\u53d6\u6d88'
+      }
+    )
+    await processApi.deleteTemplate(template.id)
+    ElMessage.success('\u6a21\u677f\u5df2\u5220\u9664')
+    await loadOverview()
+  } catch (error: unknown) {
+    if (error === 'cancel' || String(error).includes('cancel')) {
+      return
+    }
+    ElMessage.error(resolveErrorMessage(error, '\u5220\u9664\u6a21\u677f\u5931\u8d25'))
+  }
 }
 </script>
 
@@ -382,3 +395,5 @@ const openTemplateEdit = (template: ProcessTemplateCard) => {
   color: #ffffff !important;
 }
 </style>
+
+

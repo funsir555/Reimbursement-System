@@ -188,8 +188,35 @@
         </el-menu>
       </aside>
 
-      <main class="flex-1 p-6">
-        <router-view />
+      <main class="flex-1 overflow-hidden p-6">
+        <div class="flex h-[calc(100vh-88px)] flex-col overflow-hidden rounded-[28px] border border-slate-200/70 bg-white/70 shadow-sm">
+          <finance-workspace-tabs
+            v-if="showFinanceTabs"
+            :tabs="financeWorkspace.tabs"
+            :active-path="financeWorkspace.activePath"
+            @select="handleFinanceTabSelect"
+            @close="handleFinanceTabClose"
+            @close-others="handleFinanceCloseOthers"
+            @close-right="handleFinanceCloseRight"
+          />
+
+          <div class="min-h-0 flex-1 overflow-auto p-6">
+            <router-view v-slot="{ Component, route: viewRoute }">
+              <keep-alive>
+                <component
+                  :is="Component"
+                  v-if="isFinancePath(viewRoute.path)"
+                  :key="viewRoute.fullPath"
+                />
+              </keep-alive>
+              <component
+                :is="Component"
+                v-if="!isFinancePath(viewRoute.path)"
+                :key="viewRoute.fullPath"
+              />
+            </router-view>
+          </div>
+        </div>
       </main>
     </div>
 
@@ -202,10 +229,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { authApi, downloadApi, type UserProfile } from '@/api'
+import FinanceWorkspaceTabs from '@/components/finance/FinanceWorkspaceTabs.vue'
+import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
 import { hasAnyPermission } from '@/utils/permissions'
 import {
   Money,
@@ -228,6 +257,7 @@ import DownloadCenterDrawer from '@/components/DownloadCenterDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()
+const financeWorkspace = useFinanceWorkspaceStore()
 
 const searchQuery = ref('')
 const showNewExpense = ref(false)
@@ -277,6 +307,7 @@ const canShowFinance = computed(() =>
   ])
 )
 const canShowArchives = computed(() => canAny(['archives:menu', 'archives:invoices:view', 'archives:account_books:view']))
+const showFinanceTabs = computed(() => isFinancePath(route.path) && financeWorkspace.tabs.length > 0)
 
 const loadCurrentUser = async () => {
   const cachedUser = localStorage.getItem('user')
@@ -312,6 +343,14 @@ onMounted(async () => {
   await loadDownloadCount()
 })
 
+watch(
+  () => route.fullPath,
+  () => {
+    financeWorkspace.syncRoute(route)
+  },
+  { immediate: true }
+)
+
 const logout = () => {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
@@ -339,5 +378,37 @@ const handleUserCommand = (command: string) => {
 
 const handleDownloadLoaded = (count: number) => {
   downloadPendingCount.value = count
+}
+
+function isFinancePath(path: string) {
+  return financeWorkspace.isFinancePath(path)
+}
+
+function handleFinanceTabSelect(path: string) {
+  financeWorkspace.activate(path)
+  router.push(path)
+}
+
+function handleFinanceTabClose(path: string) {
+  const nextPath = financeWorkspace.getNextPathAfterClose(path)
+  const closingCurrent = route.fullPath === path
+  financeWorkspace.close(path)
+  if (closingCurrent) {
+    router.push(nextPath || '/dashboard')
+  }
+}
+
+function handleFinanceCloseOthers(path: string) {
+  financeWorkspace.closeOthers(path)
+  if (route.fullPath !== path) {
+    router.push(path)
+  }
+}
+
+function handleFinanceCloseRight(path: string) {
+  financeWorkspace.closeToRight(path)
+  if (!financeWorkspace.tabs.some((item) => item.path === route.fullPath)) {
+    router.push(path)
+  }
 }
 </script>

@@ -366,6 +366,13 @@
                     </el-select>
                   </el-form-item>
 
+                  <p
+                    v-if="selectedNode.config.managerConfig.deptSource === 'UNDERTAKE_DEPT'"
+                    class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-6 text-blue-600"
+                  >
+                    “承担部门”来源于表单中的“承担部门”组件结果；若提单时未选到承担部门，当前仍会兼容回退到提单人部门。
+                  </p>
+
                   <el-form-item label="部门级次" class="!mb-0">
                     <el-select v-model="selectedNode.config.managerConfig.managerLevel" placeholder="请选择主管级次">
                       <el-option

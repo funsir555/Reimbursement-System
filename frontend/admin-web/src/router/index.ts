@@ -52,14 +52,30 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/profile/PersonalCenterView.vue'),
         meta: { title: 'Profile', permissionCode: 'profile:view' }
       },
-      placeholderRoute('expense/create', 'expense-create', 'Create Expense', 'Create expense forms', 'expense:create:view'),
+      {
+        path: 'expense/create',
+        name: 'expense-create',
+        component: () => import('../views/expense/ExpenseCreateView.vue'),
+        meta: { title: 'Create Expense', permissionCode: 'expense:create:view' }
+      },
       {
         path: 'expense/list',
         name: 'expense-list',
         component: () => import('../views/expense/ExpenseListView.vue'),
         meta: { title: 'Expense List', permissionCode: 'expense:list:view' }
       },
-      placeholderRoute('expense/approval', 'expense-approval', 'Expense Approval', 'Pending approvals', 'expense:approval:view'),
+      {
+        path: 'expense/approval',
+        name: 'expense-approval',
+        component: () => import('../views/expense/ExpenseApprovalView.vue'),
+        meta: { title: 'Expense Approval', permissionCode: 'expense:approval:view' }
+      },
+      {
+        path: 'expense/documents/:documentCode',
+        name: 'expense-document-detail',
+        component: () => import('../views/expense/ExpenseDocumentDetailView.vue'),
+        meta: { title: 'Expense Document Detail', permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view'] }
+      },
       placeholderRoute('expense/payment/bank-link', 'expense-bank-link', 'Bank Link', 'Bank payment integration', 'expense:payment:bank_link:view'),
       placeholderRoute('expense/documents', 'expense-documents', 'Expense Documents', 'Document query center', 'expense:documents:view'),
       placeholderRoute('expense/voucher-generation', 'expense-voucher-generation', 'Voucher Generation', 'Generate vouchers', 'expense:voucher_generation:view'),
@@ -93,24 +109,126 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/process/ProcessFlowDesignerView.vue'),
         meta: { title: 'Process Flow Designer', permissionCode: 'expense:process_management:view' }
       },
+      {
+        path: 'expense/workbench/process-management/form-designer/create',
+        name: 'expense-workbench-process-form-create',
+        component: () => import('../views/process/ProcessFormDesignerView.vue'),
+        meta: { title: 'Process Form Designer', permissionCode: 'expense:process_management:view' }
+      },
+      {
+        path: 'expense/workbench/process-management/form-designer/:id',
+        name: 'expense-workbench-process-form-edit',
+        component: () => import('../views/process/ProcessFormDesignerView.vue'),
+        meta: { title: 'Process Form Designer', permissionCode: 'expense:process_management:view' }
+      },
       placeholderRoute('expense/workbench/budget-management', 'expense-workbench-budget-management', 'Budget Management', 'Budget management', 'expense:budget_management:view'),
       {
         path: 'finance/general-ledger/new-voucher',
         name: 'finance-new-voucher',
         component: () => import('../views/finance/FinanceNewVoucherView.vue'),
-        meta: { title: 'New Voucher', description: 'Create finance vouchers', permissionCode: 'finance:general_ledger:new_voucher:view' }
+        meta: {
+          title: 'New Voucher',
+          tabTitle: '记账凭证',
+          description: 'Create finance vouchers',
+          permissionCode: 'finance:general_ledger:new_voucher:view'
+        }
       },
-      placeholderRoute('finance/general-ledger/query-voucher', 'finance-query-voucher', 'Query Voucher', 'Query vouchers', 'finance:general_ledger:query_voucher:view'),
-      placeholderRoute('finance/general-ledger/review-voucher', 'finance-review-voucher', 'Review Voucher', 'Review vouchers', 'finance:general_ledger:review_voucher:view'),
-      placeholderRoute('finance/general-ledger/balance-sheet', 'finance-ledger-balance-sheet', 'Ledger Balance Sheet', 'Ledger balance sheet', 'finance:general_ledger:balance_sheet:view'),
-      placeholderRoute('finance/fixed-assets', 'finance-fixed-assets', 'Fixed Assets', 'Fixed assets', 'finance:fixed_assets:view'),
-      placeholderRoute('finance/reports/balance-sheet', 'finance-reports-balance-sheet', 'Balance Sheet Report', 'Balance sheet report', 'finance:reports:balance_sheet:view'),
-      placeholderRoute('finance/reports/income-statement', 'finance-reports-income-statement', 'Income Statement', 'Income statement', 'finance:reports:income_statement:view'),
-      placeholderRoute('finance/reports/cash-flow', 'finance-reports-cash-flow', 'Cash Flow', 'Cash flow report', 'finance:reports:cash_flow:view'),
-      placeholderRoute('finance/archives/customers', 'finance-archives-customers', 'Customer Archive', 'Customer archive', 'finance:archives:customers:view'),
-      placeholderRoute('finance/archives/suppliers', 'finance-archives-suppliers', 'Supplier Archive', 'Supplier archive', 'finance:archives:suppliers:view'),
-      placeholderRoute('finance/archives/employees', 'finance-archives-employees', 'Employee Archive', 'Employee archive', 'finance:archives:employees:view'),
-      placeholderRoute('finance/archives/departments', 'finance-archives-departments', 'Department Archive', 'Department archive', 'finance:archives:departments:view'),
+      {
+        ...placeholderRoute('finance/general-ledger/query-voucher', 'finance-query-voucher', 'Query Voucher', 'Query vouchers', 'finance:general_ledger:query_voucher:view'),
+        meta: {
+          title: 'Query Voucher',
+          tabTitle: '查询凭证',
+          description: 'Query vouchers',
+          permissionCode: 'finance:general_ledger:query_voucher:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/general-ledger/review-voucher', 'finance-review-voucher', 'Review Voucher', 'Review vouchers', 'finance:general_ledger:review_voucher:view'),
+        meta: {
+          title: 'Review Voucher',
+          tabTitle: '审核凭证',
+          description: 'Review vouchers',
+          permissionCode: 'finance:general_ledger:review_voucher:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/general-ledger/balance-sheet', 'finance-ledger-balance-sheet', 'Ledger Balance Sheet', 'Ledger balance sheet', 'finance:general_ledger:balance_sheet:view'),
+        meta: {
+          title: 'Ledger Balance Sheet',
+          tabTitle: '余额表',
+          description: 'Ledger balance sheet',
+          permissionCode: 'finance:general_ledger:balance_sheet:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/fixed-assets', 'finance-fixed-assets', 'Fixed Assets', 'Fixed assets', 'finance:fixed_assets:view'),
+        meta: {
+          title: 'Fixed Assets',
+          tabTitle: '固定资产',
+          description: 'Fixed assets',
+          permissionCode: 'finance:fixed_assets:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/reports/balance-sheet', 'finance-reports-balance-sheet', 'Balance Sheet Report', 'Balance sheet report', 'finance:reports:balance_sheet:view'),
+        meta: {
+          title: 'Balance Sheet Report',
+          tabTitle: '资产负债表',
+          description: 'Balance sheet report',
+          permissionCode: 'finance:reports:balance_sheet:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/reports/income-statement', 'finance-reports-income-statement', 'Income Statement', 'Income statement', 'finance:reports:income_statement:view'),
+        meta: {
+          title: 'Income Statement',
+          tabTitle: '利润表',
+          description: 'Income statement',
+          permissionCode: 'finance:reports:income_statement:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/reports/cash-flow', 'finance-reports-cash-flow', 'Cash Flow', 'Cash flow report', 'finance:reports:cash_flow:view'),
+        meta: {
+          title: 'Cash Flow',
+          tabTitle: '现金流量表',
+          description: 'Cash flow report',
+          permissionCode: 'finance:reports:cash_flow:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/archives/customers', 'finance-archives-customers', 'Customer Archive', 'Customer archive', 'finance:archives:customers:view'),
+        meta: {
+          title: 'Customer Archive',
+          tabTitle: '客户档案',
+          description: 'Customer archive',
+          permissionCode: 'finance:archives:customers:view'
+        }
+      },
+      {
+        path: 'finance/archives/suppliers',
+        name: 'finance-archives-suppliers',
+        component: () => import('../views/finance/FinanceSupplierArchiveView.vue'),
+        meta: { title: 'Supplier Archive', tabTitle: '供应商档案', permissionCode: 'finance:archives:suppliers:view' }
+      },
+      {
+        ...placeholderRoute('finance/archives/employees', 'finance-archives-employees', 'Employee Archive', 'Employee archive', 'finance:archives:employees:view'),
+        meta: {
+          title: 'Employee Archive',
+          tabTitle: '员工档案',
+          description: 'Employee archive',
+          permissionCode: 'finance:archives:employees:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/archives/departments', 'finance-archives-departments', 'Department Archive', 'Department archive', 'finance:archives:departments:view'),
+        meta: {
+          title: 'Department Archive',
+          tabTitle: '部门档案',
+          description: 'Department archive',
+          permissionCode: 'finance:archives:departments:view'
+        }
+      },
       {
         path: 'archives/invoices',
         name: 'archives-invoices',
