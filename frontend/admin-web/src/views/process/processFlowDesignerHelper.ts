@@ -35,6 +35,13 @@ export type FlowStateSnapshot = {
   routes: ProcessFlowRoute[]
 }
 
+export type FlowMoveReason = 'MOVED' | 'NOT_FOUND' | 'INVALID_TARGET' | 'NOOP'
+
+export type FlowMoveResult = FlowStateSnapshot & {
+  moved: boolean
+  reason: FlowMoveReason
+}
+
 const AUTO_ROUTE_NAME_PREFIX = '条件分支 '
 
 export function normalizeContainerKey(value?: string | null): FlowContainerKey {
@@ -94,7 +101,7 @@ export function insertNodeIntoContainer(
   const preparedNode: ProcessFlowNode = {
     ...cloneValue(node),
     parentNodeKey: toParentNodeKey(containerKey),
-    displayOrder: index + 1
+    displayOrder: buildDisplayOrderHint(ordered, index)
   }
 
   if (anchor) {
@@ -177,6 +184,96 @@ export function removeNodeAndDescendants(nodes: ProcessFlowNode[], routes: Proce
     nextNodes.filter((item) => !nodeKeysToRemove.has(item.nodeKey)),
     nextRoutes.filter((item) => !routeKeysToRemove.has(item.routeKey))
   )
+}
+
+export function moveNodeIntoContainer(
+  nodes: ProcessFlowNode[],
+  routes: ProcessFlowRoute[],
+  nodeKey: string,
+  containerKey: FlowContainerKey,
+  index: number
+): FlowMoveResult {
+  const nextNodes = cloneValue(nodes)
+  const nextRoutes = cloneValue(routes)
+  const targetNode = nextNodes.find((item) => item.nodeKey === nodeKey)
+  if (!targetNode) {
+    return {
+      nodes: nextNodes,
+      routes: nextRoutes,
+      moved: false,
+      reason: 'NOT_FOUND'
+    }
+  }
+
+  const sourceContainerKey = normalizeContainerKey(targetNode.parentNodeKey)
+  const targetContainerKey = normalizeContainerKey(containerKey)
+  if (targetNode.nodeType === 'BRANCH' && targetContainerKey && collectBranchDescendantRouteKeys(nextNodes, nextRoutes, nodeKey).has(targetContainerKey)) {
+    return {
+      nodes: nextNodes,
+      routes: nextRoutes,
+      moved: false,
+      reason: 'INVALID_TARGET'
+    }
+  }
+
+  const sourceNodes = listNodesInContainer(nextNodes, sourceContainerKey)
+  const sourceIndex = sourceNodes.findIndex((item) => item.nodeKey === nodeKey)
+  if (sourceIndex < 0) {
+    return {
+      nodes: nextNodes,
+      routes: nextRoutes,
+      moved: false,
+      reason: 'NOT_FOUND'
+    }
+  }
+
+  const targetNodes = sourceContainerKey === targetContainerKey
+    ? sourceNodes.filter((item) => item.nodeKey !== nodeKey)
+    : listNodesInContainer(nextNodes, targetContainerKey)
+  let effectiveIndex = clamp(index, 0, targetNodes.length)
+  if (sourceContainerKey === targetContainerKey && index > sourceIndex) {
+    effectiveIndex -= 1
+  }
+
+  if (sourceContainerKey === targetContainerKey && effectiveIndex === sourceIndex) {
+    return {
+      nodes: nextNodes,
+      routes: nextRoutes,
+      moved: false,
+      reason: 'NOOP'
+    }
+  }
+
+  const removalIndex = nextNodes.findIndex((item) => item.nodeKey === nodeKey)
+  const [removedNode] = removalIndex >= 0 ? nextNodes.splice(removalIndex, 1) : [undefined]
+  if (!removedNode) {
+    return {
+      nodes: nextNodes,
+      routes: nextRoutes,
+      moved: false,
+      reason: 'NOT_FOUND'
+    }
+  }
+
+  const preparedNode: ProcessFlowNode = {
+    ...removedNode,
+    parentNodeKey: toParentNodeKey(targetContainerKey),
+    displayOrder: buildDisplayOrderHint(targetNodes, effectiveIndex)
+  }
+  const anchor = targetNodes[effectiveIndex]
+  if (anchor) {
+    const anchorIndex = nextNodes.findIndex((item) => item.nodeKey === anchor.nodeKey)
+    nextNodes.splice(anchorIndex, 0, preparedNode)
+  } else {
+    nextNodes.push(preparedNode)
+  }
+
+  const snapshot = reindexFlowState(nextNodes, nextRoutes)
+  return {
+    ...snapshot,
+    moved: true,
+    reason: 'MOVED'
+  }
 }
 
 export function reindexFlowState(nodes: ProcessFlowNode[], routes: ProcessFlowRoute[]): FlowStateSnapshot {
@@ -271,6 +368,34 @@ function collectContainerDescendants(
   })
 }
 
+function collectBranchDescendantRouteKeys(nodes: ProcessFlowNode[], routes: ProcessFlowRoute[], branchNodeKey: string) {
+  const routeKeys = new Set<string>()
+  const queue = [branchNodeKey]
+
+  while (queue.length) {
+    const currentNodeKey = queue.shift()
+    if (!currentNodeKey) {
+      continue
+    }
+
+    routes
+      .filter((item) => item.sourceNodeKey === currentNodeKey)
+      .forEach((route) => {
+        if (routeKeys.has(route.routeKey)) {
+          return
+        }
+        routeKeys.add(route.routeKey)
+        nodes
+          .filter((item) => normalizeContainerKey(item.parentNodeKey) === route.routeKey && item.nodeType === 'BRANCH')
+          .forEach((node) => {
+            queue.push(node.nodeKey)
+          })
+      })
+  }
+
+  return routeKeys
+}
+
 function createInsertBlock(containerKey: FlowContainerKey, index: number): FlowCanvasInsertBlock {
   return {
     key: `insert-${containerKey ?? 'root'}-${index}`,
@@ -289,6 +414,25 @@ function isAutoRouteName(name?: string) {
 
 function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function buildDisplayOrderHint(nodes: ProcessFlowNode[], index: number) {
+  const previous = nodes[index - 1]
+  const next = nodes[index]
+  if (previous && next) {
+    return ((previous.displayOrder ?? index) + (next.displayOrder ?? (index + 1))) / 2
+  }
+  if (next) {
+    return (next.displayOrder ?? (index + 1)) - 1
+  }
+  if (previous) {
+    return (previous.displayOrder ?? index) + 1
+  }
+  return 1
 }
 
 function createRouteKey(branchNodeKey: string, order: number) {

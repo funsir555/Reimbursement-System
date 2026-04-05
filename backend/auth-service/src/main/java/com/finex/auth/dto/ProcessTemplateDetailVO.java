@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyValue;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -26,6 +27,12 @@ public class ProcessTemplateDetailVO {
 
     private String formDesign;
 
+    private String expenseDetailDesign;
+
+    private String expenseDetailType;
+
+    private String expenseDetailModeDefault;
+
     private String printMode;
 
     private String approvalFlow;
@@ -40,8 +47,10 @@ public class ProcessTemplateDetailVO {
 
     private List<String> scopeExpenseTypeCodes;
 
+    @MoneyValue
     private BigDecimal amountMin;
 
+    @MoneyValue
     private BigDecimal amountMax;
 
     private String tagOption;

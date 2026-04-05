@@ -33,6 +33,9 @@ finex:
     queue-capacity: ${FINEX_ASYNC_QUEUE_CAPACITY:200}
     thread-name-prefix: ${FINEX_ASYNC_THREAD_NAME_PREFIX:finex-async-}
     await-termination-seconds: ${FINEX_ASYNC_AWAIT_TERMINATION_SECONDS:30}
+  expense:
+    attachments:
+      storage-path: ${FINEX_EXPENSE_ATTACHMENT_STORAGE_PATH:${user.dir}/storage/expense-attachments}
 
 logging:
   level:

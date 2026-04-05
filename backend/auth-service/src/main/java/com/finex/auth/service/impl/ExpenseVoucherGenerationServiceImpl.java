@@ -1,0 +1,1221 @@
+package com.finex.auth.service.impl;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.dto.ExpenseVoucherEntrySnapshotVO;
+import com.finex.auth.dto.ExpenseVoucherGeneratedRecordDetailVO;
+import com.finex.auth.dto.ExpenseVoucherGeneratedRecordVO;
+import com.finex.auth.dto.ExpenseVoucherGenerationMetaVO;
+import com.finex.auth.dto.ExpenseVoucherPageVO;
+import com.finex.auth.dto.ExpenseVoucherPushBatchResultVO;
+import com.finex.auth.dto.ExpenseVoucherPushDTO;
+import com.finex.auth.dto.ExpenseVoucherPushDocumentVO;
+import com.finex.auth.dto.ExpenseVoucherPushResultVO;
+import com.finex.auth.dto.ExpenseVoucherSubjectMappingSaveDTO;
+import com.finex.auth.dto.ExpenseVoucherSubjectMappingVO;
+import com.finex.auth.dto.ExpenseVoucherTemplatePolicySaveDTO;
+import com.finex.auth.dto.ExpenseVoucherTemplatePolicyVO;
+import com.finex.auth.dto.FinanceVoucherDetailVO;
+import com.finex.auth.dto.FinanceVoucherEntryDTO;
+import com.finex.auth.dto.FinanceVoucherOptionVO;
+import com.finex.auth.dto.FinanceVoucherSaveDTO;
+import com.finex.auth.dto.FinanceVoucherSaveResultVO;
+import com.finex.auth.entity.ExpVoucherPushBatch;
+import com.finex.auth.entity.ExpVoucherPushDocument;
+import com.finex.auth.entity.ExpVoucherPushEntry;
+import com.finex.auth.entity.ExpVoucherSubjectMapping;
+import com.finex.auth.entity.ExpVoucherTemplatePolicy;
+import com.finex.auth.entity.GlAccvouch;
+import com.finex.auth.entity.ProcessDocumentExpenseDetail;
+import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.entity.ProcessDocumentTemplate;
+import com.finex.auth.entity.ProcessExpenseType;
+import com.finex.auth.entity.SystemCompany;
+import com.finex.auth.entity.User;
+import com.finex.auth.mapper.ExpVoucherPushBatchMapper;
+import com.finex.auth.mapper.ExpVoucherPushDocumentMapper;
+import com.finex.auth.mapper.ExpVoucherPushEntryMapper;
+import com.finex.auth.mapper.ExpVoucherSubjectMappingMapper;
+import com.finex.auth.mapper.ExpVoucherTemplatePolicyMapper;
+import com.finex.auth.mapper.GlAccvouchMapper;
+import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
+import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
+import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
+import com.finex.auth.mapper.ProcessExpenseTypeMapper;
+import com.finex.auth.mapper.SystemCompanyMapper;
+import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.ExpenseVoucherGenerationService;
+import com.finex.auth.service.FinanceVoucherService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenerationService {
+
+    private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    private static final String PUSH_STATUS_SUCCESS = "SUCCESS";
+    private static final String PUSH_STATUS_FAILED = "FAILED";
+    private static final String PUSH_STATUS_UNPUSHED = "UNPUSHED";
+    private static final String PAYMENT_COMPANY_COMPONENT_CODE = "payment-company";
+    private static final String DEFAULT_VOUCHER_TYPE = "记";
+    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+    private static final DateTimeFormatter BATCH_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    private static final List<OptionSeed> VOUCHER_TYPE_SEEDS = List.of(
+            new OptionSeed("记", "记账凭证"),
+            new OptionSeed("收", "收款凭证"),
+            new OptionSeed("付", "付款凭证"),
+            new OptionSeed("转", "转账凭证")
+    );
+
+    private static final List<OptionSeed> ACCOUNT_SEEDS = List.of(
+            new OptionSeed("1001", "1001 库存现金"),
+            new OptionSeed("1002", "1002 银行存款"),
+            new OptionSeed("1122", "1122 其他应收款"),
+            new OptionSeed("2202", "2202 其他应付款"),
+            new OptionSeed("2221", "2221 应交税费"),
+            new OptionSeed("660100", "660100 差旅费"),
+            new OptionSeed("660200", "660200 福利费"),
+            new OptionSeed("660300", "660300 办公费"),
+            new OptionSeed("660500", "660500 招待费")
+    );
+
+    private final ExpVoucherTemplatePolicyMapper templatePolicyMapper;
+    private final ExpVoucherSubjectMappingMapper subjectMappingMapper;
+    private final ExpVoucherPushBatchMapper pushBatchMapper;
+    private final ExpVoucherPushDocumentMapper pushDocumentMapper;
+    private final ExpVoucherPushEntryMapper pushEntryMapper;
+    private final ProcessDocumentInstanceMapper documentInstanceMapper;
+    private final ProcessDocumentExpenseDetailMapper expenseDetailMapper;
+    private final ProcessDocumentTemplateMapper documentTemplateMapper;
+    private final ProcessExpenseTypeMapper expenseTypeMapper;
+    private final SystemCompanyMapper systemCompanyMapper;
+    private final UserMapper userMapper;
+    private final GlAccvouchMapper glAccvouchMapper;
+    private final FinanceVoucherService financeVoucherService;
+    private final ObjectMapper objectMapper;
+
+    @Override
+    public ExpenseVoucherGenerationMetaVO getMeta(Long currentUserId) {
+        List<SystemCompany> companies = listCompanies();
+        List<ProcessDocumentTemplate> templates = listTemplates();
+        List<ProcessExpenseType> expenseTypes = listExpenseTypes();
+        List<ProcessDocumentInstance> approvedDocuments = listApprovedDocuments();
+        Map<String, ExpVoucherPushDocument> pushMap = listPushDocuments().stream()
+                .collect(Collectors.toMap(ExpVoucherPushDocument::getDocumentCode, Function.identity(), (left, right) -> left));
+
+        ExpenseVoucherGenerationMetaVO meta = new ExpenseVoucherGenerationMetaVO();
+        meta.setCompanyOptions(companies.stream().map(this::toCompanyOption).toList());
+        meta.setTemplateOptions(templates.stream().map(this::toTemplateOption).toList());
+        meta.setExpenseTypeOptions(expenseTypes.stream().map(this::toExpenseTypeOption).toList());
+        meta.setAccountOptions(loadAccountOptions());
+        meta.setVoucherTypeOptions(toOptions(VOUCHER_TYPE_SEEDS));
+        meta.setPushStatusOptions(List.of(
+                option(PUSH_STATUS_UNPUSHED, "待推送"),
+                option(PUSH_STATUS_SUCCESS, "推送成功"),
+                option(PUSH_STATUS_FAILED, "推送失败")
+        ));
+        meta.setDefaultCompanyId(resolveDefaultCompanyId(currentUserId, companies));
+        meta.setLatestBatchNo(resolveLatestBatchNo());
+
+        int pendingCount = 0;
+        BigDecimal pendingAmount = ZERO;
+        for (ProcessDocumentInstance document : approvedDocuments) {
+            ExpVoucherPushDocument pushDocument = pushMap.get(document.getDocumentCode());
+            if (pushDocument == null || !PUSH_STATUS_SUCCESS.equals(pushDocument.getPushStatus())) {
+                pendingCount += 1;
+                pendingAmount = pendingAmount.add(zero(document.getTotalAmount()));
+            }
+        }
+        meta.setPendingPushCount(pendingCount);
+        meta.setPendingPushAmount(pendingAmount);
+        meta.setPushedVoucherCount((int) pushMap.values().stream().filter(item -> PUSH_STATUS_SUCCESS.equals(item.getPushStatus())).count());
+        meta.setPushFailureCount((int) pushMap.values().stream().filter(item -> PUSH_STATUS_FAILED.equals(item.getPushStatus())).count());
+        return meta;
+    }
+
+    @Override
+    public ExpenseVoucherPageVO<ExpenseVoucherTemplatePolicyVO> getTemplatePolicies(String companyId, String templateCode, Integer enabled, Integer page, Integer pageSize) {
+        Map<String, String> companyMap = companyNameMap();
+        List<ExpenseVoucherTemplatePolicyVO> rows = templatePolicyMapper.selectList(
+                        Wrappers.<ExpVoucherTemplatePolicy>lambdaQuery()
+                                .eq(hasText(companyId), ExpVoucherTemplatePolicy::getCompanyId, trim(companyId))
+                                .eq(hasText(templateCode), ExpVoucherTemplatePolicy::getTemplateCode, trim(templateCode))
+                                .eq(enabled != null, ExpVoucherTemplatePolicy::getEnabled, enabled)
+                                .orderByDesc(ExpVoucherTemplatePolicy::getUpdatedAt, ExpVoucherTemplatePolicy::getId)
+                ).stream()
+                .map(item -> toTemplatePolicyVO(item, companyMap))
+                .toList();
+        return buildPage(rows, page, pageSize);
+    }
+
+    @Override
+    public ExpenseVoucherPageVO<ExpenseVoucherSubjectMappingVO> getSubjectMappings(String companyId, String templateCode, String expenseTypeCode, Integer enabled, Integer page, Integer pageSize) {
+        Map<String, String> companyMap = companyNameMap();
+        List<ExpenseVoucherSubjectMappingVO> rows = subjectMappingMapper.selectList(
+                        Wrappers.<ExpVoucherSubjectMapping>lambdaQuery()
+                                .eq(hasText(companyId), ExpVoucherSubjectMapping::getCompanyId, trim(companyId))
+                                .eq(hasText(templateCode), ExpVoucherSubjectMapping::getTemplateCode, trim(templateCode))
+                                .eq(hasText(expenseTypeCode), ExpVoucherSubjectMapping::getExpenseTypeCode, trim(expenseTypeCode))
+                                .eq(enabled != null, ExpVoucherSubjectMapping::getEnabled, enabled)
+                                .orderByDesc(ExpVoucherSubjectMapping::getUpdatedAt, ExpVoucherSubjectMapping::getId)
+                ).stream()
+                .map(item -> toSubjectMappingVO(item, companyMap))
+                .toList();
+        return buildPage(rows, page, pageSize);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseVoucherTemplatePolicyVO createTemplatePolicy(ExpenseVoucherTemplatePolicySaveDTO dto, Long currentUserId, String currentUsername) {
+        validateTemplatePolicy(dto, null);
+        ExpVoucherTemplatePolicy entity = new ExpVoucherTemplatePolicy();
+        applyTemplatePolicy(dto, entity, currentUsername);
+        entity.setCreatedBy(currentUsername);
+        templatePolicyMapper.insert(entity);
+        return toTemplatePolicyVO(entity, companyNameMap());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseVoucherTemplatePolicyVO updateTemplatePolicy(Long id, ExpenseVoucherTemplatePolicySaveDTO dto, Long currentUserId, String currentUsername) {
+        ExpVoucherTemplatePolicy entity = requireTemplatePolicy(id);
+        validateTemplatePolicy(dto, id);
+        applyTemplatePolicy(dto, entity, currentUsername);
+        templatePolicyMapper.updateById(entity);
+        return toTemplatePolicyVO(entity, companyNameMap());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseVoucherSubjectMappingVO createSubjectMapping(ExpenseVoucherSubjectMappingSaveDTO dto, Long currentUserId, String currentUsername) {
+        validateSubjectMapping(dto, null);
+        ExpVoucherSubjectMapping entity = new ExpVoucherSubjectMapping();
+        applySubjectMapping(dto, entity, currentUsername);
+        entity.setCreatedBy(currentUsername);
+        subjectMappingMapper.insert(entity);
+        return toSubjectMappingVO(entity, companyNameMap());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseVoucherSubjectMappingVO updateSubjectMapping(Long id, ExpenseVoucherSubjectMappingSaveDTO dto, Long currentUserId, String currentUsername) {
+        ExpVoucherSubjectMapping entity = requireSubjectMapping(id);
+        validateSubjectMapping(dto, id);
+        applySubjectMapping(dto, entity, currentUsername);
+        subjectMappingMapper.updateById(entity);
+        return toSubjectMappingVO(entity, companyNameMap());
+    }
+    @Override
+    public ExpenseVoucherPageVO<ExpenseVoucherPushDocumentVO> getPushDocuments(String companyId, String templateCode, String keyword, String pushStatus, String dateFrom, String dateTo, Integer page, Integer pageSize) {
+        Map<String, String> companyMap = companyNameMap();
+        Map<String, String> expenseTypeMap = expenseTypeNameMap();
+        Map<String, ExpVoucherPushDocument> pushMap = listPushDocuments().stream()
+                .collect(Collectors.toMap(ExpVoucherPushDocument::getDocumentCode, Function.identity(), (left, right) -> left));
+
+        List<ExpenseVoucherPushDocumentVO> rows = new ArrayList<>();
+        for (ProcessDocumentInstance document : listApprovedDocuments()) {
+            String resolvedCompanyId = resolveDocumentCompanyId(document);
+            if (!matchesCompany(resolvedCompanyId, companyId)) {
+                continue;
+            }
+            if (hasText(templateCode) && !Objects.equals(trim(templateCode), trim(document.getTemplateCode()))) {
+                continue;
+            }
+            if (!matchesKeyword(keyword, document.getDocumentCode(), document.getTemplateName(), document.getSubmitterName(), document.getDocumentTitle())) {
+                continue;
+            }
+            if (!matchesDateRange(resolveBusinessDate(document), dateFrom, dateTo)) {
+                continue;
+            }
+            ExpVoucherPushDocument pushDocument = pushMap.get(document.getDocumentCode());
+            String resolvedPushStatus = pushDocument == null ? PUSH_STATUS_UNPUSHED : defaultText(pushDocument.getPushStatus(), PUSH_STATUS_UNPUSHED);
+            if (hasText(pushStatus) && !Objects.equals(trim(pushStatus), resolvedPushStatus)) {
+                continue;
+            }
+            List<ProcessDocumentExpenseDetail> details = listExpenseDetails(document.getDocumentCode());
+            ExpenseVoucherPushDocumentVO row = new ExpenseVoucherPushDocumentVO();
+            row.setCompanyId(resolvedCompanyId);
+            row.setCompanyName(companyMap.getOrDefault(resolvedCompanyId, resolvedCompanyId));
+            row.setDocumentCode(document.getDocumentCode());
+            row.setTemplateCode(document.getTemplateCode());
+            row.setTemplateName(document.getTemplateName());
+            row.setSubmitterUserId(document.getSubmitterUserId());
+            row.setSubmitterName(document.getSubmitterName());
+            row.setTotalAmount(zero(document.getTotalAmount()));
+            row.setFinishedAt(formatDateTime(document.getFinishedAt()));
+            row.setExpenseSummary(buildExpenseSummary(details, expenseTypeMap));
+            row.setPushStatus(resolvedPushStatus);
+            row.setPushStatusLabel(resolvePushStatusLabel(resolvedPushStatus));
+            row.setFailureReason(pushDocument == null ? null : trim(pushDocument.getErrorMessage()));
+            row.setVoucherNo(pushDocument == null ? null : pushDocument.getVoucherNo());
+            row.setCanPush(canPush(document, pushDocument, resolvedCompanyId, details));
+            rows.add(row);
+        }
+        rows.sort(Comparator.comparing(ExpenseVoucherPushDocumentVO::getFinishedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(ExpenseVoucherPushDocumentVO::getDocumentCode, Comparator.nullsLast(Comparator.reverseOrder())));
+        return buildPage(rows, page, pageSize);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseVoucherPushBatchResultVO pushDocuments(ExpenseVoucherPushDTO dto, Long currentUserId, String currentUsername) {
+        LinkedHashSet<String> documentCodes = dto == null ? new LinkedHashSet<>() : dto.getDocumentCodes().stream()
+                .map(this::trim)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (documentCodes.isEmpty()) {
+            throw new IllegalArgumentException("请选择需要推送的单据");
+        }
+
+        Map<String, ProcessDocumentInstance> documentMap = documentInstanceMapper.selectList(
+                        Wrappers.<ProcessDocumentInstance>lambdaQuery().in(ProcessDocumentInstance::getDocumentCode, documentCodes)
+                ).stream()
+                .collect(Collectors.toMap(ProcessDocumentInstance::getDocumentCode, Function.identity(), (left, right) -> left));
+
+        Map<String, CompanyBatchContext> batchMap = new LinkedHashMap<>();
+        ExpenseVoucherPushBatchResultVO result = new ExpenseVoucherPushBatchResultVO();
+        result.setSuccessCount(0);
+        result.setFailureCount(0);
+
+        for (String documentCode : documentCodes) {
+            ProcessDocumentInstance document = documentMap.get(documentCode);
+            if (document == null) {
+                result.getResults().add(buildFailureResult(documentCode, null, null, null, "单据不存在，无法推送凭证"));
+                result.setFailureCount(result.getFailureCount() + 1);
+                continue;
+            }
+
+            String companyId = null;
+            CompanyBatchContext batchContext = null;
+            try {
+                companyId = requireDocumentCompanyId(document);
+                batchContext = batchMap.computeIfAbsent(companyId, key -> createBatchContext(key, currentUsername));
+                ExpenseVoucherPushResultVO pushResult = pushOneDocument(document, batchContext, currentUserId, currentUsername);
+                result.getResults().add(pushResult);
+                result.setSuccessCount(result.getSuccessCount() + 1);
+            } catch (Exception ex) {
+                String errorMessage = defaultText(ex.getMessage(), "推送失败");
+                if (companyId != null) {
+                    batchContext = batchContext == null ? batchMap.computeIfAbsent(companyId, key -> createBatchContext(key, currentUsername)) : batchContext;
+                    saveFailedPushDocument(document, batchContext, errorMessage);
+                }
+                result.getResults().add(buildFailureResult(document.getDocumentCode(), companyId, document.getTemplateCode(), document.getTemplateName(), errorMessage));
+                result.setFailureCount(result.getFailureCount() + 1);
+            }
+        }
+
+        String latestBatchNo = null;
+        for (CompanyBatchContext batchContext : batchMap.values()) {
+            ExpVoucherPushBatch batch = batchContext.batch;
+            batch.setDocumentCount(batchContext.documentCount);
+            batch.setSuccessCount(batchContext.successCount);
+            batch.setFailureCount(batchContext.failureCount);
+            batch.setStatus(batchContext.failureCount > 0 ? (batchContext.successCount > 0 ? "PARTIAL" : PUSH_STATUS_FAILED) : PUSH_STATUS_SUCCESS);
+            pushBatchMapper.updateById(batch);
+            latestBatchNo = batch.getBatchNo();
+        }
+        result.setLatestBatchNo(latestBatchNo);
+        return result;
+    }
+
+    @Override
+    public ExpenseVoucherPageVO<ExpenseVoucherGeneratedRecordVO> getGeneratedVouchers(String companyId, String templateCode, String documentCode, String voucherNo, String pushStatus, String dateFrom, String dateTo, Integer page, Integer pageSize) {
+        Map<String, String> companyMap = companyNameMap();
+        List<ExpenseVoucherGeneratedRecordVO> rows = listPushDocuments().stream()
+                .filter(item -> matchesCompany(item.getCompanyId(), companyId))
+                .filter(item -> !hasText(templateCode) || Objects.equals(trim(templateCode), trim(item.getTemplateCode())))
+                .filter(item -> !hasText(documentCode) || containsIgnoreCase(item.getDocumentCode(), trim(documentCode)))
+                .filter(item -> !hasText(voucherNo) || containsIgnoreCase(item.getVoucherNo(), trim(voucherNo)))
+                .filter(item -> !hasText(pushStatus) || Objects.equals(trim(pushStatus), trim(item.getPushStatus())))
+                .filter(item -> matchesDateRange(item.getPushedAt() == null ? null : item.getPushedAt().toLocalDate(), dateFrom, dateTo))
+                .sorted(Comparator.comparing(ExpVoucherPushDocument::getPushedAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(ExpVoucherPushDocument::getId, Comparator.reverseOrder()))
+                .map(item -> toGeneratedRecordVO(item, companyMap))
+                .toList();
+        return buildPage(rows, page, pageSize);
+    }
+
+    @Override
+    public ExpenseVoucherGeneratedRecordDetailVO getGeneratedVoucherDetail(Long id) {
+        ExpVoucherPushDocument pushDocument = pushDocumentMapper.selectById(id);
+        if (pushDocument == null) {
+            throw new IllegalArgumentException("推送记录不存在");
+        }
+        ExpenseVoucherGeneratedRecordDetailVO detail = new ExpenseVoucherGeneratedRecordDetailVO();
+        detail.setRecord(toGeneratedRecordVO(pushDocument, companyNameMap()));
+        detail.setEntries(pushEntryMapper.selectList(
+                        Wrappers.<ExpVoucherPushEntry>lambdaQuery()
+                                .eq(ExpVoucherPushEntry::getPushDocumentId, pushDocument.getId())
+                                .orderByAsc(ExpVoucherPushEntry::getEntryNo, ExpVoucherPushEntry::getId)
+                ).stream().map(this::toEntrySnapshotVO).toList());
+        if (hasText(pushDocument.getVoucherNo())) {
+            try {
+                detail.setVoucherDetail(financeVoucherService.getDetail(pushDocument.getVoucherNo()));
+            } catch (Exception ignored) {
+                detail.setVoucherDetail(null);
+            }
+        }
+        return detail;
+    }
+
+    private ExpenseVoucherPushResultVO pushOneDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, Long currentUserId, String currentUsername) {
+        if (!DOCUMENT_STATUS_APPROVED.equals(trim(document.getStatus()))) {
+            throw new IllegalStateException("只有已审批通过的单据才能推送凭证");
+        }
+        String companyId = requireDocumentCompanyId(document);
+        ExpVoucherPushDocument existingPush = findPushDocument(companyId, document.getDocumentCode());
+        if (existingPush != null && PUSH_STATUS_SUCCESS.equals(existingPush.getPushStatus())) {
+            throw new IllegalStateException("该单据已推送凭证，凭证号：" + existingPush.getVoucherNo());
+        }
+
+        List<ProcessDocumentExpenseDetail> details = listExpenseDetails(document.getDocumentCode());
+        if (details.isEmpty()) {
+            throw new IllegalStateException("单据没有费用明细，无法生成凭证");
+        }
+        ExpVoucherTemplatePolicy templatePolicy = requireEnabledTemplatePolicy(companyId, document.getTemplateCode());
+        Map<String, ExpVoucherSubjectMapping> subjectMap = listEnabledSubjectMappings(companyId, document.getTemplateCode()).stream()
+                .collect(Collectors.toMap(ExpVoucherSubjectMapping::getExpenseTypeCode, Function.identity(), (left, right) -> left));
+        Map<String, String> expenseTypeMap = expenseTypeNameMap();
+        LinkedHashMap<String, BigDecimal> debitAmounts = aggregateExpenseAmounts(details);
+        if (debitAmounts.isEmpty()) {
+            throw new IllegalStateException("未识别到可推送的费用金额");
+        }
+        for (String expenseTypeCode : debitAmounts.keySet()) {
+            if (!subjectMap.containsKey(expenseTypeCode)) {
+                throw new IllegalStateException("费用类型“" + expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode) + "”缺少借方科目映射");
+            }
+        }
+
+        FinanceVoucherSaveDTO saveDTO = buildVoucherSaveDTO(document, companyId, templatePolicy, debitAmounts, subjectMap, expenseTypeMap, currentUsername);
+        FinanceVoucherSaveResultVO saveResult = financeVoucherService.saveVoucher(saveDTO, currentUserId, currentUsername);
+        ExpVoucherPushDocument pushDocument = saveSuccessPushDocument(document, batchContext, saveResult);
+        rebuildPushEntries(pushDocument, saveDTO, subjectMap, templatePolicy, expenseTypeMap);
+        batchContext.documentCount += 1;
+        batchContext.successCount += 1;
+        return buildSuccessResult(document, companyId, saveResult);
+    }
+    private FinanceVoucherSaveDTO buildVoucherSaveDTO(ProcessDocumentInstance document, String companyId, ExpVoucherTemplatePolicy templatePolicy, LinkedHashMap<String, BigDecimal> debitAmounts, Map<String, ExpVoucherSubjectMapping> subjectMap, Map<String, String> expenseTypeMap, String currentUsername) {
+        LocalDate businessDate = resolveBusinessDate(document);
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId(companyId);
+        dto.setDbillDate(businessDate.format(DATE_FORMATTER));
+        dto.setIperiod(businessDate.getMonthValue());
+        dto.setCsign(defaultText(templatePolicy.getVoucherType(), DEFAULT_VOUCHER_TYPE));
+        dto.setCbill(currentUsername);
+        dto.setIdoc(0);
+        dto.setCtext1("报销凭证-" + document.getDocumentCode());
+        dto.setCtext2(defaultText(document.getTemplateName(), document.getTemplateCode()));
+
+        List<FinanceVoucherEntryDTO> entries = new ArrayList<>();
+        BigDecimal totalAmount = ZERO;
+        for (Map.Entry<String, BigDecimal> entry : debitAmounts.entrySet()) {
+            String expenseTypeCode = entry.getKey();
+            BigDecimal amount = zero(entry.getValue());
+            ExpVoucherSubjectMapping mapping = subjectMap.get(expenseTypeCode);
+            FinanceVoucherEntryDTO voucherEntry = new FinanceVoucherEntryDTO();
+            voucherEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode)));
+            voucherEntry.setCcode(mapping.getDebitAccountCode());
+            voucherEntry.setMd(amount);
+            voucherEntry.setMc(ZERO);
+            entries.add(voucherEntry);
+            totalAmount = totalAmount.add(amount);
+        }
+        FinanceVoucherEntryDTO creditEntry = new FinanceVoucherEntryDTO();
+        creditEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, "银行科目"));
+        creditEntry.setCcode(templatePolicy.getCreditAccountCode());
+        creditEntry.setMd(ZERO);
+        creditEntry.setMc(totalAmount);
+        entries.add(creditEntry);
+        dto.setEntries(entries);
+        return dto;
+    }
+
+    private ExpVoucherPushDocument saveSuccessPushDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, FinanceVoucherSaveResultVO saveResult) {
+        ExpVoucherPushDocument row = findPushDocument(batchContext.batch.getCompanyId(), document.getDocumentCode());
+        if (row == null) {
+            row = new ExpVoucherPushDocument();
+            row.setCompanyId(batchContext.batch.getCompanyId());
+            row.setDocumentCode(document.getDocumentCode());
+        }
+        row.setBatchId(batchContext.batch.getId());
+        row.setBatchNo(batchContext.batch.getBatchNo());
+        row.setTemplateCode(document.getTemplateCode());
+        row.setTemplateName(document.getTemplateName());
+        row.setSubmitterUserId(document.getSubmitterUserId());
+        row.setSubmitterName(document.getSubmitterName());
+        row.setTotalAmount(zero(document.getTotalAmount()));
+        row.setPushStatus(PUSH_STATUS_SUCCESS);
+        row.setVoucherNo(saveResult.getVoucherNo());
+        row.setVoucherType(saveResult.getCsign());
+        row.setVoucherNumber(saveResult.getInoId());
+        row.setFiscalPeriod(saveResult.getIperiod());
+        row.setBillDate(resolveBusinessDate(document));
+        row.setErrorMessage(null);
+        row.setPushedAt(LocalDateTime.now());
+        if (row.getId() == null) {
+            pushDocumentMapper.insert(row);
+        } else {
+            pushDocumentMapper.updateById(row);
+        }
+        return row;
+    }
+
+    private void saveFailedPushDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, String errorMessage) {
+        ExpVoucherPushDocument row = findPushDocument(batchContext.batch.getCompanyId(), document.getDocumentCode());
+        if (row == null) {
+            row = new ExpVoucherPushDocument();
+            row.setCompanyId(batchContext.batch.getCompanyId());
+            row.setDocumentCode(document.getDocumentCode());
+        }
+        row.setBatchId(batchContext.batch.getId());
+        row.setBatchNo(batchContext.batch.getBatchNo());
+        row.setTemplateCode(document.getTemplateCode());
+        row.setTemplateName(document.getTemplateName());
+        row.setSubmitterUserId(document.getSubmitterUserId());
+        row.setSubmitterName(document.getSubmitterName());
+        row.setTotalAmount(zero(document.getTotalAmount()));
+        row.setPushStatus(PUSH_STATUS_FAILED);
+        row.setVoucherNo(null);
+        row.setVoucherType(null);
+        row.setVoucherNumber(null);
+        row.setFiscalPeriod(resolveBusinessDate(document).getMonthValue());
+        row.setBillDate(resolveBusinessDate(document));
+        row.setErrorMessage(trim(errorMessage));
+        row.setPushedAt(LocalDateTime.now());
+        if (row.getId() == null) {
+            pushDocumentMapper.insert(row);
+        } else {
+            pushDocumentMapper.updateById(row);
+        }
+        pushEntryMapper.delete(Wrappers.<ExpVoucherPushEntry>lambdaQuery().eq(ExpVoucherPushEntry::getPushDocumentId, row.getId()));
+        batchContext.documentCount += 1;
+        batchContext.failureCount += 1;
+    }
+
+    private void rebuildPushEntries(ExpVoucherPushDocument pushDocument, FinanceVoucherSaveDTO saveDTO, Map<String, ExpVoucherSubjectMapping> subjectMap, ExpVoucherTemplatePolicy templatePolicy, Map<String, String> expenseTypeMap) {
+        pushEntryMapper.delete(Wrappers.<ExpVoucherPushEntry>lambdaQuery().eq(ExpVoucherPushEntry::getPushDocumentId, pushDocument.getId()));
+        Map<String, String> debitAccountExpenseTypeMap = new LinkedHashMap<>();
+        for (ExpVoucherSubjectMapping mapping : subjectMap.values()) {
+            debitAccountExpenseTypeMap.putIfAbsent(mapping.getDebitAccountCode(), mapping.getExpenseTypeCode());
+        }
+        for (int index = 0; index < saveDTO.getEntries().size(); index++) {
+            FinanceVoucherEntryDTO source = saveDTO.getEntries().get(index);
+            ExpVoucherPushEntry entry = new ExpVoucherPushEntry();
+            entry.setCompanyId(pushDocument.getCompanyId());
+            entry.setPushDocumentId(pushDocument.getId());
+            entry.setEntryNo(index + 1);
+            entry.setDigest(source.getCdigest());
+            entry.setAccountCode(source.getCcode());
+            entry.setAccountName(resolveAccountName(source.getCcode()));
+            boolean isDebit = zero(source.getMd()).compareTo(ZERO) > 0;
+            entry.setDirection(isDebit ? "DEBIT" : "CREDIT");
+            entry.setAmount(isDebit ? zero(source.getMd()) : zero(source.getMc()));
+            if (isDebit) {
+                String expenseTypeCode = debitAccountExpenseTypeMap.get(source.getCcode());
+                entry.setExpenseTypeCode(expenseTypeCode);
+                entry.setExpenseTypeName(expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
+            } else {
+                entry.setExpenseTypeCode(null);
+                entry.setExpenseTypeName(defaultText(templatePolicy.getTemplateName(), "统一贷方科目"));
+            }
+            pushEntryMapper.insert(entry);
+        }
+    }
+
+    private CompanyBatchContext createBatchContext(String companyId, String currentUsername) {
+        ExpVoucherPushBatch batch = new ExpVoucherPushBatch();
+        batch.setCompanyId(companyId);
+        batch.setBatchNo("VG" + LocalDateTime.now().format(BATCH_FORMATTER) + companyId.substring(Math.max(companyId.length() - 4, 0)));
+        batch.setDocumentCount(0);
+        batch.setSuccessCount(0);
+        batch.setFailureCount(0);
+        batch.setStatus("DRAFT");
+        batch.setCreatedBy(currentUsername);
+        pushBatchMapper.insert(batch);
+        return new CompanyBatchContext(batch);
+    }
+
+    private ExpVoucherTemplatePolicy requireEnabledTemplatePolicy(String companyId, String templateCode) {
+        ExpVoucherTemplatePolicy policy = templatePolicyMapper.selectOne(
+                Wrappers.<ExpVoucherTemplatePolicy>lambdaQuery()
+                        .eq(ExpVoucherTemplatePolicy::getCompanyId, companyId)
+                        .eq(ExpVoucherTemplatePolicy::getTemplateCode, templateCode)
+                        .eq(ExpVoucherTemplatePolicy::getEnabled, 1)
+                        .last("limit 1")
+        );
+        if (policy == null) {
+            throw new IllegalStateException("当前公司和报销模板未配置统一贷方科目策略");
+        }
+        return policy;
+    }
+
+    private List<ExpVoucherSubjectMapping> listEnabledSubjectMappings(String companyId, String templateCode) {
+        return subjectMappingMapper.selectList(
+                Wrappers.<ExpVoucherSubjectMapping>lambdaQuery()
+                        .eq(ExpVoucherSubjectMapping::getCompanyId, companyId)
+                        .eq(ExpVoucherSubjectMapping::getTemplateCode, templateCode)
+                        .eq(ExpVoucherSubjectMapping::getEnabled, 1)
+        );
+    }
+
+    private LinkedHashMap<String, BigDecimal> aggregateExpenseAmounts(List<ProcessDocumentExpenseDetail> details) {
+        LinkedHashMap<String, BigDecimal> result = new LinkedHashMap<>();
+        for (ProcessDocumentExpenseDetail detail : details) {
+            String expenseTypeCode = hasText(detail.getExpenseTypeCode()) ? trim(detail.getExpenseTypeCode()) : fallbackExpenseTypeCode(detail.getFormDataJson());
+            if (expenseTypeCode == null) {
+                continue;
+            }
+            BigDecimal amount = resolveDetailAmount(detail);
+            if (amount.compareTo(ZERO) <= 0) {
+                continue;
+            }
+            result.merge(expenseTypeCode, amount, BigDecimal::add);
+        }
+        return result;
+    }
+
+    private BigDecimal resolveDetailAmount(ProcessDocumentExpenseDetail detail) {
+        BigDecimal actualPaymentAmount = zero(detail.getActualPaymentAmount());
+        if (actualPaymentAmount.compareTo(ZERO) > 0) {
+            return actualPaymentAmount;
+        }
+        return zero(detail.getInvoiceAmount());
+    }
+
+    private String fallbackExpenseTypeCode(String formDataJson) {
+        Object value = readMap(formDataJson).get("expenseTypeCode");
+        return value == null ? null : trim(String.valueOf(value));
+    }
+
+    private String buildExpenseSummary(List<ProcessDocumentExpenseDetail> details, Map<String, String> expenseTypeMap) {
+        LinkedHashMap<String, BigDecimal> summary = aggregateExpenseAmounts(details);
+        if (summary.isEmpty()) {
+            return "-";
+        }
+        return summary.entrySet().stream()
+                .map(entry -> expenseTypeMap.getOrDefault(entry.getKey(), entry.getKey()) + " " + zero(entry.getValue()).toPlainString())
+                .collect(Collectors.joining(" / "));
+    }
+
+    private boolean canPush(ProcessDocumentInstance document, ExpVoucherPushDocument pushDocument, String companyId, List<ProcessDocumentExpenseDetail> details) {
+        if (!DOCUMENT_STATUS_APPROVED.equals(trim(document.getStatus()))) {
+            return false;
+        }
+        if (!hasText(companyId)) {
+            return false;
+        }
+        if (pushDocument != null && PUSH_STATUS_SUCCESS.equals(pushDocument.getPushStatus())) {
+            return false;
+        }
+        ExpVoucherTemplatePolicy policy = templatePolicyMapper.selectOne(
+                Wrappers.<ExpVoucherTemplatePolicy>lambdaQuery()
+                        .eq(ExpVoucherTemplatePolicy::getCompanyId, companyId)
+                        .eq(ExpVoucherTemplatePolicy::getTemplateCode, document.getTemplateCode())
+                        .eq(ExpVoucherTemplatePolicy::getEnabled, 1)
+                        .last("limit 1")
+        );
+        if (policy == null) {
+            return false;
+        }
+        Map<String, ExpVoucherSubjectMapping> subjectMap = listEnabledSubjectMappings(companyId, document.getTemplateCode()).stream()
+                .collect(Collectors.toMap(ExpVoucherSubjectMapping::getExpenseTypeCode, Function.identity(), (left, right) -> left));
+        for (String expenseTypeCode : aggregateExpenseAmounts(details).keySet()) {
+            if (!subjectMap.containsKey(expenseTypeCode)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    private List<SystemCompany> listCompanies() {
+        return systemCompanyMapper.selectList(
+                Wrappers.<SystemCompany>lambdaQuery()
+                        .eq(SystemCompany::getStatus, 1)
+                        .orderByAsc(SystemCompany::getCompanyCode, SystemCompany::getCompanyId)
+        );
+    }
+
+    private List<ProcessDocumentTemplate> listTemplates() {
+        return documentTemplateMapper.selectList(
+                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .eq(ProcessDocumentTemplate::getEnabled, 1)
+                        .orderByAsc(ProcessDocumentTemplate::getSortOrder, ProcessDocumentTemplate::getId)
+        );
+    }
+
+    private List<ProcessExpenseType> listExpenseTypes() {
+        return expenseTypeMapper.selectList(
+                Wrappers.<ProcessExpenseType>lambdaQuery()
+                        .eq(ProcessExpenseType::getStatus, 1)
+                        .orderByAsc(ProcessExpenseType::getExpenseCode, ProcessExpenseType::getId)
+        );
+    }
+
+    private List<ProcessDocumentInstance> listApprovedDocuments() {
+        return documentInstanceMapper.selectList(
+                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                        .eq(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_APPROVED)
+                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getId)
+        );
+    }
+
+    private List<ExpVoucherPushDocument> listPushDocuments() {
+        return pushDocumentMapper.selectList(
+                Wrappers.<ExpVoucherPushDocument>lambdaQuery()
+                        .orderByDesc(ExpVoucherPushDocument::getPushedAt, ExpVoucherPushDocument::getId)
+        );
+    }
+
+    private List<ProcessDocumentExpenseDetail> listExpenseDetails(String documentCode) {
+        return expenseDetailMapper.selectList(
+                Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
+                        .eq(ProcessDocumentExpenseDetail::getDocumentCode, documentCode)
+                        .orderByAsc(ProcessDocumentExpenseDetail::getSortOrder, ProcessDocumentExpenseDetail::getId)
+        );
+    }
+
+    private ExpVoucherPushDocument findPushDocument(String companyId, String documentCode) {
+        return pushDocumentMapper.selectOne(
+                Wrappers.<ExpVoucherPushDocument>lambdaQuery()
+                        .eq(ExpVoucherPushDocument::getCompanyId, companyId)
+                        .eq(ExpVoucherPushDocument::getDocumentCode, documentCode)
+                        .last("limit 1")
+        );
+    }
+
+    private Map<String, String> companyNameMap() {
+        return listCompanies().stream().collect(Collectors.toMap(SystemCompany::getCompanyId, SystemCompany::getCompanyName, (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private Map<String, String> expenseTypeNameMap() {
+        return listExpenseTypes().stream().collect(Collectors.toMap(ProcessExpenseType::getExpenseCode, item -> defaultText(item.getExpenseName(), item.getExpenseCode()), (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private List<FinanceVoucherOptionVO> loadAccountOptions() {
+        LinkedHashMap<String, String> labels = new LinkedHashMap<>();
+        for (OptionSeed seed : ACCOUNT_SEEDS) {
+            labels.put(seed.value, seed.label);
+        }
+        List<Object> dbCodes = glAccvouchMapper.selectObjs(
+                Wrappers.<GlAccvouch>lambdaQuery()
+                        .select(GlAccvouch::getCcode)
+                        .isNotNull(GlAccvouch::getCcode)
+                        .groupBy(GlAccvouch::getCcode)
+                        .orderByAsc(GlAccvouch::getCcode)
+                        .last("limit 200")
+        );
+        for (Object dbCode : dbCodes) {
+            if (dbCode == null) {
+                continue;
+            }
+            String code = trim(String.valueOf(dbCode));
+            if (code != null && !labels.containsKey(code)) {
+                labels.put(code, code + " 会计科目");
+            }
+        }
+        return labels.entrySet().stream().map(entry -> option(entry.getKey(), entry.getValue())).toList();
+    }
+
+    private String resolveDefaultCompanyId(Long currentUserId, List<SystemCompany> companies) {
+        if (companies.isEmpty()) {
+            return null;
+        }
+        User currentUser = userMapper.selectById(currentUserId);
+        if (currentUser != null && hasText(currentUser.getCompanyId())) {
+            String companyId = trim(currentUser.getCompanyId());
+            boolean exists = companies.stream().anyMatch(item -> Objects.equals(item.getCompanyId(), companyId));
+            if (exists) {
+                return companyId;
+            }
+        }
+        return companies.get(0).getCompanyId();
+    }
+
+    private String resolveLatestBatchNo() {
+        ExpVoucherPushBatch latestBatch = pushBatchMapper.selectOne(
+                Wrappers.<ExpVoucherPushBatch>lambdaQuery()
+                        .orderByDesc(ExpVoucherPushBatch::getCreatedAt, ExpVoucherPushBatch::getId)
+                        .last("limit 1")
+        );
+        return latestBatch == null ? null : latestBatch.getBatchNo();
+    }
+
+    private String resolveDocumentCompanyId(ProcessDocumentInstance document) {
+        Map<String, Object> formData = readMap(document.getFormDataJson());
+        Map<String, Object> schema = readMap(document.getFormSchemaSnapshotJson());
+        String fieldKey = findBusinessComponentFieldKey(schema, PAYMENT_COMPANY_COMPONENT_CODE);
+        if (fieldKey != null && formData.get(fieldKey) != null) {
+            return trim(String.valueOf(formData.get(fieldKey)));
+        }
+        for (Map.Entry<String, Object> entry : formData.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().startsWith(PAYMENT_COMPANY_COMPONENT_CODE) && entry.getValue() != null) {
+                return trim(String.valueOf(entry.getValue()));
+            }
+        }
+        User submitter = document.getSubmitterUserId() == null ? null : userMapper.selectById(document.getSubmitterUserId());
+        return submitter == null ? null : trim(submitter.getCompanyId());
+    }
+
+    private String requireDocumentCompanyId(ProcessDocumentInstance document) {
+        String companyId = resolveDocumentCompanyId(document);
+        if (companyId == null) {
+            throw new IllegalStateException("单据未识别到付款公司，无法推送凭证");
+        }
+        return companyId;
+    }
+
+    private String findBusinessComponentFieldKey(Map<String, Object> schema, String componentCode) {
+        Object rawBlocks = schema.get("blocks");
+        if (!(rawBlocks instanceof List<?> blocks)) {
+            return null;
+        }
+        for (Object blockItem : blocks) {
+            if (!(blockItem instanceof Map<?, ?> block)) {
+                continue;
+            }
+            if (!Objects.equals("BUSINESS_COMPONENT", block.get("kind"))) {
+                continue;
+            }
+            Object props = block.get("props");
+            if (!(props instanceof Map<?, ?> propMap)) {
+                continue;
+            }
+            if (Objects.equals(componentCode, propMap.get("componentCode")) && block.get("fieldKey") != null) {
+                return String.valueOf(block.get("fieldKey"));
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> readMap(String json) {
+        if (!hasText(json)) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
+        } catch (Exception ignored) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private LocalDate resolveBusinessDate(ProcessDocumentInstance document) {
+        if (document.getFinishedAt() != null) {
+            return document.getFinishedAt().toLocalDate();
+        }
+        if (document.getUpdatedAt() != null) {
+            return document.getUpdatedAt().toLocalDate();
+        }
+        if (document.getCreatedAt() != null) {
+            return document.getCreatedAt().toLocalDate();
+        }
+        return LocalDate.now();
+    }
+
+    private void validateTemplatePolicy(ExpenseVoucherTemplatePolicySaveDTO dto, Long currentId) {
+        if (!hasText(dto.getCompanyId()) || systemCompanyMapper.selectById(trim(dto.getCompanyId())) == null) {
+            throw new IllegalArgumentException("公司不存在，无法保存模板科目策略");
+        }
+        if (!existsTemplate(dto.getTemplateCode())) {
+            throw new IllegalArgumentException("报销模板不存在，无法保存模板科目策略");
+        }
+        ExpVoucherTemplatePolicy duplicate = templatePolicyMapper.selectOne(
+                Wrappers.<ExpVoucherTemplatePolicy>lambdaQuery()
+                        .eq(ExpVoucherTemplatePolicy::getCompanyId, trim(dto.getCompanyId()))
+                        .eq(ExpVoucherTemplatePolicy::getTemplateCode, trim(dto.getTemplateCode()))
+                        .ne(currentId != null, ExpVoucherTemplatePolicy::getId, currentId)
+                        .last("limit 1")
+        );
+        if (duplicate != null) {
+            throw new IllegalArgumentException("同一公司和报销模板只能维护一套统一贷方策略");
+        }
+    }
+
+    private void validateSubjectMapping(ExpenseVoucherSubjectMappingSaveDTO dto, Long currentId) {
+        if (!hasText(dto.getCompanyId()) || systemCompanyMapper.selectById(trim(dto.getCompanyId())) == null) {
+            throw new IllegalArgumentException("公司不存在，无法保存费用类型映射");
+        }
+        if (!existsTemplate(dto.getTemplateCode())) {
+            throw new IllegalArgumentException("报销模板不存在，无法保存费用类型映射");
+        }
+        if (!existsExpenseType(dto.getExpenseTypeCode())) {
+            throw new IllegalArgumentException("费用类型不存在，无法保存科目映射");
+        }
+        ExpVoucherSubjectMapping duplicate = subjectMappingMapper.selectOne(
+                Wrappers.<ExpVoucherSubjectMapping>lambdaQuery()
+                        .eq(ExpVoucherSubjectMapping::getCompanyId, trim(dto.getCompanyId()))
+                        .eq(ExpVoucherSubjectMapping::getTemplateCode, trim(dto.getTemplateCode()))
+                        .eq(ExpVoucherSubjectMapping::getExpenseTypeCode, trim(dto.getExpenseTypeCode()))
+                        .ne(currentId != null, ExpVoucherSubjectMapping::getId, currentId)
+                        .last("limit 1")
+        );
+        if (duplicate != null) {
+            throw new IllegalArgumentException("同一公司、报销模板和费用类型不能重复维护借方科目");
+        }
+    }
+
+    private void applyTemplatePolicy(ExpenseVoucherTemplatePolicySaveDTO dto, ExpVoucherTemplatePolicy entity, String currentUsername) {
+        entity.setCompanyId(trim(dto.getCompanyId()));
+        entity.setTemplateCode(trim(dto.getTemplateCode()));
+        entity.setTemplateName(resolveTemplateName(dto.getTemplateCode(), dto.getTemplateName()));
+        entity.setCreditAccountCode(trim(dto.getCreditAccountCode()));
+        entity.setCreditAccountName(defaultText(trim(dto.getCreditAccountName()), resolveAccountName(dto.getCreditAccountCode())));
+        entity.setVoucherType(defaultText(trim(dto.getVoucherType()), DEFAULT_VOUCHER_TYPE));
+        entity.setSummaryRule(trim(dto.getSummaryRule()));
+        entity.setEnabled(dto.getEnabled() == null ? 1 : (dto.getEnabled() == 0 ? 0 : 1));
+        entity.setUpdatedBy(currentUsername);
+    }
+
+    private void applySubjectMapping(ExpenseVoucherSubjectMappingSaveDTO dto, ExpVoucherSubjectMapping entity, String currentUsername) {
+        entity.setCompanyId(trim(dto.getCompanyId()));
+        entity.setTemplateCode(trim(dto.getTemplateCode()));
+        entity.setTemplateName(resolveTemplateName(dto.getTemplateCode(), dto.getTemplateName()));
+        entity.setExpenseTypeCode(trim(dto.getExpenseTypeCode()));
+        entity.setExpenseTypeName(resolveExpenseTypeName(dto.getExpenseTypeCode(), dto.getExpenseTypeName()));
+        entity.setDebitAccountCode(trim(dto.getDebitAccountCode()));
+        entity.setDebitAccountName(defaultText(trim(dto.getDebitAccountName()), resolveAccountName(dto.getDebitAccountCode())));
+        entity.setEnabled(dto.getEnabled() == null ? 1 : (dto.getEnabled() == 0 ? 0 : 1));
+        entity.setUpdatedBy(currentUsername);
+    }
+
+    private boolean existsTemplate(String templateCode) {
+        return documentTemplateMapper.selectOne(
+                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .eq(ProcessDocumentTemplate::getTemplateCode, trim(templateCode))
+                        .last("limit 1")
+        ) != null;
+    }
+
+    private boolean existsExpenseType(String expenseTypeCode) {
+        return expenseTypeMapper.selectOne(
+                Wrappers.<ProcessExpenseType>lambdaQuery()
+                        .eq(ProcessExpenseType::getExpenseCode, trim(expenseTypeCode))
+                        .last("limit 1")
+        ) != null;
+    }
+
+    private String resolveTemplateName(String templateCode, String templateName) {
+        if (hasText(templateName)) {
+            return trim(templateName);
+        }
+        ProcessDocumentTemplate template = documentTemplateMapper.selectOne(
+                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .eq(ProcessDocumentTemplate::getTemplateCode, trim(templateCode))
+                        .last("limit 1")
+        );
+        return template == null ? trim(templateCode) : defaultText(template.getTemplateName(), templateCode);
+    }
+
+    private String resolveExpenseTypeName(String expenseTypeCode, String expenseTypeName) {
+        if (hasText(expenseTypeName)) {
+            return trim(expenseTypeName);
+        }
+        ProcessExpenseType expenseType = expenseTypeMapper.selectOne(
+                Wrappers.<ProcessExpenseType>lambdaQuery()
+                        .eq(ProcessExpenseType::getExpenseCode, trim(expenseTypeCode))
+                        .last("limit 1")
+        );
+        return expenseType == null ? trim(expenseTypeCode) : defaultText(expenseType.getExpenseName(), expenseTypeCode);
+    }
+
+    private ExpVoucherTemplatePolicy requireTemplatePolicy(Long id) {
+        ExpVoucherTemplatePolicy entity = templatePolicyMapper.selectById(id);
+        if (entity == null) {
+            throw new IllegalArgumentException("模板科目策略不存在");
+        }
+        return entity;
+    }
+
+    private ExpVoucherSubjectMapping requireSubjectMapping(Long id) {
+        ExpVoucherSubjectMapping entity = subjectMappingMapper.selectById(id);
+        if (entity == null) {
+            throw new IllegalArgumentException("费用类型科目映射不存在");
+        }
+        return entity;
+    }
+
+    private ExpenseVoucherTemplatePolicyVO toTemplatePolicyVO(ExpVoucherTemplatePolicy entity, Map<String, String> companyMap) {
+        ExpenseVoucherTemplatePolicyVO vo = new ExpenseVoucherTemplatePolicyVO();
+        vo.setId(entity.getId());
+        vo.setCompanyId(entity.getCompanyId());
+        vo.setCompanyName(companyMap.getOrDefault(entity.getCompanyId(), entity.getCompanyId()));
+        vo.setTemplateCode(entity.getTemplateCode());
+        vo.setTemplateName(entity.getTemplateName());
+        vo.setCreditAccountCode(entity.getCreditAccountCode());
+        vo.setCreditAccountName(defaultText(entity.getCreditAccountName(), resolveAccountName(entity.getCreditAccountCode())));
+        vo.setVoucherType(entity.getVoucherType());
+        vo.setVoucherTypeLabel(resolveVoucherTypeLabel(entity.getVoucherType()));
+        vo.setSummaryRule(entity.getSummaryRule());
+        vo.setEnabled(Objects.equals(entity.getEnabled(), 1));
+        vo.setUpdatedAt(formatDateTime(entity.getUpdatedAt()));
+        return vo;
+    }
+
+    private ExpenseVoucherSubjectMappingVO toSubjectMappingVO(ExpVoucherSubjectMapping entity, Map<String, String> companyMap) {
+        ExpenseVoucherSubjectMappingVO vo = new ExpenseVoucherSubjectMappingVO();
+        vo.setId(entity.getId());
+        vo.setCompanyId(entity.getCompanyId());
+        vo.setCompanyName(companyMap.getOrDefault(entity.getCompanyId(), entity.getCompanyId()));
+        vo.setTemplateCode(entity.getTemplateCode());
+        vo.setTemplateName(entity.getTemplateName());
+        vo.setExpenseTypeCode(entity.getExpenseTypeCode());
+        vo.setExpenseTypeName(entity.getExpenseTypeName());
+        vo.setDebitAccountCode(entity.getDebitAccountCode());
+        vo.setDebitAccountName(defaultText(entity.getDebitAccountName(), resolveAccountName(entity.getDebitAccountCode())));
+        vo.setEnabled(Objects.equals(entity.getEnabled(), 1));
+        vo.setUpdatedAt(formatDateTime(entity.getUpdatedAt()));
+        return vo;
+    }
+
+    private ExpenseVoucherGeneratedRecordVO toGeneratedRecordVO(ExpVoucherPushDocument entity, Map<String, String> companyMap) {
+        ExpenseVoucherGeneratedRecordVO vo = new ExpenseVoucherGeneratedRecordVO();
+        vo.setId(entity.getId());
+        vo.setCompanyId(entity.getCompanyId());
+        vo.setCompanyName(companyMap.getOrDefault(entity.getCompanyId(), entity.getCompanyId()));
+        vo.setBatchNo(entity.getBatchNo());
+        vo.setDocumentCode(entity.getDocumentCode());
+        vo.setTemplateCode(entity.getTemplateCode());
+        vo.setTemplateName(entity.getTemplateName());
+        vo.setSubmitterName(entity.getSubmitterName());
+        vo.setTotalAmount(zero(entity.getTotalAmount()));
+        vo.setPushStatus(entity.getPushStatus());
+        vo.setPushStatusLabel(resolvePushStatusLabel(entity.getPushStatus()));
+        vo.setVoucherNo(entity.getVoucherNo());
+        vo.setVoucherType(entity.getVoucherType());
+        vo.setVoucherNumber(entity.getVoucherNumber());
+        vo.setBillDate(formatDate(entity.getBillDate()));
+        vo.setPushedAt(formatDateTime(entity.getPushedAt()));
+        vo.setFailureReason(entity.getErrorMessage());
+        return vo;
+    }
+
+    private ExpenseVoucherEntrySnapshotVO toEntrySnapshotVO(ExpVoucherPushEntry entity) {
+        ExpenseVoucherEntrySnapshotVO vo = new ExpenseVoucherEntrySnapshotVO();
+        vo.setEntryNo(entity.getEntryNo());
+        vo.setDirection(entity.getDirection());
+        vo.setDigest(entity.getDigest());
+        vo.setAccountCode(entity.getAccountCode());
+        vo.setAccountName(entity.getAccountName());
+        vo.setExpenseTypeCode(entity.getExpenseTypeCode());
+        vo.setExpenseTypeName(entity.getExpenseTypeName());
+        vo.setAmount(zero(entity.getAmount()));
+        return vo;
+    }
+
+    private FinanceVoucherOptionVO toCompanyOption(SystemCompany company) {
+        return option(company.getCompanyId(), hasText(company.getCompanyCode()) ? company.getCompanyCode() + " - " + company.getCompanyName() : company.getCompanyName());
+    }
+
+    private FinanceVoucherOptionVO toTemplateOption(ProcessDocumentTemplate template) {
+        return option(template.getTemplateCode(), defaultText(template.getTemplateName(), template.getTemplateCode()));
+    }
+
+    private FinanceVoucherOptionVO toExpenseTypeOption(ProcessExpenseType expenseType) {
+        return option(expenseType.getExpenseCode(), defaultText(expenseType.getExpenseName(), expenseType.getExpenseCode()));
+    }
+
+    private String resolveSummary(String templateRule, ProcessDocumentInstance document, String expenseTypeName) {
+        String summary = hasText(templateRule) ? trim(templateRule) : "报销单${documentCode}-${expenseTypeName}";
+        return summary
+                .replace("${documentCode}", defaultText(document.getDocumentCode(), ""))
+                .replace("${templateName}", defaultText(document.getTemplateName(), ""))
+                .replace("${submitterName}", defaultText(document.getSubmitterName(), ""))
+                .replace("${expenseTypeName}", defaultText(expenseTypeName, ""));
+    }
+
+    private ExpenseVoucherPushResultVO buildSuccessResult(ProcessDocumentInstance document, String companyId, FinanceVoucherSaveResultVO saveResult) {
+        ExpenseVoucherPushResultVO result = new ExpenseVoucherPushResultVO();
+        result.setDocumentCode(document.getDocumentCode());
+        result.setCompanyId(companyId);
+        result.setTemplateCode(document.getTemplateCode());
+        result.setTemplateName(document.getTemplateName());
+        result.setPushStatus(PUSH_STATUS_SUCCESS);
+        result.setVoucherNo(saveResult.getVoucherNo());
+        return result;
+    }
+
+    private ExpenseVoucherPushResultVO buildFailureResult(String documentCode, String companyId, String templateCode, String templateName, String errorMessage) {
+        ExpenseVoucherPushResultVO result = new ExpenseVoucherPushResultVO();
+        result.setDocumentCode(documentCode);
+        result.setCompanyId(companyId);
+        result.setTemplateCode(templateCode);
+        result.setTemplateName(templateName);
+        result.setPushStatus(PUSH_STATUS_FAILED);
+        result.setErrorMessage(defaultText(errorMessage, "推送失败"));
+        return result;
+    }
+
+    private <T> ExpenseVoucherPageVO<T> buildPage(List<T> rows, Integer page, Integer pageSize) {
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 100);
+        int start = Math.min((safePage - 1) * safePageSize, rows.size());
+        int end = Math.min(start + safePageSize, rows.size());
+        ExpenseVoucherPageVO<T> result = new ExpenseVoucherPageVO<>();
+        result.setTotal(rows.size());
+        result.setPage(safePage);
+        result.setPageSize(safePageSize);
+        result.setItems(new ArrayList<>(rows.subList(start, end)));
+        return result;
+    }
+
+    private FinanceVoucherOptionVO option(String value, String label) {
+        FinanceVoucherOptionVO option = new FinanceVoucherOptionVO();
+        option.setValue(value);
+        option.setLabel(label);
+        return option;
+    }
+
+    private List<FinanceVoucherOptionVO> toOptions(List<OptionSeed> seeds) {
+        return seeds.stream().map(item -> option(item.value, item.label)).toList();
+    }
+
+    private boolean matchesCompany(String actualCompanyId, String filterCompanyId) {
+        return !hasText(filterCompanyId) || Objects.equals(trim(actualCompanyId), trim(filterCompanyId));
+    }
+
+    private boolean matchesKeyword(String keyword, String... texts) {
+        if (!hasText(keyword)) {
+            return true;
+        }
+        String normalizedKeyword = trim(keyword).toLowerCase(Locale.ROOT);
+        for (String text : texts) {
+            if (containsIgnoreCase(text, normalizedKeyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsIgnoreCase(String source, String keyword) {
+        return hasText(source) && hasText(keyword) && source.toLowerCase(Locale.ROOT).contains(trim(keyword).toLowerCase(Locale.ROOT));
+    }
+
+    private boolean matchesDateRange(LocalDate date, String dateFrom, String dateTo) {
+        LocalDate from = parseDate(dateFrom);
+        LocalDate to = parseDate(dateTo);
+        if (date == null) {
+            return from == null && to == null;
+        }
+        if (from != null && date.isBefore(from)) {
+            return false;
+        }
+        if (to != null && date.isAfter(to)) {
+            return false;
+        }
+        return true;
+    }
+
+    private LocalDate parseDate(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(trim(value), DATE_FORMATTER);
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
+    }
+
+    private String formatDate(LocalDate value) {
+        return value == null ? null : value.format(DATE_FORMATTER);
+    }
+
+    private String formatDateTime(LocalDateTime value) {
+        return value == null ? null : value.toString().replace('T', ' ');
+    }
+
+    private String resolveAccountName(String accountCode) {
+        String code = trim(accountCode);
+        if (code == null) {
+            return null;
+        }
+        for (OptionSeed seed : ACCOUNT_SEEDS) {
+            if (Objects.equals(seed.value, code)) {
+                return seed.label;
+            }
+        }
+        return code + " 会计科目";
+    }
+
+    private String resolveVoucherTypeLabel(String voucherType) {
+        String value = trim(voucherType);
+        if (value == null) {
+            return DEFAULT_VOUCHER_TYPE;
+        }
+        for (OptionSeed seed : VOUCHER_TYPE_SEEDS) {
+            if (Objects.equals(seed.value, value)) {
+                return seed.label;
+            }
+        }
+        return value;
+    }
+
+    private String resolvePushStatusLabel(String pushStatus) {
+        return switch (defaultText(pushStatus, PUSH_STATUS_UNPUSHED)) {
+            case PUSH_STATUS_SUCCESS -> "推送成功";
+            case PUSH_STATUS_FAILED -> "推送失败";
+            default -> "待推送";
+        };
+    }
+
+    private BigDecimal zero(BigDecimal value) {
+        return value == null ? ZERO : value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String trim(String value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private boolean hasText(String value) {
+        return trim(value) != null;
+    }
+
+    private String defaultText(String value, String fallback) {
+        return hasText(value) ? trim(value) : fallback;
+    }
+
+    private static final class OptionSeed {
+        private final String value;
+        private final String label;
+
+        private OptionSeed(String value, String label) {
+            this.value = value;
+            this.label = label;
+        }
+    }
+
+    private static final class CompanyBatchContext {
+        private final ExpVoucherPushBatch batch;
+        private int documentCount;
+        private int successCount;
+        private int failureCount;
+
+        private CompanyBatchContext(ExpVoucherPushBatch batch) {
+            this.batch = batch;
+        }
+    }
+}

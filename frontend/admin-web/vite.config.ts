@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
+const frontendPort = Number.parseInt(process.env.FINEX_FRONTEND_PORT ?? '5173', 10)
+const gatewayProxyTarget = process.env.FINEX_GATEWAY_PROXY_TARGET ?? 'http://localhost:8080'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -16,10 +19,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: frontendPort,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: gatewayProxyTarget,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '/api')
       }

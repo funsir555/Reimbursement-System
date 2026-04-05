@@ -3,42 +3,42 @@ USE finex_db;
 SET NAMES utf8mb4;
 
 CREATE TABLE IF NOT EXISTS pm_custom_archive_design (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    archive_code VARCHAR(64) NOT NULL,
-    archive_name VARCHAR(100) NOT NULL,
-    archive_type VARCHAR(32) NOT NULL,
-    archive_description VARCHAR(255) NULL,
-    status TINYINT NOT NULL DEFAULT 1,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自定义档案ID',
+    archive_code VARCHAR(64) NOT NULL COMMENT '档案编码',
+    archive_name VARCHAR(100) NOT NULL COMMENT '档案名称',
+    archive_type VARCHAR(32) NOT NULL COMMENT '档案类型:SELECT可选档案/AUTO_RULE自动划分',
+    archive_description VARCHAR(255) NULL COMMENT '档案说明',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_archive_code (archive_code),
     KEY idx_archive_type (archive_type, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义档案设计表';
 
 CREATE TABLE IF NOT EXISTS pm_custom_archive_item (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    archive_id BIGINT NOT NULL,
-    item_code VARCHAR(64) NOT NULL,
-    item_name VARCHAR(100) NOT NULL,
-    priority INT NULL DEFAULT 1,
-    status TINYINT NOT NULL DEFAULT 1,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '档案结果项ID',
+    archive_id BIGINT NOT NULL COMMENT '所属档案ID',
+    item_code VARCHAR(64) NOT NULL COMMENT '结果项编码',
+    item_name VARCHAR(100) NOT NULL COMMENT '结果项名称',
+    priority INT NULL DEFAULT 1 COMMENT '优先级，值越小越靠前',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_archive_item_code (archive_id, item_code),
     KEY idx_archive_item_status (archive_id, status, id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义档案结果项表';
 
 CREATE TABLE IF NOT EXISTS pm_custom_archive_rule (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    archive_item_id BIGINT NOT NULL,
-    group_no INT NOT NULL DEFAULT 1,
-    field_key VARCHAR(64) NOT NULL,
-    operator VARCHAR(32) NOT NULL,
-    compare_value VARCHAR(500) NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自动划分规则ID',
+    archive_item_id BIGINT NOT NULL COMMENT '归属结果项ID',
+    group_no INT NOT NULL DEFAULT 1 COMMENT '规则组号，同组条件为且、组间为或',
+    field_key VARCHAR(64) NOT NULL COMMENT '匹配字段标识',
+    operator VARCHAR(32) NOT NULL COMMENT '比较运算符:EQ/NE/IN/NOT_IN/GT/BETWEEN/CONTAINS',
+    compare_value VARCHAR(500) NULL COMMENT '比较值，按JSON序列化存储',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     KEY idx_archive_item_group (archive_item_id, group_no, id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义档案自动划分规则表';
 
 INSERT INTO pm_custom_archive_design (archive_code, archive_name, archive_type, archive_description, status)
 VALUES

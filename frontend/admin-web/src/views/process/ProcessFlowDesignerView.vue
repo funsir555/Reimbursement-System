@@ -1,6 +1,6 @@
 <template>
-  <div class="space-y-6">
-    <div class="mb-6 flex justify-end">
+  <div class="space-y-6 pb-24">
+    <div class="mb-6 flex justify-start">
       <div class="flex flex-wrap items-center gap-3">
         <button type="button" class="flex items-center gap-2 text-sm text-blue-600" @click="goBack">
           <el-icon><ArrowLeft /></el-icon>
@@ -13,12 +13,11 @@
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-[300px,minmax(0,1fr),420px]">
       <el-card class="!rounded-3xl !shadow-sm">
         <template #header>
-          <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
             <div>
               <h2 class="text-lg font-semibold text-slate-800">流程列表</h2>
-              <p class="mt-1 text-sm text-slate-400">选择已有流程，或新建一个草稿继续设计</p>
+              <p class="mt-1 text-sm text-slate-400">选择已有流程，直接进入编辑状态继续设计</p>
             </div>
-            <el-button type="primary" :icon="Plus" @click="createNewFlow">新建流程</el-button>
           </div>
         </template>
 
@@ -64,31 +63,41 @@
             <el-input v-model="working.flowDescription" type="textarea" :rows="3" placeholder="请输入流程说明" />
           </el-form-item>
 
-          <div class="rounded-[32px] border border-slate-100 bg-slate-50/80 px-4 py-6 lg:px-8" :class="{ 'canvas-muted': hasSelection }">
-            <div class="flow-track">
-              <div class="flow-step is-first">
-                <div class="terminal-node start-node">
-                  <span class="terminal-title">开始</span>
-                  <span class="terminal-desc">提交单据后进入流程</span>
-                </div>
-              </div>
+          <div class="flow-canvas-shell rounded-[32px] border border-slate-100 bg-slate-50/80 px-4 py-6 lg:px-8" :class="{ 'canvas-muted': hasSelection }">
+            <div class="flow-canvas-scroll" data-testid="flow-canvas-scroll">
+              <div class="flow-canvas-surface">
+                <div class="flow-track">
+                  <div class="flow-step is-first">
+                    <div class="terminal-node start-node">
+                      <span class="terminal-title">开始</span>
+                      <span class="terminal-desc">提交单据后进入流程</span>
+                    </div>
+                  </div>
 
-              <ProcessFlowCanvasRenderer
-                :blocks="canvasBlocks"
-                :selected-node-key="selectedNodeKey"
-                :selected-route-key="selectedRouteKey"
-                :scene-name-by-id="sceneName"
-                :node-type-label="nodeTypeLabel"
-                :node-card-class="nodeCardClass"
-                @insert-node="handleCanvasInsert"
-                @select-node="selectNode"
-                @select-route="selectRoute"
-              />
+                  <ProcessFlowCanvasRenderer
+                    :blocks="canvasBlocks"
+                    :selected-node-key="selectedNodeKey"
+                    :selected-route-key="selectedRouteKey"
+                    :dragging-node-key="draggingNodeKey"
+                    :drop-target-key="dropTargetKey"
+                    :scene-name-by-id="sceneName"
+                    :node-type-label="nodeTypeLabel"
+                    :node-card-class="nodeCardClass"
+                    @insert-node="handleCanvasInsert"
+                    @select-node="selectNode"
+                    @select-route="selectRoute"
+                    @drag-node-start="handleCanvasDragStart"
+                    @drag-node-end="handleCanvasDragEnd"
+                    @drag-node-over="handleCanvasDragOver"
+                    @drop-node="handleCanvasDrop"
+                  />
 
-              <div class="flow-step is-last">
-                <div class="terminal-node end-node">
-                  <span class="terminal-title">结束</span>
-                  <span class="terminal-desc">流程流转完成</span>
+                  <div class="flow-step is-last">
+                    <div class="terminal-node end-node">
+                      <span class="terminal-title">结束</span>
+                      <span class="terminal-desc">流程流转完成</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -116,7 +125,7 @@
           </div>
         </template>
 
-        <div class="designer-side-scroll">
+        <div class="designer-side-scroll" data-testid="designer-side-panel">
           <div v-if="selectedRoute" class="space-y-6">
             <div class="rounded-[24px] border border-slate-200 bg-slate-50 p-5 space-y-5">
               <div class="flex flex-wrap items-start justify-between gap-3">
@@ -611,7 +620,7 @@
                           {{ describeRouteConditions(routeItem).conditions }} 条条件
                         </p>
                       </div>
-                      <el-tag size="small" effect="plain">编辑条件</el-tag>
+                      <el-tag size="small" effect="plain">{{ currentFlowLabel }}</el-tag>
                     </div>
                   </button>
                 </div>
@@ -626,10 +635,42 @@
       </el-card>
     </div>
 
-    <div class="flex justify-end gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
-      <el-button type="primary" :icon="Check" :loading="saving" @click="saveFlow">保存草稿</el-button>
-      <el-button type="success" :loading="publishing" @click="publishCurrentFlow">发布流程</el-button>
-      <el-button type="danger" plain :loading="disabling" :disabled="!working.id" @click="disableCurrentFlow">停用流程</el-button>
+    <div
+      class="process-flow-designer-floating-bar sticky bottom-4 z-10"
+      data-testid="process-flow-designer-floating-bar"
+    >
+      <div
+        class="process-flow-designer-floating-bar__inner"
+        data-testid="process-flow-designer-floating-bar-inner"
+      >
+        <el-button
+          class="process-flow-designer-floating-bar__button"
+          type="primary"
+          :icon="Check"
+          :loading="saving"
+          @click="saveFlow"
+        >
+          保存草稿
+        </el-button>
+        <el-button
+          class="process-flow-designer-floating-bar__button process-flow-designer-floating-bar__button--success"
+          type="success"
+          :loading="publishing"
+          @click="publishCurrentFlow"
+        >
+          发布流程
+        </el-button>
+        <el-button
+          class="process-flow-designer-floating-bar__button"
+          type="danger"
+          plain
+          :loading="disabling"
+          :disabled="!working.id"
+          @click="disableCurrentFlow"
+        >
+          停用流程
+        </el-button>
+      </div>
     </div>
 
     <el-dialog v-model="sceneDialog.visible" title="新增流程场景" width="460px">
@@ -652,10 +693,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Delete, Plus, RefreshRight } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Delete, RefreshRight } from '@element-plus/icons-vue'
 import ProcessFlowCanvasRenderer from '@/components/process/ProcessFlowCanvasRenderer.vue'
 import {
   processApi,
@@ -675,13 +716,16 @@ import {
   buildDefaultBranchRoutes,
   buildFlowCanvasBlocks,
   insertNodeIntoContainer,
+  moveNodeIntoContainer,
   normalizeContainerKey,
   reindexFlowState,
   removeNodeAndDescendants,
   removeRouteLane,
   type FlowContainerKey,
-  type FlowInsertType
+  type FlowInsertType,
+  type FlowMoveResult
 } from '@/views/process/processFlowDesignerHelper'
+import { persistFlowDraft, publishFlowAfterPersist } from '@/views/process/flowDesignerPersistence'
 
 type EditableProcessFlowCondition = Omit<ProcessFlowCondition, 'compareValue'> & {
   compareValue: any
@@ -699,6 +743,12 @@ type InsertCommand = {
   containerKey: FlowContainerKey
   index: number
   nodeType: FlowInsertType
+}
+
+type CanvasDropTarget = {
+  containerKey: FlowContainerKey
+  index: number
+  blockKey: string
 }
 
 type SelectionPreference = {
@@ -720,6 +770,8 @@ const flows = ref<ProcessFlowSummary[]>([])
 const meta = ref<ProcessFlowMeta | null>(null)
 const selectedNodeKey = ref('')
 const selectedRouteKey = ref('')
+const draggingNodeKey = ref('')
+const dropTargetKey = ref('')
 
 const working = reactive<ProcessFlowDetail>(createEmptyFlow())
 const sceneDialog = reactive({
@@ -775,6 +827,8 @@ const currentBranchRoutes = computed<EditableProcessFlowRoute[]>(() => {
   ) as EditableProcessFlowRoute[]
 })
 
+const currentFlowLabel = computed(() => working.flowName?.trim() || '未命名流程')
+
 const panelTitle = computed(() => {
   if (selectedRoute.value) {
     return selectedRoute.value.routeName || '条件分支'
@@ -815,6 +869,17 @@ function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
+function handleDesignerKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Delete' || !selectedNode.value || selectedRoute.value) {
+    return
+  }
+  if (hasOpenMessageBox() || isEditingElement(event.target)) {
+    return
+  }
+  event.preventDefault()
+  void removeSelectedNode()
+}
+
 watch(
   () => route.params.id,
   async () => {
@@ -830,7 +895,12 @@ watch(
 )
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleDesignerKeydown)
   await reloadPageData()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleDesignerKeydown)
 })
 
 function createEmptyFlow(): ProcessFlowDetail {
@@ -1204,6 +1274,71 @@ function selectRoute(routeKey: string) {
   selectedNodeKey.value = ''
 }
 
+function hasOpenMessageBox() {
+  return typeof document !== 'undefined' && Boolean(document.querySelector('.el-message-box'))
+}
+
+function isEditingElement(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  if (target.isContentEditable) {
+    return true
+  }
+  const editableParent = target.closest('input, textarea, select, [contenteditable="true"]')
+  return Boolean(editableParent)
+}
+
+function handleCanvasDragStart(nodeKey: string) {
+  draggingNodeKey.value = nodeKey
+  dropTargetKey.value = ''
+}
+
+function handleCanvasDragEnd() {
+  draggingNodeKey.value = ''
+  dropTargetKey.value = ''
+}
+
+function handleCanvasDragOver(payload: CanvasDropTarget) {
+  if (!draggingNodeKey.value) {
+    return
+  }
+  dropTargetKey.value = payload.blockKey
+}
+
+async function handleCanvasDrop(payload: CanvasDropTarget) {
+  const currentNodeKey = draggingNodeKey.value
+  handleCanvasDragEnd()
+  if (!currentNodeKey) {
+    return
+  }
+
+  const moveResult = moveNodeIntoContainer(
+    working.nodes || [],
+    working.routes || [],
+    currentNodeKey,
+    payload.containerKey,
+    payload.index
+  )
+  if (!moveResult.moved) {
+    handleMoveFailure(moveResult)
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm('确定将当前节点移动到这个位置吗？', '调整节点位置', {
+      type: 'warning',
+      confirmButtonText: '确认修改',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+
+  applyWorkingGraph(moveResult.nodes, moveResult.routes, { nodeKey: currentNodeKey })
+  ElMessage.success('节点位置已调整')
+}
+
 function handleCanvasInsert(payload: InsertCommand) {
   const node = buildNodeByType(payload.nodeType, payload.index)
   const inserted = insertNodeIntoContainer(working.nodes || [], node, payload.containerKey, payload.index)
@@ -1219,6 +1354,12 @@ function handleCanvasInsert(payload: InsertCommand) {
   }
 
   applyWorkingGraph(inserted.nodes, nextRoutes, preferredSelection)
+}
+
+function handleMoveFailure(moveResult: FlowMoveResult) {
+  if (moveResult.reason === 'INVALID_TARGET') {
+    ElMessage.warning('不能将当前分支移动到自己的内部位置')
+  }
 }
 
 function buildNodeByType(nodeType: FlowInsertType, index: number): ProcessFlowNode {
@@ -1635,51 +1776,66 @@ function buildPayload(): ProcessFlowSavePayload {
   }
 }
 
-async function saveFlow() {
+function currentSelectionPreference(): SelectionPreference {
+  return selectedRoute.value ? { routeKey: selectedRoute.value.routeKey } : { nodeKey: selectedNode.value?.nodeKey }
+}
+
+async function persistCurrentFlow(showSuccessMessage = true) {
   if (!working.flowName?.trim()) {
-    ElMessage.warning('请先填写流程名称')
-    return
+    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u6d41\u7a0b\u540d\u79f0')
+    return null
   }
 
   saving.value = true
   try {
     const payload = buildPayload()
-    const preferred = selectedRoute.value ? { routeKey: selectedRoute.value.routeKey } : { nodeKey: selectedNode.value?.nodeKey }
-    const res = working.id ? await processApi.updateFlow(working.id, payload) : await processApi.createFlow(payload)
-    Object.assign(working, normalizeFlowDetail(res.data))
+    const preferred = currentSelectionPreference()
+    const detail = await persistFlowDraft(processApi, working.id, payload)
+    Object.assign(working, normalizeFlowDetail(detail))
     restoreSelection(preferred)
     await reloadFlowListOnly()
-    ElMessage.success('流程草稿已保存')
+    if (showSuccessMessage) {
+      ElMessage.success('\u6d41\u7a0b\u8349\u7a3f\u5df2\u4fdd\u5b58')
+    }
+    return detail
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '保存流程失败'))
+    ElMessage.error(resolveErrorMessage(error, '\u4fdd\u5b58\u6d41\u7a0b\u5931\u8d25'))
+    return null
   } finally {
     saving.value = false
   }
 }
 
+async function saveFlow() {
+  await persistCurrentFlow()
+}
+
 async function publishCurrentFlow() {
-  if (!working.id) {
-    await saveFlow()
-  }
-  if (!working.id) {
+  if (!working.flowName?.trim()) {
+    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u6d41\u7a0b\u540d\u79f0')
     return
   }
 
   publishing.value = true
   try {
-    const preferred = selectedRoute.value ? { routeKey: selectedRoute.value.routeKey } : { nodeKey: selectedNode.value?.nodeKey }
-    const res = await processApi.publishFlow(working.id)
-    Object.assign(working, normalizeFlowDetail(res.data))
+    const payload = buildPayload()
+    const preferred = currentSelectionPreference()
+    const result = await publishFlowAfterPersist(processApi, working.id, payload, async (detail) => {
+      Object.assign(working, normalizeFlowDetail(detail))
+      restoreSelection(preferred)
+      await reloadFlowListOnly()
+    })
+    Object.assign(working, normalizeFlowDetail(result.publishedDetail))
     restoreSelection(preferred)
     await reloadFlowListOnly()
-    ElMessage.success('流程已发布')
+    ElMessage.success('\u6d41\u7a0b\u5df2\u53d1\u5e03')
 
     const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
     if (returnTo && working.flowCode) {
       await router.push(appendQueryParam(returnTo, 'createdFlowCode', working.flowCode))
     }
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '发布流程失败'))
+    ElMessage.error(resolveErrorMessage(error, '\u53d1\u5e03\u6d41\u7a0b\u5931\u8d25'))
   } finally {
     publishing.value = false
   }
@@ -1769,9 +1925,41 @@ function appendQueryParam(path: string, key: string, value: string) {
   background: linear-gradient(180deg, rgba(241, 245, 249, 0.95), rgba(248, 250, 252, 0.92));
 }
 
+.flow-canvas-shell {
+  overflow: hidden;
+}
+
+.flow-canvas-scroll {
+  max-height: calc(100vh - 320px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 4px 10px 10px 4px;
+}
+
+.flow-canvas-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.flow-canvas-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.85);
+}
+
+.flow-canvas-scroll::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.92);
+}
+
+.flow-canvas-surface {
+  display: flex;
+  justify-content: center;
+  min-width: 100%;
+}
+
 .flow-track {
   display: flex;
   min-height: 560px;
+  min-width: 100%;
   flex-direction: column;
   align-items: center;
   gap: 18px;
@@ -1849,22 +2037,8 @@ function appendQueryParam(path: string, key: string, value: string) {
 }
 
 .designer-side-scroll {
-  max-height: calc(100vh - 260px);
-  overflow-y: auto;
-  padding-right: 8px;
-}
-
-.designer-side-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-
-.designer-side-scroll::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.85);
-}
-
-.designer-side-scroll::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 0.92);
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .route-pill-grid {
@@ -1903,11 +2077,74 @@ function appendQueryParam(path: string, key: string, value: string) {
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
+.process-flow-designer-floating-bar {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.process-flow-designer-floating-bar__inner {
+  display: flex;
+  width: min(95vw, 1680px);
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 32px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(248, 250, 252, 0.18) 100%);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px);
+  padding: 24px 30px;
+  font-size: 18px;
+}
+
+:deep(.process-flow-designer-floating-bar__button.el-button) {
+  min-height: 54px;
+  padding: 0 28px;
+  border-radius: 20px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+:deep(.process-flow-designer-floating-bar__button--success.el-button) {
+  box-shadow: 0 18px 36px rgba(34, 197, 94, 0.18);
+}
+
 @media (max-width: 1279px) {
-  .designer-side-scroll {
+  .flow-canvas-shell {
+    overflow: visible;
+  }
+
+  .flow-canvas-scroll {
     max-height: none;
-    overflow-y: visible;
-    padding-right: 0;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .flow-canvas-surface {
+    display: block;
+  }
+
+  .flow-track {
+    min-width: 0;
+  }
+
+}
+
+@media (max-width: 767px) {
+  .process-flow-designer-floating-bar__inner {
+    width: calc(100vw - 24px);
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 18px 16px;
+    font-size: 16px;
+  }
+
+  :deep(.process-flow-designer-floating-bar__button.el-button) {
+    flex: 1 1 calc(50% - 6px);
+    min-height: 48px;
+    padding: 0 16px;
+    font-size: 16px;
   }
 }
 </style>

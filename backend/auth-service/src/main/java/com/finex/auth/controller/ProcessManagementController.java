@@ -9,6 +9,9 @@ import com.finex.auth.dto.ProcessCustomArchiveSaveDTO;
 import com.finex.auth.dto.ProcessCustomArchiveStatusDTO;
 import com.finex.auth.dto.ProcessCustomArchiveSummaryVO;
 import com.finex.auth.dto.ProcessExpenseTypeDetailVO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignDetailVO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignSaveDTO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignSummaryVO;
 import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
 import com.finex.auth.dto.ProcessExpenseTypeStatusDTO;
@@ -30,12 +33,14 @@ import com.finex.auth.dto.ProcessTemplateFormOptionsVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.dto.ProcessTemplateSaveResultVO;
 import com.finex.auth.dto.ProcessTemplateTypeVO;
+import com.finex.auth.interceptor.TemplateSaveTraceInterceptor;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ProcessManagementService;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -49,6 +54,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/auth/process-management")
 @RequiredArgsConstructor
@@ -101,7 +107,7 @@ public class ProcessManagementController {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
         return Result.success(
                 "模板保存成功",
-                processManagementService.saveTemplate(dto, getCurrentUsername(request))
+                traceCreateTemplate(request, dto)
         );
     }
 
@@ -114,7 +120,7 @@ public class ProcessManagementController {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
         return Result.success(
                 "模板更新成功",
-                processManagementService.updateTemplate(id, dto, getCurrentUsername(request))
+                traceUpdateTemplate(id, request, dto)
         );
     }
 
@@ -243,6 +249,46 @@ public class ProcessManagementController {
     public Result<Boolean> deleteExpenseType(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
         return Result.success("Expense type deleted", processManagementService.deleteExpenseType(id));
+    }
+
+    @GetMapping("/expense-detail-designs")
+    public Result<List<ProcessExpenseDetailDesignSummaryVO>> listExpenseDetailDesigns(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.listExpenseDetailDesigns());
+    }
+
+    @GetMapping("/expense-detail-designs/{id}")
+    public Result<ProcessExpenseDetailDesignDetailVO> expenseDetailDesignDetail(
+            @PathVariable Long id,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.getExpenseDetailDesignDetail(id));
+    }
+
+    @PostMapping("/expense-detail-designs")
+    public Result<ProcessExpenseDetailDesignDetailVO> createExpenseDetailDesign(
+            @Valid @RequestBody ProcessExpenseDetailDesignSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
+        return Result.success("费用明细表单保存成功", processManagementService.createExpenseDetailDesign(dto));
+    }
+
+    @PutMapping("/expense-detail-designs/{id}")
+    public Result<ProcessExpenseDetailDesignDetailVO> updateExpenseDetailDesign(
+            @PathVariable Long id,
+            @Valid @RequestBody ProcessExpenseDetailDesignSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("费用明细表单更新成功", processManagementService.updateExpenseDetailDesign(id, dto));
+    }
+
+    @DeleteMapping("/expense-detail-designs/{id}")
+    public Result<Boolean> deleteExpenseDetailDesign(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("费用明细表单删除成功", processManagementService.deleteExpenseDetailDesign(id));
     }
 
     @GetMapping("/form-designs")
@@ -376,5 +422,98 @@ public class ProcessManagementController {
             return value;
         }
         return "流程管理员";
+    }
+    private ProcessTemplateSaveResultVO traceCreateTemplate(HttpServletRequest request, ProcessTemplateSaveDTO dto) {
+        String traceId = resolveTemplateSaveTraceId(request);
+        Long userId = getCurrentUserId(request);
+        String username = getCurrentUsername(request);
+        long startedAt = System.nanoTime();
+        log.info(
+                "[TemplateSaveTrace][{}][controller] createTemplate start userId={} username={} {}",
+                traceId,
+                userId,
+                username,
+                summarizeTemplatePayload(dto)
+        );
+        try {
+            ProcessTemplateSaveResultVO result = processManagementService.saveTemplate(dto, username);
+            log.info(
+                    "[TemplateSaveTrace][{}][controller] createTemplate success templateCode={} costMs={}",
+                    traceId,
+                    result.getTemplateCode(),
+                    elapsedMillis(startedAt)
+            );
+            return result;
+        } catch (RuntimeException ex) {
+            log.error(
+                    "[TemplateSaveTrace][{}][controller] createTemplate failed after {}ms: {}",
+                    traceId,
+                    elapsedMillis(startedAt),
+                    ex.getMessage(),
+                    ex
+            );
+            throw ex;
+        }
+    }
+
+    private ProcessTemplateSaveResultVO traceUpdateTemplate(Long id, HttpServletRequest request, ProcessTemplateSaveDTO dto) {
+        String traceId = resolveTemplateSaveTraceId(request);
+        Long userId = getCurrentUserId(request);
+        String username = getCurrentUsername(request);
+        long startedAt = System.nanoTime();
+        log.info(
+                "[TemplateSaveTrace][{}][controller] updateTemplate start templateId={} userId={} username={} {}",
+                traceId,
+                id,
+                userId,
+                username,
+                summarizeTemplatePayload(dto)
+        );
+        try {
+            ProcessTemplateSaveResultVO result = processManagementService.updateTemplate(id, dto, username);
+            log.info(
+                    "[TemplateSaveTrace][{}][controller] updateTemplate success templateId={} templateCode={} costMs={}",
+                    traceId,
+                    id,
+                    result.getTemplateCode(),
+                    elapsedMillis(startedAt)
+            );
+            return result;
+        } catch (RuntimeException ex) {
+            log.error(
+                    "[TemplateSaveTrace][{}][controller] updateTemplate failed templateId={} after {}ms: {}",
+                    traceId,
+                    id,
+                    elapsedMillis(startedAt),
+                    ex.getMessage(),
+                    ex
+            );
+            throw ex;
+        }
+    }
+
+    private String resolveTemplateSaveTraceId(HttpServletRequest request) {
+        Object traceId = request.getAttribute(TemplateSaveTraceInterceptor.TRACE_ATTRIBUTE);
+        if (traceId instanceof String value && !value.isBlank()) {
+            return value;
+        }
+        String traceHeader = request.getHeader(TemplateSaveTraceInterceptor.TRACE_HEADER);
+        if (traceHeader != null && !traceHeader.isBlank()) {
+            return traceHeader.trim();
+        }
+        return "no-trace-id";
+    }
+
+    private String summarizeTemplatePayload(ProcessTemplateSaveDTO dto) {
+        return "templateType=" + dto.getTemplateType()
+                + ", templateName=" + dto.getTemplateName()
+                + ", formDesign=" + dto.getFormDesign()
+                + ", approvalFlow=" + dto.getApprovalFlow()
+                + ", expenseDetailDesign=" + dto.getExpenseDetailDesign()
+                + ", enabled=" + dto.getEnabled();
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
     }
 }

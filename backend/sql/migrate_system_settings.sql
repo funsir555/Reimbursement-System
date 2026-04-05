@@ -347,7 +347,7 @@ FROM (
     UNION ALL SELECT 'expense:approval:view', 'Expense Approval', 'MENU', p.id, 'expense', '/expense/approval', 303, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:payment:bank_link:view', 'Expense Bank Link', 'MENU', p.id, 'expense', '/expense/payment/bank-link', 304, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:documents:view', 'Expense Documents', 'MENU', p.id, 'expense', '/expense/documents', 305, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
-    UNION ALL SELECT 'expense:voucher_generation:view', 'Expense Voucher Generation', 'MENU', p.id, 'expense', '/expense/voucher-generation', 306, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
+    UNION ALL SELECT 'expense:voucher_generation:view', 'Expense Voucher Generation', 'MENU', p.id, 'expense', '/expense/workbench/process-management', 306, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:process_management:view', 'Expense Process Management', 'MENU', p.id, 'expense', '/expense/workbench/process-management', 307, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:budget_management:view', 'Expense Budget Management', 'MENU', p.id, 'expense', '/expense/workbench/budget-management', 308, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'finance:general_ledger:new_voucher:view', 'Finance New Voucher', 'MENU', p.id, 'finance', '/finance/general-ledger/new-voucher', 401, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
@@ -362,6 +362,7 @@ FROM (
     UNION ALL SELECT 'finance:archives:suppliers:view', 'Finance Supplier Archive', 'MENU', p.id, 'finance', '/finance/archives/suppliers', 410, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:archives:employees:view', 'Finance Employee Archive', 'MENU', p.id, 'finance', '/finance/archives/employees', 411, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:archives:departments:view', 'Finance Department Archive', 'MENU', p.id, 'finance', '/finance/archives/departments', 412, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
+    UNION ALL SELECT 'finance:archives:account_subjects:view', 'Finance Account Subjects', 'MENU', p.id, 'finance', '/finance/archives/account-subjects', 413, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'archives:invoices:view', 'Invoice Archive', 'MENU', p.id, 'archives', '/archives/invoices', 501, 1 FROM sys_permission p WHERE p.permission_code = 'archives:menu'
     UNION ALL SELECT 'archives:account_books:view', 'Account Books', 'MENU', p.id, 'archives', '/archives/account-books', 502, 1 FROM sys_permission p WHERE p.permission_code = 'archives:menu'
 ) t
@@ -398,6 +399,16 @@ FROM (
     UNION ALL SELECT 'expense:approval:reject', 'Expense Approval Reject', p.id, 'expense', 332 FROM sys_permission p WHERE p.permission_code = 'expense:approval:view'
     UNION ALL SELECT 'expense:payment:bank_link:pay', 'Expense Bank Link Pay', p.id, 'expense', 341 FROM sys_permission p WHERE p.permission_code = 'expense:payment:bank_link:view'
     UNION ALL SELECT 'expense:voucher_generation:generate', 'Expense Voucher Generate', p.id, 'expense', 351 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
+    ('expense:voucher_generation:mapping:view', CONVERT(0xe587ade8af81e7a791e79baee698a0e5b084 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3062, 1),
+    ('expense:voucher_generation:mapping:edit', CONVERT(0xe7bc96e8be91e587ade8af81e7a791e79baee698a0e5b084 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3063, 1),
+    ('expense:voucher_generation:push:view', CONVERT(0xe68ea8e98081e587ade8af81 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3064, 1),
+    ('expense:voucher_generation:push:execute', CONVERT(0xe689a7e8a18ce587ade8af81e68ea8e98081 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3065, 1),
+    ('expense:voucher_generation:query:view', CONVERT(0xe587ade8af81e69fa5e8afa2 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3066, 1),
+    UNION ALL SELECT 'expense:voucher_generation:mapping:view', 'Expense Voucher Mapping View', p.id, 'expense', 352 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
+    UNION ALL SELECT 'expense:voucher_generation:mapping:edit', 'Expense Voucher Mapping Edit', p.id, 'expense', 353 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
+    UNION ALL SELECT 'expense:voucher_generation:push:view', 'Expense Voucher Push View', p.id, 'expense', 354 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
+    UNION ALL SELECT 'expense:voucher_generation:push:execute', 'Expense Voucher Push Execute', p.id, 'expense', 355 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
+    UNION ALL SELECT 'expense:voucher_generation:query:view', 'Expense Voucher Query View', p.id, 'expense', 356 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
     UNION ALL SELECT 'expense:process_management:create', 'Process Management Create', p.id, 'expense', 361 FROM sys_permission p WHERE p.permission_code = 'expense:process_management:view'
     UNION ALL SELECT 'expense:process_management:edit', 'Process Management Edit', p.id, 'expense', 362 FROM sys_permission p WHERE p.permission_code = 'expense:process_management:view'
     UNION ALL SELECT 'expense:process_management:publish', 'Process Management Publish', p.id, 'expense', 363 FROM sys_permission p WHERE p.permission_code = 'expense:process_management:view'
@@ -410,6 +421,12 @@ FROM (
     UNION ALL SELECT 'finance:fixed_assets:create', 'Finance Fixed Assets Create', p.id, 'finance', 461 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
     UNION ALL SELECT 'finance:fixed_assets:edit', 'Finance Fixed Assets Edit', p.id, 'finance', 462 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
     UNION ALL SELECT 'finance:fixed_assets:delete', 'Finance Fixed Assets Delete', p.id, 'finance', 463 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
+    UNION ALL SELECT 'finance:fixed_assets:import', 'Finance Fixed Assets Import', p.id, 'finance', 464 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
+    UNION ALL SELECT 'finance:fixed_assets:change', 'Finance Fixed Assets Change', p.id, 'finance', 465 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
+    UNION ALL SELECT 'finance:fixed_assets:depreciate', 'Finance Fixed Assets Depreciate', p.id, 'finance', 466 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
+    UNION ALL SELECT 'finance:fixed_assets:dispose', 'Finance Fixed Assets Dispose', p.id, 'finance', 467 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
+    UNION ALL SELECT 'finance:fixed_assets:close_period', 'Finance Fixed Assets Close Period', p.id, 'finance', 468 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
+    UNION ALL SELECT 'finance:fixed_assets:view_voucher_link', 'Finance Fixed Assets View Voucher Link', p.id, 'finance', 469 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
     UNION ALL SELECT 'finance:reports:balance_sheet:export', 'Finance Balance Sheet Export', p.id, 'finance', 471 FROM sys_permission p WHERE p.permission_code = 'finance:reports:balance_sheet:view'
     UNION ALL SELECT 'finance:reports:income_statement:export', 'Finance Income Statement Export', p.id, 'finance', 481 FROM sys_permission p WHERE p.permission_code = 'finance:reports:income_statement:view'
     UNION ALL SELECT 'finance:reports:cash_flow:export', 'Finance Cash Flow Export', p.id, 'finance', 491 FROM sys_permission p WHERE p.permission_code = 'finance:reports:cash_flow:view'
@@ -527,7 +544,7 @@ INSERT INTO tmp_permission_seed (
     ('expense:payment:bank_link:view', '银企直连', 'MENU', 'expense:payment:menu', 'expense', '/expense/payment/bank-link', 3041, 1),
     ('expense:payment:bank_link:pay', '发起支付', 'BUTTON', 'expense:payment:bank_link:view', 'expense', NULL, 30411, 1),
     ('expense:documents:view', '单据查询', 'MENU', 'expense:menu', 'expense', '/expense/documents', 305, 1),
-    ('expense:voucher_generation:view', '凭证生成', 'MENU', 'expense:menu', 'expense', '/expense/voucher-generation', 306, 1),
+    ('expense:voucher_generation:view', CONVERT(0xe587ade8af81e7949fe68890 USING utf8mb4), 'MENU', 'expense:menu', 'expense', '/expense/workbench/process-management', 306, 1),
     ('expense:voucher_generation:generate', '生成凭证', 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3061, 1),
     ('expense:workbench:menu', '管理工作台', 'MENU', 'expense:menu', 'expense-workbench', '/expense/workbench', 307, 1),
     ('expense:process_management:view', '流程管理', 'MENU', 'expense:workbench:menu', 'expense', '/expense/workbench/process-management', 3071, 1),
@@ -546,12 +563,25 @@ INSERT INTO tmp_permission_seed (
     ('finance:general_ledger:review_voucher:view', '审核凭证', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/review-voucher', 4013, 1),
     ('finance:general_ledger:review_voucher:review', '审核通过', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40131, 1),
     ('finance:general_ledger:review_voucher:unreview', '取消审核', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40132, 1),
-    ('finance:general_ledger:balance_sheet:view', '余额表', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/balance-sheet', 4014, 1),
-    ('finance:general_ledger:balance_sheet:export', '导出余额表', 'BUTTON', 'finance:general_ledger:balance_sheet:view', 'finance', NULL, 40141, 1),
+    ('finance:general_ledger:balance_sheet:view', '总账余额表', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/balance-sheet', 4014, 1),
+    ('finance:general_ledger:balance_sheet:export', '导出总账余额表', 'BUTTON', 'finance:general_ledger:balance_sheet:view', 'finance', NULL, 40141, 1),
+    ('finance:general_ledger:detail_ledger:view', '明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/detail-ledger', 4015, 1),
+    ('finance:general_ledger:general_ledger:view', '总分类账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/general-ledger', 4016, 1),
+    ('finance:general_ledger:project_detail_ledger:view', '项目明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/project-detail-ledger', 4017, 1),
+    ('finance:general_ledger:supplier_detail_ledger:view', '供应商明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/supplier-detail-ledger', 4018, 1),
+    ('finance:general_ledger:customer_detail_ledger:view', '客户明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/customer-detail-ledger', 4019, 1),
+    ('finance:general_ledger:personal_detail_ledger:view', '个人明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/personal-detail-ledger', 4020, 1),
+    ('finance:general_ledger:quantity_amount_detail_ledger:view', '数量金额明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/quantity-amount-detail-ledger', 4021, 1),
     ('finance:fixed_assets:view', '固定资产', 'MENU', 'finance:menu', 'finance', '/finance/fixed-assets', 402, 1),
     ('finance:fixed_assets:create', '新增固定资产', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4021, 1),
     ('finance:fixed_assets:edit', '编辑固定资产', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4022, 1),
     ('finance:fixed_assets:delete', '删除固定资产', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4023, 1),
+    ('finance:fixed_assets:import', '固定资产期初导入', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4024, 1),
+    ('finance:fixed_assets:change', '固定资产变动', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4025, 1),
+    ('finance:fixed_assets:depreciate', '固定资产折旧', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4026, 1),
+    ('finance:fixed_assets:dispose', '固定资产处置', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4027, 1),
+    ('finance:fixed_assets:close_period', '固定资产期间结账', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4028, 1),
+    ('finance:fixed_assets:view_voucher_link', '固定资产凭证联查', 'BUTTON', 'finance:fixed_assets:view', 'finance', NULL, 4029, 1),
     ('finance:reports:menu', '财务报表', 'MENU', 'finance:menu', 'finance-reports', '/finance/reports', 403, 1),
     ('finance:reports:balance_sheet:view', '资产负债表', 'MENU', 'finance:reports:menu', 'finance', '/finance/reports/balance-sheet', 4031, 1),
     ('finance:reports:balance_sheet:export', '导出资产负债表', 'BUTTON', 'finance:reports:balance_sheet:view', 'finance', NULL, 40311, 1),
@@ -584,6 +614,7 @@ INSERT INTO tmp_permission_seed (
     ('finance:archives:departments:delete', '删除部门档案', 'BUTTON', 'finance:archives:departments:view', 'finance', NULL, 40443, 1),
     ('finance:archives:departments:import', '导入部门档案', 'BUTTON', 'finance:archives:departments:view', 'finance', NULL, 40444, 1),
     ('finance:archives:departments:export', '导出部门档案', 'BUTTON', 'finance:archives:departments:view', 'finance', NULL, 40445, 1),
+    ('finance:archives:account_subjects:view', '会计科目', 'MENU', 'finance:archives:menu', 'finance', '/finance/archives/account-subjects', 4045, 1),
 
     ('archives:menu', '电子档案', 'MENU', NULL, 'archives', '/archives', 50, 1),
     ('archives:invoices:view', '发票管理', 'MENU', 'archives:menu', 'archives', '/archives/invoices', 501, 1),

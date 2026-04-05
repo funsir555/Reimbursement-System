@@ -26,6 +26,11 @@ export type BusinessComponentDefinition = {
   defaultDisplayLabel?: string
 }
 
+export type DocumentTemplateTypeOption = {
+  value: string
+  label: string
+}
+
 export type FormBlockQuickActionState = 'expandable' | 'collapsible' | 'hidden'
 
 export const FORM_PERMISSION_STAGE_OPTIONS: Array<{ key: ProcessFormPermissionStage; label: string }> = [
@@ -78,6 +83,16 @@ export const CONTROL_PALETTE_CATEGORIES = [
   '上传展示'
 ] as const
 
+export const DOCUMENT_TEMPLATE_TYPE_OPTIONS: DocumentTemplateTypeOption[] = [
+  { value: 'report', label: '报销单' },
+  { value: 'application', label: '申请单' },
+  { value: 'contract', label: '合同单' },
+  { value: 'loan', label: '借款单' }
+]
+
+export const RELATED_DOCUMENT_ALLOWED_TEMPLATE_TYPES = ['report', 'application', 'contract', 'loan'] as const
+export const WRITEOFF_DOCUMENT_ALLOWED_TEMPLATE_TYPES = ['report', 'loan'] as const
+
 export const BUSINESS_COMPONENT_DEFINITIONS: BusinessComponentDefinition[] = [
   {
     code: 'counterparty',
@@ -98,10 +113,28 @@ export const BUSINESS_COMPONENT_DEFINITIONS: BusinessComponentDefinition[] = [
     previewFields: ['开户行', '账户名称', '银行账号']
   },
   {
+    code: 'payment-company',
+    label: '付款公司',
+    description: '从系统维护的公司主数据中选择付款公司，提交时保存绑定的公司记录。',
+    previewFields: ['公司名称', '公司编码', '付款主体']
+  },
+  {
     code: 'undertake-department',
     label: '承担部门',
     description: '用于归集费用归属部门，可设置固定默认部门或提单人所在部门。',
     previewFields: ['费用归属部门', '默认部门', '提单人所在部门']
+  },
+  {
+    code: 'related-document',
+    label: '关联单据',
+    description: '弹窗选择并关联已审批通过的报销单、申请单、合同单或借款单。',
+    previewFields: ['单据编号', '单据标题', '单据状态', '单据类型']
+  },
+  {
+    code: 'writeoff-document',
+    label: '核销单据',
+    description: '选择借款单或可核销的报销单，并逐条填写本次核销金额。',
+    previewFields: ['单据编号', '可核销余额', '核销来源', '核销金额']
   },
   {
     code: 'bank-push-summary',
@@ -119,10 +152,51 @@ export function buildBusinessComponentPaletteItems() {
     description: definition.description,
     kind: 'BUSINESS_COMPONENT',
     span: 1,
-    props: definition.code === 'undertake-department'
-      ? { componentCode: definition.code, defaultDeptMode: 'NONE', defaultDeptId: '' }
-      : { componentCode: definition.code }
+    props: buildBusinessComponentProps(definition.code)
   }))
+}
+
+function buildBusinessComponentProps(componentCode: string) {
+  if (componentCode === 'undertake-department') {
+    return { componentCode, defaultDeptMode: 'NONE', defaultDeptId: '' }
+  }
+  if (componentCode === 'related-document') {
+    return {
+      componentCode,
+      allowedTemplateTypes: [...RELATED_DOCUMENT_ALLOWED_TEMPLATE_TYPES]
+    }
+  }
+  if (componentCode === 'writeoff-document') {
+    return {
+      componentCode,
+      allowedTemplateTypes: [...WRITEOFF_DOCUMENT_ALLOWED_TEMPLATE_TYPES]
+    }
+  }
+  return { componentCode }
+}
+
+export function normalizeBusinessComponentAllowedTemplateTypes(componentCode: string, rawValue: unknown) {
+  const allowedValues = componentCode === 'writeoff-document'
+    ? [...WRITEOFF_DOCUMENT_ALLOWED_TEMPLATE_TYPES]
+    : [...RELATED_DOCUMENT_ALLOWED_TEMPLATE_TYPES]
+
+  if (!Array.isArray(rawValue) || rawValue.length === 0) {
+    return allowedValues
+  }
+
+  const normalized = rawValue
+    .map((item) => normalizeDocumentTemplateType(item))
+    .filter((item, index, list) => allowedValues.includes(item) && list.indexOf(item) === index)
+
+  return normalized.length ? normalized : allowedValues
+}
+
+function normalizeDocumentTemplateType(value: unknown) {
+  const normalized = typeof value === 'string' ? value.trim() : String(value || '').trim()
+  if (normalized === 'application' || normalized === 'contract' || normalized === 'loan') {
+    return normalized
+  }
+  return 'report'
 }
 
 export function buildSharedFieldPaletteItems(archives: ProcessCustomArchiveSummary[]) {

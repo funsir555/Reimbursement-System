@@ -1,6 +1,9 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyValue;
 import lombok.Data;
+
+import java.math.BigDecimal;
 
 import java.util.List;
 
@@ -16,7 +19,8 @@ public class DashboardVO {
 
     private Integer pendingApprovalDelta;
 
-    private Double monthlyExpenseAmount;
+    @MoneyValue
+    private BigDecimal monthlyExpenseAmount;
 
     private Integer monthlyExpenseCount;
 
@@ -24,7 +28,8 @@ public class DashboardVO {
 
     private Integer monthlyInvoiceCount;
 
-    private Double budgetRemaining;
+    @MoneyValue
+    private BigDecimal budgetRemaining;
 
     private Integer budgetUsageRate;
 

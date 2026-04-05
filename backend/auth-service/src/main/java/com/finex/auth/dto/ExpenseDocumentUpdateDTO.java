@@ -1,0 +1,17 @@
+package com.finex.auth.dto;
+
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Data
+public class ExpenseDocumentUpdateDTO {
+
+    @NotNull
+    private Map<String, Object> formData = new LinkedHashMap<>();
+
+    private List<ExpenseDetailInstanceDTO> expenseDetails;
+}

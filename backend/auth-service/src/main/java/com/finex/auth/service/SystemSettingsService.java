@@ -48,7 +48,7 @@ public interface SystemSettingsService {
 
     Boolean deleteRole(Long id);
 
-    Boolean assignRolePermissions(Long roleId, RolePermissionAssignDTO dto);
+    Boolean assignRolePermissions(Long roleId, RolePermissionAssignDTO dto, Long currentUserId);
 
     Boolean assignUserRoles(Long userId, UserRoleAssignDTO dto);
 

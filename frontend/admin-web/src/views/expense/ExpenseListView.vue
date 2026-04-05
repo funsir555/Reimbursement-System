@@ -1,94 +1,188 @@
-<template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-800">我的报销</h1>
-        <p class="mt-1 text-gray-500">管理你提交的报销单据</p>
-      </div>
-      <el-button
-        v-if="canAny(['expense:create:view', 'expense:create:create'])"
-        type="primary"
-        :icon="Plus"
-        @click="goCreateExpense"
-      >
-        新建报销
-      </el-button>
-    </div>
+﻿<template>
+  <div class="expense-wb-page expense-wb-page--list space-y-5">
+    <section class="expense-wb-stat-grid expense-wb-stat-grid--compact">
+      <article v-for="stat in listStats" :key="stat.label" class="expense-wb-stat-card expense-wb-stat-card--compact">
+        <div class="expense-wb-stat-card__top">
+          <div>
+            <p class="expense-wb-stat-card__label">{{ stat.label }}</p>
+            <p class="expense-wb-stat-card__value">{{ stat.value }}</p>
+          </div>
+          <span class="expense-wb-stat-card__icon" :class="`expense-wb-stat-card__icon--${stat.tone}`">
+            <el-icon :size="22">
+              <component :is="stat.icon" />
+            </el-icon>
+          </span>
+        </div>
+      </article>
+    </section>
 
-    <el-card>
-      <div class="flex flex-wrap gap-4">
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索单号或事由"
-          class="w-64"
-          :prefix-icon="Search"
-        />
-        <el-select v-model="filterStatus" placeholder="报销状态" class="w-40">
-          <el-option label="全部" value="" />
-          <el-option label="审批中" value="pending" />
-          <el-option label="已通过" value="approved" />
-          <el-option label="已驳回" value="rejected" />
-          <el-option label="草稿" value="draft" />
-        </el-select>
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-        />
-        <el-button type="primary" :icon="Search" @click="currentPage = 1">查询</el-button>
-        <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
+    <el-card class="expense-wb-toolbar expense-wb-toolbar--compact">
+      <div class="expense-wb-toolbar__row expense-wb-toolbar__row--compact expense-wb-toolbar__main" data-testid="expense-toolbar-main">
+        <div class="expense-wb-toolbar__heading expense-wb-toolbar__heading--compact">
+          <p class="expense-wb-toolbar__title">筛选与检索</p>
+        </div>
+
+        <div class="expense-wb-toolbar__group">
+          <el-button
+            data-testid="expense-advanced-filter-trigger"
+            :type="showAdvancedFilters ? 'primary' : 'default'"
+            :icon="Filter"
+            @click="showAdvancedFilters = !showAdvancedFilters"
+          >
+            高级筛选
+          </el-button>
+          <el-popover placement="bottom-end" :width="360" trigger="click">
+            <template #reference>
+              <el-button :icon="Operation">显示字段</el-button>
+            </template>
+            <div class="expense-wb-column-panel">
+              <div class="expense-wb-column-panel__header">
+                <p class="expense-wb-column-panel__title">选择列表显示字段</p>
+                <el-button link type="primary" @click="restoreDefaultColumns">恢复默认</el-button>
+              </div>
+              <div class="expense-wb-column-panel__grid">
+                <div
+                  v-for="column in columnPanelItems"
+                  :key="column.key"
+                  class="expense-wb-column-item"
+                  :class="{
+                    'is-dragging': draggingColumnKey === column.key,
+                    'is-drop-target': dropTargetColumnKey === column.key
+                  }"
+                  draggable="true"
+                  @dragstart="handleColumnDragStart(column.key)"
+                  @dragover.prevent="handleColumnDragOver(column.key)"
+                  @drop.prevent="handleColumnDrop(column.key)"
+                  @dragend="handleColumnDragEnd"
+                >
+                  <span class="expense-wb-column-item__handle">⋮⋮</span>
+                  <el-checkbox
+                    :model-value="visibleColumns.includes(column.key)"
+                    @change="handleColumnVisibilityToggle(column.key, $event)"
+                  >
+                    {{ column.label }}
+                  </el-checkbox>
+                </div>
+              </div>
+            </div>
+          </el-popover>
+
+          <div class="expense-wb-toolbar__actions">
+            <el-button
+              v-if="canAny([...EXPENSE_CREATE_ENTRY_PERMISSION_CODES])"
+              type="primary"
+              :icon="Plus"
+              @click="goCreateExpense"
+            >
+              新建报销
+            </el-button>
+            <el-button :icon="Refresh" @click="reloadList">刷新列表</el-button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="showAdvancedFilters"
+        class="expense-wb-advanced-panel expense-wb-advanced-panel--dropdown"
+        data-testid="expense-advanced-panel"
+      >
+        <div class="expense-wb-advanced-grid expense-wb-advanced-grid--four-column" data-testid="expense-advanced-grid">
+          <el-input v-model="filters.documentCode" clearable placeholder="单据编号" />
+          <el-input v-model="filters.submitterName" clearable placeholder="提单人" />
+          <el-input v-model="filters.templateName" clearable placeholder="模板名称" />
+          <el-select v-model="filters.documentStatusLabel" clearable placeholder="状态">
+            <el-option label="全部" value="" />
+            <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+          </el-select>
+          <el-date-picker
+            v-model="filters.submittedDateRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            range-separator="至"
+            start-placeholder="提交开始日期"
+            end-placeholder="提交结束日期"
+          />
+          <el-date-picker
+            v-model="filters.paymentDateRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            range-separator="至"
+            start-placeholder="支付开始日期"
+            end-placeholder="支付结束日期"
+          />
+          <el-input v-model="filters.paymentCompanyName" clearable placeholder="付款公司" />
+          <el-input v-model="filters.payeeName" clearable placeholder="收款人" />
+          <el-input v-model="filters.counterpartyName" clearable placeholder="往来单位" />
+          <el-input v-model="filters.submitterDeptName" clearable placeholder="提单人部门" />
+          <el-input v-model="filters.undertakeDepartmentName" clearable placeholder="承担部门" />
+          <el-input v-model="filters.tagName" clearable placeholder="标签" />
+        </div>
+        <div class="expense-wb-advanced-panel__actions">
+          <el-button type="primary" @click="currentPage = 1">查询</el-button>
+          <el-button @click="resetFilters">重置</el-button>
+        </div>
       </div>
     </el-card>
 
-    <el-card>
-      <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading">
-        <el-table-column prop="no" label="报销单号" width="160">
+    <el-card class="expense-wb-panel expense-wb-table-shell">
+      <div class="expense-wb-table-shell__header">
+        <div>
+          <p class="expense-wb-table-shell__title">报销单据列表</p>
+        </div>
+        <div class="expense-wb-pill-cluster">
+          <span class="expense-wb-soft-badge">总数 {{ expenseList.length }}</span>
+          <span class="expense-wb-soft-badge expense-wb-soft-badge--success">已过滤 {{ filteredExpenseList.length }}</span>
+        </div>
+      </div>
+
+      <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading" @header-dragend="handleHeaderDragEnd">
+        <el-table-column
+          v-for="column in visibleColumnDefinitions"
+          :key="column.key"
+          :column-key="column.key"
+          :prop="column.key"
+          :label="column.label"
+          :width="column.width"
+          :min-width="column.minWidth"
+          resizable
+          show-overflow-tooltip
+        >
           <template #default="{ row }">
-            <button class="cursor-pointer font-medium text-blue-600 hover:underline" type="button" @click="openDetail(row)">
-              {{ row.no }}
+            <button
+              v-if="column.key === 'documentCode'"
+              class="cursor-pointer font-medium text-blue-600 hover:underline"
+              type="button"
+              @click="openDetail(row)"
+            >
+              {{ resolveColumnText(row, column.key) }}
             </button>
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="type" label="报销类型" width="120">
-          <template #default="{ row }">
-            <el-tag size="small" :type="getTypeTagType(row.type)">
-              {{ row.type }}
+            <span v-else-if="column.key === 'amount'" class="font-bold text-slate-800">
+              {{ formatAmount(resolveColumnText(row, column.key)) }}
+            </span>
+            <el-tag v-else-if="column.key === 'documentStatusLabel'" :type="getStatusType(resolveDocumentStatusLabel(row))">
+              {{ resolveDocumentStatusLabel(row) || '-' }}
             </el-tag>
+            <span v-else>{{ resolveColumnText(row, column.key) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="reason" label="报销事由" show-overflow-tooltip />
-
-        <el-table-column prop="amount" label="金额" width="140">
-          <template #default="{ row }">
-            <span class="font-bold text-gray-800">¥ {{ row.amount.toLocaleString() }}</span>
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="date" label="提交日期" width="120" />
-
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right" :resizable="false">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
-            <el-button v-if="row.status === '草稿' && can('expense:list:edit')" link type="primary" size="small">编辑</el-button>
-            <el-button v-if="row.status === '草稿' && can('expense:list:delete')" link type="danger" size="small">删除</el-button>
-            <el-button v-if="row.status === '已驳回' && can('expense:list:submit')" link type="warning" size="small">重新提交</el-button>
+            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:edit')" link type="primary" size="small">
+              编辑
+            </el-button>
+            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:delete')" link type="danger" size="small">
+              删除
+            </el-button>
+            <el-button v-if="resolveDocumentStatusLabel(row) === '已驳回' && can('expense:list:submit')" link type="warning" size="small">
+              重新提交
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <div class="mt-6 flex justify-end">
+      <div class="expense-wb-pagination">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -105,69 +199,129 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import {
+  CircleCheckFilled,
+  Clock,
+  EditPen,
+  Filter,
+  Operation,
+  Plus,
+  Refresh,
+  Tickets
+} from '@element-plus/icons-vue'
 import { expenseApi, type ExpenseSummary } from '@/api'
-import { hasAnyPermission, hasPermission, readStoredUser } from '@/utils/permissions'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import {
+  EXPENSE_CREATE_ENTRY_PERMISSION_CODES,
+  hasAnyPermission,
+  hasPermission,
+  readStoredUser
+} from '@/utils/permissions'
+import {
+  EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS,
+  EXPENSE_WORKBENCH_DEFAULT_COLUMNS,
+  EXPENSE_WORKBENCH_DEFAULT_COLUMN_ORDER,
+  EXPENSE_WORKBENCH_STATUS_OPTIONS,
+  EXPENSE_WORKBENCH_STORAGE_KEYS,
+  EXPENSE_WORKBENCH_COLUMNS,
+  buildColumnGridDisplayOrder,
+  createExpenseWorkbenchFilters,
+  filterExpenseWorkbenchRows,
+  loadColumnOrder,
+  loadColumnWidths,
+  loadVisibleColumns,
+  moveColumnOrder,
+  resolveColumnText,
+  resolveDocumentStatusLabel,
+  resolveOrderedColumnDefinitions,
+  resolveVisibleColumnDefinitions,
+  saveColumnOrder,
+  saveColumnWidth,
+  saveVisibleColumns,
+  sortVisibleColumnsByOrder,
+  type ExpenseWorkbenchColumnKey
+} from './expenseWorkbenchListHelper'
 
-const searchQuery = ref('')
-const filterStatus = ref('')
-const dateRange = ref<string[]>([])
 const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const expenseList = ref<ExpenseSummary[]>([])
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
+const filters = ref(createExpenseWorkbenchFilters())
+const showAdvancedFilters = ref(false)
 const router = useRouter()
 
+const allowedColumnKeys: ExpenseWorkbenchColumnKey[] = EXPENSE_WORKBENCH_COLUMNS
+  .map((item) => item.key)
+  .filter((key) => key !== 'taskCreatedAt')
+const columnOrder = ref<ExpenseWorkbenchColumnKey[]>(
+  loadColumnOrder(
+    EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS.list,
+    EXPENSE_WORKBENCH_DEFAULT_COLUMN_ORDER,
+    allowedColumnKeys
+  )
+)
+const columnWidths = ref(loadColumnWidths(allowedColumnKeys))
+const visibleColumns = ref<ExpenseWorkbenchColumnKey[]>(
+  loadVisibleColumns(
+    EXPENSE_WORKBENCH_STORAGE_KEYS.list,
+    EXPENSE_WORKBENCH_DEFAULT_COLUMNS.list,
+    allowedColumnKeys
+  )
+)
+const draggingColumnKey = ref<ExpenseWorkbenchColumnKey | ''>('')
+const dropTargetColumnKey = ref<ExpenseWorkbenchColumnKey | ''>('')
+
+const statusOptions = EXPENSE_WORKBENCH_STATUS_OPTIONS
 const can = (code: string) => hasPermission(code, permissionCodes.value)
 const canAny = (codes: string[]) => hasAnyPermission(codes, permissionCodes.value)
 
 onMounted(async () => {
-  loading.value = true
-  try {
-    const res = await expenseApi.list()
-    expenseList.value = res.data
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载报销列表失败')
-  } finally {
-    loading.value = false
-  }
+  await loadExpenseList()
 })
 
-const filteredExpenseList = computed(() =>
-  expenseList.value.filter((item) => {
-    const matchedKeyword =
-      !searchQuery.value ||
-      item.no.includes(searchQuery.value) ||
-      item.reason.includes(searchQuery.value)
-
-    const matchedStatus =
-      !filterStatus.value ||
-      (filterStatus.value === 'pending' && item.status === '审批中') ||
-      (filterStatus.value === 'approved' && item.status === '已通过') ||
-      (filterStatus.value === 'rejected' && item.status === '已驳回') ||
-      (filterStatus.value === 'draft' && item.status === '草稿')
-
-    const [startDate, endDate] = dateRange.value
-    const matchedDate = !startDate || !endDate || (item.date >= startDate && item.date <= endDate)
-
-    return matchedKeyword && matchedStatus && matchedDate
-  })
-)
+const filteredExpenseList = computed(() => filterExpenseWorkbenchRows(expenseList.value, filters.value))
 
 const pagedExpenseList = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredExpenseList.value.slice(start, start + pageSize.value)
 })
 
-function getTypeTagType(type: string) {
-  const map: Record<string, string> = {
-    差旅费: 'primary',
-    交通费: 'success',
-    招待费: 'warning',
-    办公费: 'info'
+const listStats = computed(() => [
+  {
+    label: '全部单据',
+    value: expenseList.value.length,
+    icon: Tickets,
+    tone: 'blue'
+  },
+  {
+    label: '审批中',
+    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '审批中').length,
+    icon: Clock,
+    tone: 'amber'
+  },
+  {
+    label: '已通过',
+    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '已通过').length,
+    icon: CircleCheckFilled,
+    tone: 'green'
+  },
+  {
+    label: '草稿中',
+    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '草稿').length,
+    icon: EditPen,
+    tone: 'rose'
   }
-  return map[type] || ''
+])
+
+const columnOptions = computed(() => resolveOrderedColumnDefinitions(columnOrder.value))
+const columnPanelItems = computed(() => buildColumnGridDisplayOrder(columnOptions.value))
+const visibleColumnDefinitions = computed(() =>
+  resolveVisibleColumnDefinitions(visibleColumns.value, columnOrder.value, columnWidths.value)
+)
+
+function formatAmount(value: unknown) {
+  const amount = Number(value || 0)
+  return `¥ ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function getStatusType(status: string) {
@@ -175,16 +329,82 @@ function getStatusType(status: string) {
     审批中: 'warning',
     已通过: 'success',
     已驳回: 'danger',
-    草稿: 'info'
+    草稿: 'info',
+    流程异常: 'info'
   }
   return map[status] || 'info'
 }
 
 function resetFilters() {
-  searchQuery.value = ''
-  filterStatus.value = ''
-  dateRange.value = []
+  filters.value = createExpenseWorkbenchFilters()
   currentPage.value = 1
+}
+
+function handleVisibleColumnsChange(nextValue: ExpenseWorkbenchColumnKey[] | string[]) {
+  const normalized = nextValue.filter(
+    (item): item is ExpenseWorkbenchColumnKey => allowedColumnKeys.includes(item as ExpenseWorkbenchColumnKey)
+  ) as ExpenseWorkbenchColumnKey[]
+  if (!normalized.length) {
+    ElMessage.warning('至少保留一个显示字段')
+    return
+  }
+  visibleColumns.value = sortVisibleColumnsByOrder(normalized, columnOrder.value)
+  saveVisibleColumns(EXPENSE_WORKBENCH_STORAGE_KEYS.list, visibleColumns.value)
+}
+
+function restoreDefaultColumns() {
+  visibleColumns.value = [...EXPENSE_WORKBENCH_DEFAULT_COLUMNS.list]
+  columnOrder.value = EXPENSE_WORKBENCH_DEFAULT_COLUMN_ORDER.filter((key) => allowedColumnKeys.includes(key))
+  saveVisibleColumns(EXPENSE_WORKBENCH_STORAGE_KEYS.list, visibleColumns.value)
+  saveColumnOrder(EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS.list, columnOrder.value)
+}
+
+function handleColumnVisibilityToggle(columnKey: ExpenseWorkbenchColumnKey, checked: unknown) {
+  const nextVisibleColumns = checked
+    ? [...new Set([...visibleColumns.value, columnKey])]
+    : visibleColumns.value.filter((key) => key !== columnKey)
+  handleVisibleColumnsChange(nextVisibleColumns)
+}
+
+function handleColumnDragStart(columnKey: ExpenseWorkbenchColumnKey) {
+  draggingColumnKey.value = columnKey
+  dropTargetColumnKey.value = ''
+}
+
+function handleColumnDragOver(columnKey: ExpenseWorkbenchColumnKey) {
+  if (!draggingColumnKey.value || draggingColumnKey.value === columnKey) {
+    return
+  }
+  dropTargetColumnKey.value = columnKey
+}
+
+function handleColumnDrop(columnKey: ExpenseWorkbenchColumnKey) {
+  if (!draggingColumnKey.value || draggingColumnKey.value === columnKey) {
+    handleColumnDragEnd()
+    return
+  }
+  columnOrder.value = moveColumnOrder(columnOrder.value, draggingColumnKey.value, columnKey)
+  visibleColumns.value = sortVisibleColumnsByOrder(visibleColumns.value, columnOrder.value)
+  saveColumnOrder(EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS.list, columnOrder.value)
+  saveVisibleColumns(EXPENSE_WORKBENCH_STORAGE_KEYS.list, visibleColumns.value)
+  handleColumnDragEnd()
+}
+
+function handleColumnDragEnd() {
+  draggingColumnKey.value = ''
+  dropTargetColumnKey.value = ''
+}
+
+function handleHeaderDragEnd(
+  newWidth: number,
+  _oldWidth: number,
+  column: { columnKey?: string; property?: string }
+) {
+  const columnKey = String(column.columnKey || column.property || '') as ExpenseWorkbenchColumnKey
+  if (!allowedColumnKeys.includes(columnKey)) {
+    return
+  }
+  columnWidths.value = saveColumnWidth(columnKey, newWidth, columnWidths.value)
 }
 
 function goCreateExpense() {
@@ -198,5 +418,21 @@ function openDetail(row: ExpenseSummary) {
     return
   }
   void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+}
+
+async function reloadList() {
+  await loadExpenseList()
+}
+
+async function loadExpenseList() {
+  loading.value = true
+  try {
+    const res = await expenseApi.list()
+    expenseList.value = res.data || []
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载报销列表失败')
+  } finally {
+    loading.value = false
+  }
 }
 </script>

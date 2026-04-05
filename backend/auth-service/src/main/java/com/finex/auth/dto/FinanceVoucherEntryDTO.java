@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyInput;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -29,8 +30,10 @@ public class FinanceVoucherEntryDTO {
 
     private BigDecimal nfrat;
 
+    @MoneyInput
     private BigDecimal md;
 
+    @MoneyInput
     private BigDecimal mc;
 
     private BigDecimal ndS;

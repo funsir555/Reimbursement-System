@@ -17,6 +17,7 @@ import com.finex.auth.support.AsyncTaskSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -61,11 +62,11 @@ public class MvpDataServiceImpl implements MvpDataService {
         dashboard.setUser(getCurrentUser(userId));
         dashboard.setPendingApprovalCount(2 + userFactor);
         dashboard.setPendingApprovalDelta(userFactor % 3 + 1);
-        dashboard.setMonthlyExpenseAmount(6800D + userFactor * 860D);
+        dashboard.setMonthlyExpenseAmount(BigDecimal.valueOf(6800L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(860L))));
         dashboard.setMonthlyExpenseCount(expenses.size());
         dashboard.setInvoiceCount(invoices.size() * 12);
         dashboard.setMonthlyInvoiceCount(invoices.size());
-        dashboard.setBudgetRemaining(42000D - userFactor * 1200D);
+        dashboard.setBudgetRemaining(BigDecimal.valueOf(42000L).subtract(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(1200L))));
         dashboard.setBudgetUsageRate(28 + userFactor * 4);
         dashboard.setRecentExpenses(expenses.subList(0, Math.min(4, expenses.size())));
         dashboard.setPendingApprovals(buildPendingApprovals(user));
@@ -81,15 +82,15 @@ public class MvpDataServiceImpl implements MvpDataService {
 
         return List.of(
                 expense("BX" + today.format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "001", "差旅费",
-                        getDisplayName(user) + "华东出差费用", 1800D + userFactor * 350D, today.minusDays(1), "审批中"),
+                        getDisplayName(user) + "华东出差费用", BigDecimal.valueOf(1800L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(350L))), today.minusDays(1), "审批中"),
                 expense("BX" + today.minusDays(2).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "002", "办公费",
-                        getDisplayName(user) + "办公用品采购", 320D + userFactor * 68D, today.minusDays(2), "已通过"),
+                        getDisplayName(user) + "办公用品采购", BigDecimal.valueOf(320L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(68L))), today.minusDays(2), "已通过"),
                 expense("BX" + today.minusDays(4).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "003", "招待费",
-                        getDisplayName(user) + "客户接待费用", 960D + userFactor * 120D, today.minusDays(4), "已通过"),
+                        getDisplayName(user) + "客户接待费用", BigDecimal.valueOf(960L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(120L))), today.minusDays(4), "已通过"),
                 expense("BX" + today.minusDays(6).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "004", "交通费",
-                        getDisplayName(user) + "市内交通", 48D + userFactor * 12D, today.minusDays(6), "已驳回"),
+                        getDisplayName(user) + "市内交通", BigDecimal.valueOf(48L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(12L))), today.minusDays(6), "已驳回"),
                 expense("BX" + today.minusDays(9).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "005", "差旅费",
-                        getDisplayName(user) + "华北出差费用", 3200D + userFactor * 420D, today.minusDays(9), "已通过")
+                        getDisplayName(user) + "华北出差费用", BigDecimal.valueOf(3200L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(420L))), today.minusDays(9), "已通过")
         );
     }
 
@@ -101,13 +102,13 @@ public class MvpDataServiceImpl implements MvpDataService {
 
         List<InvoiceSummaryVO> invoices = List.of(
                 invoice("011001900211", "12345678", "增值税普通发票", getDisplayName(user) + "科技有限公司",
-                        1600D + userFactor * 240D, today.minusDays(3), "已验真", "已识别"),
+                        BigDecimal.valueOf(1600L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(240L))), today.minusDays(3), "已验真", "已识别"),
                 invoice("031001900211", "87654321", "增值税专用发票", getDisplayName(user) + "贸易有限公司",
-                        3200D + userFactor * 360D, today.minusDays(5), "已验真", "已识别"),
+                        BigDecimal.valueOf(3200L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(360L))), today.minusDays(5), "已验真", "已识别"),
                 invoice("011001900212", "11112222", "电子发票", getDisplayName(user) + "服务公司",
-                        680D + userFactor * 100D, today.minusDays(7), "待验真", "待识别"),
+                        BigDecimal.valueOf(680L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(100L))), today.minusDays(7), "待验真", "待识别"),
                 invoice("031001900213", "33334444", "增值税普通发票", getDisplayName(user) + "电子公司",
-                        420D + userFactor * 80D, today.minusDays(12), "验真失败", "识别失败")
+                        BigDecimal.valueOf(420L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(80L))), today.minusDays(12), "验真失败", "识别失败")
         );
 
         Map<String, AsyncTaskRecord> verifyTasks = latestTaskMap(userId, AsyncTaskSupport.TASK_TYPE_INVOICE_VERIFY);
@@ -124,9 +125,9 @@ public class MvpDataServiceImpl implements MvpDataService {
     private List<ApprovalSummaryVO> buildPendingApprovals(User user) {
         String displayName = getDisplayName(user);
         return List.of(
-                approval(1L, "上海出差费用报销", displayName, "10分钟前", 3245D, 1),
-                approval(2L, "客户招待费用", displayName, "30分钟前", 1580D, 2),
-                approval(3L, "季度办公用品采购", displayName, "1小时前", 8920D, 3)
+                approval(1L, "上海出差费用报销", displayName, "10分钟前", BigDecimal.valueOf(3245L), 1),
+                approval(2L, "客户招待费用", displayName, "30分钟前", BigDecimal.valueOf(1580L), 2),
+                approval(3L, "季度办公用品采购", displayName, "1小时前", BigDecimal.valueOf(8920L), 3)
         );
     }
 
@@ -138,7 +139,7 @@ public class MvpDataServiceImpl implements MvpDataService {
         );
     }
 
-    private ExpenseSummaryVO expense(String no, String type, String reason, Double amount, LocalDate date, String status) {
+    private ExpenseSummaryVO expense(String no, String type, String reason, BigDecimal amount, LocalDate date, String status) {
         ExpenseSummaryVO summary = new ExpenseSummaryVO();
         summary.setNo(no);
         summary.setType(type);
@@ -150,7 +151,7 @@ public class MvpDataServiceImpl implements MvpDataService {
     }
 
     private InvoiceSummaryVO invoice(String code, String number, String type, String seller,
-                                     Double amount, LocalDate date, String status, String ocrStatus) {
+                                     BigDecimal amount, LocalDate date, String status, String ocrStatus) {
         InvoiceSummaryVO summary = new InvoiceSummaryVO();
         summary.setCode(code);
         summary.setNumber(number);
@@ -210,7 +211,7 @@ public class MvpDataServiceImpl implements MvpDataService {
         invoice.setOcrStatus("识别失败");
     }
 
-    private ApprovalSummaryVO approval(Long id, String title, String submitter, String time, Double amount, int avatarSeed) {
+    private ApprovalSummaryVO approval(Long id, String title, String submitter, String time, BigDecimal amount, int avatarSeed) {
         ApprovalSummaryVO summary = new ApprovalSummaryVO();
         summary.setId(id);
         summary.setTitle(title);

@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyValue;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -75,19 +76,24 @@ public class FinanceVendorDetailVO {
     private LocalDateTime dProxyEDate;
     private LocalDateTime dProxySDate;
     private LocalDateTime dVenDevDate;
+    @MoneyValue
     private BigDecimal fRegistFund;
+    @MoneyValue
     private BigDecimal iAPMoney;
     private Integer iBusinessADays;
     private Integer iEmployeeNum;
     private Integer iFrequency;
     private Integer iGradeABC;
     private Integer iId;
+    @MoneyValue
     private BigDecimal iLastMoney;
     private Integer iLicenceADays;
+    @MoneyValue
     private BigDecimal iLRMoney;
     private Integer iProxyADays;
     private Integer iVenCreDate;
     private String iVenCreGrade;
+    @MoneyValue
     private BigDecimal iVenCreLine;
     private BigDecimal iVenDisRate;
     private Boolean active;

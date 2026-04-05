@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyInput;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
@@ -26,6 +27,10 @@ public class ProcessTemplateSaveDTO {
 
     private String formDesign;
 
+    private String expenseDetailDesign;
+
+    private String expenseDetailModeDefault;
+
     private String printMode;
 
     private String approvalFlow;
@@ -40,8 +45,10 @@ public class ProcessTemplateSaveDTO {
 
     private List<String> scopeExpenseTypeCodes;
 
+    @MoneyInput
     private BigDecimal amountMin;
 
+    @MoneyInput
     private BigDecimal amountMax;
 
     private String tagOption;

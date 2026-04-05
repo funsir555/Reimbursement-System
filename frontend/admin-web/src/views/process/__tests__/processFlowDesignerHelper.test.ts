@@ -5,6 +5,7 @@ import {
   buildDefaultBranchRoutes,
   buildFlowCanvasBlocks,
   insertNodeIntoContainer,
+  moveNodeIntoContainer,
   normalizeContainerKey,
   removeNodeAndDescendants,
   removeRouteLane,
@@ -190,5 +191,75 @@ describe('processFlowDesignerHelper', () => {
         .sort((left, right) => (left.priority ?? 0) - (right.priority ?? 0))
         .map((item) => item.routeName)
     ).toEqual(['条件分支 1', '条件分支 2'])
+  })
+
+  it('moves a node across containers and reindexes both sides', () => {
+    const nodes = [
+      createApprovalNode('approval-root', 1),
+      createBranchNode('branch-1', 2),
+      createApprovalNode('approval-lane-1', 1, 'route-1'),
+      createApprovalNode('approval-lane-2', 2, 'route-1')
+    ]
+    const routes = [createRoute('route-1', 'branch-1', 1), createRoute('route-2', 'branch-1', 2)]
+
+    const next = moveNodeIntoContainer(nodes, routes, 'approval-lane-2', null, 0)
+
+    expect(next.moved).toBe(true)
+    expect(next.reason).toBe('MOVED')
+    expect(
+      next.nodes
+        .filter((item) => normalizeContainerKey(item.parentNodeKey) === null)
+        .sort((left, right) => (left.displayOrder ?? 0) - (right.displayOrder ?? 0))
+        .map((item) => item.nodeKey)
+    ).toEqual(['approval-lane-2', 'approval-root', 'branch-1'])
+    expect(
+      next.nodes
+        .filter((item) => item.parentNodeKey === 'route-1')
+        .sort((left, right) => (left.displayOrder ?? 0) - (right.displayOrder ?? 0))
+        .map((item) => item.nodeKey)
+    ).toEqual(['approval-lane-1'])
+  })
+
+  it('treats dropping a node onto its current adjacent insert slot as a no-op', () => {
+    const nodes = [
+      createApprovalNode('approval-1', 1),
+      createApprovalNode('approval-2', 2),
+      createApprovalNode('approval-3', 3)
+    ]
+
+    const next = moveNodeIntoContainer(nodes, [], 'approval-2', null, 2)
+
+    expect(next.moved).toBe(false)
+    expect(next.reason).toBe('NOOP')
+    expect(next.nodes.map((item) => item.nodeKey)).toEqual(['approval-1', 'approval-2', 'approval-3'])
+  })
+
+  it('keeps branch descendants attached when moving a branch block', () => {
+    const nodes = [
+      createApprovalNode('approval-root', 1),
+      createBranchNode('branch-1', 2),
+      createApprovalNode('approval-1', 1, 'route-1')
+    ]
+    const routes = [createRoute('route-1', 'branch-1', 1), createRoute('route-2', 'branch-1', 2)]
+
+    const next = moveNodeIntoContainer(nodes, routes, 'branch-1', null, 0)
+
+    expect(next.moved).toBe(true)
+    expect(next.nodes.find((item) => item.nodeKey === 'branch-1')?.displayOrder).toBe(1)
+    expect(next.routes.map((item) => item.sourceNodeKey)).toEqual(['branch-1', 'branch-1'])
+    expect(next.nodes.find((item) => item.nodeKey === 'approval-1')?.parentNodeKey).toBe('route-1')
+  })
+
+  it('rejects moving a branch block into its own descendant route', () => {
+    const nodes = [
+      createBranchNode('branch-1', 1),
+      createApprovalNode('approval-1', 1, 'route-1')
+    ]
+    const routes = [createRoute('route-1', 'branch-1', 1), createRoute('route-2', 'branch-1', 2)]
+
+    const next = moveNodeIntoContainer(nodes, routes, 'branch-1', 'route-1', 0)
+
+    expect(next.moved).toBe(false)
+    expect(next.reason).toBe('INVALID_TARGET')
   })
 })

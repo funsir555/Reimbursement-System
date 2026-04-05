@@ -18,6 +18,9 @@ import com.finex.auth.dto.ProcessCustomArchiveRuleFieldVO;
 import com.finex.auth.dto.ProcessCustomArchiveSaveDTO;
 import com.finex.auth.dto.ProcessCustomArchiveSummaryVO;
 import com.finex.auth.dto.ProcessExpenseTypeConfigOptionVO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignDetailVO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignSaveDTO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignSummaryVO;
 import com.finex.auth.dto.ProcessExpenseTypeDetailVO;
 import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
@@ -50,6 +53,8 @@ import com.finex.auth.entity.ProcessTemplateCategory;
 import com.finex.auth.entity.ProcessTemplateScope;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
+import com.finex.auth.interceptor.TemplateSaveTraceInterceptor;
+import com.finex.auth.mapper.CodeSequenceMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveRuleMapper;
@@ -61,10 +66,17 @@ import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.ProcessFormDesignService;
 import com.finex.auth.service.ProcessFlowDesignService;
+import com.finex.auth.service.ProcessExpenseDetailDesignService;
 import com.finex.auth.service.ProcessManagementService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -81,15 +93,20 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final DateTimeFormatter CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final String HIGHLIGHT_SEPARATOR = "|";
+    private static final String TEMPLATE_CODE_PREFIX = "FX";
+    private static final String TEMPLATE_CODE_SEQUENCE_KEY = "DOCUMENT_TEMPLATE";
+    private static final int TEMPLATE_CODE_RETRY_LIMIT = 3;
 
     private static final String DEFAULT_NUMBERING_RULE_CODE = "FX_DATE_4SEQ";
     private static final String DEFAULT_NUMBERING_RULE_PREVIEW = "FX+\u5e74+\u6708+\u65e5+4\u4f4d\u6570\u5b57\uff08\u5982\uff1aFX202503251234\uff09";
@@ -177,6 +194,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     private final ProcessTemplateCategoryMapper categoryMapper;
     private final ProcessDocumentTemplateMapper templateMapper;
+    private final CodeSequenceMapper codeSequenceMapper;
     private final ProcessTemplateScopeMapper scopeMapper;
     private final ProcessCustomArchiveDesignMapper customArchiveDesignMapper;
     private final ProcessCustomArchiveItemMapper customArchiveItemMapper;
@@ -185,6 +203,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
     private final ProcessFormDesignService processFormDesignService;
+    private final ProcessExpenseDetailDesignService processExpenseDetailDesignService;
     private final ProcessFlowDesignService processFlowDesignService;
     private final ObjectMapper objectMapper;
 
@@ -208,11 +227,18 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
+        Map<String, String> formNameMap = processFormDesignService.listFormDesigns(null).stream()
+                .collect(Collectors.toMap(
+                        ProcessFormDesignSummaryVO::getFormCode,
+                        ProcessFormDesignSummaryVO::getFormName,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
 
         ProcessCenterOverviewVO overview = new ProcessCenterOverviewVO();
         overview.setNavItems(buildNavItems());
         overview.setSummary(buildSummary(templates));
-        overview.setCategories(buildCategoryCards(categories, templates, categoryMap));
+        overview.setCategories(buildCategoryCards(categories, templates, categoryMap, formNameMap));
         return overview;
     }
 
@@ -221,7 +247,8 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         return List.of(
                 templateType("report", "\u62a5\u9500\u5355", "\u8d39\u7528\u62a5\u9500", "\u9002\u7528\u4e8e\u5458\u5de5\u62a5\u9500\u3001\u5dee\u65c5\u62a5\u9500\u4e0e\u56e2\u961f\u8d39\u7528\u5f52\u96c6\u7b49\u573a\u666f\u3002", "blue"),
                 templateType("application", "\u7533\u8bf7\u5355", "\u4e1a\u52a1\u7533\u8bf7", "\u9002\u7528\u4e8e\u9884\u7b97\u7533\u8bf7\u3001\u4ed8\u6b3e\u7533\u8bf7\u3001\u9879\u76ee\u7533\u8bf7\u7b49\u4e8b\u524d\u6d41\u7a0b\u3002", "cyan"),
-                templateType("loan", "\u501f\u6b3e\u5355", "\u501f\u652f\u7ba1\u7406", "\u9002\u7528\u4e8e\u5907\u7528\u91d1\u501f\u652f\u3001\u9879\u76ee\u501f\u6b3e\u53ca\u540e\u7eed\u6838\u9500\u5f52\u8fd8\u573a\u666f\u3002", "orange")
+                templateType("loan", "\u501f\u6b3e\u5355", "\u501f\u652f\u7ba1\u7406", "\u9002\u7528\u4e8e\u5907\u7528\u91d1\u501f\u652f\u3001\u9879\u76ee\u501f\u6b3e\u53ca\u540e\u7eed\u6838\u9500\u5f52\u8fd8\u573a\u666f\u3002", "orange"),
+                templateType("contract", "\u5408\u540c\u5355", "\u5408\u540c\u7ba1\u7406", "\u9002\u7528\u4e8e\u5408\u540c\u7533\u8bf7\u3001\u5408\u540c\u8bc4\u5ba1\u3001\u7b7e\u8ba2\u6d41\u8f6c\u53ca\u540e\u7eed\u5408\u540c\u7ba1\u7406\u573a\u666f\u3002", "emerald")
         );
     }
 
@@ -233,6 +260,8 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         options.setCategoryOptions(loadTemplateCategoryOptions());
         options.setNumberingRulePreview(DEFAULT_NUMBERING_RULE_PREVIEW);
         options.setFormDesignOptions(loadFormDesignOptions(templateType));
+        options.setExpenseDetailDesignOptions(loadExpenseDetailDesignOptions(templateType));
+        options.setExpenseDetailModeOptions(loadExpenseDetailModeOptions(templateType));
         options.setApprovalFlows(processFlowDesignService.listPublishedFlowOptions());
         options.setPrintModes(List.of(
                 option("\u9ed8\u8ba4\u6253\u5370\u6a21\u677f", "default-print"),
@@ -269,83 +298,288 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProcessTemplateSaveResultVO saveTemplate(ProcessTemplateSaveDTO dto, String operatorName) {
-        String categoryCode = normalize(dto.getCategory(), "employee-expense");
-        String templateType = normalize(dto.getTemplateType(), "report");
-        boolean enabled = dto.getEnabled() == null || dto.getEnabled();
+        String traceId = currentTemplateSaveTraceId();
+        long startedAt = System.nanoTime();
+        log.info(
+                "[TemplateSaveTrace][{}][service] saveTemplate start templateName={} templateType={} category={} formDesign={} approvalFlow={} expenseDetailDesign={} enabled={}",
+                traceId,
+                dto.getTemplateName(),
+                dto.getTemplateType(),
+                dto.getCategory(),
+                dto.getFormDesign(),
+                dto.getApprovalFlow(),
+                dto.getExpenseDetailDesign(),
+                dto.getEnabled()
+        );
 
-        validateTemplateScope(dto);
+        try {
+            String categoryCode = normalize(dto.getCategory(), "employee-expense");
+            String templateType = normalize(dto.getTemplateType(), "report");
+            boolean enabled = dto.getEnabled() == null || dto.getEnabled();
 
-        Map<String, String> departmentLabelMap = departmentLabelMap();
-        Map<String, String> expenseTypeLabelMap = expenseTypeLabelMap();
-        Map<String, String> archiveLabelMap = enabledArchiveLabelMap();
-        Map<String, String> flowLabelMap = processFlowDesignService.publishedFlowLabelMap();
-        String approvalFlowCode = resolveApprovalFlowCode(dto.getApprovalFlow(), flowLabelMap);
+            long stageStartedAt = System.nanoTime();
+            validateTemplateScope(dto);
+            logTemplateSaveStage(traceId, "saveTemplate", "validateTemplateScope", stageStartedAt);
 
-        ProcessDocumentTemplate template = new ProcessDocumentTemplate();
-        template.setTemplateCode(buildTemplateCode());
-        template.setTemplateName(trimToEmpty(dto.getTemplateName()));
-        template.setTemplateType(templateType);
-        template.setTemplateTypeLabel(resolveTemplateTypeLabel(templateType));
-        template.setCategoryCode(categoryCode);
-        template.setTemplateDescription(resolveDescription(dto));
-        template.setNumberingRule(DEFAULT_NUMBERING_RULE_CODE);
-        template.setFormDesignCode(resolveFormDesignCode(dto.getFormDesign(), templateType));
-        template.setIconColor(DEFAULT_TEMPLATE_COLOR);
-        template.setEnabled(enabled ? 1 : 0);
-        template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
-        template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
-        template.setApprovalFlow(approvalFlowCode);
-        template.setFlowName(flowLabelMap.get(approvalFlowCode));
-        template.setPaymentMode(normalize(dto.getPaymentMode(), "none"));
-        template.setAllocationForm(normalize(dto.getAllocationForm(), "allocation-default"));
-        template.setAiAuditMode(normalize(dto.getAiAuditMode(), "disabled"));
-        template.setHighlights(String.join(HIGHLIGHT_SEPARATOR, buildHighlights(dto, archiveLabelMap)));
-        template.setOwnerName(normalize(operatorName, "\u6d41\u7a0b\u7ba1\u7406\u5458"));
-        template.setSortOrder(nextSortOrder(categoryCode));
-        templateMapper.insert(template);
+            stageStartedAt = System.nanoTime();
+            Map<String, String> departmentLabelMap = departmentLabelMap();
+            Map<String, String> expenseTypeLabelMap = expenseTypeLabelMap();
+            Map<String, String> archiveLabelMap = enabledArchiveLabelMap();
+            Map<String, String> flowLabelMap = processFlowDesignService.publishedFlowLabelMap();
+            String approvalFlowCode = resolveApprovalFlowCode(dto.getApprovalFlow(), flowLabelMap);
+            logTemplateSaveStage(traceId, "saveTemplate", "loadReferenceData", stageStartedAt);
 
-        replaceTemplateScopes(template.getId(), dto, departmentLabelMap, expenseTypeLabelMap, archiveLabelMap);
-        return buildTemplateSaveResult(template);
+            stageStartedAt = System.nanoTime();
+            ProcessDocumentTemplate template = new ProcessDocumentTemplate();
+            String templateCode = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.buildTemplateCode",
+                    this::buildTemplateCode
+            );
+            String templateTypeLabel = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.resolveTemplateTypeLabel",
+                    () -> resolveTemplateTypeLabel(templateType)
+            );
+            String templateDescription = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.resolveDescription",
+                    () -> resolveDescription(dto)
+            );
+            String formDesignCode = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.resolveFormDesignCode",
+                    () -> resolveFormDesignCode(dto.getFormDesign(), templateType)
+            );
+            String expenseDetailDesignCode = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.resolveExpenseDetailDesignCode",
+                    () -> resolveExpenseDetailDesignCode(dto.getExpenseDetailDesign(), templateType)
+            );
+            String expenseDetailModeDefault = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.resolveExpenseDetailModeDefault",
+                    () -> resolveExpenseDetailModeDefault(dto.getExpenseDetailModeDefault(), expenseDetailDesignCode)
+            );
+            String highlights = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.buildHighlights",
+                    () -> String.join(HIGHLIGHT_SEPARATOR, buildHighlights(dto, archiveLabelMap))
+            );
+            Integer sortOrder = traceTemplateSaveValueStep(
+                    traceId,
+                    "saveTemplate",
+                    "prepareTemplateEntity.nextSortOrder",
+                    () -> nextSortOrder(categoryCode)
+            );
+            template.setTemplateCode(templateCode);
+            template.setTemplateName(trimToEmpty(dto.getTemplateName()));
+            template.setTemplateType(templateType);
+            template.setTemplateTypeLabel(templateTypeLabel);
+            template.setCategoryCode(categoryCode);
+            template.setTemplateDescription(templateDescription);
+            template.setNumberingRule(DEFAULT_NUMBERING_RULE_CODE);
+            template.setFormDesignCode(formDesignCode);
+            template.setExpenseDetailDesignCode(expenseDetailDesignCode);
+            template.setExpenseDetailModeDefault(expenseDetailModeDefault);
+            template.setIconColor(DEFAULT_TEMPLATE_COLOR);
+            template.setEnabled(enabled ? 1 : 0);
+            template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
+            template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
+            template.setApprovalFlow(approvalFlowCode);
+            template.setFlowName(flowLabelMap.get(approvalFlowCode));
+            template.setPaymentMode(normalize(dto.getPaymentMode(), "none"));
+            template.setAllocationForm(normalize(dto.getAllocationForm(), "allocation-default"));
+            template.setAiAuditMode(normalize(dto.getAiAuditMode(), "disabled"));
+            template.setHighlights(highlights);
+            template.setOwnerName(normalize(operatorName, "\u6d41\u7a0b\u7ba1\u7406\u5458"));
+            template.setSortOrder(sortOrder);
+            logTemplateSaveStage(traceId, "saveTemplate", "prepareTemplateEntity", stageStartedAt);
+
+            stageStartedAt = System.nanoTime();
+            insertTemplateWithRetry(template, traceId);
+            log.info(
+                    "[TemplateSaveTrace][{}][service] saveTemplate insertTemplate templateId={} templateCode={} costMs={}",
+                    traceId,
+                    template.getId(),
+                    template.getTemplateCode(),
+                    elapsedMillis(stageStartedAt)
+            );
+
+            stageStartedAt = System.nanoTime();
+            replaceTemplateScopes(template.getId(), dto, departmentLabelMap, expenseTypeLabelMap, archiveLabelMap);
+            log.info(
+                    "[TemplateSaveTrace][{}][service] saveTemplate replaceTemplateScopes templateId={} costMs={}",
+                    traceId,
+                    template.getId(),
+                    elapsedMillis(stageStartedAt)
+            );
+
+            ProcessTemplateSaveResultVO result = buildTemplateSaveResult(template);
+            log.info(
+                    "[TemplateSaveTrace][{}][service] saveTemplate success templateId={} templateCode={} totalMs={}",
+                    traceId,
+                    template.getId(),
+                    template.getTemplateCode(),
+                    elapsedMillis(startedAt)
+            );
+            return result;
+        } catch (RuntimeException ex) {
+            log.error(
+                    "[TemplateSaveTrace][{}][service] saveTemplate failed after {}ms: {}",
+                    traceId,
+                    elapsedMillis(startedAt),
+                    ex.getMessage(),
+                    ex
+            );
+            throw ex;
+        }
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProcessTemplateSaveResultVO updateTemplate(Long id, ProcessTemplateSaveDTO dto, String operatorName) {
-        ProcessDocumentTemplate template = requireActiveTemplate(id);
-        String categoryCode = normalize(dto.getCategory(), template.getCategoryCode());
-        String templateType = normalize(dto.getTemplateType(), template.getTemplateType());
-        boolean enabled = dto.getEnabled() == null || dto.getEnabled();
+        String traceId = currentTemplateSaveTraceId();
+        long startedAt = System.nanoTime();
+        log.info(
+                "[TemplateSaveTrace][{}][service] updateTemplate start templateId={} templateName={} templateType={} category={} formDesign={} approvalFlow={} expenseDetailDesign={} enabled={}",
+                traceId,
+                id,
+                dto.getTemplateName(),
+                dto.getTemplateType(),
+                dto.getCategory(),
+                dto.getFormDesign(),
+                dto.getApprovalFlow(),
+                dto.getExpenseDetailDesign(),
+                dto.getEnabled()
+        );
 
-        validateTemplateScope(dto);
+        try {
+            long stageStartedAt = System.nanoTime();
+            ProcessDocumentTemplate template = requireActiveTemplate(id);
+            logTemplateSaveStage(traceId, "updateTemplate", "requireActiveTemplate", stageStartedAt);
 
-        Map<String, String> departmentLabelMap = departmentLabelMap();
-        Map<String, String> expenseTypeLabelMap = expenseTypeLabelMap();
-        Map<String, String> archiveLabelMap = enabledArchiveLabelMap();
-        Map<String, String> flowLabelMap = processFlowDesignService.publishedFlowLabelMap();
-        String approvalFlowCode = resolveApprovalFlowCode(dto.getApprovalFlow(), flowLabelMap);
+            String categoryCode = normalize(dto.getCategory(), template.getCategoryCode());
+            String templateType = normalize(dto.getTemplateType(), template.getTemplateType());
+            boolean enabled = dto.getEnabled() == null || dto.getEnabled();
 
-        template.setTemplateName(trimToEmpty(dto.getTemplateName()));
-        template.setTemplateType(templateType);
-        template.setTemplateTypeLabel(resolveTemplateTypeLabel(templateType));
-        template.setCategoryCode(categoryCode);
-        template.setTemplateDescription(resolveDescription(dto));
-        template.setNumberingRule(DEFAULT_NUMBERING_RULE_CODE);
-        template.setFormDesignCode(resolveFormDesignCode(dto.getFormDesign(), templateType));
-        template.setIconColor(DEFAULT_TEMPLATE_COLOR);
-        template.setEnabled(enabled ? 1 : 0);
-        template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
-        template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
-        template.setApprovalFlow(approvalFlowCode);
-        template.setFlowName(flowLabelMap.get(approvalFlowCode));
-        template.setPaymentMode(normalize(dto.getPaymentMode(), "none"));
-        template.setAllocationForm(normalize(dto.getAllocationForm(), "allocation-default"));
-        template.setAiAuditMode(normalize(dto.getAiAuditMode(), "disabled"));
-        template.setHighlights(String.join(HIGHLIGHT_SEPARATOR, buildHighlights(dto, archiveLabelMap)));
-        template.setOwnerName(normalize(operatorName, template.getOwnerName()));
-        templateMapper.updateById(template);
+            stageStartedAt = System.nanoTime();
+            validateTemplateScope(dto);
+            logTemplateSaveStage(traceId, "updateTemplate", "validateTemplateScope", stageStartedAt);
 
-        replaceTemplateScopes(template.getId(), dto, departmentLabelMap, expenseTypeLabelMap, archiveLabelMap);
-        return buildTemplateSaveResult(template);
+            stageStartedAt = System.nanoTime();
+            Map<String, String> departmentLabelMap = departmentLabelMap();
+            Map<String, String> expenseTypeLabelMap = expenseTypeLabelMap();
+            Map<String, String> archiveLabelMap = enabledArchiveLabelMap();
+            Map<String, String> flowLabelMap = processFlowDesignService.publishedFlowLabelMap();
+            String approvalFlowCode = resolveApprovalFlowCode(dto.getApprovalFlow(), flowLabelMap);
+            logTemplateSaveStage(traceId, "updateTemplate", "loadReferenceData", stageStartedAt);
+
+            stageStartedAt = System.nanoTime();
+            String templateTypeLabel = traceTemplateSaveValueStep(
+                    traceId,
+                    "updateTemplate",
+                    "prepareTemplateEntity.resolveTemplateTypeLabel",
+                    () -> resolveTemplateTypeLabel(templateType)
+            );
+            String templateDescription = traceTemplateSaveValueStep(
+                    traceId,
+                    "updateTemplate",
+                    "prepareTemplateEntity.resolveDescription",
+                    () -> resolveDescription(dto)
+            );
+            String formDesignCode = traceTemplateSaveValueStep(
+                    traceId,
+                    "updateTemplate",
+                    "prepareTemplateEntity.resolveFormDesignCode",
+                    () -> resolveFormDesignCode(dto.getFormDesign(), templateType)
+            );
+            String expenseDetailDesignCode = traceTemplateSaveValueStep(
+                    traceId,
+                    "updateTemplate",
+                    "prepareTemplateEntity.resolveExpenseDetailDesignCode",
+                    () -> resolveExpenseDetailDesignCode(dto.getExpenseDetailDesign(), templateType)
+            );
+            String expenseDetailModeDefault = traceTemplateSaveValueStep(
+                    traceId,
+                    "updateTemplate",
+                    "prepareTemplateEntity.resolveExpenseDetailModeDefault",
+                    () -> resolveExpenseDetailModeDefault(dto.getExpenseDetailModeDefault(), expenseDetailDesignCode)
+            );
+            String highlights = traceTemplateSaveValueStep(
+                    traceId,
+                    "updateTemplate",
+                    "prepareTemplateEntity.buildHighlights",
+                    () -> String.join(HIGHLIGHT_SEPARATOR, buildHighlights(dto, archiveLabelMap))
+            );
+            template.setTemplateName(trimToEmpty(dto.getTemplateName()));
+            template.setTemplateType(templateType);
+            template.setTemplateTypeLabel(templateTypeLabel);
+            template.setCategoryCode(categoryCode);
+            template.setTemplateDescription(templateDescription);
+            template.setNumberingRule(DEFAULT_NUMBERING_RULE_CODE);
+            template.setFormDesignCode(formDesignCode);
+            template.setExpenseDetailDesignCode(expenseDetailDesignCode);
+            template.setExpenseDetailModeDefault(expenseDetailModeDefault);
+            template.setIconColor(DEFAULT_TEMPLATE_COLOR);
+            template.setEnabled(enabled ? 1 : 0);
+            template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
+            template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
+            template.setApprovalFlow(approvalFlowCode);
+            template.setFlowName(flowLabelMap.get(approvalFlowCode));
+            template.setPaymentMode(normalize(dto.getPaymentMode(), "none"));
+            template.setAllocationForm(normalize(dto.getAllocationForm(), "allocation-default"));
+            template.setAiAuditMode(normalize(dto.getAiAuditMode(), "disabled"));
+            template.setHighlights(highlights);
+            template.setOwnerName(normalize(operatorName, template.getOwnerName()));
+            logTemplateSaveStage(traceId, "updateTemplate", "prepareTemplateEntity", stageStartedAt);
+
+            stageStartedAt = System.nanoTime();
+            templateMapper.updateById(template);
+            log.info(
+                    "[TemplateSaveTrace][{}][service] updateTemplate updateTemplateRow templateId={} templateCode={} costMs={}",
+                    traceId,
+                    template.getId(),
+                    template.getTemplateCode(),
+                    elapsedMillis(stageStartedAt)
+            );
+
+            stageStartedAt = System.nanoTime();
+            replaceTemplateScopes(template.getId(), dto, departmentLabelMap, expenseTypeLabelMap, archiveLabelMap);
+            log.info(
+                    "[TemplateSaveTrace][{}][service] updateTemplate replaceTemplateScopes templateId={} costMs={}",
+                    traceId,
+                    template.getId(),
+                    elapsedMillis(stageStartedAt)
+            );
+
+            ProcessTemplateSaveResultVO result = buildTemplateSaveResult(template);
+            log.info(
+                    "[TemplateSaveTrace][{}][service] updateTemplate success templateId={} templateCode={} totalMs={}",
+                    traceId,
+                    template.getId(),
+                    template.getTemplateCode(),
+                    elapsedMillis(startedAt)
+            );
+            return result;
+        } catch (RuntimeException ex) {
+            log.error(
+                    "[TemplateSaveTrace][{}][service] updateTemplate failed templateId={} after {}ms: {}",
+                    traceId,
+                    id,
+                    elapsedMillis(startedAt),
+                    ex.getMessage(),
+                    ex
+            );
+            throw ex;
+        }
     }
 
     @Override
@@ -603,6 +837,31 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     }
 
     @Override
+    public List<ProcessExpenseDetailDesignSummaryVO> listExpenseDetailDesigns() {
+        return processExpenseDetailDesignService.listExpenseDetailDesigns();
+    }
+
+    @Override
+    public ProcessExpenseDetailDesignDetailVO getExpenseDetailDesignDetail(Long id) {
+        return processExpenseDetailDesignService.getExpenseDetailDesignDetail(id);
+    }
+
+    @Override
+    public ProcessExpenseDetailDesignDetailVO createExpenseDetailDesign(ProcessExpenseDetailDesignSaveDTO dto) {
+        return processExpenseDetailDesignService.createExpenseDetailDesign(dto);
+    }
+
+    @Override
+    public ProcessExpenseDetailDesignDetailVO updateExpenseDetailDesign(Long id, ProcessExpenseDetailDesignSaveDTO dto) {
+        return processExpenseDetailDesignService.updateExpenseDetailDesign(id, dto);
+    }
+
+    @Override
+    public Boolean deleteExpenseDetailDesign(Long id) {
+        return processExpenseDetailDesignService.deleteExpenseDetailDesign(id);
+    }
+
+    @Override
     public List<ProcessFormDesignSummaryVO> listFormDesigns(String templateType) {
         return processFormDesignService.listFormDesigns(templateType);
     }
@@ -683,6 +942,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private List<ProcessCenterNavItemVO> buildNavItems() {
         return List.of(
                 navItem("document-flow", "\u5355\u636e\u4e0e\u6d41\u7a0b", "\u7ef4\u62a4\u5355\u636e\u6a21\u677f\u3001\u5ba1\u6279\u6d41\u7a0b\u548c\u76f8\u5173\u914d\u7f6e\u80fd\u529b"),
+                navItem("expense-detail-form", "\u8d39\u7528\u660e\u7ec6\u8868\u5355", "\u7ef4\u62a4\u62a5\u9500\u6a21\u677f\u4e13\u7528\u7684\u8d39\u7528\u660e\u7ec6\u5b50\u8868\u5355"),
                 navItem("custom-archive", "\u81ea\u5b9a\u4e49\u6863\u6848", "\u7ef4\u62a4\u6807\u7b7e\u3001\u5206\u671f\u4ed8\u6b3e\u7b49\u4e1a\u52a1\u914d\u7f6e\u6863\u6848"),
                 navItem("expense-type", "\u8d39\u7528\u7c7b\u578b", "\u7ef4\u62a4\u8d39\u7528\u7c7b\u578b\u6811\u548c\u53d1\u7968\u7a0e\u52a1\u914d\u7f6e")
         );
@@ -702,7 +962,8 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private List<ProcessTemplateCategoryVO> buildCategoryCards(
             List<ProcessTemplateCategory> categories,
             List<ProcessDocumentTemplate> templates,
-            Map<String, ProcessTemplateCategory> categoryMap
+            Map<String, ProcessTemplateCategory> categoryMap,
+            Map<String, String> formNameMap
     ) {
         Map<String, List<ProcessDocumentTemplate>> groupedTemplates = templates.stream()
                 .collect(Collectors.groupingBy(
@@ -719,7 +980,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             card.setName(category.getCategoryName());
             card.setDescription(normalize(category.getCategoryDescription(), "\u7ef4\u62a4\u8be5\u5206\u7c7b\u4e0b\u7684\u6d41\u7a0b\u6a21\u677f"));
             card.setTemplateCount(categoryTemplates.size());
-            card.setTemplates(buildTemplateCards(categoryTemplates, category.getCategoryName()));
+            card.setTemplates(buildTemplateCards(categoryTemplates, category.getCategoryName(), formNameMap));
             result.add(card);
         }
 
@@ -732,14 +993,20 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             card.setName(entry.getKey());
             card.setDescription("\u672a\u5f52\u7c7b\u6a21\u677f");
             card.setTemplateCount(entry.getValue().size());
-            card.setTemplates(buildTemplateCards(entry.getValue(), entry.getKey()));
+            card.setTemplates(buildTemplateCards(entry.getValue(), entry.getKey(), formNameMap));
             result.add(card);
         }
         return result;
     }
 
-    private List<ProcessTemplateCardVO> buildTemplateCards(List<ProcessDocumentTemplate> templates, String categoryName) {
+    private List<ProcessTemplateCardVO> buildTemplateCards(
+            List<ProcessDocumentTemplate> templates,
+            String categoryName,
+            Map<String, String> formNameMap
+    ) {
         return templates.stream().map(template -> {
+            String flowCode = trimToNull(template.getApprovalFlow());
+            String formCode = trimToNull(template.getFormDesignCode());
             ProcessTemplateCardVO card = new ProcessTemplateCardVO();
             card.setId(template.getId());
             card.setTemplateCode(template.getTemplateCode());
@@ -749,7 +1016,10 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             card.setBusinessDomain(categoryName);
             card.setDescription(normalize(template.getTemplateDescription(), "\u7ef4\u62a4\u8be5\u6a21\u677f\u7684\u914d\u7f6e\u8bf4\u660e"));
             card.setHighlights(splitHighlights(template.getHighlights()));
+            card.setFlowCode(flowCode);
             card.setFlowName(normalize(template.getFlowName(), "\u672a\u8bbe\u7f6e\u5ba1\u6279\u6d41\u7a0b"));
+            card.setFormCode(formCode);
+            card.setFormName(normalize(formNameMap.get(formCode), "\u672a\u7ed1\u5b9a\u8868\u5355"));
             card.setUpdatedAt(formatDateTime(template.getUpdatedAt()));
             card.setOwner(normalize(template.getOwnerName(), "\u6d41\u7a0b\u7ba1\u7406\u5458"));
             card.setColor(resolveColor(template.getIconColor()));
@@ -770,6 +1040,9 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         detail.setCategory(template.getCategoryCode());
         detail.setEnabled(template.getEnabled() == null || template.getEnabled() == 1);
         detail.setFormDesign(template.getFormDesignCode());
+        detail.setExpenseDetailDesign(template.getExpenseDetailDesignCode());
+        detail.setExpenseDetailType(resolveExpenseDetailType(template.getExpenseDetailDesignCode()));
+        detail.setExpenseDetailModeDefault(template.getExpenseDetailModeDefault());
         detail.setPrintMode(template.getPrintMode());
         detail.setApprovalFlow(template.getApprovalFlow());
         detail.setPaymentMode(template.getPaymentMode());
@@ -888,13 +1161,70 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         return processFormDesignService.listFormDesignOptions(templateType);
     }
 
+    private List<ProcessExpenseDetailDesignSummaryVO> loadExpenseDetailDesignOptions(String templateType) {
+        return Objects.equals(normalize(templateType, "report"), "report")
+                ? processExpenseDetailDesignService.listExpenseDetailDesigns()
+                : Collections.emptyList();
+    }
+
+    private List<ProcessFormOptionVO> loadExpenseDetailModeOptions(String templateType) {
+        if (!Objects.equals(normalize(templateType, "report"), "report")) {
+            return Collections.emptyList();
+        }
+        return List.of(
+                option("\u9884\u4ed8\u672a\u5230\u7968", "PREPAY_UNBILLED"),
+                option("\u5230\u7968\u5168\u90e8\u652f\u4ed8", "INVOICE_FULL_PAYMENT")
+        );
+    }
+
     private String resolveFormDesignCode(String formDesign, String templateType) {
         return processFormDesignService.resolveFormDesignCode(formDesign, templateType);
     }
 
+    private String resolveExpenseDetailDesignCode(String expenseDetailDesign, String templateType) {
+        String normalizedTemplateType = normalize(templateType, "report");
+        String normalizedCode = trimToNull(expenseDetailDesign);
+        if (!Objects.equals(normalizedTemplateType, "report")) {
+            if (normalizedCode != null) {
+                throw new IllegalArgumentException("\u53ea\u6709\u62a5\u9500\u6a21\u677f\u652f\u6301\u7ed1\u5b9a\u8d39\u7528\u660e\u7ec6\u8868\u5355");
+            }
+            return null;
+        }
+        return processExpenseDetailDesignService.resolveExpenseDetailDesignCode(normalizedCode);
+    }
+
+    private String resolveExpenseDetailType(String expenseDetailDesignCode) {
+        String normalizedCode = trimToNull(expenseDetailDesignCode);
+        return normalizedCode == null ? null : processExpenseDetailDesignService.resolveExpenseDetailType(normalizedCode);
+    }
+
+    private String resolveExpenseDetailModeDefault(String expenseDetailModeDefault, String expenseDetailDesignCode) {
+        String detailType = resolveExpenseDetailType(expenseDetailDesignCode);
+        if (!Objects.equals(detailType, "ENTERPRISE_TRANSACTION")) {
+            return null;
+        }
+        String normalizedMode = trimToNull(expenseDetailModeDefault);
+        if (normalizedMode == null) {
+            return "PREPAY_UNBILLED";
+        }
+        if (!Objects.equals(normalizedMode, "PREPAY_UNBILLED") && !Objects.equals(normalizedMode, "INVOICE_FULL_PAYMENT")) {
+            throw new IllegalArgumentException("\u4f01\u4e1a\u5f80\u6765\u8d39\u7528\u660e\u7ec6\u9ed8\u8ba4\u6a21\u5f0f\u4e0d\u5408\u6cd5");
+        }
+        return normalizedMode;
+    }
+
     private void validateTemplateScope(ProcessTemplateSaveDTO dto) {
+        String templateType = normalize(dto.getTemplateType(), "report");
         validateSelectableIds(normalizeIdList(dto.getScopeDeptIds()), loadValidDepartmentIdSet(), "\u90e8\u95e8");
         validateSelectableIds(normalizeIdList(dto.getScopeExpenseTypeCodes()), loadValidExpenseTypeCodeSet(), "\u8d39\u7528\u7c7b\u578b");
+
+        if (Objects.equals(templateType, "report")) {
+            if (trimToNull(dto.getExpenseDetailDesign()) == null) {
+                throw new IllegalArgumentException("\u62a5\u9500\u6a21\u677f\u5fc5\u987b\u7ed1\u5b9a\u8d39\u7528\u660e\u7ec6\u8868\u5355");
+            }
+        } else if (trimToNull(dto.getExpenseDetailDesign()) != null || trimToNull(dto.getExpenseDetailModeDefault()) != null) {
+            throw new IllegalArgumentException("\u7533\u8bf7\u5355\u548c\u501f\u6b3e\u5355\u4e0d\u652f\u6301\u8d39\u7528\u660e\u7ec6\u8868\u5355");
+        }
 
         BigDecimal amountMin = dto.getAmountMin();
         BigDecimal amountMax = dto.getAmountMax();
@@ -913,24 +1243,25 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             ProcessTemplateSaveDTO dto,
             Map<String, String> archiveLabelMap
     ) {
-        LinkedHashSet<String> highlights = new LinkedHashSet<>();
-        highlights.add("\u79fb\u52a8\u7aef\u63d0\u5355");
+        LinkedHashSet<String> uniqueHighlights = new LinkedHashSet<>();
+        uniqueHighlights.add("\u79fb\u52a8\u7aef\u63d0\u5355");
         if (!"none".equalsIgnoreCase(normalize(dto.getPaymentMode(), "none"))) {
-            highlights.add("\u4ed8\u6b3e\u5355\u8054\u52a8");
+            uniqueHighlights.add("\u4ed8\u6b3e\u5355\u8054\u52a8");
         }
         if (!"disabled".equalsIgnoreCase(normalize(dto.getAiAuditMode(), "disabled"))) {
-            highlights.add("AI \u5ba1\u6838");
+            uniqueHighlights.add("AI \u5ba1\u6838");
         }
 
         String tagLabel = archiveLabelMap.get(trimToEmpty(dto.getTagOption()));
         if (tagLabel != null) {
-            highlights.add(tagLabel);
+            uniqueHighlights.add(tagLabel);
         }
         String installmentLabel = archiveLabelMap.get(trimToEmpty(dto.getInstallmentOption()));
         if (installmentLabel != null) {
-            highlights.add(installmentLabel);
+            uniqueHighlights.add(installmentLabel);
         }
 
+        List<String> highlights = new ArrayList<>(uniqueHighlights);
         while (highlights.size() < 3) {
             highlights.add("\u6682\u65e0\u4eae\u70b9");
         }
@@ -1008,6 +1339,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         return switch (normalize(templateType, "report")) {
             case "application" -> "\u7533\u8bf7\u5355";
             case "loan" -> "\u501f\u6b3e\u5355";
+            case "contract" -> "\u5408\u540c\u5355";
             default -> "\u62a5\u9500\u5355";
         };
     }
@@ -1034,13 +1366,93 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     }
 
     private String buildTemplateCode() {
-        String prefix = "FX" + LocalDate.now().format(CODE_DATE_FORMATTER);
+        String bizDate = LocalDate.now().format(CODE_DATE_FORMATTER);
+        String prefix = TEMPLATE_CODE_PREFIX + bizDate;
+        for (int attempt = 1; attempt <= TEMPLATE_CODE_RETRY_LIMIT; attempt++) {
+            long nextValue = nextTemplateCodeSequenceValue(bizDate, prefix);
+            String templateCode = prefix + String.format("%04d", nextValue);
+            if (!templateCodeExists(templateCode)) {
+                return templateCode;
+            }
+            log.warn(
+                    "[TemplateSaveTrace][{}][service] buildTemplateCode collision attempt={} templateCode={}",
+                    currentTemplateSaveTraceId(),
+                    attempt,
+                    templateCode
+            );
+        }
+        throw new IllegalArgumentException("模板编码生成冲突，请重试");
+    }
+
+    private long nextTemplateCodeSequenceValue(String bizDate, String prefix) {
+        int updatedRows = codeSequenceMapper.allocateNextTemplateCodeValue(TEMPLATE_CODE_SEQUENCE_KEY, bizDate);
+        if (updatedRows == 0) {
+            initializeTemplateCodeSequence(bizDate, prefix);
+            updatedRows = codeSequenceMapper.allocateNextTemplateCodeValue(TEMPLATE_CODE_SEQUENCE_KEY, bizDate);
+        }
+        if (updatedRows == 0) {
+            throw new IllegalStateException("模板编码序列生成失败");
+        }
+        Long currentValue = codeSequenceMapper.currentAllocatedValue();
+        if (currentValue == null || currentValue < 1L) {
+            throw new IllegalStateException("模板编码序列生成失败");
+        }
+        return currentValue;
+    }
+
+    private void initializeTemplateCodeSequence(String bizDate, String prefix) {
+        long initialValue = currentTemplateCodeSequenceValue(prefix);
+        codeSequenceMapper.initializeSequenceIfAbsent(TEMPLATE_CODE_SEQUENCE_KEY, bizDate, initialValue);
+    }
+
+    private long currentTemplateCodeSequenceValue(String prefix) {
+        Long currentValue = templateMapper.selectMaxTemplateCodeValueByPrefix(prefix);
+        if (currentValue == null || currentValue < 0L) {
+            return 0L;
+        }
+        return currentValue;
+    }
+
+    private boolean templateCodeExists(String templateCode) {
         Long count = templateMapper.selectCount(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
-                        .likeRight(ProcessDocumentTemplate::getTemplateCode, prefix)
+                        .eq(ProcessDocumentTemplate::getTemplateCode, templateCode)
         );
-        long next = count == null ? 1L : count + 1L;
-        return prefix + String.format("%04d", next);
+        return count != null && count > 0;
+    }
+
+    private void insertTemplateWithRetry(ProcessDocumentTemplate template, String traceId) {
+        for (int attempt = 1; attempt <= TEMPLATE_CODE_RETRY_LIMIT; attempt++) {
+            try {
+                templateMapper.insert(template);
+                return;
+            } catch (DuplicateKeyException ex) {
+                if (!isTemplateCodeDuplicate(ex)) {
+                    throw ex;
+                }
+                if (attempt >= TEMPLATE_CODE_RETRY_LIMIT) {
+                    throw new IllegalArgumentException("模板编码生成冲突，请重试", ex);
+                }
+                log.warn(
+                        "[TemplateSaveTrace][{}][service] saveTemplate insertTemplate duplicate templateCode={} attempt={} - regenerating",
+                        traceId,
+                        template.getTemplateCode(),
+                        attempt
+                );
+                template.setTemplateCode(buildTemplateCode());
+            }
+        }
+    }
+
+    private boolean isTemplateCodeDuplicate(DuplicateKeyException ex) {
+        String message = ex.getMostSpecificCause() != null
+                ? ex.getMostSpecificCause().getMessage()
+                : ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase();
+        return normalized.contains("uk_template_code") || normalized.contains("pm_document_template.uk_template_code");
     }
 
     private Map<String, String> expenseTypeLabelMap() {
@@ -1819,7 +2231,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             return bigDecimal;
         }
         if (value instanceof Number number) {
-            return BigDecimal.valueOf(number.doubleValue());
+            return new BigDecimal(String.valueOf(number));
         }
         String normalizedValue = trimToNull(String.valueOf(value));
         if (normalizedValue == null) {
@@ -1851,6 +2263,81 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     private String formatDateTime(LocalDateTime dateTime) {
         return dateTime == null ? "" : DATE_TIME_FORMATTER.format(dateTime);
+    }
+
+    private String currentTemplateSaveTraceId() {
+        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
+            return "no-trace-id";
+        }
+        HttpServletRequest request = attributes.getRequest();
+        Object traceId = request.getAttribute(TemplateSaveTraceInterceptor.TRACE_ATTRIBUTE);
+        if (traceId instanceof String value && !value.isBlank()) {
+            return value;
+        }
+        String traceHeader = request.getHeader(TemplateSaveTraceInterceptor.TRACE_HEADER);
+        if (traceHeader != null && !traceHeader.isBlank()) {
+            return traceHeader.trim();
+        }
+        return "no-trace-id";
+    }
+
+    private void logTemplateSaveStage(String traceId, String action, String stage, long startedAt) {
+        log.info(
+                "[TemplateSaveTrace][{}][service] {} {} costMs={}",
+                traceId,
+                action,
+                stage,
+                elapsedMillis(startedAt)
+        );
+    }
+
+    private <T> T traceTemplateSaveValueStep(String traceId, String action, String stage, Supplier<T> supplier) {
+        log.info("[TemplateSaveTrace][{}][service] {} {} start", traceId, action, stage);
+        long startedAt = System.nanoTime();
+        try {
+            T result = supplier.get();
+            log.info(
+                    "[TemplateSaveTrace][{}][service] {} {} costMs={} result={}",
+                    traceId,
+                    action,
+                    stage,
+                    elapsedMillis(startedAt),
+                    summarizeTemplateSaveTraceValue(result)
+            );
+            return result;
+        } catch (RuntimeException ex) {
+            log.error(
+                    "[TemplateSaveTrace][{}][service] {} {} failed after {}ms: {}",
+                    traceId,
+                    action,
+                    stage,
+                    elapsedMillis(startedAt),
+                    ex.getMessage(),
+                    ex
+            );
+            throw ex;
+        }
+    }
+
+    private String summarizeTemplateSaveTraceValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof CharSequence text) {
+            String normalized = text.toString().replace('\n', ' ').replace('\r', ' ');
+            if (normalized.length() > 120) {
+                return normalized.substring(0, 120) + "...";
+            }
+            return normalized;
+        }
+        if (value instanceof Collection<?> collection) {
+            return "Collection(size=" + collection.size() + ")";
+        }
+        return String.valueOf(value);
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return Math.max(0L, (System.nanoTime() - startedAt) / 1_000_000L);
     }
 
     private ProcessCenterNavItemVO navItem(String key, String label, String tip) {

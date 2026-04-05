@@ -1,6 +1,27 @@
 <template>
-  <div class="grid grid-cols-1 gap-6 xl:grid-cols-[380px,minmax(0,1fr)]">
-    <el-card class="!rounded-3xl !shadow-sm">
+  <div class="expense-wb-page expense-wb-page--config space-y-6">
+    <section class="expense-wb-stat-grid expense-wb-stat-grid--compact" data-testid="expense-type-summary-grid">
+      <article
+        v-for="stat in expenseTypeStats"
+        :key="stat.label"
+        class="expense-wb-stat-card expense-wb-stat-card--compact"
+      >
+        <div class="expense-wb-stat-card__top">
+          <div>
+            <p class="expense-wb-stat-card__label">{{ stat.label }}</p>
+            <p class="expense-wb-stat-card__value">{{ stat.value }}</p>
+          </div>
+          <span class="expense-wb-stat-card__icon" :class="`expense-wb-stat-card__icon--${stat.tone}`">
+            <el-icon :size="22">
+              <component :is="stat.icon" />
+            </el-icon>
+          </span>
+        </div>
+      </article>
+    </section>
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[380px,minmax(0,1fr)]">
+    <el-card class="expense-wb-panel">
       <template #header>
         <div class="flex items-center justify-between gap-3">
           <div>
@@ -47,7 +68,7 @@
       </div>
     </el-card>
 
-    <el-card class="!rounded-3xl !shadow-sm">
+    <el-card class="expense-wb-panel">
       <template #header>
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -213,13 +234,14 @@
         <el-button type="primary" @click="createDraft">新增费用类型</el-button>
       </el-empty>
     </el-card>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, Delete, Plus, Search } from '@element-plus/icons-vue'
+import { Check, CircleCheckFilled, Delete, Files, Plus, Search } from '@element-plus/icons-vue'
 import {
   processApi,
   type ProcessExpenseTypeDetail,
@@ -277,6 +299,39 @@ const statusSwitch = computed({
 })
 
 const filteredTree = computed(() => filterTree(treeData.value, keyword.value.trim().toLowerCase()))
+const flattenedTreeNodes = computed(() => flattenTreeNodes(treeData.value))
+const filteredTreeNodes = computed(() => flattenTreeNodes(filteredTree.value))
+const enabledExpenseTypeCount = computed(() => flattenedTreeNodes.value.filter((item) => item.status === 1).length)
+const expenseTypeStats = computed(() => [
+  {
+    label: '全部类型',
+    value: flattenedTreeNodes.value.length,
+    hint: '费用类型树中当前维护的全部节点数量',
+    icon: Files,
+    tone: 'blue'
+  },
+  {
+    label: '启用中',
+    value: enabledExpenseTypeCount.value,
+    hint: '当前处于启用状态，可用于单据场景',
+    icon: CircleCheckFilled,
+    tone: 'green'
+  },
+  {
+    label: '搜索结果',
+    value: filteredTreeNodes.value.length,
+    hint: '按名称或编码过滤后的树节点数量',
+    icon: Search,
+    tone: 'amber'
+  },
+  {
+    label: '当前编辑',
+    value: form.value ? '已选择' : '新建草稿',
+    hint: form.value?.expenseName || '右侧配置区当前正在维护的费用类型',
+    icon: Check,
+    tone: 'rose'
+  }
+])
 
 onMounted(async () => {
   await loadInitialData()
@@ -423,6 +478,9 @@ const filterTree = (nodes: ProcessExpenseTypeTreeNode[], search: string): Proces
     })
     .filter(Boolean) as ProcessExpenseTypeTreeNode[]
 }
+
+const flattenTreeNodes = (nodes: ProcessExpenseTypeTreeNode[]): ProcessExpenseTypeTreeNode[] =>
+  nodes.flatMap((node) => [node, ...flattenTreeNodes(node.children || [])])
 </script>
 
 <style scoped>

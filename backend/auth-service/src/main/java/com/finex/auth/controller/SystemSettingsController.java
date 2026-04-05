@@ -166,8 +166,9 @@ public class SystemSettingsController {
             @RequestBody RolePermissionAssignDTO dto,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), ROLE_ASSIGN_PERMISSION);
-        return Result.success("角色权限分配成功", systemSettingsService.assignRolePermissions(id, dto));
+        Long currentUserId = getCurrentUserId(request);
+        accessControlService.requirePermission(currentUserId, ROLE_ASSIGN_PERMISSION);
+        return Result.success("角色权限分配成功", systemSettingsService.assignRolePermissions(id, dto, currentUserId));
     }
 
     @PostMapping("/users/{id}/roles")

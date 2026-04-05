@@ -32,6 +32,10 @@ public class ProcessDocumentTask {
 
     private String approvalMode;
 
+    private String taskKind;
+
+    private Long sourceTaskId;
+
     private String actionComment;
 
     private LocalDateTime createdAt;

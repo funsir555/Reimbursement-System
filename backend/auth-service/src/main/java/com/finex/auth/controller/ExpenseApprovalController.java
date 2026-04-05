@@ -1,18 +1,26 @@
 package com.finex.auth.controller;
 
+import com.finex.auth.dto.ExpenseActionUserOptionVO;
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
 import com.finex.auth.dto.ExpenseApprovalPendingItemVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
+import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
+import com.finex.auth.dto.ExpenseTaskAddSignDTO;
+import com.finex.auth.dto.ExpenseTaskTransferDTO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -59,6 +67,60 @@ public class ExpenseApprovalController {
                 "审批已驳回",
                 expenseDocumentService.rejectTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto == null ? new ExpenseApprovalActionDTO() : dto)
         );
+    }
+
+    @GetMapping("/tasks/{taskId}/modify-context")
+    public Result<ExpenseDocumentEditContextVO> modifyContext(@PathVariable Long taskId, HttpServletRequest request) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_APPROVAL_VIEW, EXPENSE_APPROVAL_APPROVE);
+        return Result.success(expenseDocumentService.getTaskModifyContext(getCurrentUserId(request), taskId));
+    }
+
+    @PutMapping("/tasks/{taskId}/modify")
+    public Result<ExpenseDocumentDetailVO> modify(
+            @PathVariable Long taskId,
+            @Valid @RequestBody ExpenseDocumentUpdateDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
+        return Result.success(
+                "审批单已更新",
+                expenseDocumentService.modifyTaskDocument(getCurrentUserId(request), getCurrentUsername(request), taskId, dto)
+        );
+    }
+
+    @PostMapping("/tasks/{taskId}/add-sign")
+    public Result<ExpenseDocumentDetailVO> addSign(
+            @PathVariable Long taskId,
+            @Valid @RequestBody ExpenseTaskAddSignDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
+        return Result.success(
+                "已发起加签",
+                expenseDocumentService.addSignTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto)
+        );
+    }
+
+    @PostMapping("/tasks/{taskId}/transfer")
+    public Result<ExpenseDocumentDetailVO> transfer(
+            @PathVariable Long taskId,
+            @Valid @RequestBody ExpenseTaskTransferDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
+        return Result.success(
+                "审批任务已转交",
+                expenseDocumentService.transferTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto)
+        );
+    }
+
+    @GetMapping("/action-users")
+    public Result<List<ExpenseActionUserOptionVO>> actionUsers(
+            @RequestParam(required = false) String keyword,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_VIEW);
+        return Result.success(expenseDocumentService.searchActionUsers(getCurrentUserId(request), keyword));
     }
 
     private Long getCurrentUserId(HttpServletRequest request) {

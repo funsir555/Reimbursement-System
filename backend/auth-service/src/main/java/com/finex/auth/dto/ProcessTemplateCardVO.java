@@ -26,7 +26,13 @@ public class ProcessTemplateCardVO {
 
     private List<String> highlights;
 
+    private String flowCode;
+
     private String flowName;
+
+    private String formCode;
+
+    private String formName;
 
     private String updatedAt;
 

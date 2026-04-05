@@ -32,6 +32,30 @@
           </div>
         </section>
 
+        <section
+          v-if="saveBlockers.length"
+          id="save-blockers"
+          ref="saveBlockersRef"
+          class="save-blockers-panel rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 shadow-sm"
+        >
+          <div class="flex items-start gap-4">
+            <div class="save-blockers-icon">!</div>
+            <div class="min-w-0 flex-1 space-y-3">
+              <div>
+                <p class="text-base font-semibold text-amber-950">当前还不能保存模板</p>
+                <p class="mt-1 text-sm text-amber-800">
+                  下面这些问题处理完后，系统才会真正发起保存请求并把模板入库。
+                </p>
+              </div>
+              <ul class="space-y-2 text-sm text-amber-900">
+                <li v-for="blocker in saveBlockers" :key="blocker" class="save-blocker-item">
+                  {{ blocker }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
         <el-form label-position="top" class="space-y-6">
           <el-card id="basic" class="anchor-card !rounded-3xl !shadow-sm">
             <template #header>
@@ -94,6 +118,27 @@
                 <button type="button" class="selection-trigger" @click="openOptionDialog('approvalFlow')">
                   {{ singleOptionLabel('approvalFlow') || '请选择审批流程' }}
                 </button>
+              </el-form-item>
+
+              <el-form-item v-if="isReportTemplate" label="费用明细表单" required>
+                <button type="button" class="selection-trigger" @click="openOptionDialog('expenseDetailDesign')">
+                  {{ singleOptionLabel('expenseDetailDesign') || '请选择费用明细表单' }}
+                </button>
+              </el-form-item>
+
+              <el-form-item
+                v-if="isReportTemplate && selectedExpenseDetailType === 'ENTERPRISE_TRANSACTION'"
+                label="企业往来默认模式"
+                required
+              >
+                <el-select v-model="form.expenseDetailModeDefault" placeholder="请选择企业往来默认模式">
+                  <el-option
+                    v-for="item in options?.expenseDetailModeOptions || []"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
+                </el-select>
               </el-form-item>
 
               <el-form-item label="表单打印">
@@ -169,20 +214,14 @@
 
               <el-form-item label="限定金额">
                 <div class="grid grid-cols-[minmax(0,1fr),36px,minmax(0,1fr)] items-center gap-3">
-                  <el-input-number
+                  <money-input
                     v-model="form.amountMin"
-                    :min="0"
-                    :precision="2"
-                    :controls="false"
                     class="w-full"
                     placeholder="最小值"
                   />
                   <span class="text-center text-slate-400">至</span>
-                  <el-input-number
+                  <money-input
                     v-model="form.amountMax"
-                    :min="0"
-                    :precision="2"
-                    :controls="false"
                     class="w-full"
                     placeholder="最大值"
                   />
@@ -395,6 +434,7 @@ import { ArrowLeft, Close, Plus } from '@element-plus/icons-vue'
 import {
   processApi,
   type ProcessCenterNavItem,
+  type ProcessExpenseDetailDesignSummary,
   type ProcessExpenseTypeTreeNode,
   type ProcessFormDesignSummary,
   type ProcessFlowSummary,
@@ -404,9 +444,11 @@ import {
   type ProcessTemplateSavePayload
 } from '@/api'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import { compareMoney } from '@/utils/money'
 import ProcessWorkbenchSidebar from '@/components/process/ProcessWorkbenchSidebar.vue'
 
-type SingleOptionField = 'formDesign' | 'approvalFlow' | 'printMode' | 'paymentMode' | 'allocationForm'
+type SingleOptionField = 'formDesign' | 'expenseDetailDesign' | 'approvalFlow' | 'printMode' | 'paymentMode' | 'allocationForm'
 
 type LabeledValue = {
   label: string
@@ -419,6 +461,7 @@ type ExpenseTypeTreeInstance = {
 }
 
 const TEMPLATE_DRAFT_PREFIX = 'process-template-create-draft:'
+const DEFAULT_ENTERPRISE_TRANSACTION_MODE = 'PREPAY_UNBILLED'
 
 const route = useRoute()
 const router = useRouter()
@@ -431,6 +474,7 @@ const flowSummaries = ref<ProcessFlowSummary[]>([])
 const formDesignSummaries = ref<ProcessFormDesignSummary[]>([])
 const saving = ref(false)
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
+const saveBlockersRef = ref<HTMLElement | null>(null)
 
 const templateType = computed(() => String(route.params.templateType || 'report'))
 const templateId = computed(() => {
@@ -442,6 +486,7 @@ const templateId = computed(() => {
   return Number.isFinite(id) && id > 0 ? id : null
 })
 const isEditMode = computed(() => templateId.value !== null)
+const isReportTemplate = computed(() => templateType.value === 'report')
 const canCreate = computed(() =>
   isEditMode.value
     ? hasPermission('expense:process_management:edit', permissionCodes.value)
@@ -485,6 +530,7 @@ const expenseTypeTreeRef = ref<ExpenseTypeTreeInstance | null>(null)
 
 const optionDialogConfig: Record<SingleOptionField, { title: string; createLabel: string }> = {
   formDesign: { title: '选择表单设计', createLabel: '新建表单设计' },
+  expenseDetailDesign: { title: '选择费用明细表单', createLabel: '新建费用明细表单' },
   approvalFlow: { title: '选择审批流程', createLabel: '新建审批流程' },
   printMode: { title: '选择表单打印', createLabel: '新建表单打印' },
   paymentMode: { title: '选择付款单设置', createLabel: '新建付款单设置' },
@@ -514,6 +560,15 @@ const flowSummaryMap = computed(() => {
   })
   return map
 })
+const expenseDetailSummaryMap = computed(() => {
+  const map = new Map<string, ProcessExpenseDetailDesignSummary>()
+  ;(options.value?.expenseDetailDesignOptions || []).forEach((item) => {
+    if (item.detailCode) {
+      map.set(item.detailCode, item)
+    }
+  })
+  return map
+})
 const formDesignSummaryMap = computed(() => {
   const map = new Map<string, ProcessFormDesignSummary>()
   formDesignSummaries.value.forEach((item) => {
@@ -522,6 +577,31 @@ const formDesignSummaryMap = computed(() => {
     }
   })
   return map
+})
+const selectedExpenseDetailType = computed(() => expenseDetailSummaryMap.value.get(form.expenseDetailDesign || '')?.detailType || '')
+const saveBlockers = computed(() => {
+  const blockers: string[] = []
+
+  if (!canCreate.value) {
+    blockers.push(templateId.value !== null ? '当前账号没有修改模板权限。' : '当前账号没有新增流程模板权限。')
+  }
+  if (!form.templateName.trim()) {
+    blockers.push('请先填写单据名称。')
+  }
+  if (!form.approvalFlow) {
+    blockers.push('请先选择审批流程。')
+  }
+  if (!form.formDesign) {
+    blockers.push('请先选择表单设计。')
+  }
+  if (isReportTemplate.value && !form.expenseDetailDesign) {
+    blockers.push('报销模板必须绑定费用明细表单。')
+  }
+  if (form.amountMin && form.amountMax && compareMoney(form.amountMin, form.amountMax) > 0) {
+    blockers.push('限定金额区间不合法，最小金额不能大于最大金额。')
+  }
+
+  return blockers
 })
 
 function resolveErrorMessage(error: unknown, fallback: string) {
@@ -553,6 +633,25 @@ watch(
   }
 )
 
+watch(
+  () => route.query.createdExpenseDetailCode,
+  () => {
+    applyCreatedExpenseDetailCodeFromRoute()
+  }
+)
+
+watch(selectedExpenseDetailType, (value) => {
+  if (value === 'ENTERPRISE_TRANSACTION') {
+    if (!form.expenseDetailModeDefault) {
+      form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
+    }
+    return
+  }
+  if (form.expenseDetailModeDefault) {
+    form.expenseDetailModeDefault = ''
+  }
+})
+
 onMounted(async () => {
   await loadPage()
 })
@@ -565,6 +664,8 @@ function createEmptyForm(type: string): ProcessTemplateSavePayload {
     category: '',
     enabled: true,
     formDesign: '',
+    expenseDetailDesign: '',
+    expenseDetailModeDefault: '',
     printMode: '',
     approvalFlow: '',
     paymentMode: '',
@@ -572,8 +673,8 @@ function createEmptyForm(type: string): ProcessTemplateSavePayload {
     aiAuditMode: '',
     scopeDeptIds: [],
     scopeExpenseTypeCodes: [],
-    amountMin: undefined,
-    amountMax: undefined,
+    amountMin: '',
+    amountMax: '',
     tagOption: '',
     installmentOption: ''
   }
@@ -648,6 +749,8 @@ function normalizeTemplateDetail(detail: ProcessTemplateDetail, optionData: Proc
     category: detail.category || defaults.category,
     enabled: detail.enabled ?? true,
     formDesign: detail.formDesign || defaults.formDesign,
+    expenseDetailDesign: detail.expenseDetailDesign || '',
+    expenseDetailModeDefault: detail.expenseDetailModeDefault || '',
     printMode: detail.printMode || defaults.printMode,
     approvalFlow: detail.approvalFlow || '',
     paymentMode: detail.paymentMode || defaults.paymentMode,
@@ -655,8 +758,8 @@ function normalizeTemplateDetail(detail: ProcessTemplateDetail, optionData: Proc
     aiAuditMode: detail.aiAuditMode || defaults.aiAuditMode,
     scopeDeptIds: Array.isArray(detail.scopeDeptIds) ? detail.scopeDeptIds.map(String) : [],
     scopeExpenseTypeCodes: Array.isArray(detail.scopeExpenseTypeCodes) ? detail.scopeExpenseTypeCodes.map(String) : [],
-    amountMin: detail.amountMin ?? undefined,
-    amountMax: detail.amountMax ?? undefined,
+    amountMin: detail.amountMin ?? '',
+    amountMax: detail.amountMax ?? '',
     tagOption: detail.tagOption || '',
     installmentOption: detail.installmentOption || ''
   }
@@ -683,6 +786,7 @@ async function loadPage() {
     initializeForm(optionRes.data, detailRes?.data || null)
     applyCreatedFlowCodeFromRoute()
     applyCreatedFormCodeFromRoute()
+    applyCreatedExpenseDetailCodeFromRoute()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载模板配置页面失败'))
   }
@@ -695,6 +799,12 @@ function initializeForm(optionData: ProcessTemplateFormOptions, detail: ProcessT
     scopeDeptIds: [...(next.scopeDeptIds || [])],
     scopeExpenseTypeCodes: [...(next.scopeExpenseTypeCodes || [])]
   })
+  if (optionData.templateType !== 'report') {
+    form.expenseDetailDesign = ''
+    form.expenseDetailModeDefault = ''
+  } else if (selectedExpenseDetailType.value === 'ENTERPRISE_TRANSACTION' && !form.expenseDetailModeDefault) {
+    form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
+  }
 }
 
 function applyCreatedFlowCodeFromRoute() {
@@ -721,10 +831,32 @@ function applyCreatedFormCodeFromRoute() {
   router.replace({ query: nextQuery })
 }
 
+function applyCreatedExpenseDetailCodeFromRoute() {
+  const createdExpenseDetailCode = typeof route.query.createdExpenseDetailCode === 'string'
+    ? route.query.createdExpenseDetailCode
+    : ''
+  if (!createdExpenseDetailCode) {
+    return
+  }
+
+  form.expenseDetailDesign = createdExpenseDetailCode
+  if (expenseDetailSummaryMap.value.get(createdExpenseDetailCode)?.detailType === 'ENTERPRISE_TRANSACTION' && !form.expenseDetailModeDefault) {
+    form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
+  }
+  const nextQuery = { ...route.query }
+  delete nextQuery.createdExpenseDetailCode
+  router.replace({ query: nextQuery })
+}
+
 function optionListByField(field: SingleOptionField) {
   switch (field) {
     case 'formDesign':
       return options.value?.formDesignOptions || []
+    case 'expenseDetailDesign':
+      return (options.value?.expenseDetailDesignOptions || []).map((item) => ({
+        label: item.detailName,
+        value: item.detailCode
+      }))
     case 'approvalFlow':
       return options.value?.approvalFlows || []
     case 'printMode':
@@ -738,6 +870,9 @@ function optionListByField(field: SingleOptionField) {
 
 function singleOptionLabel(field: SingleOptionField) {
   const currentValue = form[field]
+  if (field === 'expenseDetailDesign') {
+    return expenseDetailSummaryMap.value.get(currentValue || '')?.detailName || ''
+  }
   return optionListByField(field).find((item) => item.value === currentValue)?.label || ''
 }
 
@@ -747,7 +882,7 @@ function openOptionDialog(field: SingleOptionField) {
   optionDialog.title = config.title
   optionDialog.createLabel = config.createLabel
   optionDialog.options = optionListByField(field)
-  optionDialog.pendingValue = form[field]
+  optionDialog.pendingValue = String(form[field] || '')
   optionDialog.visible = true
 }
 
@@ -762,6 +897,20 @@ function showCreateEntry() {
     optionDialog.visible = false
     router.push({
       name: 'expense-workbench-process-form-create',
+      query: {
+        from: templateId.value !== null ? 'template-edit' : 'template-create',
+        templateType: templateType.value,
+        returnTo: route.fullPath
+      }
+    })
+    return
+  }
+
+  if (optionDialog.field === 'expenseDetailDesign') {
+    saveTemplateDraft()
+    optionDialog.visible = false
+    router.push({
+      name: 'expense-workbench-process-expense-detail-create',
       query: {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
         templateType: templateType.value,
@@ -801,6 +950,27 @@ function showOptionEdit(item: ProcessFormOption) {
     router.push({
       name: 'expense-workbench-process-form-edit',
       params: { id: formDesign.id },
+      query: {
+        from: templateId.value !== null ? 'template-edit' : 'template-create',
+        templateType: templateType.value,
+        returnTo: route.fullPath
+      }
+    })
+    return
+  }
+
+  if (optionDialog.field === 'expenseDetailDesign') {
+    const expenseDetailDesign = expenseDetailSummaryMap.value.get(item.value)
+    if (!expenseDetailDesign?.id) {
+      ElMessage.warning('当前费用明细表单缺少可编辑详情，请刷新后重试')
+      return
+    }
+
+    saveTemplateDraft()
+    optionDialog.visible = false
+    router.push({
+      name: 'expense-workbench-process-expense-detail-edit',
+      params: { id: expenseDetailDesign.id },
       query: {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
         templateType: templateType.value,
@@ -921,7 +1091,38 @@ const goBack = () => {
   router.push('/expense/workbench/process-management')
 }
 
+const scrollToSaveBlockers = async () => {
+  await nextTick()
+  saveBlockersRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+}
+
+function resolveTemplateSaveSuccessMessage(templateCode: string) {
+  if (templateId.value !== null) {
+    if (isReportTemplate.value && form.enabled) {
+      return `模板修改成功，可在新建报销中直接使用：${templateCode}`
+    }
+    if (isReportTemplate.value && !form.enabled) {
+      return `模板修改成功，但当前未启用，不会出现在新建报销中：${templateCode}`
+    }
+    return `模板修改成功：${templateCode}`
+  }
+
+  if (isReportTemplate.value && form.enabled) {
+    return `模板已保存，可在新建报销中直接使用：${templateCode}`
+  }
+  if (isReportTemplate.value && !form.enabled) {
+    return `模板已保存，但当前未启用，不会出现在新建报销中：${templateCode}`
+  }
+  return `模板已保存：${templateCode}`
+}
+
 const saveTemplate = async () => {
+  if (saveBlockers.value.length) {
+    await scrollToSaveBlockers()
+    ElMessage.warning(saveBlockers.value[0])
+    return
+  }
+
   if (!canCreate.value) {
     ElMessage.warning(templateId.value !== null ? '当前账号没有修改模板权限' : '当前账号没有新增流程模板权限')
     return
@@ -942,19 +1143,32 @@ const saveTemplate = async () => {
     return
   }
 
-  if (form.amountMin !== undefined && form.amountMax !== undefined && form.amountMin > form.amountMax) {
+  if (isReportTemplate.value && !form.expenseDetailDesign) {
+    ElMessage.warning('报销模板必须绑定费用明细表单')
+    return
+  }
+
+  if (form.amountMin && form.amountMax && compareMoney(form.amountMin, form.amountMax) > 0) {
     ElMessage.warning('限定金额区间不合法，最小金额不能大于最大金额')
     return
   }
 
   saving.value = true
   try {
+    if (isReportTemplate.value) {
+      if (selectedExpenseDetailType.value === 'ENTERPRISE_TRANSACTION' && !form.expenseDetailModeDefault) {
+        form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
+      }
+    } else {
+      form.expenseDetailDesign = ''
+      form.expenseDetailModeDefault = ''
+    }
     const payload = clonePayload(form)
     const res = templateId.value !== null
       ? await processApi.updateTemplate(templateId.value, payload)
       : await processApi.createTemplate(payload)
     clearTemplateDraft()
-    ElMessage.success(`${templateId.value !== null ? '模板修改成功' : '模板已保存'}：${res.data.templateCode}`)
+    ElMessage.success(resolveTemplateSaveSuccessMessage(res.data.templateCode))
     router.push('/expense/workbench/process-management')
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, templateId.value !== null ? '保存修改失败' : '保存模板失败'))
@@ -992,6 +1206,39 @@ const saveTemplate = async () => {
   background: #f8fafc;
   padding: 0 14px;
   color: #334155;
+}
+
+.save-blockers-panel {
+  scroll-margin-top: 96px;
+}
+
+.save-blockers-icon {
+  display: flex;
+  height: 28px;
+  width: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #f59e0b;
+  color: #fff;
+  font-weight: 700;
+}
+
+.save-blocker-item {
+  position: relative;
+  padding-left: 18px;
+}
+
+.save-blocker-item::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  height: 6px;
+  width: 6px;
+  border-radius: 9999px;
+  background: #b45309;
 }
 
 .selection-trigger {

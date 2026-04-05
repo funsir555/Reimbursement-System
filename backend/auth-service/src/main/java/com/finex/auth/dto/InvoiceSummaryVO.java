@@ -1,6 +1,9 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyValue;
 import lombok.Data;
+
+import java.math.BigDecimal;
 
 /**
  * 发票摘要
@@ -16,7 +19,8 @@ public class InvoiceSummaryVO {
 
     private String seller;
 
-    private Double amount;
+    @MoneyValue
+    private BigDecimal amount;
 
     private String date;
 

@@ -20,6 +20,10 @@ public class ProcessTemplateFormOptionsVO {
 
     private List<ProcessFormOptionVO> formDesignOptions;
 
+    private List<ProcessExpenseDetailDesignSummaryVO> expenseDetailDesignOptions;
+
+    private List<ProcessFormOptionVO> expenseDetailModeOptions;
+
     private List<ProcessFormOptionVO> printModes;
 
     private List<ProcessFormOptionVO> approvalFlows;

@@ -95,6 +95,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     private static final String DEPARTMENT_CODE_PREFIX = "DEPT";
     private static final String COMPANY_ID_PREFIX = "COMPANY";
     private static final String COMPANY_CODE_PREFIX = "COMP";
+    private static final String ROLE_CODE_PREFIX = "RL";
+    private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";
     private static final int CODE_GENERATION_MAX_RETRY = 20;
 
     private final UserService userService;
@@ -381,9 +383,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public RoleVO createRole(RoleSaveDTO dto) {
-        ensureRoleCodeUnique(dto.getRoleCode(), null);
         SystemRole role = new SystemRole();
-        role.setRoleCode(dto.getRoleCode().trim());
+        role.setRoleCode(generateRoleCode());
         role.setRoleName(dto.getRoleName().trim());
         role.setRoleDescription(trimToNull(dto.getRoleDescription()));
         role.setStatus(normalizeStatus(dto.getStatus()));
@@ -395,8 +396,9 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Transactional(rollbackFor = Exception.class)
     public RoleVO updateRole(Long id, RoleSaveDTO dto) {
         SystemRole role = requireRole(id);
-        ensureRoleCodeUnique(dto.getRoleCode(), id);
-        role.setRoleCode(dto.getRoleCode().trim());
+        if (isSuperAdminRole(role)) {
+            throw new IllegalArgumentException("超级管理员角色为系统保留角色，不能通过前端修改");
+        }
         role.setRoleName(dto.getRoleName().trim());
         role.setRoleDescription(trimToNull(dto.getRoleDescription()));
         role.setStatus(normalizeStatus(dto.getStatus()));
@@ -407,7 +409,10 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteRole(Long id) {
-        requireRole(id);
+        SystemRole role = requireRole(id);
+        if (isSuperAdminRole(role)) {
+            throw new IllegalArgumentException("超级管理员角色为系统保留角色，不能删除");
+        }
         systemRolePermissionMapper.delete(Wrappers.<SystemRolePermission>lambdaQuery().eq(SystemRolePermission::getRoleId, id));
         systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getRoleId, id));
         systemRoleMapper.deleteById(id);
@@ -416,8 +421,11 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean assignRolePermissions(Long roleId, RolePermissionAssignDTO dto) {
-        requireRole(roleId);
+    public Boolean assignRolePermissions(Long roleId, RolePermissionAssignDTO dto, Long currentUserId) {
+        SystemRole role = requireRole(roleId);
+        if (isSuperAdminRole(role) && !currentUserIsSuperAdmin(currentUserId)) {
+            throw new IllegalArgumentException("超级管理员权限仅可由超级管理员修改");
+        }
         systemRolePermissionMapper.delete(Wrappers.<SystemRolePermission>lambdaQuery().eq(SystemRolePermission::getRoleId, roleId));
         List<String> permissionCodes = dto == null || dto.getPermissionCodes() == null ? List.of() : dto.getPermissionCodes();
         if (permissionCodes.isEmpty()) {
@@ -443,10 +451,27 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Transactional(rollbackFor = Exception.class)
     public Boolean assignUserRoles(Long userId, UserRoleAssignDTO dto) {
         requireUser(userId);
-        systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getUserId, userId));
-        List<Long> roleIds = dto == null || dto.getRoleIds() == null ? List.of() : dto.getRoleIds();
+        Long superAdminRoleId = findSuperAdminRoleId();
+        List<Long> roleIds = dto == null || dto.getRoleIds() == null
+                ? List.of()
+                : dto.getRoleIds().stream().filter(Objects::nonNull).distinct().toList();
+        if (superAdminRoleId != null && roleIds.contains(superAdminRoleId)) {
+            throw new IllegalArgumentException("超级管理员只能通过数据库维护");
+        }
+        if (superAdminRoleId != null) {
+            systemUserRoleMapper.delete(
+                    Wrappers.<SystemUserRole>lambdaQuery()
+                            .eq(SystemUserRole::getUserId, userId)
+                            .ne(SystemUserRole::getRoleId, superAdminRoleId)
+            );
+        } else {
+            systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getUserId, userId));
+        }
         for (Long roleId : roleIds) {
-            requireRole(roleId);
+            SystemRole role = requireRole(roleId);
+            if (isSuperAdminRole(role)) {
+                throw new IllegalArgumentException("超级管理员只能通过数据库维护");
+            }
             SystemUserRole userRole = new SystemUserRole();
             userRole.setUserId(userId);
             userRole.setRoleId(roleId);
@@ -553,6 +578,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     public SyncConnectorVO updateSyncConnector(SyncConnectorSaveDTO dto) {
         ensureDefaultConnectors();
         String platformCode = dto.getPlatformCode().trim().toUpperCase(Locale.ROOT);
+        validateConnectorSave(platformCode, dto);
         SystemSyncConnector connector = systemSyncConnectorMapper.selectOne(
                 Wrappers.<SystemSyncConnector>lambdaQuery()
                         .eq(SystemSyncConnector::getPlatformCode, platformCode)
@@ -567,7 +593,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         connector.setEnabled(dto.getEnabled() != null && dto.getEnabled() == 0 ? 0 : 1);
         connector.setAutoSyncEnabled(dto.getAutoSyncEnabled() != null && dto.getAutoSyncEnabled() == 1 ? 1 : 0);
         connector.setSyncIntervalMinutes(dto.getSyncIntervalMinutes() == null || dto.getSyncIntervalMinutes() <= 0 ? 60 : dto.getSyncIntervalMinutes());
-        connector.setConfigJson(writeConnectorConfig(dto));
+        connector.setConfigJson(writeConnectorConfig(platformCode, dto));
         connector.setPlatformName(resolvePlatformName(platformCode));
         systemSyncConnectorMapper.updateById(connector);
         return toSyncConnectorVo(requireConnector(platformCode));
@@ -643,6 +669,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
 
         SyncStats stats = new SyncStats();
         try {
+            validateConnectorRunConfig(connector.getPlatformCode(), readConnectorConfig(connector.getConfigJson()));
             OrganizationSyncAdapter adapter = requireSyncAdapter(connector.getPlatformCode());
             ExternalSyncPayload payload = adapter.pull(connector);
             processDepartments(job.getId(), connector.getPlatformCode(), payload.getDepartments(), stats);
@@ -1038,11 +1065,11 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         return vo;
     }
 
-    private String writeConnectorConfig(SyncConnectorSaveDTO dto) {
+    private String writeConnectorConfig(String platformCode, SyncConnectorSaveDTO dto) {
         Map<String, String> config = new LinkedHashMap<>();
-        config.put("appKey", trimToNull(dto.getAppKey()));
+        config.put("appKey", PLATFORM_WECOM.equals(platformCode) ? null : trimToNull(dto.getAppKey()));
         config.put("appSecret", trimToNull(dto.getAppSecret()));
-        config.put("appId", trimToNull(dto.getAppId()));
+        config.put("appId", PLATFORM_WECOM.equals(platformCode) ? null : trimToNull(dto.getAppId()));
         config.put("corpId", trimToNull(dto.getCorpId()));
         config.put("agentId", trimToNull(dto.getAgentId()));
         try {
@@ -1061,6 +1088,28 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             });
         } catch (Exception ex) {
             return new HashMap<>();
+        }
+    }
+
+    private void validateConnectorSave(String platformCode, SyncConnectorSaveDTO dto) {
+        if (!PLATFORM_WECOM.equals(platformCode)) {
+            return;
+        }
+        requireConnectorField(dto.getCorpId(), "企微企业 ID");
+        requireConnectorField(dto.getAppSecret(), "企微通讯录 Secret");
+    }
+
+    private void validateConnectorRunConfig(String platformCode, Map<String, String> config) {
+        if (!PLATFORM_WECOM.equals(platformCode)) {
+            return;
+        }
+        requireConnectorField(config.get("corpId"), "企微企业 ID");
+        requireConnectorField(config.get("appSecret"), "企微通讯录 Secret");
+    }
+
+    private void requireConnectorField(String value, String fieldName) {
+        if (StrUtil.isBlank(value)) {
+            throw new IllegalArgumentException(fieldName + "不能为空");
         }
     }
 
@@ -1444,6 +1493,9 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     }
 
     private void ensureRoleCodeUnique(String roleCode, Long excludeId) {
+        if (StrUtil.isBlank(roleCode)) {
+            throw new IllegalArgumentException("角色编码不能为空");
+        }
         LambdaQueryWrapper<SystemRole> wrapper = Wrappers.<SystemRole>lambdaQuery()
                 .eq(SystemRole::getRoleCode, roleCode.trim());
         if (excludeId != null) {
@@ -1492,6 +1544,58 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             }
         }
         throw new IllegalStateException("部门编码自动生成失败");
+    }
+
+    private String generateRoleCode() {
+        for (int attempt = 0; attempt < CODE_GENERATION_MAX_RETRY; attempt++) {
+            int maxSequence = systemRoleMapper.selectList(
+                    Wrappers.<SystemRole>lambdaQuery()
+                            .likeRight(SystemRole::getRoleCode, ROLE_CODE_PREFIX)
+            ).stream()
+                    .map(SystemRole::getRoleCode)
+                    .mapToInt(this::parseRoleSequence)
+                    .max()
+                    .orElse(0);
+            int nextSequence = maxSequence + 1 + attempt;
+            String roleCode = ROLE_CODE_PREFIX + String.format("%06d", nextSequence);
+            if (systemRoleMapper.selectCount(
+                    Wrappers.<SystemRole>lambdaQuery().eq(SystemRole::getRoleCode, roleCode)
+            ) == 0) {
+                return roleCode;
+            }
+        }
+        throw new IllegalStateException("角色编码自动生成失败");
+    }
+
+    private int parseRoleSequence(String roleCode) {
+        if (StrUtil.isBlank(roleCode) || !roleCode.startsWith(ROLE_CODE_PREFIX)) {
+            return 0;
+        }
+        String sequencePart = roleCode.substring(ROLE_CODE_PREFIX.length());
+        if (!sequencePart.matches("\\d{6}")) {
+            return 0;
+        }
+        return Integer.parseInt(sequencePart);
+    }
+
+    private boolean isSuperAdminRole(SystemRole role) {
+        return role != null && SUPER_ADMIN_ROLE_CODE.equalsIgnoreCase(StrUtil.blankToDefault(role.getRoleCode(), ""));
+    }
+
+    private boolean currentUserIsSuperAdmin(Long userId) {
+        if (userId == null) {
+            return false;
+        }
+        return accessControlService.getRoleCodes(userId).stream()
+                .anyMatch(roleCode -> SUPER_ADMIN_ROLE_CODE.equalsIgnoreCase(roleCode));
+    }
+
+    private Long findSuperAdminRoleId() {
+        return systemRoleMapper.selectList(
+                Wrappers.<SystemRole>lambdaQuery()
+                        .eq(SystemRole::getRoleCode, SUPER_ADMIN_ROLE_CODE)
+                        .last("limit 1")
+        ).stream().findFirst().map(SystemRole::getId).orElse(null);
     }
 
     private CompanyCodeBundle generateCompanyCodes() {

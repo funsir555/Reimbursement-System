@@ -1,6 +1,9 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyValue;
 import lombok.Data;
+
+import java.math.BigDecimal;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -20,7 +23,8 @@ public class ExpenseDocumentDetailVO {
 
     private String statusLabel;
 
-    private Double totalAmount;
+    @MoneyValue
+    private BigDecimal totalAmount;
 
     private Long submitterUserId;
 
@@ -48,7 +52,11 @@ public class ExpenseDocumentDetailVO {
 
     private Map<String, Object> flowSnapshot = new LinkedHashMap<>();
 
+    private List<ProcessFormOptionVO> companyOptions = new ArrayList<>();
+
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
+
+    private List<ExpenseDetailInstanceSummaryVO> expenseDetails = new ArrayList<>();
 
     private List<ExpenseApprovalTaskVO> currentTasks = new ArrayList<>();
 

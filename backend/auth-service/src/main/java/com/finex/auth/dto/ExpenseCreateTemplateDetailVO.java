@@ -21,8 +21,18 @@ public class ExpenseCreateTemplateDetailVO {
     private String flowName;
     private String formName;
     private Map<String, Object> schema = new LinkedHashMap<>();
+    private String expenseDetailDesignCode;
+    private String expenseDetailDesignName;
+    private String expenseDetailType;
+    private String expenseDetailTypeLabel;
+    private String expenseDetailModeDefault;
+    private Map<String, Object> expenseDetailSchema = new LinkedHashMap<>();
     private List<ProcessCustomArchiveDetailVO> sharedArchives = new ArrayList<>();
+    private List<ProcessCustomArchiveDetailVO> expenseDetailSharedArchives = new ArrayList<>();
+    private List<ProcessFormOptionVO> companyOptions = new ArrayList<>();
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
+    private List<ProcessFormOptionVO> expenseTypeOptions = new ArrayList<>();
+    private Map<String, String> expenseTypeInvoiceFreeModeMap = new LinkedHashMap<>();
     private String currentUserDeptId;
     private String currentUserDeptName;
 }

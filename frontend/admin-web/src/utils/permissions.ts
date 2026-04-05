@@ -2,9 +2,16 @@ type StoredUserLike = {
   permissionCodes?: string[]
 }
 
+export const EXPENSE_CREATE_ENTRY_PERMISSION_CODES = [
+  'expense:create:view',
+  'expense:create:create',
+  'expense:create:submit'
+] as const
+
 const FALLBACK_PATHS: Array<{ path: string; permissionCodes: string[] }> = [
   { path: '/dashboard', permissionCodes: ['dashboard:menu', 'dashboard:view'] },
   { path: '/profile', permissionCodes: ['profile:menu', 'profile:view'] },
+  { path: '/expense/create', permissionCodes: [...EXPENSE_CREATE_ENTRY_PERMISSION_CODES] },
   { path: '/expense/list', permissionCodes: ['expense:menu', 'expense:list:view'] },
   { path: '/archives/invoices', permissionCodes: ['archives:menu', 'archives:invoices:view'] },
   {

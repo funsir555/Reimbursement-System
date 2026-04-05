@@ -7,31 +7,39 @@
       :class="block.kind === 'branch' ? 'is-branch-step' : ''"
     >
       <template v-if="block.kind === 'insert'">
-        <el-dropdown trigger="click" @command="handleInsertCommand">
-          <button
-            type="button"
-            class="insert-trigger"
-            :aria-label="`在第 ${block.index + 1} 个位置插入节点`"
-          >
-            +
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'APPROVAL' }">
-                审批节点
-              </el-dropdown-item>
-              <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'CC' }">
-                抄送节点
-              </el-dropdown-item>
-              <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'PAYMENT' }">
-                支付节点
-              </el-dropdown-item>
-              <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'BRANCH' }">
-                流程分支
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div
+          class="insert-trigger-shell"
+          :class="dropTargetKey === block.key ? 'is-drop-target' : ''"
+          @dragenter.prevent="emit('drag-node-over', { containerKey: block.containerKey, index: block.index, blockKey: block.key })"
+          @dragover.prevent="emit('drag-node-over', { containerKey: block.containerKey, index: block.index, blockKey: block.key })"
+          @drop.prevent="emit('drop-node', { containerKey: block.containerKey, index: block.index, blockKey: block.key })"
+        >
+          <el-dropdown trigger="click" @command="handleInsertCommand">
+            <button
+              type="button"
+              class="insert-trigger"
+              :aria-label="`在第 ${block.index + 1} 个位置插入节点`"
+            >
+              +
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'APPROVAL' }">
+                  审批节点
+                </el-dropdown-item>
+                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'CC' }">
+                  抄送节点
+                </el-dropdown-item>
+                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'PAYMENT' }">
+                  支付节点
+                </el-dropdown-item>
+                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'BRANCH' }">
+                  流程分支
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </template>
 
       <template v-else-if="block.kind === 'node'">
@@ -39,8 +47,15 @@
           <button
             type="button"
             class="flow-node-card"
-            :class="[nodeCardClass(block.node.nodeType), selectedNodeKey === block.node.nodeKey ? 'is-selected' : '']"
+            :class="[
+              nodeCardClass(block.node.nodeType),
+              selectedNodeKey === block.node.nodeKey ? 'is-selected' : '',
+              draggingNodeKey === block.node.nodeKey ? 'is-dragging' : ''
+            ]"
+            draggable="true"
             @click="emit('select-node', block.node.nodeKey)"
+            @dragstart="handleNodeDragStart($event, block.node.nodeKey)"
+            @dragend="emit('drag-node-end')"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 text-left">
@@ -59,6 +74,24 @@
         <div class="branch-shell" :style="branchShellStyle(block.routes.length)">
           <div class="branch-mainline-entry" aria-hidden="true"></div>
           <div class="branch-split-line" aria-hidden="true"></div>
+          <button
+            type="button"
+            class="branch-node-card"
+            :class="[
+              selectedNodeKey === block.node.nodeKey ? 'is-selected' : '',
+              draggingNodeKey === block.node.nodeKey ? 'is-dragging' : ''
+            ]"
+            draggable="true"
+            @click="emit('select-node', block.node.nodeKey)"
+            @dragstart="handleNodeDragStart($event, block.node.nodeKey)"
+            @dragend="emit('drag-node-end')"
+          >
+            <div class="min-w-0 text-left">
+              <p class="truncate text-sm font-semibold text-slate-900">{{ block.node.nodeName }}</p>
+              <p class="mt-1 text-xs text-slate-500">{{ nodeTypeLabel(block.node.nodeType) }}</p>
+            </div>
+            <span class="branch-node-card__hint">拖动可调整位置</span>
+          </button>
 
           <div class="branch-lanes">
             <div
@@ -90,12 +123,18 @@
                   :blocks="lane.blocks"
                   :selected-node-key="selectedNodeKey"
                   :selected-route-key="selectedRouteKey"
+                  :dragging-node-key="draggingNodeKey"
+                  :drop-target-key="dropTargetKey"
                   :scene-name-by-id="sceneNameById"
                   :node-type-label="nodeTypeLabel"
                   :node-card-class="nodeCardClass"
                   @insert-node="emit('insert-node', $event)"
                   @select-node="emit('select-node', $event)"
                   @select-route="emit('select-route', $event)"
+                  @drag-node-start="emit('drag-node-start', $event)"
+                  @drag-node-end="emit('drag-node-end')"
+                  @drag-node-over="emit('drag-node-over', $event)"
+                  @drop-node="emit('drop-node', $event)"
                 />
               </div>
               <div class="branch-lane-exit" aria-hidden="true"></div>
@@ -126,10 +165,18 @@ type InsertCommand = {
   nodeType: FlowInsertType
 }
 
+type CanvasDropPayload = {
+  containerKey: FlowContainerKey
+  index: number
+  blockKey: string
+}
+
 defineProps<{
   blocks: FlowCanvasBlock[]
   selectedNodeKey: string
   selectedRouteKey: string
+  draggingNodeKey?: string
+  dropTargetKey?: string | null
   sceneNameById: (sceneId?: number) => string
   nodeTypeLabel: (nodeType: string) => string
   nodeCardClass: (nodeType: string) => string
@@ -139,6 +186,10 @@ const emit = defineEmits<{
   (event: 'insert-node', payload: InsertCommand): void
   (event: 'select-node', nodeKey: string): void
   (event: 'select-route', routeKey: string): void
+  (event: 'drag-node-start', nodeKey: string): void
+  (event: 'drag-node-end'): void
+  (event: 'drag-node-over', payload: CanvasDropPayload): void
+  (event: 'drop-node', payload: CanvasDropPayload): void
 }>()
 
 function handleInsertCommand(command: string | number | object) {
@@ -148,6 +199,15 @@ function handleInsertCommand(command: string | number | object) {
   emit('insert-node', command as InsertCommand)
 }
 
+function handleNodeDragStart(event: DragEvent, nodeKey: string) {
+  event.dataTransfer?.setData('text/plain', nodeKey)
+  event.dataTransfer?.setDragImage?.((event.currentTarget as HTMLElement) || new Image(), 24, 24)
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+  }
+  emit('drag-node-start', nodeKey)
+}
+
 function countConditions(route: { conditionGroups?: Array<{ conditions?: unknown[] }> }) {
   return (route.conditionGroups || []).reduce((total, group) => total + (group.conditions?.length || 0), 0)
 }
@@ -155,7 +215,8 @@ function countConditions(route: { conditionGroups?: Array<{ conditions?: unknown
 function branchShellStyle(routeCount: number) {
   return {
     '--branch-lane-count': String(Math.max(routeCount, 1)),
-    '--branch-lane-gap': '18px'
+    '--branch-lane-gap': '18px',
+    '--branch-lane-width': '260px'
   }
 }
 </script>
@@ -222,6 +283,11 @@ function branchShellStyle(routeCount: number) {
   transform: translateY(-2px);
 }
 
+.flow-node-card.is-dragging {
+  opacity: 0.55;
+  transform: scale(0.98);
+}
+
 .flow-node-card.is-selected {
   box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.18), 0 20px 44px rgba(15, 23, 42, 0.22);
 }
@@ -240,6 +306,21 @@ function branchShellStyle(routeCount: number) {
 
 .flow-node-card.is-branch {
   background: linear-gradient(135deg, #ea580c, #fb923c);
+}
+
+.insert-trigger-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 6px;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.insert-trigger-shell.is-drop-target {
+  background: rgba(14, 165, 233, 0.12);
+  box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.12);
+  transform: scale(1.04);
 }
 
 .insert-trigger {
@@ -267,11 +348,49 @@ function branchShellStyle(routeCount: number) {
 .branch-shell {
   position: relative;
   display: flex;
-  width: min(100%, 980px);
+  width: max-content;
+  min-width: min(100%, 980px);
   flex-direction: column;
   align-items: center;
   gap: 0;
   z-index: 1;
+}
+
+.branch-node-card {
+  display: flex;
+  width: min(100%, 320px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 18px;
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(240, 249, 255, 0.98), rgba(255, 255, 255, 0.98));
+  padding: 14px 16px;
+  color: #0f172a;
+  text-align: left;
+  box-shadow: 0 16px 34px rgba(14, 165, 233, 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.branch-node-card:hover {
+  transform: translateY(-1px);
+}
+
+.branch-node-card.is-selected {
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.12), 0 16px 34px rgba(14, 165, 233, 0.12);
+}
+
+.branch-node-card.is-dragging {
+  opacity: 0.55;
+}
+
+.branch-node-card__hint {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0284c7;
 }
 
 .branch-mainline-entry {
@@ -291,16 +410,17 @@ function branchShellStyle(routeCount: number) {
 
 .branch-lanes {
   display: grid;
-  width: 100%;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 18px;
+  width: max-content;
+  min-width: 100%;
+  grid-template-columns: repeat(var(--branch-lane-count), minmax(var(--branch-lane-width), var(--branch-lane-width)));
+  gap: var(--branch-lane-gap);
   margin: 0;
 }
 
 .branch-lane {
   display: flex;
   height: 100%;
-  min-width: 0;
+  min-width: var(--branch-lane-width);
   flex-direction: column;
   align-items: center;
   gap: 0;
@@ -398,6 +518,7 @@ function branchShellStyle(routeCount: number) {
 
   .branch-shell {
     width: min(100%, 520px);
+    min-width: 0;
   }
 
   .branch-split-line,
@@ -410,7 +531,13 @@ function branchShellStyle(routeCount: number) {
   }
 
   .branch-lanes {
+    width: 100%;
+    min-width: 0;
     grid-template-columns: 1fr;
+  }
+
+  .branch-lane {
+    min-width: 0;
   }
 }
 </style>

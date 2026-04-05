@@ -76,7 +76,7 @@
         <el-table-column prop="seller" label="销售方" show-overflow-tooltip />
         <el-table-column prop="amount" label="金额" width="120">
           <template #default="{ row }">
-            <span class="font-medium">¥{{ row.amount.toLocaleString() }}</span>
+            <span class="font-medium">¥{{ formatMoney(row.amount) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="date" label="开票日期" width="120" />
@@ -140,6 +140,7 @@ import { ElMessage } from 'element-plus'
 import { asyncTaskApi, invoiceApi, type InvoiceSummary } from '@/api'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { Download, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { formatMoney } from '@/utils/money'
 
 const searchQuery = ref('')
 const filterType = ref('')

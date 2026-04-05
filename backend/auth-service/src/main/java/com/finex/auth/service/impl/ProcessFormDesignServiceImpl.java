@@ -224,6 +224,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         return switch (trimToNull(templateType) == null ? "report" : templateType.trim()) {
             case "application" -> "application";
             case "loan" -> "loan";
+            case "contract" -> "contract";
             default -> "report";
         };
     }
@@ -232,6 +233,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         return switch (normalizeTemplateType(templateType)) {
             case "application" -> "Application";
             case "loan" -> "Loan";
+            case "contract" -> "合同单";
             default -> "Expense";
         };
     }

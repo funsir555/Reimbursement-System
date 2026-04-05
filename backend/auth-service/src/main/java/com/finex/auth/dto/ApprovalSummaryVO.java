@@ -1,6 +1,9 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyValue;
 import lombok.Data;
+
+import java.math.BigDecimal;
 
 /**
  * 审批摘要
@@ -16,7 +19,8 @@ public class ApprovalSummaryVO {
 
     private String time;
 
-    private Double amount;
+    @MoneyValue
+    private BigDecimal amount;
 
     private String avatar;
 }

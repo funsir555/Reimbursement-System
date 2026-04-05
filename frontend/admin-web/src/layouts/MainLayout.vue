@@ -20,10 +20,10 @@
 
         <div class="flex items-center gap-4">
           <el-button
-            v-if="canAny(['expense:create:view', 'expense:create:create'])"
+            v-if="canAny([...EXPENSE_CREATE_ENTRY_PERMISSION_CODES])"
             type="primary"
             :icon="Plus"
-            @click="showNewExpense = true"
+            @click="goCreateExpense"
           >
             新建报销
           </el-button>
@@ -76,7 +76,7 @@
               <el-icon><Wallet /></el-icon>
               <span>报销管理</span>
             </template>
-            <el-menu-item v-if="canAny(['expense:create:view'])" index="/expense/create" class="menu-level-2">新建报销</el-menu-item>
+            <el-menu-item v-if="canAny([...EXPENSE_CREATE_ENTRY_PERMISSION_CODES])" index="/expense/create" class="menu-level-2">新建报销</el-menu-item>
             <el-menu-item v-if="canAny(['expense:list:view'])" index="/expense/list" class="menu-level-2">我的报销</el-menu-item>
             <el-menu-item v-if="canAny(['expense:approval:view'])" index="/expense/approval" class="menu-level-2">待我审批</el-menu-item>
             <el-sub-menu v-if="canAny(['expense:payment:bank_link:view'])" index="/expense/payment" class="menu-level-2">
@@ -88,20 +88,13 @@
             <el-menu-item v-if="canAny(['expense:documents:view'])" index="/expense/documents" class="menu-level-2">单据查询</el-menu-item>
             <el-menu-item v-if="canAny(['expense:voucher_generation:view'])" index="/expense/voucher-generation" class="menu-level-2">凭证生成</el-menu-item>
             <el-sub-menu
-              v-if="canAny(['expense:process_management:view', 'expense:budget_management:view'])"
+              v-if="canAny(['expense:budget_management:view'])"
               index="/expense/workbench"
               class="menu-level-2"
             >
               <template #title>
                 <span>管理工作台</span>
               </template>
-              <el-menu-item
-                v-if="canAny(['expense:process_management:view'])"
-                index="/expense/workbench/process-management"
-                class="menu-level-3"
-              >
-                流程管理
-              </el-menu-item>
               <el-menu-item
                 v-if="canAny(['expense:budget_management:view'])"
                 index="/expense/workbench/budget-management"
@@ -122,7 +115,14 @@
                 'finance:general_ledger:new_voucher:view',
                 'finance:general_ledger:query_voucher:view',
                 'finance:general_ledger:review_voucher:view',
-                'finance:general_ledger:balance_sheet:view'
+                'finance:general_ledger:balance_sheet:view',
+                'finance:general_ledger:detail_ledger:view',
+                'finance:general_ledger:general_ledger:view',
+                'finance:general_ledger:project_detail_ledger:view',
+                'finance:general_ledger:supplier_detail_ledger:view',
+                'finance:general_ledger:customer_detail_ledger:view',
+                'finance:general_ledger:personal_detail_ledger:view',
+                'finance:general_ledger:quantity_amount_detail_ledger:view'
               ])"
               index="/finance/general-ledger"
               class="menu-level-2"
@@ -133,7 +133,14 @@
               <el-menu-item v-if="canAny(['finance:general_ledger:new_voucher:view'])" index="/finance/general-ledger/new-voucher" class="menu-level-3">新建凭证</el-menu-item>
               <el-menu-item v-if="canAny(['finance:general_ledger:query_voucher:view'])" index="/finance/general-ledger/query-voucher" class="menu-level-3">查询凭证</el-menu-item>
               <el-menu-item v-if="canAny(['finance:general_ledger:review_voucher:view'])" index="/finance/general-ledger/review-voucher" class="menu-level-3">审核凭证</el-menu-item>
-              <el-menu-item v-if="canAny(['finance:general_ledger:balance_sheet:view'])" index="/finance/general-ledger/balance-sheet" class="menu-level-3">余额表</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:balance_sheet:view'])" index="/finance/general-ledger/balance-sheet" class="menu-level-3">总账余额表</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:detail_ledger:view'])" index="/finance/general-ledger/detail-ledger" class="menu-level-3">明细账</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:general_ledger:view'])" index="/finance/general-ledger/general-ledger" class="menu-level-3">总分类账</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:project_detail_ledger:view'])" index="/finance/general-ledger/project-detail-ledger" class="menu-level-3">项目明细账</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:supplier_detail_ledger:view'])" index="/finance/general-ledger/supplier-detail-ledger" class="menu-level-3">供应商明细账</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:customer_detail_ledger:view'])" index="/finance/general-ledger/customer-detail-ledger" class="menu-level-3">客户明细账</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:personal_detail_ledger:view'])" index="/finance/general-ledger/personal-detail-ledger" class="menu-level-3">个人明细账</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:general_ledger:quantity_amount_detail_ledger:view'])" index="/finance/general-ledger/quantity-amount-detail-ledger" class="menu-level-3">数量金额明细账</el-menu-item>
             </el-sub-menu>
             <el-menu-item v-if="canAny(['finance:fixed_assets:view'])" index="/finance/fixed-assets" class="menu-level-2">固定资产</el-menu-item>
             <el-sub-menu
@@ -157,7 +164,8 @@
                 'finance:archives:customers:view',
                 'finance:archives:suppliers:view',
                 'finance:archives:employees:view',
-                'finance:archives:departments:view'
+                'finance:archives:departments:view',
+                'finance:archives:account_subjects:view'
               ])"
               index="/finance/archives"
               class="menu-level-2"
@@ -169,6 +177,7 @@
               <el-menu-item v-if="canAny(['finance:archives:suppliers:view'])" index="/finance/archives/suppliers" class="menu-level-3">供应商档案</el-menu-item>
               <el-menu-item v-if="canAny(['finance:archives:employees:view'])" index="/finance/archives/employees" class="menu-level-3">员工档案</el-menu-item>
               <el-menu-item v-if="canAny(['finance:archives:departments:view'])" index="/finance/archives/departments" class="menu-level-3">部门档案</el-menu-item>
+              <el-menu-item v-if="canAny(['finance:archives:account_subjects:view'])" index="/finance/archives/account-subjects" class="menu-level-3">会计科目</el-menu-item>
             </el-sub-menu>
           </el-sub-menu>
 
@@ -220,7 +229,6 @@
       </main>
     </div>
 
-    <new-expense-dialog v-model="showNewExpense" />
     <download-center-drawer
       v-model="downloadDrawerVisible"
       @loaded="handleDownloadLoaded"
@@ -235,7 +243,7 @@ import { ElMessage } from 'element-plus'
 import { authApi, downloadApi, type UserProfile } from '@/api'
 import FinanceWorkspaceTabs from '@/components/finance/FinanceWorkspaceTabs.vue'
 import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
-import { hasAnyPermission } from '@/utils/permissions'
+import { EXPENSE_CREATE_ENTRY_PERMISSION_CODES, hasAnyPermission } from '@/utils/permissions'
 import {
   Money,
   Search,
@@ -252,7 +260,6 @@ import {
   Coin,
   FolderOpened
 } from '@element-plus/icons-vue'
-import NewExpenseDialog from '@/components/NewExpenseDialog.vue'
 import DownloadCenterDrawer from '@/components/DownloadCenterDrawer.vue'
 
 const route = useRoute()
@@ -260,7 +267,6 @@ const router = useRouter()
 const financeWorkspace = useFinanceWorkspaceStore()
 
 const searchQuery = ref('')
-const showNewExpense = ref(false)
 const downloadDrawerVisible = ref(false)
 const downloadPendingCount = ref(0)
 const currentUser = ref<UserProfile | null>(null)
@@ -279,7 +285,7 @@ const canShowDashboard = computed(() => canAny(['dashboard:menu', 'dashboard:vie
 const canShowExpense = computed(() =>
   canAny([
     'expense:menu',
-    'expense:create:view',
+    ...EXPENSE_CREATE_ENTRY_PERMISSION_CODES,
     'expense:list:view',
     'expense:approval:view',
     'expense:payment:bank_link:view',
@@ -296,6 +302,13 @@ const canShowFinance = computed(() =>
     'finance:general_ledger:query_voucher:view',
     'finance:general_ledger:review_voucher:view',
     'finance:general_ledger:balance_sheet:view',
+    'finance:general_ledger:detail_ledger:view',
+    'finance:general_ledger:general_ledger:view',
+    'finance:general_ledger:project_detail_ledger:view',
+    'finance:general_ledger:supplier_detail_ledger:view',
+    'finance:general_ledger:customer_detail_ledger:view',
+    'finance:general_ledger:personal_detail_ledger:view',
+    'finance:general_ledger:quantity_amount_detail_ledger:view',
     'finance:fixed_assets:view',
     'finance:reports:balance_sheet:view',
     'finance:reports:income_statement:view',
@@ -303,7 +316,8 @@ const canShowFinance = computed(() =>
     'finance:archives:customers:view',
     'finance:archives:suppliers:view',
     'finance:archives:employees:view',
-    'finance:archives:departments:view'
+    'finance:archives:departments:view',
+    'finance:archives:account_subjects:view'
   ])
 )
 const canShowArchives = computed(() => canAny(['archives:menu', 'archives:invoices:view', 'archives:account_books:view']))
@@ -356,6 +370,10 @@ const logout = () => {
   localStorage.removeItem('user')
   ElMessage.success('已退出登录')
   router.push('/login')
+}
+
+const goCreateExpense = () => {
+  void router.push('/expense/create')
 }
 
 const handleUserCommand = (command: string) => {

@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import com.finex.auth.support.json.MoneyValue;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -19,8 +20,10 @@ public class FinanceVoucherSaveResultVO {
 
     private Integer entryCount;
 
+    @MoneyValue
     private BigDecimal totalDebit;
 
+    @MoneyValue
     private BigDecimal totalCredit;
 
     private String status;

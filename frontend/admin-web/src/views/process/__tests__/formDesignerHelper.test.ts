@@ -50,6 +50,32 @@ describe('formDesignerHelper', () => {
     expect(block.span).toBe(1)
   })
 
+  it('includes payment company in business component palette', () => {
+    const paletteItem = buildBusinessComponentPaletteItems().find((item) => item.key === 'payment-company')
+
+    expect(paletteItem).toBeTruthy()
+    expect(paletteItem?.label).toBe('付款公司')
+    expect(paletteItem?.props).toEqual({ componentCode: 'payment-company' })
+  })
+
+  it('includes related and writeoff document business components with default allowed types', () => {
+    const businessItems = buildBusinessComponentPaletteItems()
+    const relatedItem = businessItems.find((item) => item.key === 'related-document')
+    const writeoffItem = businessItems.find((item) => item.key === 'writeoff-document')
+
+    expect(relatedItem).toBeTruthy()
+    expect(relatedItem?.props).toEqual({
+      componentCode: 'related-document',
+      allowedTemplateTypes: ['report', 'application', 'contract', 'loan']
+    })
+
+    expect(writeoffItem).toBeTruthy()
+    expect(writeoffItem?.props).toEqual({
+      componentCode: 'writeoff-document',
+      allowedTemplateTypes: ['report', 'loan']
+    })
+  })
+
   it('builds shared field palette items that only persist archive code', () => {
     const items = buildSharedFieldPaletteItems([createArchive('CA001', '共享部门')])
     const block = createBlockFromPaletteItem(items[0])

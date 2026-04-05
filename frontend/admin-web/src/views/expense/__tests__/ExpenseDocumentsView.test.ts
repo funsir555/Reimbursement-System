@@ -1,0 +1,239 @@
+﻿import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent, inject, provide } from 'vue'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import ExpenseDocumentsView from '@/views/expense/ExpenseDocumentsView.vue'
+
+const mocks = vi.hoisted(() => ({
+  router: {
+    push: vi.fn()
+  },
+  expenseApi: {
+    queryDocuments: vi.fn()
+  },
+  elMessage: {
+    error: vi.fn(),
+    warning: vi.fn()
+  }
+}))
+
+vi.mock('vue-router', () => ({
+  useRouter: () => mocks.router
+}))
+
+vi.mock('@/api', () => ({
+  expenseApi: mocks.expenseApi
+}))
+
+vi.mock('element-plus', () => ({
+  ElMessage: mocks.elMessage
+}))
+
+const SimpleContainer = defineComponent({
+  template: '<div><slot name="reference" /><slot name="header" /><slot /><slot name="footer" /></div>'
+})
+
+const ButtonStub = defineComponent({
+  emits: ['click'],
+  template: '<button type="button" @click="$emit(\'click\')"><slot /></button>'
+})
+
+const InputStub = defineComponent({
+  props: {
+    modelValue: {
+      type: [String, Number],
+      default: ''
+    }
+  },
+  emits: ['update:modelValue'],
+  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+})
+
+const SelectStub = defineComponent({
+  props: {
+    modelValue: {
+      type: String,
+      default: ''
+    }
+  },
+  emits: ['update:modelValue'],
+  template: '<div><slot /></div>'
+})
+
+const TableStub = defineComponent({
+  props: {
+    data: {
+      type: Array,
+      default: () => []
+    }
+  },
+  setup(props) {
+    provide('tableRows', props.data)
+    return {}
+  },
+  template: '<div><slot /></div>'
+})
+
+const TableColumnStub = defineComponent({
+  props: {
+    prop: {
+      type: String,
+      default: ''
+    }
+  },
+  setup() {
+    const rows = inject<any[]>('tableRows', [])
+    return { rows }
+  },
+  template: `
+    <div>
+      <template v-for="row in rows" :key="row.documentCode + prop">
+        <slot :row="row">
+          <span>{{ prop ? row[prop] : '' }}</span>
+        </slot>
+      </template>
+    </div>
+  `
+})
+
+const PaginationStub = defineComponent({
+  template: '<div />'
+})
+
+async function mountView() {
+  const wrapper = mount(ExpenseDocumentsView, {
+    global: {
+      stubs: {
+        'el-card': SimpleContainer,
+        'el-button': ButtonStub,
+        'el-input': InputStub,
+        'el-select': SelectStub,
+        'el-option': true,
+        'el-date-picker': SimpleContainer,
+        'el-table': TableStub,
+        'el-table-column': TableColumnStub,
+        'el-tag': SimpleContainer,
+        'el-pagination': PaginationStub,
+        'el-icon': SimpleContainer,
+        'el-popover': SimpleContainer,
+        'el-checkbox': SimpleContainer
+      },
+      directives: {
+        loading: () => undefined
+      }
+    }
+  })
+  await flushPromises()
+  return wrapper
+}
+
+describe('ExpenseDocumentsView', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.localStorage.clear()
+    mocks.router.push.mockResolvedValue(undefined)
+    mocks.expenseApi.queryDocuments.mockResolvedValue({
+      data: [
+        {
+          documentCode: 'DOC-001',
+          no: 'DOC-001',
+          documentTitle: '差旅审批单',
+          reason: '上海出差',
+          submitterName: '张三',
+          templateName: '差旅报销模板',
+          currentNodeName: '财务审批',
+          amount: 1880.5,
+          date: '2026-04-01',
+          status: '审批中',
+          documentStatusLabel: '审批中',
+          submittedAt: '2026-04-01 10:00',
+          payeeName: '李四'
+        },
+        {
+          documentCode: 'DOC-002',
+          no: 'DOC-002',
+          documentTitle: '借款申请单',
+          reason: '项目借款',
+          submitterName: '李四',
+          templateName: '借款模板',
+          currentNodeName: '',
+          amount: 5000,
+          date: '2026-04-02',
+          status: '草稿',
+          documentStatusLabel: '草稿',
+          submittedAt: '2026-04-02 09:00',
+          payeeName: '王五'
+        }
+      ]
+    })
+  })
+
+  it('loads query documents data and keeps only non-draft rows', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as { filteredExpenseList: Array<{ no: string; documentStatusLabel: string }> }
+
+    expect(mocks.expenseApi.queryDocuments).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('高级筛选')
+    expect(wrapper.text()).toContain('显示字段')
+    expect(wrapper.text()).toContain('刷新列表')
+    expect(wrapper.text()).toContain('返回待我审批')
+    expect(wrapper.find('[data-testid="expense-advanced-panel"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="expense-advanced-filter-trigger"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="expense-toolbar-main"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="expense-advanced-panel"]').classes()).toContain('expense-wb-advanced-panel--dropdown')
+    expect(wrapper.get('[data-testid="expense-advanced-grid"]').classes()).toContain('expense-wb-advanced-grid--four-column')
+    expect(vm.filteredExpenseList.map((item) => item.no)).toEqual(['DOC-001'])
+    expect(vm.filteredExpenseList.some((item) => item.documentStatusLabel === '草稿')).toBe(false)
+  })
+
+  it('supports allowed advanced filters, drag sorting, and restoring default columns', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filters: { payeeName: string }
+      filteredExpenseList: Array<{ documentCode: string }>
+      handleVisibleColumnsChange: (value: string[]) => void
+      handleColumnDragStart: (key: string) => void
+      handleColumnDrop: (key: string) => void
+      restoreDefaultColumns: () => void
+      visibleColumnDefinitions: Array<{ key: string }>
+    }
+
+    vm.filters.payeeName = '李四'
+    await flushPromises()
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001'])
+
+    vm.handleVisibleColumnsChange(['documentCode', 'submitterName'])
+    vm.handleColumnDragStart('submitterName')
+    vm.handleColumnDrop('documentCode')
+    await flushPromises()
+    expect(vm.visibleColumnDefinitions.map((item) => item.key)).toEqual(['submitterName', 'documentCode'])
+    expect(JSON.parse(window.localStorage.getItem('expense:documents:visible-columns') || '[]')).toEqual(['submitterName', 'documentCode'])
+    expect(JSON.parse(window.localStorage.getItem('expense:documents:column-order') || '[]')[0]).toBe('submitterName')
+
+    vm.restoreDefaultColumns()
+    await flushPromises()
+    expect(vm.visibleColumnDefinitions.map((item) => item.key)).toEqual([
+      'documentCode',
+      'documentTitle',
+      'templateName',
+      'submitterName',
+      'currentNodeName',
+      'documentStatusLabel',
+      'amount',
+      'submittedAt'
+    ])
+  })
+
+  it('opens the existing document detail page when clicking a document number', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openDetail: (row: { documentCode: string; no: string }) => void
+    }
+
+    vm.openDetail({ documentCode: 'DOC-001', no: 'DOC-001' })
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+  })
+})

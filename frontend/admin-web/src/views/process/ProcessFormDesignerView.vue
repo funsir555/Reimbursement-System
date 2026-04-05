@@ -12,7 +12,7 @@
       <div class="flex flex-wrap items-center gap-3">
         <el-tag effect="plain">{{ templateTypeLabel }}</el-tag>
         <el-button type="primary" :icon="Check" :loading="saving" :disabled="!canEdit" @click="saveFormDesign">
-          保存表单设计
+          {{ designerSaveLabel }}
         </el-button>
       </div>
     </div>
@@ -128,19 +128,26 @@
       <el-card class="!rounded-3xl !shadow-sm" v-loading="loading">
         <div class="space-y-6">
           <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,0.9fr)]">
-            <el-form-item label="表单名称" required class="!mb-0">
-              <el-input v-model="working.formName" placeholder="请输入表单名称" />
+            <el-form-item :label="designerNameLabel" required class="!mb-0">
+              <el-input v-model="working.formName" :placeholder="`请输入${designerNameLabel}`" />
             </el-form-item>
 
-            <el-form-item label="表单编码" class="!mb-0">
+            <el-form-item :label="designerCodeLabel" class="!mb-0">
               <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
                 {{ working.formCode || '保存后自动生成' }}
               </div>
             </el-form-item>
           </div>
 
-          <el-form-item label="表单说明" class="!mb-0">
-            <el-input v-model="working.formDescription" type="textarea" :rows="3" placeholder="请输入表单说明" />
+          <el-form-item v-if="isExpenseDetailDesigner" label="明细类型" class="!mb-0">
+            <el-radio-group v-model="working.detailType">
+              <el-radio-button label="NORMAL_REIMBURSEMENT">普通报销</el-radio-button>
+              <el-radio-button label="ENTERPRISE_TRANSACTION">企业往来</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item :label="designerDescriptionLabel" class="!mb-0">
+            <el-input v-model="working.formDescription" type="textarea" :rows="3" :placeholder="`请输入${designerDescriptionLabel}`" />
           </el-form-item>
 
           <div class="rounded-[32px] border border-slate-100 bg-slate-50/80 px-4 py-6 lg:px-8">
@@ -390,11 +397,45 @@
                       </el-select>
                     </el-form-item>
 
+                    <el-form-item
+                      v-if="supportsDocumentTemplateTypeConfig(selectedBlock)"
+                      :label="documentTemplateTypeLabel(selectedBlock)"
+                      class="!mb-0"
+                    >
+                      <el-checkbox-group
+                        :model-value="allowedTemplateTypesValue(selectedBlock)"
+                        class="flex flex-wrap gap-3"
+                        @update:model-value="setDocumentTemplateTypes"
+                      >
+                        <el-checkbox
+                          v-for="item in documentTemplateTypeOptions(selectedBlock)"
+                          :key="`${selectedBlock.blockId}-${item.value}`"
+                          :label="item.value"
+                        >
+                          {{ item.label }}
+                        </el-checkbox>
+                      </el-checkbox-group>
+                    </el-form-item>
+
                     <p
                       v-if="businessCode(selectedBlock) === 'undertake-department'"
                       class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-6 text-blue-600"
                     >
                       选择“提单人所在部门”后，提单页会自动带出当前登录人的真实所属部门。
+                    </p>
+
+                    <p
+                      v-if="businessCode(selectedBlock) === 'related-document'"
+                      class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs leading-6 text-emerald-700"
+                    >
+                      提单页会按所选单据类型分组弹出选择窗口，支持同时关联多张已审批通过的单据。
+                    </p>
+
+                    <p
+                      v-if="businessCode(selectedBlock) === 'writeoff-document'"
+                      class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-700"
+                    >
+                      核销单据固定只允许报销单与借款单，提单页选择后需逐条填写本次核销金额。
                     </p>
                   </div>
                 </template>
@@ -478,9 +519,12 @@ import {
   processApi,
   type ProcessCustomArchiveDetail,
   type ProcessCustomArchiveSummary,
+  type ProcessExpenseDetailDesignDetail,
+  type ProcessExpenseDetailDesignSavePayload,
   type ProcessFlowScene,
   type ProcessFormDesignBlock,
   type ProcessFormDesignDetail,
+  type ProcessFormDesignSchema,
   type ProcessFormDesignSavePayload,
   type ProcessFormOption
 } from '@/api'
@@ -488,8 +532,11 @@ import { hasPermission, readStoredUser } from '@/utils/permissions'
 import {
   CONTROL_PALETTE_ITEMS,
   CONTROL_PALETTE_CATEGORIES,
+  DOCUMENT_TEMPLATE_TYPE_OPTIONS,
   FORM_PERMISSION_STAGE_OPTIONS,
   FORM_PERMISSION_VALUE_OPTIONS,
+  RELATED_DOCUMENT_ALLOWED_TEMPLATE_TYPES,
+  WRITEOFF_DOCUMENT_ALLOWED_TEMPLATE_TYPES,
   type FormDesignerPaletteItem,
   buildBusinessComponentPaletteItems,
   buildSharedFieldPaletteItems,
@@ -503,17 +550,31 @@ import {
   insertBlockAt,
   moveBlock,
   moveBlockByOffset,
+  normalizeBusinessComponentAllowedTemplateTypes,
   normalizeFormSchema,
   removeBlock
 } from '@/views/process/formDesignerHelper'
 
 type PaletteTabKey = 'controls' | 'business' | 'shared'
 type DragSource = { type: 'palette'; key: string } | { type: 'canvas'; blockId: string; index: number }
+type DesignerDetailState = {
+  id: number
+  formCode: string
+  formName: string
+  templateType: string
+  templateTypeLabel: string
+  formDescription: string
+  updatedAt: string
+  schema: ProcessFormDesignSchema
+  detailType: string
+  detailTypeLabel: string
+}
 
 const route = useRoute()
 const router = useRouter()
 const initialFormId = Number(route.params.id)
 const initialIsCreateMode = !Number.isFinite(initialFormId) || initialFormId <= 0
+const isExpenseDetailDesigner = computed(() => String(route.name || '').includes('expense-detail'))
 const loading = ref(false)
 const saving = ref(false)
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
@@ -530,7 +591,7 @@ const customArchives = ref<ProcessCustomArchiveSummary[]>([])
 const customArchiveDetailMap = ref<Record<string, ProcessCustomArchiveDetail>>({})
 const customArchiveDetailLoadingCodes = ref<string[]>([])
 const customArchiveDetailErrorCodes = ref<string[]>([])
-const working = reactive<ProcessFormDesignDetail>(createEmptyDetail(resolveRouteTemplateType(), initialIsCreateMode))
+const working = reactive<DesignerDetailState>(createEmptyDetail(resolveRouteTemplateType(), initialIsCreateMode))
 const undertakeDeptSpecialValue = '__SUBMITTER_DEPARTMENT__'
 const undertakeDeptNoneValue = '__NONE__'
 
@@ -546,7 +607,13 @@ const formId = computed(() => {
 })
 const isCreateMode = computed(() => formId.value === null)
 const canEdit = computed(() => isCreateMode.value ? hasPermission('expense:process_management:create', permissionCodes.value) : hasPermission('expense:process_management:edit', permissionCodes.value))
-const templateTypeLabel = computed(() => working.templateTypeLabel || resolveTemplateTypeLabel(working.templateType))
+const templateTypeLabel = computed(() => isExpenseDetailDesigner.value ? (working.detailTypeLabel || resolveExpenseDetailTypeLabel(working.detailType)) : (working.templateTypeLabel || resolveTemplateTypeLabel(working.templateType)))
+const designerNameLabel = computed(() => isExpenseDetailDesigner.value ? '明细表单名称' : '表单名称')
+const designerCodeLabel = computed(() => isExpenseDetailDesigner.value ? '明细表单编码' : '表单编码')
+const designerDescriptionLabel = computed(() => isExpenseDetailDesigner.value ? '明细表单说明' : '表单说明')
+const designerSaveLabel = computed(() => isExpenseDetailDesigner.value ? '保存费用明细表单' : '保存表单设计')
+const designerSaveSuccessText = computed(() => formId.value !== null ? (isExpenseDetailDesigner.value ? '费用明细表单已更新' : '表单设计已更新') : (isExpenseDetailDesigner.value ? '费用明细表单已创建' : '表单设计已创建'))
+const designerLoadErrorText = computed(() => isExpenseDetailDesigner.value ? '加载费用明细表单失败' : '加载表单设计失败')
 const businessPaletteItems = computed(() => buildBusinessComponentPaletteItems())
 const sharedArchiveOptions = computed(() => customArchives.value.filter((item) => item.status === 1 && item.archiveType === 'SELECT'))
 const sharedPaletteItems = computed(() => buildSharedFieldPaletteItems(sharedArchiveOptions.value))
@@ -578,6 +645,11 @@ watch(selectedBlock, (block) => {
     void ensureSharedArchiveDetailsByCodes([getSharedArchiveCode(block)])
   }
 })
+watch(() => working.detailType, (detailType) => {
+  if (isExpenseDetailDesigner.value) {
+    working.detailTypeLabel = resolveExpenseDetailTypeLabel(detailType || 'NORMAL_REIMBURSEMENT')
+  }
+})
 
 onMounted(() => {
   window.addEventListener('keydown', handleWindowKeydown)
@@ -587,7 +659,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleWindowKeydown)
 })
 
-function createEmptyDetail(templateType: string, useDefaultBlocks = false): ProcessFormDesignDetail {
+function createEmptyDetail(templateType: string, useDefaultBlocks = false): DesignerDetailState {
   return {
     id: 0,
     formCode: '',
@@ -596,31 +668,58 @@ function createEmptyDetail(templateType: string, useDefaultBlocks = false): Proc
     templateTypeLabel: resolveTemplateTypeLabel(templateType),
     formDescription: '',
     updatedAt: '',
-    schema: useDefaultBlocks ? createDefaultNewFormSchema() : createEmptyFormSchema()
+    schema: !isExpenseDetailDesigner.value && useDefaultBlocks ? createDefaultNewFormSchema() : createEmptyFormSchema(),
+    detailType: 'NORMAL_REIMBURSEMENT',
+    detailTypeLabel: resolveExpenseDetailTypeLabel('NORMAL_REIMBURSEMENT')
   }
 }
 
 function resolveRouteTemplateType() {
   const raw = typeof route.query.templateType === 'string' ? route.query.templateType : ''
-  return raw === 'application' || raw === 'loan' ? raw : 'report'
+  return raw === 'application' || raw === 'loan' || raw === 'contract' ? raw : 'report'
 }
 
 function resolveTemplateTypeLabel(templateType: string) {
   if (templateType === 'application') return '申请单'
   if (templateType === 'loan') return '借款单'
+  if (templateType === 'contract') return '合同单'
   return '报销单'
+}
+
+function resolveExpenseDetailTypeLabel(detailType: string) {
+  return detailType === 'ENTERPRISE_TRANSACTION' ? '企业往来' : '普通报销'
 }
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
-function assignDetail(detail: ProcessFormDesignDetail) {
+function assignDetail(detail: ProcessFormDesignDetail | ProcessExpenseDetailDesignDetail) {
+  if (isExpenseDetailDesigner.value) {
+    const expenseDetail = detail as ProcessExpenseDetailDesignDetail
+    Object.assign(working, {
+      id: expenseDetail.id || 0,
+      formCode: expenseDetail.detailCode || '',
+      formName: expenseDetail.detailName || '',
+      templateType: 'report',
+      templateTypeLabel: resolveTemplateTypeLabel('report'),
+      formDescription: expenseDetail.detailDescription || '',
+      updatedAt: expenseDetail.updatedAt || '',
+      schema: normalizeFormSchema(expenseDetail.schema),
+      detailType: expenseDetail.detailType || 'NORMAL_REIMBURSEMENT',
+      detailTypeLabel: expenseDetail.detailTypeLabel || resolveExpenseDetailTypeLabel(expenseDetail.detailType || 'NORMAL_REIMBURSEMENT')
+    })
+    return
+  }
+
+  const formDetail = detail as ProcessFormDesignDetail
   Object.assign(working, {
-    ...detail,
-    templateType: detail.templateType || resolveRouteTemplateType(),
-    templateTypeLabel: detail.templateTypeLabel || resolveTemplateTypeLabel(detail.templateType || resolveRouteTemplateType()),
-    schema: normalizeFormSchema(detail.schema)
+    ...formDetail,
+    templateType: formDetail.templateType || resolveRouteTemplateType(),
+    templateTypeLabel: formDetail.templateTypeLabel || resolveTemplateTypeLabel(formDetail.templateType || resolveRouteTemplateType()),
+    schema: normalizeFormSchema(formDetail.schema),
+    detailType: '',
+    detailTypeLabel: ''
   })
 }
 
@@ -682,7 +781,9 @@ async function ensureSharedArchiveDetailsByCodes(archiveCodes: string[]) {
 async function loadPage() {
   loading.value = true
   try {
-    const detailRequest = formId.value !== null ? processApi.getFormDesignDetail(formId.value) : Promise.resolve(null)
+    const detailRequest = formId.value !== null
+      ? (isExpenseDetailDesigner.value ? processApi.getExpenseDetailDesignDetail(formId.value) : processApi.getFormDesignDetail(formId.value))
+      : Promise.resolve(null)
     const [flowMetaRes, archiveRes, detailRes] = await Promise.all([processApi.getFlowMeta(), processApi.listCustomArchives(), detailRequest])
     sceneOptions.value = flowMetaRes.data.sceneOptions || []
     departmentOptions.value = flowMetaRes.data.departmentOptions || []
@@ -697,7 +798,7 @@ async function loadPage() {
     dragHover.value = null
     paletteDeleteActive.value = false
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载表单设计失败'))
+    ElMessage.error(resolveErrorMessage(error, designerLoadErrorText.value))
   } finally {
     loading.value = false
   }
@@ -957,6 +1058,41 @@ function setUndertakeDepartmentDefaultValue(value: string | number | boolean) {
   setSelectedBlockProp('defaultDeptId', nextValue)
 }
 
+function supportsDocumentTemplateTypeConfig(block: ProcessFormDesignBlock) {
+  const code = businessCode(block)
+  return code === 'related-document' || code === 'writeoff-document'
+}
+
+function documentTemplateTypeOptions(block: ProcessFormDesignBlock) {
+  const code = businessCode(block)
+  const allowedValues: Set<string> = code === 'writeoff-document'
+    ? new Set(WRITEOFF_DOCUMENT_ALLOWED_TEMPLATE_TYPES)
+    : new Set(RELATED_DOCUMENT_ALLOWED_TEMPLATE_TYPES)
+  return DOCUMENT_TEMPLATE_TYPE_OPTIONS.filter((item) => allowedValues.has(item.value))
+}
+
+function allowedTemplateTypesValue(block: ProcessFormDesignBlock) {
+  return normalizeBusinessComponentAllowedTemplateTypes(
+    businessCode(block),
+    block.props.allowedTemplateTypes
+  )
+}
+
+function documentTemplateTypeLabel(block: ProcessFormDesignBlock) {
+  return businessCode(block) === 'writeoff-document' ? '允许核销单据类型' : '允许关联单据类型'
+}
+
+function setDocumentTemplateTypes(value: string[] | number[] | boolean[]) {
+  if (!selectedBlock.value || !supportsDocumentTemplateTypeConfig(selectedBlock.value)) {
+    return
+  }
+  const normalized = normalizeBusinessComponentAllowedTemplateTypes(
+    businessCode(selectedBlock.value),
+    Array.isArray(value) ? value.map((item) => String(item)) : []
+  )
+  setSelectedBlockProp('allowedTemplateTypes', normalized)
+}
+
 function sharedArchiveName(block: ProcessFormDesignBlock) {
   return sharedArchiveMap.value.get(getSharedArchiveCode(block))?.archiveName || '未匹配到共享档案'
 }
@@ -1101,35 +1237,67 @@ function placeholderPreview(block: ProcessFormDesignBlock) {
 
 async function saveFormDesign() {
   if (!canEdit.value) {
-    ElMessage.warning(isCreateMode.value ? '当前账号没有新建表单设计权限' : '当前账号没有修改表单设计权限')
+    ElMessage.warning(isCreateMode.value
+      ? (isExpenseDetailDesigner.value ? '当前账号没有新建费用明细表单权限' : '当前账号没有新建表单设计权限')
+      : (isExpenseDetailDesigner.value ? '当前账号没有修改费用明细表单权限' : '当前账号没有修改表单设计权限'))
     return
   }
   if (!working.formName.trim()) {
-    ElMessage.warning('请先填写表单名称')
+    ElMessage.warning(`请先填写${designerNameLabel.value}`)
     return
   }
   saving.value = true
   try {
-    const payload: ProcessFormDesignSavePayload = {
-      templateType: working.templateType,
-      formName: working.formName.trim(),
-      formDescription: working.formDescription?.trim() || '',
-      schema: normalizeFormSchema(working.schema)
-    }
-    const res = formId.value !== null ? await processApi.updateFormDesign(formId.value, payload) : await processApi.createFormDesign(payload)
+    const schema = normalizeFormSchema(working.schema)
+    const res = isExpenseDetailDesigner.value
+      ? await (formId.value !== null
+        ? processApi.updateExpenseDetailDesign(formId.value, {
+          detailName: working.formName.trim(),
+          detailDescription: working.formDescription?.trim() || '',
+          detailType: working.detailType || 'NORMAL_REIMBURSEMENT',
+          schema
+        } satisfies ProcessExpenseDetailDesignSavePayload)
+        : processApi.createExpenseDetailDesign({
+          detailName: working.formName.trim(),
+          detailDescription: working.formDescription?.trim() || '',
+          detailType: working.detailType || 'NORMAL_REIMBURSEMENT',
+          schema
+        } satisfies ProcessExpenseDetailDesignSavePayload))
+      : await (formId.value !== null
+        ? processApi.updateFormDesign(formId.value, {
+          templateType: working.templateType,
+          formName: working.formName.trim(),
+          formDescription: working.formDescription?.trim() || '',
+          schema
+        } satisfies ProcessFormDesignSavePayload)
+        : processApi.createFormDesign({
+          templateType: working.templateType,
+          formName: working.formName.trim(),
+          formDescription: working.formDescription?.trim() || '',
+          schema
+        } satisfies ProcessFormDesignSavePayload))
     assignDetail(res.data)
     selectedBlockId.value = selectedBlockId.value || working.schema.blocks[0]?.blockId || ''
-    ElMessage.success(formId.value !== null ? '表单设计已更新' : '表单设计已创建')
+    ElMessage.success(designerSaveSuccessText.value)
     const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
-    if (returnTo && res.data.formCode) {
-      await router.push(appendQueryParam(returnTo, 'createdFormCode', res.data.formCode))
+    const createdCode = isExpenseDetailDesigner.value
+      ? String((res.data as ProcessExpenseDetailDesignDetail).detailCode || '')
+      : String((res.data as ProcessFormDesignDetail).formCode || '')
+    if (returnTo && createdCode) {
+      await router.push(appendQueryParam(returnTo, isExpenseDetailDesigner.value ? 'createdExpenseDetailCode' : 'createdFormCode', createdCode))
       return
     }
     if (formId.value === null) {
-      await router.replace({ name: 'expense-workbench-process-form-edit', params: { id: res.data.id }, query: route.query })
+      await router.replace({
+        name: isExpenseDetailDesigner.value ? 'expense-workbench-process-expense-detail-edit' : 'expense-workbench-process-form-edit',
+        params: { id: res.data.id },
+        query: route.query
+      })
     }
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, isCreateMode.value ? '保存表单设计失败' : '更新表单设计失败'))
+    ElMessage.error(resolveErrorMessage(error, isCreateMode.value
+      ? (isExpenseDetailDesigner.value ? '保存费用明细表单失败' : '保存表单设计失败')
+      : (isExpenseDetailDesigner.value ? '更新费用明细表单失败' : '更新表单设计失败')))
   } finally {
     saving.value = false
   }

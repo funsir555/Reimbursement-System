@@ -1,0 +1,18 @@
+[Unit]
+Description=FinEx Gateway
+After=network.target finex-auth.service
+
+[Service]
+Type=simple
+User=finex
+Group=finex
+WorkingDirectory=/opt/finex/backend
+ExecStart=/bin/bash -lc 'set -a; source /opt/finex/backend/.env.production; set +a; exec /usr/bin/java ${FINEX_GATEWAY_JAVA_OPTS:--Xms256m -Xmx512m} -jar /opt/finex/backend/gateway.jar'
+Restart=always
+RestartSec=5
+SuccessExitStatus=143
+StandardOutput=append:/opt/finex/logs/gateway.log
+StandardError=append:/opt/finex/logs/gateway.err.log
+
+[Install]
+WantedBy=multi-user.target

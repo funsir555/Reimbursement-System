@@ -32,7 +32,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500 mb-1">本月报销</p>
-            <p class="text-3xl font-bold text-green-600">¥{{ formatCurrency(dashboard?.monthlyExpenseAmount || 0) }}</p>
+            <p class="text-3xl font-bold text-green-600">¥{{ formatCurrency(dashboard?.monthlyExpenseAmount) }}</p>
             <p class="text-xs text-gray-400 mt-2">共 {{ dashboard?.monthlyExpenseCount || 0 }} 笔</p>
           </div>
           <div class="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
@@ -60,7 +60,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm text-gray-500 mb-1">预算剩余</p>
-            <p class="text-3xl font-bold text-orange-600">¥{{ formatCurrency(dashboard?.budgetRemaining || 0) }}</p>
+            <p class="text-3xl font-bold text-orange-600">¥{{ formatCurrency(dashboard?.budgetRemaining) }}</p>
             <p class="text-xs text-gray-400 mt-2">本月预算使用率 {{ dashboard?.budgetUsageRate || 0 }}%</p>
           </div>
           <div class="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center">
@@ -118,7 +118,7 @@
           
           <el-table-column prop="amount" label="金额" width="120">
             <template #default="{ row }">
-              <span class="font-medium">¥{{ row.amount.toLocaleString() }}</span>
+              <span class="font-medium">¥{{ formatCurrency(row.amount) }}</span>
             </template>
           </el-table-column>
           
@@ -166,7 +166,7 @@
               </div>
             </div>
             <div class="text-right">
-              <p class="font-bold text-gray-800">¥{{ item.amount.toLocaleString() }}</p>
+              <p class="font-bold text-gray-800">¥{{ formatCurrency(item.amount) }}</p>
               <el-button size="small" type="primary">审批</el-button>
             </div>
           </div>
@@ -215,6 +215,7 @@ import {
   Money, Ticket, Document, Plus, ArrowRight,
   Timer, Wallet, Warning
 } from '@element-plus/icons-vue'
+import { formatMoney } from '@/utils/money'
 
 const loading = ref(false)
 const dashboard = ref<DashboardData | null>(null)
@@ -272,7 +273,7 @@ onMounted(async () => {
   }
 })
 
-const formatCurrency = (amount: number) => amount.toLocaleString()
+const formatCurrency = (amount?: string) => formatMoney(amount || '0.00')
 
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {

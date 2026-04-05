@@ -15,7 +15,7 @@
       </div>
     </template>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       <button
         v-for="option in options"
         :key="option.code"
@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { CreditCard, Document, Files } from '@element-plus/icons-vue'
+import { CreditCard, Document, Files, Tickets } from '@element-plus/icons-vue'
 import type { ProcessTemplateTypeOption } from '@/api'
 
 defineProps<{
@@ -63,7 +63,8 @@ defineEmits<{
 const iconMap = {
   report: Document,
   application: Files,
-  loan: CreditCard
+  loan: CreditCard,
+  contract: Tickets
 }
 
 type TemplateIconKey = keyof typeof iconMap
@@ -71,6 +72,7 @@ type TemplateIconKey = keyof typeof iconMap
 const accentMap: Record<string, string> = {
   blue: 'linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)',
   cyan: 'linear-gradient(135deg, #0891b2 0%, #67e8f9 100%)',
-  orange: 'linear-gradient(135deg, #ea580c 0%, #fdba74 100%)'
+  orange: 'linear-gradient(135deg, #ea580c 0%, #fdba74 100%)',
+  emerald: 'linear-gradient(135deg, #047857 0%, #34d399 100%)'
 }
 </script>

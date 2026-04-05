@@ -11,6 +11,9 @@ import com.finex.auth.dto.ProcessExpenseTypeDetailVO;
 import com.finex.auth.dto.ProcessExpenseTypeMetaVO;
 import com.finex.auth.dto.ProcessExpenseTypeSaveDTO;
 import com.finex.auth.dto.ProcessExpenseTypeTreeVO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignDetailVO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignSaveDTO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignSummaryVO;
 import com.finex.auth.dto.ProcessFormDesignDetailVO;
 import com.finex.auth.dto.ProcessFormDesignSaveDTO;
 import com.finex.auth.dto.ProcessFormDesignSummaryVO;
@@ -75,6 +78,16 @@ public interface ProcessManagementService {
     Boolean updateExpenseTypeStatus(Long id, Integer status);
 
     Boolean deleteExpenseType(Long id);
+
+    List<ProcessExpenseDetailDesignSummaryVO> listExpenseDetailDesigns();
+
+    ProcessExpenseDetailDesignDetailVO getExpenseDetailDesignDetail(Long id);
+
+    ProcessExpenseDetailDesignDetailVO createExpenseDetailDesign(ProcessExpenseDetailDesignSaveDTO dto);
+
+    ProcessExpenseDetailDesignDetailVO updateExpenseDetailDesign(Long id, ProcessExpenseDetailDesignSaveDTO dto);
+
+    Boolean deleteExpenseDetailDesign(Long id);
 
     List<ProcessFormDesignSummaryVO> listFormDesigns(String templateType);
 

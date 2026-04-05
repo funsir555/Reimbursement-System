@@ -5,6 +5,7 @@ import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
 import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
+import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.FinanceVendorDetailVO;
@@ -41,7 +42,7 @@ public class ExpenseDocumentController {
 
     @GetMapping("/templates")
     public Result<List<ExpenseCreateTemplateSummaryVO>> listTemplates(HttpServletRequest request) {
-        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW);
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(expenseDocumentService.listAvailableTemplates());
     }
 
@@ -50,8 +51,18 @@ public class ExpenseDocumentController {
             @PathVariable String templateCode,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW);
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(expenseDocumentService.getTemplateDetail(getCurrentUserId(request), templateCode));
+    }
+
+    @GetMapping("/documents/{documentCode}/details/{detailNo}")
+    public Result<ExpenseDetailInstanceDetailVO> getExpenseDetail(
+            @PathVariable String documentCode,
+            @PathVariable String detailNo,
+            HttpServletRequest request
+    ) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(expenseDocumentService.getExpenseDetail(getCurrentUserId(request), documentCode, detailNo, false));
     }
 
     @GetMapping("/vendors/options")
@@ -59,7 +70,7 @@ public class ExpenseDocumentController {
             @RequestParam(required = false) String keyword,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW);
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(expenseDocumentService.listVendorOptions(keyword));
     }
 
@@ -77,7 +88,7 @@ public class ExpenseDocumentController {
             @RequestParam(required = false) String keyword,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW);
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(expenseDocumentService.listPayeeOptions(keyword));
     }
 
@@ -86,7 +97,7 @@ public class ExpenseDocumentController {
             @RequestParam(required = false) String keyword,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW);
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(expenseDocumentService.listPayeeAccountOptions(keyword));
     }
 

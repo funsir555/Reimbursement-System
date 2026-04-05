@@ -25,6 +25,10 @@ public class ExpenseApprovalTaskVO {
 
     private String approvalMode;
 
+    private String taskKind;
+
+    private Long sourceTaskId;
+
     private String actionComment;
 
     private String createdAt;

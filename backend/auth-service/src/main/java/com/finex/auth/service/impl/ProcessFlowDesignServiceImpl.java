@@ -499,6 +499,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             if (node.getDisplayOrder() == null) {
                 node.setDisplayOrder(index + 1);
             }
+            node.setParentNodeKey(trimToNull(node.getParentNodeKey()));
             node.setNodeType(asText(node.getNodeType(), NODE_TYPE_APPROVAL));
             if (node.getNodeName() == null || node.getNodeName().trim().isEmpty()) {
                 node.setNodeName(defaultNodeName(node.getNodeType(), index + 1));

@@ -8,38 +8,14 @@
 
     <div class="flex-1 space-y-6">
       <template v-if="activeSection === 'document-flow'">
-        <section
-          class="overflow-hidden rounded-[32px] bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white shadow-lg"
-        >
-          <div class="flex flex-col gap-6 px-8 py-8 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p class="text-sm uppercase tracking-[0.22em] text-blue-100">Flow Studio</p>
-              <h1 class="mt-3 text-3xl font-bold">单据与流程</h1>
-              <p class="mt-3 max-w-2xl leading-7 text-blue-50/90">
-                把单据模板、审批流程、付款规则和 AI 审核能力统一收口到同一个工作区里，让财务同事能够更快梳理流程、维护模板并推动业务上线。
-              </p>
-            </div>
-
-            <div class="flex flex-wrap gap-3">
-              <el-button v-if="canCreateTemplates" type="primary" class="hero-primary-btn" @click="openTemplateDialog">
-                添加单据
-              </el-button>
-              <el-button v-if="canEditTemplates" class="hero-secondary-btn">
-                批量归档
-              </el-button>
-            </div>
-          </div>
-        </section>
-
-        <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <el-card v-for="stat in summaryCards" :key="stat.label" class="stat-card !rounded-3xl !shadow-sm">
-            <div class="flex items-center justify-between">
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="process-summary-grid">
+          <el-card v-for="stat in summaryCards" :key="stat.label" class="stat-card stat-card--compact !rounded-3xl !shadow-sm">
+            <div class="stat-card__content">
               <div>
                 <p class="text-sm text-slate-500">{{ stat.label }}</p>
-                <p class="mt-2 text-3xl font-bold text-slate-800">{{ stat.value }}</p>
-                <p class="mt-3 text-xs text-slate-400">{{ stat.tip }}</p>
+                <p class="mt-1.5 text-3xl font-bold leading-none text-slate-800">{{ stat.value }}</p>
               </div>
-              <div class="flex h-12 w-12 items-center justify-center rounded-2xl" :style="{ background: stat.bg }">
+              <div class="stat-card__icon" :style="{ background: stat.bg }">
                 <el-icon :size="22" class="text-white">
                   <component :is="stat.icon" />
                 </el-icon>
@@ -90,32 +66,32 @@
               </span>
             </div>
 
-            <div class="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" data-testid="process-template-grid">
               <el-card
                 v-for="template in category.templates"
                 :key="template.id"
                 class="template-card !rounded-3xl !shadow-sm"
               >
-                <div class="flex items-start justify-between gap-4">
-                  <div class="flex items-start gap-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="flex min-w-0 items-start gap-3">
                     <div
-                      class="flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-sm"
+                      class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white shadow-sm"
                       :style="{ background: template.color }"
                     >
-                      <el-icon :size="22"><Document /></el-icon>
+                      <el-icon :size="20"><Document /></el-icon>
                     </div>
-                    <div>
-                      <h3 class="text-lg font-semibold text-slate-800">{{ template.name }}</h3>
-                      <p class="mt-1 text-sm text-slate-400">{{ template.templateType }} / {{ template.businessDomain }}</p>
+                    <div class="min-w-0">
+                      <h3 class="truncate text-base font-semibold text-slate-800">{{ template.name }}</h3>
+                      <p class="mt-1 truncate text-xs text-slate-400">{{ template.templateType }} / {{ template.businessDomain }}</p>
                     </div>
                   </div>
 
                   <el-tag size="small" type="primary" effect="plain">{{ template.templateCode }}</el-tag>
                 </div>
 
-                <p class="mt-5 min-h-[48px] text-sm leading-6 text-slate-500">{{ template.description }}</p>
+                <p class="mt-3 min-h-[40px] text-sm leading-5 text-slate-500">{{ template.description }}</p>
 
-                <div class="mt-4 flex flex-wrap gap-2">
+                <div class="mt-3 flex flex-wrap gap-2">
                   <span
                     v-for="highlight in template.highlights"
                     :key="highlight"
@@ -125,14 +101,30 @@
                   </span>
                 </div>
 
-                <div class="mt-5 space-y-2 rounded-2xl bg-slate-50 px-4 py-3">
+                <div class="mt-4 space-y-2 rounded-2xl bg-slate-50 px-3.5 py-3">
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-slate-400">绑定流程</span>
-                    <span class="font-medium text-slate-700">{{ template.flowName }}</span>
+                    <button
+                      v-if="hasEditableFlow(template)"
+                      type="button"
+                      class="process-link-button"
+                      @click="openBoundFlow(template)"
+                    >
+                      {{ template.flowName }}
+                    </button>
+                    <span v-else class="font-medium text-slate-700">{{ template.flowName }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-slate-400">模板负责人</span>
-                    <span class="text-slate-700">{{ template.owner }}</span>
+                    <span class="text-slate-400">绑定表单</span>
+                    <button
+                      v-if="hasEditableForm(template)"
+                      type="button"
+                      class="process-link-button"
+                      @click="openBoundForm(template)"
+                    >
+                      {{ template.formName || '未绑定表单' }}
+                    </button>
+                    <span v-else class="text-slate-700">{{ template.formName || '未绑定表单' }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-slate-400">更新时间</span>
@@ -140,7 +132,7 @@
                   </div>
                 </div>
 
-                <div class="mt-5 flex flex-wrap justify-end gap-3">
+                <div class="mt-4 flex flex-wrap justify-end gap-2">
                   <el-button v-if="canEditTemplates" text type="danger" @click="confirmDeleteTemplate(template)">
                     删除模板
                   </el-button>
@@ -155,6 +147,10 @@
 
       <template v-else-if="activeSection === 'custom-archive'">
         <custom-archive-management-panel />
+      </template>
+
+      <template v-else-if="activeSection === 'expense-detail-form'">
+        <expense-detail-design-management-panel />
       </template>
 
       <template v-else-if="activeSection === 'expense-type'">
@@ -203,11 +199,14 @@ import {
 import {
   processApi,
   type ProcessCenterOverview,
+  type ProcessFlowSummary,
+  type ProcessFormDesignSummary,
   type ProcessTemplateCard,
   type ProcessTemplateTypeOption
 } from '@/api'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import CustomArchiveManagementPanel from '@/components/process/CustomArchiveManagementPanel.vue'
+import ExpenseDetailDesignManagementPanel from '@/components/process/ExpenseDetailDesignManagementPanel.vue'
 import ExpenseTypeManagementPanel from '@/components/process/ExpenseTypeManagementPanel.vue'
 import ProcessWorkbenchSidebar from '@/components/process/ProcessWorkbenchSidebar.vue'
 import TemplateTypeDialog from '@/components/process/TemplateTypeDialog.vue'
@@ -216,6 +215,8 @@ const route = useRoute()
 const router = useRouter()
 
 const overview = ref<ProcessCenterOverview | null>(null)
+const flowSummaries = ref<ProcessFlowSummary[]>([])
+const formDesignSummaries = ref<ProcessFormDesignSummary[]>([])
 const templateTypes = ref<ProcessTemplateTypeOption[]>([])
 const templateDialogVisible = ref(false)
 const searchKeyword = ref('')
@@ -236,6 +237,8 @@ const activeSection = computed(() => {
 const currentNav = computed(() => overview.value?.navItems.find((item) => item.key === activeSection.value))
 const currentNavLabel = computed(() => currentNav.value?.label || '\u6d41\u7a0b\u914d\u7f6e')
 const currentNavTip = computed(() => currentNav.value?.tip || '\u8fd9\u4e2a\u914d\u7f6e\u6a21\u5757\u6b63\u5728\u5efa\u8bbe\u4e2d\uff0c\u540e\u7eed\u4f1a\u7ee7\u7eed\u8865\u9f50\u771f\u5b9e\u80fd\u529b\u3002')
+const flowIdMap = computed(() => new Map(flowSummaries.value.map((item) => [item.flowCode, item.id])))
+const formIdMap = computed(() => new Map(formDesignSummaries.value.map((item) => [item.formCode, item.id])))
 const summaryCards = computed(() => {
   if (!overview.value) {
     return []
@@ -286,7 +289,8 @@ const filteredCategories = computed(() => {
         return (
           template.name.includes(keyword) ||
           template.templateType.includes(keyword) ||
-          template.flowName.includes(keyword)
+          template.flowName.includes(keyword) ||
+          (template.formName || '').includes(keyword)
         )
       })
       return {
@@ -305,12 +309,16 @@ onMounted(async () => {
 })
 async function loadOverview() {
   try {
-    const [overviewRes, typeRes] = await Promise.all([
+    const [overviewRes, typeRes, flowRes, formRes] = await Promise.all([
       processApi.getOverview(),
-      processApi.getTemplateTypes()
+      processApi.getTemplateTypes(),
+      processApi.listFlows(),
+      processApi.listFormDesigns()
     ])
     overview.value = overviewRes.data
     templateTypes.value = typeRes.data
+    flowSummaries.value = flowRes.data
+    formDesignSummaries.value = formRes.data
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '\u52a0\u8f7d\u6d41\u7a0b\u7ba1\u7406\u9875\u9762\u5931\u8d25'))
   }
@@ -353,6 +361,43 @@ const openTemplateEdit = (template: ProcessTemplateCard) => {
     }
   })
 }
+
+const hasEditableFlow = (template: ProcessTemplateCard) => {
+  const flowCode = template.flowCode?.trim()
+  return Boolean(flowCode && flowIdMap.value.has(flowCode))
+}
+
+const hasEditableForm = (template: ProcessTemplateCard) => {
+  const formCode = template.formCode?.trim()
+  return Boolean(formCode && formIdMap.value.has(formCode))
+}
+
+const openBoundFlow = (template: ProcessTemplateCard) => {
+  const flowCode = template.flowCode?.trim()
+  const flowId = flowCode ? flowIdMap.value.get(flowCode) : undefined
+  if (!flowCode || !flowId) {
+    ElMessage.warning('当前流程缺少可编辑详情，请刷新后重试')
+    return
+  }
+  router.push({
+    name: 'expense-workbench-process-flow-edit',
+    params: { id: flowId }
+  })
+}
+
+const openBoundForm = (template: ProcessTemplateCard) => {
+  const formCode = template.formCode?.trim()
+  const formId = formCode ? formIdMap.value.get(formCode) : undefined
+  if (!formCode || !formId) {
+    ElMessage.warning('当前表单缺少可编辑详情，请刷新后重试')
+    return
+  }
+  router.push({
+    name: 'expense-workbench-process-form-edit',
+    params: { id: formId }
+  })
+}
+
 const confirmDeleteTemplate = async (template: ProcessTemplateCard) => {
   try {
     await ElMessageBox.confirm(
@@ -378,23 +423,70 @@ const confirmDeleteTemplate = async (template: ProcessTemplateCard) => {
 
 <style scoped>
 .stat-card {
-  min-height: 150px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 12px 0;
+  height: 46px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(180deg, rgba(191, 219, 254, 0) 0%, rgba(191, 219, 254, 0.32) 100%);
+  pointer-events: none;
+}
+
+.stat-card--compact {
+  min-height: 108px;
+}
+
+:deep(.stat-card .el-card__body) {
+  position: relative;
+  z-index: 1;
+  padding: 18px 20px;
+}
+
+.stat-card__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stat-card__icon {
+  display: flex;
+  height: 44px;
+  width: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  box-shadow: 0 14px 28px rgba(59, 130, 246, 0.16);
 }
 
 .template-card {
   border: 1px solid #e2e8f0 !important;
 }
 
-.hero-primary-btn {
-  background: #ffffff !important;
-  border-color: #ffffff !important;
-  color: #2563eb !important;
+:deep(.template-card .el-card__body) {
+  padding: 18px;
 }
 
-.hero-secondary-btn {
-  background: rgba(255, 255, 255, 0.14) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
-  color: #ffffff !important;
+.process-link-button {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font-weight: 500;
+  padding: 0;
+}
+
+.process-link-button:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
 }
 </style>
 

@@ -30,6 +30,10 @@ public class ProcessDocumentTemplate {
 
     private String formDesignCode;
 
+    private String expenseDetailDesignCode;
+
+    private String expenseDetailModeDefault;
+
     private String iconColor;
 
     private Integer enabled;
