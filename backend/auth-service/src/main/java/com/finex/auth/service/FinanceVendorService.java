@@ -9,15 +9,17 @@ import java.util.List;
 
 public interface FinanceVendorService {
 
-    List<FinanceVendorSummaryVO> listVendors(String keyword, Boolean includeDisabled);
+    List<FinanceVendorSummaryVO> listVendors(String companyId, String keyword, Boolean includeDisabled);
 
-    FinanceVendorDetailVO getVendorDetail(String vendorCode);
+    FinanceVendorDetailVO getVendorDetail(String companyId, String vendorCode);
 
-    FinanceVendorDetailVO createVendor(FinanceVendorSaveDTO dto, String operatorName);
+    FinanceVendorDetailVO createVendor(String companyId, FinanceVendorSaveDTO dto, String operatorName);
 
-    FinanceVendorDetailVO updateVendor(String vendorCode, FinanceVendorSaveDTO dto, String operatorName);
+    FinanceVendorDetailVO createVendor(Long currentUserId, FinanceVendorSaveDTO dto, String operatorName);
 
-    Boolean disableVendor(String vendorCode, String operatorName);
+    FinanceVendorDetailVO updateVendor(String companyId, String vendorCode, FinanceVendorSaveDTO dto, String operatorName);
 
-    List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String keyword);
+    Boolean disableVendor(String companyId, String vendorCode, String operatorName);
+
+    List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String companyId, String keyword);
 }

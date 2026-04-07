@@ -112,7 +112,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW);
         return Result.success(
-                "单据已召回",
+                "鍗曟嵁宸插彫鍥?",
                 expenseDocumentService.recallDocument(userId, getCurrentUsername(request), documentCode)
         );
     }
@@ -128,7 +128,7 @@ public class ExpenseDocumentQueryController {
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
         return Result.success(
-                "评论已发布",
+                "璇勮宸插彂甯?",
                 expenseDocumentService.commentOnDocument(
                         userId,
                         getCurrentUsername(request),
@@ -148,7 +148,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_DOCUMENTS_VIEW);
         return Result.success(
-                "已向当前审批人发送催办",
+                "宸插悜褰撳墠瀹℃壒浜哄彂閫佸偓鍔?",
                 expenseDocumentService.remindDocument(userId, getCurrentUsername(request), documentCode, dto == null ? new ExpenseDocumentReminderDTO() : dto)
         );
     }
@@ -178,7 +178,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(
-                "审批单已重新提交",
+                "瀹℃壒鍗曞凡閲嶆柊鎻愪氦",
                 expenseDocumentService.resubmitDocument(userId, getCurrentUsername(request), documentCode, dto)
         );
     }
@@ -191,7 +191,7 @@ public class ExpenseDocumentQueryController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("无法获取当前登录用户");
+        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {
@@ -199,6 +199,6 @@ public class ExpenseDocumentQueryController {
         if (username instanceof String value && !value.isBlank()) {
             return value;
         }
-        return "当前用户";
+        return "褰撳墠鐢ㄦ埛";
     }
 }

@@ -61,4 +61,8 @@ public class ExpenseDocumentDetailVO {
     private List<ExpenseApprovalTaskVO> currentTasks = new ArrayList<>();
 
     private List<ExpenseApprovalLogVO> actionLogs = new ArrayList<>();
+
+    private ExpenseDocumentBankPaymentVO bankPayment;
+
+    private List<ExpenseDocumentBankReceiptVO> bankReceipts = new ArrayList<>();
 }

@@ -6,17 +6,6 @@
     @close="$emit('update:modelValue', false)"
   >
     <div class="space-y-6">
-      <div class="grid grid-cols-2 gap-4">
-        <div class="rounded-3xl bg-blue-50 px-4 py-4">
-          <p class="text-sm text-slate-500">进行中</p>
-          <p class="mt-2 text-2xl font-bold text-slate-800">{{ center?.inProgress.length || 0 }}</p>
-        </div>
-        <div class="rounded-3xl bg-slate-100 px-4 py-4">
-          <p class="text-sm text-slate-500">历史记录</p>
-          <p class="mt-2 text-2xl font-bold text-slate-800">{{ center?.history.length || 0 }}</p>
-        </div>
-      </div>
-
       <section>
         <div class="mb-3 flex items-center justify-between">
           <h3 class="text-base font-semibold text-slate-800">正在下载</h3>
@@ -30,8 +19,8 @@
             class="rounded-3xl border border-blue-100 bg-blue-50/60 px-4 py-4"
           >
             <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="font-medium text-slate-800">{{ item.fileName }}</p>
+              <div class="min-w-0">
+                <p class="truncate font-medium text-slate-800">{{ item.fileName }}</p>
                 <p class="mt-1 text-sm text-slate-500">{{ item.businessType }} · {{ item.fileSize }}</p>
               </div>
               <el-tag type="primary" effect="plain">{{ item.status }}</el-tag>
@@ -52,17 +41,28 @@
             class="rounded-3xl border border-slate-200 bg-white px-4 py-4"
           >
             <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="font-medium text-slate-800">{{ item.fileName }}</p>
+              <div class="min-w-0">
+                <p class="truncate font-medium text-slate-800">{{ item.fileName }}</p>
                 <p class="mt-1 text-sm text-slate-500">{{ item.businessType }} · {{ item.fileSize }}</p>
               </div>
               <el-tag :type="item.status === '已完成' ? 'success' : 'warning'" effect="plain">
                 {{ item.status }}
               </el-tag>
             </div>
-            <div class="mt-3 space-y-1 text-xs text-slate-400">
-              <p>创建时间：{{ item.createdAt }}</p>
-              <p v-if="item.finishedAt">完成时间：{{ item.finishedAt }}</p>
+            <div class="mt-3 flex items-center justify-between gap-3">
+              <div class="space-y-1 text-xs text-slate-400">
+                <p>创建时间：{{ item.createdAt }}</p>
+                <p v-if="item.finishedAt">完成时间：{{ item.finishedAt }}</p>
+              </div>
+              <el-button
+                v-if="item.downloadable"
+                type="primary"
+                link
+                :loading="downloadingId === item.id"
+                @click="handleDownload(item)"
+              >
+                下载
+              </el-button>
             </div>
           </div>
         </div>
@@ -75,10 +75,11 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { downloadApi, type DownloadCenterData } from '@/api'
+import { downloadApi, type DownloadCenterData, type DownloadRecord } from '@/api'
 
 const props = defineProps<{
   modelValue: boolean
+  refreshKey?: number
 }>()
 
 const emit = defineEmits<{
@@ -87,6 +88,7 @@ const emit = defineEmits<{
 }>()
 
 const center = ref<DownloadCenterData | null>(null)
+const downloadingId = ref<number | null>(null)
 
 let pollingTimer: number | null = null
 
@@ -110,7 +112,7 @@ const syncPolling = () => {
 
   if (pollingTimer === null) {
     pollingTimer = window.setInterval(() => {
-      loadData(true)
+      void loadData(true)
     }, 3000)
   }
 }
@@ -131,15 +133,35 @@ const loadData = async (silent = false) => {
   }
 }
 
+const handleDownload = async (item: DownloadRecord) => {
+  downloadingId.value = item.id
+  try {
+    await downloadApi.downloadFile(item.id, item.fileName)
+  } catch (error: any) {
+    ElMessage.error(error.message || '下载文件失败')
+  } finally {
+    downloadingId.value = null
+  }
+}
+
 watch(
   () => props.modelValue,
   (visible) => {
     if (visible) {
-      loadData()
+      void loadData()
       return
     }
     stopPolling()
   },
   { immediate: true }
+)
+
+watch(
+  () => props.refreshKey,
+  () => {
+    if (props.modelValue) {
+      void loadData(true)
+    }
+  }
 )
 </script>

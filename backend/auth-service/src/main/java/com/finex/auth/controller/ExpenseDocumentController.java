@@ -71,7 +71,7 @@ public class ExpenseDocumentController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success(expenseDocumentService.listVendorOptions(keyword));
+        return Result.success(expenseDocumentService.listVendorOptions(getCurrentUserId(request), keyword));
     }
 
     @PostMapping("/vendors")
@@ -80,7 +80,7 @@ public class ExpenseDocumentController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success("往来单位已新增", financeVendorService.createVendor(dto, getCurrentUsername(request)));
+        return Result.success("往来单位已新增", financeVendorService.createVendor(getCurrentUserId(request), dto, getCurrentUsername(request)));
     }
 
     @GetMapping("/payees/options")
@@ -89,7 +89,7 @@ public class ExpenseDocumentController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success(expenseDocumentService.listPayeeOptions(keyword));
+        return Result.success(expenseDocumentService.listPayeeOptions(getCurrentUserId(request), keyword));
     }
 
     @GetMapping("/payee-accounts/options")
@@ -98,7 +98,7 @@ public class ExpenseDocumentController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success(expenseDocumentService.listPayeeAccountOptions(keyword));
+        return Result.success(expenseDocumentService.listPayeeAccountOptions(getCurrentUserId(request), keyword));
     }
 
     @PostMapping("/documents")

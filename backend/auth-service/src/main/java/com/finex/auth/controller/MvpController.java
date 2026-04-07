@@ -1,6 +1,8 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.DashboardVO;
+import com.finex.auth.dto.DashboardWriteOffBindingDTO;
+import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.dto.InvoiceSummaryVO;
 import com.finex.auth.dto.UserProfileVO;
@@ -8,9 +10,13 @@ import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.auth.service.MvpDataService;
 import com.finex.common.Result;
+import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,6 +44,46 @@ public class MvpController {
     public Result<DashboardVO> dashboard(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DASHBOARD_VIEW);
         return Result.success(mvpDataService.getDashboard(getCurrentUserId(request)));
+    }
+
+    @GetMapping("/dashboard/outstanding-documents")
+    public Result<List<ExpenseSummaryVO>> outstandingDocuments(
+            HttpServletRequest request,
+            @RequestParam String kind
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), DASHBOARD_VIEW);
+        return Result.success(expenseDocumentService.listOutstandingDocuments(getCurrentUserId(request), kind));
+    }
+
+    @GetMapping("/dashboard/writeoff-report-picker")
+    public Result<ExpenseDocumentPickerVO> writeoffReportPicker(
+            HttpServletRequest request,
+            @RequestParam String targetDocumentCode,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer pageSize
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), DASHBOARD_VIEW);
+        return Result.success(expenseDocumentService.getDashboardWriteOffSourceReportPicker(
+                getCurrentUserId(request),
+                targetDocumentCode,
+                keyword,
+                page,
+                pageSize
+        ));
+    }
+
+    @PostMapping("/dashboard/writeoff-bindings")
+    public Result<Boolean> bindWriteoff(
+            HttpServletRequest request,
+            @Valid @RequestBody DashboardWriteOffBindingDTO dto
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), DASHBOARD_VIEW);
+        return Result.success(expenseDocumentService.bindDashboardWriteOff(
+                getCurrentUserId(request),
+                dto.getTargetDocumentCode(),
+                dto.getSourceReportDocumentCode()
+        ));
     }
 
     @GetMapping("/expenses")

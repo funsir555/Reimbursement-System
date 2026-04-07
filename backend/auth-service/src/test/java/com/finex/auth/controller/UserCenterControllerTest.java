@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.springframework.core.io.ByteArrayResource;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -78,6 +80,8 @@ class UserCenterControllerTest {
         DownloadRecordVO record = new DownloadRecordVO();
         record.setId(100L);
         record.setFileName("invoice-export.xlsx");
+        record.setDownloadable(true);
+        record.setDownloadUrl("/auth/user-center/downloads/100/content");
         downloadCenter.setHistory(List.of(record));
 
         when(userCenterService.getDownloadCenter(1L)).thenReturn(downloadCenter);
@@ -90,6 +94,26 @@ class UserCenterControllerTest {
 
         verify(accessControlService).requireAnyPermission(1L, "profile:view", "profile:downloads:view");
         verify(userCenterService).getDownloadCenter(1L);
+    }
+
+    @Test
+    void downloadContentStreamsOwnFile() throws Exception {
+        when(userCenterService.loadDownloadContent(1L, 100L)).thenReturn(
+                new UserCenterService.DownloadContent(
+                        new ByteArrayResource("xlsx".getBytes()),
+                        "expense-export.xlsx",
+                        4L
+                )
+        );
+        doNothing().when(accessControlService).requireAnyPermission(1L, "profile:view", "profile:downloads:view");
+
+        mockMvc.perform(get("/auth/user-center/downloads/100/content").requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("expense-export.xlsx")));
+
+        verify(accessControlService).requireAnyPermission(1L, "profile:view", "profile:downloads:view");
+        verify(userCenterService).loadDownloadContent(1L, 100L);
     }
 
     @Test

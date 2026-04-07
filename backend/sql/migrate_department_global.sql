@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS sys_department (
     feishu_department_id VARCHAR(100) NULL COMMENT '飞书部门ID',
     sync_source VARCHAR(32) NULL COMMENT '同步来源:MANUAL/WECOM/DINGTALK/FEISHU/MIXED',
     sync_enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用同步',
+    stat_department_belong VARCHAR(100) NULL COMMENT '统计部门归属',
+    stat_region_belong VARCHAR(100) NULL COMMENT '统计大区归属',
+    stat_area_belong VARCHAR(100) NULL COMMENT '统计区域归属',
     last_sync_at DATETIME NULL COMMENT '最近同步时间',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
     sort_order INT NOT NULL DEFAULT 0 COMMENT '排序号',
@@ -64,6 +67,96 @@ SET @sql = IF(
     ),
     'ALTER TABLE sys_user MODIFY COLUMN feishu_user_id VARCHAR(100) NULL COMMENT ''飞书用户ID''',
     'ALTER TABLE sys_user ADD COLUMN feishu_user_id VARCHAR(100) NULL COMMENT ''飞书用户ID'' AFTER dingtalk_user_id'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'stat_department_belong'
+    ),
+    'ALTER TABLE sys_user MODIFY COLUMN stat_department_belong VARCHAR(100) NULL COMMENT ''统计部门归属''',
+    'ALTER TABLE sys_user ADD COLUMN stat_department_belong VARCHAR(100) NULL COMMENT ''统计部门归属'' AFTER labor_relation_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'stat_region_belong'
+    ),
+    'ALTER TABLE sys_user MODIFY COLUMN stat_region_belong VARCHAR(100) NULL COMMENT ''统计大区归属''',
+    'ALTER TABLE sys_user ADD COLUMN stat_region_belong VARCHAR(100) NULL COMMENT ''统计大区归属'' AFTER stat_department_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'stat_area_belong'
+    ),
+    'ALTER TABLE sys_user MODIFY COLUMN stat_area_belong VARCHAR(100) NULL COMMENT ''统计区域归属''',
+    'ALTER TABLE sys_user ADD COLUMN stat_area_belong VARCHAR(100) NULL COMMENT ''统计区域归属'' AFTER stat_region_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_department'
+          AND COLUMN_NAME = 'stat_department_belong'
+    ),
+    'ALTER TABLE sys_department MODIFY COLUMN stat_department_belong VARCHAR(100) NULL COMMENT ''统计部门归属''',
+    'ALTER TABLE sys_department ADD COLUMN stat_department_belong VARCHAR(100) NULL COMMENT ''统计部门归属'' AFTER sync_enabled'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_department'
+          AND COLUMN_NAME = 'stat_region_belong'
+    ),
+    'ALTER TABLE sys_department MODIFY COLUMN stat_region_belong VARCHAR(100) NULL COMMENT ''统计大区归属''',
+    'ALTER TABLE sys_department ADD COLUMN stat_region_belong VARCHAR(100) NULL COMMENT ''统计大区归属'' AFTER stat_department_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_department'
+          AND COLUMN_NAME = 'stat_area_belong'
+    ),
+    'ALTER TABLE sys_department MODIFY COLUMN stat_area_belong VARCHAR(100) NULL COMMENT ''统计区域归属''',
+    'ALTER TABLE sys_department ADD COLUMN stat_area_belong VARCHAR(100) NULL COMMENT ''统计区域归属'' AFTER stat_region_belong'
 );
 PREPARE stmt FROM @sql;
 EXECUTE stmt;

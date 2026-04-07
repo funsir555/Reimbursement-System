@@ -75,7 +75,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
                         .eq(ProcessDocumentTemplate::getExpenseDetailDesignCode, detailDesign.getDetailCode())
         );
         if (referencedCount != null && referencedCount > 0) {
-            throw new IllegalStateException("当前费用明细表单已被模板引用，不能删除");
+            throw new IllegalStateException("褰撳墠璐圭敤鏄庣粏琛ㄥ崟宸茶妯℃澘寮曠敤锛屼笉鑳藉垹闄?");
         }
         processExpenseDetailDesignMapper.deleteById(id);
         return Boolean.TRUE;
@@ -94,7 +94,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
     public String resolveExpenseDetailDesignCode(String detailCode) {
         String normalizedCode = trimToNull(detailCode);
         if (normalizedCode == null) {
-            throw new IllegalArgumentException("费用明细表单不能为空");
+            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟涓嶈兘涓虹┖");
         }
 
         ProcessExpenseDetailDesign detailDesign = processExpenseDetailDesignMapper.selectOne(
@@ -103,7 +103,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
                         .last("limit 1")
         );
         if (detailDesign == null) {
-            throw new IllegalArgumentException("费用明细表单不存在");
+            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟涓嶅瓨鍦?");
         }
         return detailDesign.getDetailCode();
     }
@@ -160,19 +160,19 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
 
     private void validateSave(ProcessExpenseDetailDesignSaveDTO dto, ProcessExpenseDetailDesign existing) {
         if (trimToNull(dto.getDetailName()) == null) {
-            throw new IllegalArgumentException("费用明细表单名称不能为空");
+            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟鍚嶇О涓嶈兘涓虹┖");
         }
         if (trimToNull(dto.getDetailType()) == null) {
-            throw new IllegalArgumentException("费用明细表单类型不能为空");
+            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟绫诲瀷涓嶈兘涓虹┖");
         }
         String normalizedType = normalizeDetailType(dto.getDetailType());
         if (!Objects.equals(normalizedType, ExpenseDetailSystemFieldSupport.DETAIL_TYPE_NORMAL)
                 && !Objects.equals(normalizedType, ExpenseDetailSystemFieldSupport.DETAIL_TYPE_ENTERPRISE)) {
-            throw new IllegalArgumentException("费用明细表单类型不合法");
+            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟绫诲瀷涓嶅悎娉?");
         }
         if (existing != null && isDetailDesignReferenced(existing.getDetailCode())
                 && !Objects.equals(normalizeDetailType(existing.getDetailType()), normalizedType)) {
-            throw new IllegalStateException("当前费用明细表单已被模板引用，不能修改类型");
+            throw new IllegalStateException("褰撳墠璐圭敤鏄庣粏琛ㄥ崟宸茶妯℃澘寮曠敤锛屼笉鑳戒慨鏀圭被鍨?");
         }
     }
 
@@ -187,7 +187,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
     private ProcessExpenseDetailDesign requireExpenseDetailDesign(Long id) {
         ProcessExpenseDetailDesign detailDesign = processExpenseDetailDesignMapper.selectById(id);
         if (detailDesign == null) {
-            throw new IllegalStateException("费用明细表单不存在");
+            throw new IllegalStateException("璐圭敤鏄庣粏琛ㄥ崟涓嶅瓨鍦?");
         }
         return detailDesign;
     }
@@ -208,8 +208,8 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
 
     private String resolveDetailTypeLabel(String detailType) {
         return Objects.equals(normalizeDetailType(detailType), ExpenseDetailSystemFieldSupport.DETAIL_TYPE_ENTERPRISE)
-                ? "企业往来"
-                : "普通报销";
+                ? "浼佷笟寰€鏉?"
+                : "鏅€氭姤閿€";
     }
 
     private String formatTime(LocalDateTime value) {

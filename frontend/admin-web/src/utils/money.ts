@@ -80,7 +80,7 @@ export function formatMoney(value: MoneyInputValue) {
   const normalized = normalizeMoneyValue(value, { fallback: '0.00', allowNegative: true })
   const negative = normalized.startsWith('-')
   const plain = negative ? normalized.slice(1) : normalized
-  const [wholePart, decimalPart = '00'] = plain.split('.')
+  const [wholePart = '0', decimalPart = '00'] = plain.split('.')
   const groupedWhole = wholePart.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return `${negative ? '-' : ''}${groupedWhole}.${decimalPart}`
 }

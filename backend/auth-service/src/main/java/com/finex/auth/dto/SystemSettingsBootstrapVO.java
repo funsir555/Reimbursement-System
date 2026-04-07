@@ -20,6 +20,8 @@ public class SystemSettingsBootstrapVO {
 
     private List<CompanyVO> companies = new ArrayList<>();
 
+    private List<CompanyBankAccountVO> companyBankAccounts = new ArrayList<>();
+
     private List<SyncConnectorVO> connectors = new ArrayList<>();
 
     private List<SyncJobVO> jobs = new ArrayList<>();

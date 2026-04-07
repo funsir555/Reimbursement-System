@@ -41,6 +41,12 @@ desktop.ini
 *.temp
 *.swp
 *~
+download-*.xlsx
+
+# 本地备份与下载产物
+backend/sql/backup/
+backend/sql/backup_local/
+backend/auth-service/storage/downloads/
 
 # 测试报告
 test-output/

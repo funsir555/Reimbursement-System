@@ -80,7 +80,7 @@ export function resolveExpenseDetailActions(input: ResolveExpenseDetailActionsIn
 
   if (input.statusBucket === 'pending' && input.isActiveApprover) {
     return [
-      primaryAction('approve', '通过', 'success'),
+      primaryAction('approve', '通过', 'primary'),
       primaryAction('reject', '驳回', 'danger'),
       secondaryAction('prev', '上一单', !input.prevDocumentCode),
       secondaryAction('next', '下一单', !input.nextDocumentCode),
@@ -95,7 +95,7 @@ export function resolveExpenseDetailActions(input: ResolveExpenseDetailActionsIn
 
   if (input.statusBucket === 'exception' && input.canApprovalView && input.isFlowParticipant) {
     return [
-      primaryAction('approve', '通过', 'success', true, EXCEPTION_DISABLED_REASON),
+      primaryAction('approve', '通过', 'primary', true, EXCEPTION_DISABLED_REASON),
       primaryAction('reject', '驳回', 'danger', true, EXCEPTION_DISABLED_REASON),
       secondaryAction('prev', '上一单', !input.prevDocumentCode),
       secondaryAction('next', '下一单', !input.nextDocumentCode),

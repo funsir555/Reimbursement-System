@@ -35,7 +35,7 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
     @Override
     public ExpenseAttachmentVO uploadAttachment(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("请先选择附件");
+            throw new IllegalArgumentException("璇峰厛閫夋嫨闄勪欢");
         }
 
         String attachmentId = UUID.randomUUID().toString().replace("-", "");
@@ -67,8 +67,16 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
         } catch (Exception ex) {
             deleteIfExists(binaryPath);
             deleteIfExists(metadataPath);
-            throw new IllegalStateException("附件上传失败，请稍后重试", ex);
+            throw new IllegalStateException("闄勪欢涓婁紶澶辫触锛岃绋嶅悗閲嶈瘯", ex);
         }
+    }
+
+    @Override
+    public ExpenseAttachmentVO saveGeneratedAttachment(String fileName, String contentType, byte[] content) {
+        if (content == null || content.length == 0) {
+            throw new IllegalArgumentException("附件内容不能为空");
+        }
+        return storeAttachment(fileName, contentType, content);
     }
 
     @Override
@@ -78,7 +86,7 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
         Path binaryPath = root.resolve(normalizedId + ".bin");
         Path metadataPath = root.resolve(normalizedId + ".json");
         if (!Files.exists(binaryPath) || !Files.exists(metadataPath)) {
-            throw new IllegalArgumentException("附件不存在或已失效");
+            throw new IllegalArgumentException("闄勪欢涓嶅瓨鍦ㄦ垨宸插け鏁?");
         }
 
         try {
@@ -92,7 +100,40 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
             Resource resource = new FileSystemResource(binaryPath);
             return new StoredExpenseAttachment(resource, fileName, contentType, Files.size(binaryPath));
         } catch (IOException ex) {
-            throw new IllegalStateException("附件读取失败，请稍后重试", ex);
+            throw new IllegalStateException("闄勪欢璇诲彇澶辫触锛岃绋嶅悗閲嶈瘯", ex);
+        }
+    }
+
+    private ExpenseAttachmentVO storeAttachment(String originalFileName, String rawContentType, byte[] content) {
+        String attachmentId = UUID.randomUUID().toString().replace("-", "");
+        String fileName = sanitizeFileName(originalFileName);
+        String contentType = normalizeContentType(rawContentType, fileName);
+        Path root = ensureStorageRoot();
+        Path binaryPath = root.resolve(attachmentId + ".bin");
+        Path metadataPath = root.resolve(attachmentId + ".json");
+
+        try {
+            Files.write(binaryPath, content);
+
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("attachmentId", attachmentId);
+            metadata.put("fileName", fileName);
+            metadata.put("contentType", contentType);
+            metadata.put("fileSize", content.length);
+            metadata.put("previewUrl", buildPreviewUrl(attachmentId));
+            Files.writeString(metadataPath, objectMapper.writeValueAsString(metadata));
+
+            ExpenseAttachmentVO attachment = new ExpenseAttachmentVO();
+            attachment.setAttachmentId(attachmentId);
+            attachment.setFileName(fileName);
+            attachment.setContentType(contentType);
+            attachment.setFileSize((long) content.length);
+            attachment.setPreviewUrl(buildPreviewUrl(attachmentId));
+            return attachment;
+        } catch (Exception ex) {
+            deleteIfExists(binaryPath);
+            deleteIfExists(metadataPath);
+            throw new IllegalStateException("生成附件失败，请稍后重试", ex);
         }
     }
 
@@ -102,7 +143,7 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
             Files.createDirectories(root);
             return root;
         } catch (IOException ex) {
-            throw new IllegalStateException("附件目录初始化失败", ex);
+            throw new IllegalStateException("闄勪欢鐩綍鍒濆鍖栧け璐?", ex);
         }
     }
 
@@ -137,7 +178,7 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
     private String normalizeAttachmentId(String attachmentId) {
         String normalized = attachmentId == null ? "" : attachmentId.trim();
         if (!normalized.matches("[A-Za-z0-9]{16,64}")) {
-            throw new IllegalArgumentException("附件标识无效");
+            throw new IllegalArgumentException("闄勪欢鏍囪瘑鏃犳晥");
         }
         return normalized;
     }

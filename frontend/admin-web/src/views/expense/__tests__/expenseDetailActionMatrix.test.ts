@@ -16,7 +16,7 @@ describe('expenseDetailActionMatrix', () => {
     })
 
     expect(actions.map((item) => item.key)).toEqual(['recall', 'print', 'comment', 'download', 'remind'])
-    expect(actions[0]).toMatchObject({ key: 'recall', primary: true })
+    expect(actions[0]).toMatchObject({ key: 'recall', primary: true, label: '召回' })
     expect(actions.slice(1).every((item) => !item.primary)).toBe(true)
   })
 
@@ -44,8 +44,8 @@ describe('expenseDetailActionMatrix', () => {
       'comment',
       'download'
     ])
-    expect(actions[0]).toMatchObject({ key: 'approve', primary: true, type: 'success' })
-    expect(actions[1]).toMatchObject({ key: 'reject', primary: true, type: 'danger' })
+    expect(actions[0]).toMatchObject({ key: 'approve', primary: true, type: 'primary', label: '通过' })
+    expect(actions[1]).toMatchObject({ key: 'reject', primary: true, type: 'danger', label: '驳回' })
     expect(actions.find((item) => item.key === 'prev')?.disabled).toBe(false)
     expect(actions.find((item) => item.key === 'next')?.disabled).toBe(false)
   })
@@ -81,6 +81,8 @@ describe('expenseDetailActionMatrix', () => {
       'add-sign',
       'transfer'
     ])
+    expect(actions.find((item) => item.key === 'print')?.label).toBe('打印')
+    expect(actions.find((item) => item.key === 'comment')?.label).toBe('评论')
     expect(resolveDisabledExpenseDetailActionHint(actions)).toContain('异常单据需由发起人召回后重提')
   })
 

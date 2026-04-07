@@ -14,7 +14,7 @@ public class ProcessCustomArchiveItemDTO {
 
     private String itemCode;
 
-    @NotBlank(message = "结果项名称不能为空")
+    @NotBlank(message = "缁撴灉椤瑰悕绉颁笉鑳戒负绌?")
     private String itemName;
 
     private Integer priority;

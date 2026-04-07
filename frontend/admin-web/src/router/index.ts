@@ -1,4 +1,4 @@
-import { ElMessage } from 'element-plus'
+﻿import { ElMessage } from 'element-plus'
 import { createRouter, createWebHistory, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router'
 import { authApi } from '@/api'
 import {
@@ -30,7 +30,8 @@ const settingsPermissionCodes = [
   'settings:organization:view',
   'settings:employees:view',
   'settings:roles:view',
-  'settings:companies:view'
+  'settings:companies:view',
+  'settings:company_accounts:view'
 ]
 
 const routes: RouteRecordRaw[] = [
@@ -50,6 +51,20 @@ const routes: RouteRecordRaw[] = [
         name: 'dashboard',
         component: () => import('../views/DashboardView.vue'),
         meta: { title: 'Dashboard', permissionCode: 'dashboard:view' }
+      },
+      {
+        path: 'dashboard/pending-repayments',
+        name: 'dashboard-pending-repayments',
+        component: () => import('../views/dashboard/DashboardOutstandingDocumentsView.vue'),
+        props: { kind: 'LOAN' },
+        meta: { title: '待还款', permissionCode: 'dashboard:view' }
+      },
+      {
+        path: 'dashboard/pending-prepay-writeoffs',
+        name: 'dashboard-pending-prepay-writeoffs',
+        component: () => import('../views/dashboard/DashboardOutstandingDocumentsView.vue'),
+        props: { kind: 'PREPAY_REPORT' },
+        meta: { title: '待预付核销', permissionCode: 'dashboard:view' }
       },
       {
         path: 'profile',
@@ -108,12 +123,31 @@ const routes: RouteRecordRaw[] = [
         component: () => import('../views/expense/ExpenseDetailReadonlyView.vue'),
         meta: { title: 'Expense Detail', permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view'] }
       },
-      placeholderRoute('expense/payment/bank-link', 'expense-bank-link', 'Bank Link', 'Bank payment integration', 'expense:payment:bank_link:view'),
+      {
+        path: 'expense/payment/orders',
+        name: 'expense-payment-orders',
+        component: () => import('../views/expense/ExpensePaymentOrdersView.vue'),
+        meta: {
+          title: '\u4ed8\u6b3e\u5355',
+          tabTitle: '\u4ed8\u6b3e\u5355',
+          permissionCode: 'expense:payment:payment_order:view'
+        }
+      },
+      {
+        path: 'expense/payment/bank-link',
+        name: 'expense-bank-link',
+        component: () => import('../views/expense/ExpenseBankLinkView.vue'),
+        meta: {
+          title: '閾朵紒鐩磋繛',
+          tabTitle: '閾朵紒鐩磋繛',
+          permissionCode: 'expense:payment:bank_link:view'
+        }
+      },
       {
         path: 'expense/documents',
         name: 'expense-documents',
         component: () => import('../views/expense/ExpenseDocumentsView.vue'),
-        meta: { title: 'Expense Documents', permissionCode: 'expense:documents:view' }
+        meta: { title: '閸楁洘宓侀弻銉嚄', tabTitle: '閸楁洘宓侀弻銉嚄', description: '缂佺喍绔撮弻銉嚄瀹稿弶褰佹禍銈呭礋閹诡喖鑻熼弻銉ф箙濞翠胶鈻奸悩鑸碘偓浣碘偓浣姐€冮崡鏇炴彥閻撗傜瑢鐎光剝澹掔紒鎾寸亯', permissionCode: 'expense:documents:view' }
       },
       {
         path: 'expense/voucher-generation',
@@ -122,19 +156,19 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '凭证生成',
           tabTitle: '凭证生成',
-          description: '维护凭证科目映射、推送凭证并查询推送结果',
+          description: '报销凭证生成工作台',
           permissionCode: 'expense:voucher_generation:view'
         }
       },
       {
         path: 'expense/workbench/process-management',
         name: 'expense-workbench-process-management',
-        component: () => import('../views/expense/ExpenseVoucherGenerationView.vue'),
+        component: () => import('../views/process/ProcessManagementView.vue'),
         meta: {
-          title: '凭证生成',
-          tabTitle: '凭证生成',
-          description: '维护凭证科目映射、推送凭证并查询推送结果',
-          permissionCode: 'expense:voucher_generation:view'
+          title: '流程管理',
+          tabTitle: '流程管理',
+          description: '流程管理工作台',
+          permissionCode: 'expense:process_management:view'
         }
       },
       {
@@ -190,6 +224,7 @@ const routes: RouteRecordRaw[] = [
         path: 'finance/general-ledger/new-voucher',
         name: 'finance-new-voucher',
         component: () => import('../views/finance/FinanceNewVoucherView.vue'),
+        props: { pageMode: 'create' },
         meta: {
           title: '新建凭证',
           tabTitle: '新建凭证',
@@ -198,20 +233,37 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        ...placeholderRoute('finance/general-ledger/query-voucher', 'finance-query-voucher', '查询凭证', '查询已有凭证', 'finance:general_ledger:query_voucher:view'),
+        path: 'finance/general-ledger/query-voucher',
+        name: 'finance-query-voucher',
+        component: () => import('../views/finance/FinanceQueryVoucherView.vue'),
         meta: {
           title: '查询凭证',
           tabTitle: '查询凭证',
-          description: '查询已有凭证',
+          description: '查询总账凭证',
           permissionCode: 'finance:general_ledger:query_voucher:view'
         }
       },
       {
-        ...placeholderRoute('finance/general-ledger/review-voucher', 'finance-review-voucher', '审核凭证', '审核总账凭证', 'finance:general_ledger:review_voucher:view'),
+        path: 'finance/general-ledger/query-voucher/:voucherNo',
+        name: 'finance-query-voucher-detail',
+        component: () => import('../views/finance/FinanceNewVoucherView.vue'),
+        props: (route) => ({
+          pageMode: 'detail',
+          voucherNo: Array.isArray(route.params.voucherNo) ? route.params.voucherNo[0] || '' : String(route.params.voucherNo || '')
+        }),
         meta: {
-          title: '审核凭证',
-          tabTitle: '审核凭证',
-          description: '审核总账凭证',
+          title: '凭证详情',
+          tabTitle: '凭证详情',
+          description: '查看和修改凭证详情',
+          permissionCode: 'finance:general_ledger:query_voucher:view'
+        }
+      },
+      {
+        ...placeholderRoute('finance/general-ledger/review-voucher', 'finance-review-voucher', '瀹℃牳鍑瘉', '瀹℃牳鎬昏处鍑瘉', 'finance:general_ledger:review_voucher:view'),
+        meta: {
+          title: '瀹℃牳鍑瘉',
+          tabTitle: '瀹℃牳鍑瘉',
+          description: '瀹℃牳鎬昏处鍑瘉',
           permissionCode: 'finance:general_ledger:review_voucher:view'
         }
       },
@@ -279,13 +331,7 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        ...placeholderRoute(
-          'finance/general-ledger/quantity-amount-detail-ledger',
-          'finance-quantity-amount-detail-ledger',
-          '数量金额明细账',
-          '数量金额明细账功能建设中',
-          'finance:general_ledger:quantity_amount_detail_ledger:view'
-        ),
+        ...placeholderRoute('finance/general-ledger/quantity-amount-detail-ledger', 'finance-quantity-amount-detail-ledger', '数量金额明细账', '数量金额明细账功能建设中', 'finance:general_ledger:quantity_amount_detail_ledger:view'),
         meta: {
           title: '数量金额明细账',
           tabTitle: '数量金额明细账',
@@ -300,7 +346,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '固定资产',
           tabTitle: '固定资产',
-          description: '固定资产工作台',
+          description: '固定资产业务工作台',
           permissionCode: 'finance:fixed_assets:view'
         }
       },
@@ -309,7 +355,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '资产负债表',
           tabTitle: '资产负债表',
-          description: '资产负债表报表',
+          description: '查看资产负债表',
           permissionCode: 'finance:reports:balance_sheet:view'
         }
       },
@@ -318,7 +364,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '利润表',
           tabTitle: '利润表',
-          description: '利润表报表',
+          description: '查看利润表',
           permissionCode: 'finance:reports:income_statement:view'
         }
       },
@@ -327,18 +373,15 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '现金流量表',
           tabTitle: '现金流量表',
-          description: '现金流量报表',
+          description: '查看现金流量表',
           permissionCode: 'finance:reports:cash_flow:view'
         }
       },
       {
-        ...placeholderRoute('finance/archives/customers', 'finance-archives-customers', 'Customer Archive', 'Customer archive', 'finance:archives:customers:view'),
-        meta: {
-          title: '客户档案',
-          tabTitle: '客户档案',
-          description: '客户主数据维护',
-          permissionCode: 'finance:archives:customers:view'
-        }
+        path: 'finance/archives/customers',
+        name: 'finance-archives-customers',
+        component: () => import('../views/finance/FinanceCustomerArchiveView.vue'),
+        meta: { title: '客户档案', tabTitle: '客户档案', description: '客户主数据维护', permissionCode: 'finance:archives:customers:view' }
       },
       {
         path: 'finance/archives/suppliers',
@@ -380,6 +423,17 @@ const routes: RouteRecordRaw[] = [
         name: 'archives-invoices',
         component: () => import('../views/invoice/InvoiceListView.vue'),
         meta: { title: 'Invoice Archive', permissionCode: 'archives:invoices:view' }
+      },
+      {
+        path: 'archives/agents',
+        name: 'archives-agents',
+        component: () => import('../views/archives/ArchiveAgentView.vue'),
+        meta: {
+          title: 'Agent 工作台',
+          tabTitle: 'Agent',
+          description: '个人可配置的自动化 Agent 平台',
+          permissionCode: 'agents:view'
+        }
       },
       placeholderRoute('archives/account-books', 'archives-account-books', 'Account Books', 'Account books', 'archives:account_books:view'),
       {
@@ -449,3 +503,7 @@ router.beforeEach(async (to) => {
 })
 
 export default router
+
+
+
+

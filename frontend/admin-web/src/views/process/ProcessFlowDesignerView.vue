@@ -2088,26 +2088,26 @@ function appendQueryParam(path: string, key: string, value: string) {
   width: min(95vw, 1680px);
   align-items: center;
   justify-content: flex-end;
-  gap: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 32px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(248, 250, 252, 0.18) 100%);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(248, 250, 252, 0.1) 100%);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(18px);
-  padding: 24px 30px;
-  font-size: 18px;
+  padding: 18px 22px;
+  font-size: 15px;
 }
 
 :deep(.process-flow-designer-floating-bar__button.el-button) {
-  min-height: 54px;
-  padding: 0 28px;
-  border-radius: 20px;
-  font-size: 18px;
+  min-height: 38px;
+  padding: 0 20px;
+  border-radius: 16px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 :deep(.process-flow-designer-floating-bar__button--success.el-button) {
-  box-shadow: 0 18px 36px rgba(34, 197, 94, 0.18);
+  box-shadow: 0 12px 24px rgba(34, 197, 94, 0.14);
 }
 
 @media (max-width: 1279px) {
@@ -2135,16 +2135,16 @@ function appendQueryParam(path: string, key: string, value: string) {
   .process-flow-designer-floating-bar__inner {
     width: calc(100vw - 24px);
     flex-wrap: wrap;
-    gap: 12px;
-    padding: 18px 16px;
-    font-size: 16px;
+    gap: 10px;
+    padding: 14px 14px;
+    font-size: 14px;
   }
 
   :deep(.process-flow-designer-floating-bar__button.el-button) {
     flex: 1 1 calc(50% - 6px);
-    min-height: 48px;
-    padding: 0 16px;
-    font-size: 16px;
+    min-height: 34px;
+    padding: 0 14px;
+    font-size: 14px;
   }
 }
 </style>

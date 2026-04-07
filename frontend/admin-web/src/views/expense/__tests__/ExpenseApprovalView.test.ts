@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
     approve: vi.fn(),
     reject: vi.fn()
   },
+  asyncTaskApi: {
+    exportExpenseScene: vi.fn()
+  },
   elMessage: {
     error: vi.fn(),
     warning: vi.fn(),
@@ -19,6 +22,9 @@ const mocks = vi.hoisted(() => ({
   },
   elMessageBox: {
     prompt: vi.fn()
+  },
+  downloadCenter: {
+    openDownloadCenter: vi.fn()
   }
 }))
 
@@ -27,12 +33,17 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/api', () => ({
-  expenseApprovalApi: mocks.expenseApprovalApi
+  expenseApprovalApi: mocks.expenseApprovalApi,
+  asyncTaskApi: mocks.asyncTaskApi
 }))
 
 vi.mock('element-plus', () => ({
   ElMessage: mocks.elMessage,
   ElMessageBox: mocks.elMessageBox
+}))
+
+vi.mock('@/utils/downloadCenter', () => ({
+  openDownloadCenter: mocks.downloadCenter.openDownloadCenter
 }))
 
 const SimpleContainer = defineComponent({
@@ -158,6 +169,7 @@ describe('ExpenseApprovalView', () => {
     mocks.elMessageBox.prompt.mockResolvedValue({ value: '同意' })
     mocks.expenseApprovalApi.approve.mockResolvedValue({})
     mocks.expenseApprovalApi.reject.mockResolvedValue({})
+    mocks.asyncTaskApi.exportExpenseScene.mockResolvedValue({ code: 200 })
   })
 
   it('renders advanced filter and visible column actions', async () => {
@@ -166,14 +178,26 @@ describe('ExpenseApprovalView', () => {
     expect(mocks.expenseApprovalApi.listPending).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('高级筛选')
     expect(wrapper.text()).toContain('显示字段')
-    expect(wrapper.text()).toContain('刷新待办')
-    expect(wrapper.text()).toContain('返回我的报销')
+    expect(wrapper.text()).toContain('下载')
+    expect(wrapper.text()).not.toContain('刷新待办')
+    expect(wrapper.text()).not.toContain('返回我的报销')
+    expect(wrapper.text()).toContain('待审 1')
+    expect(wrapper.text()).toContain('金额合计 ¥ 1,880.50')
+    expect(wrapper.text()).not.toContain('审批任务列表')
     expect(wrapper.find('[data-testid="expense-advanced-panel"]').exists()).toBe(false)
+    expect(wrapper.classes()).toContain('expense-wb-page--dense-list')
+    expect(wrapper.find('.expense-wb-stat-grid--dense').exists()).toBe(true)
+    expect(wrapper.find('.expense-wb-stat-grid--list-dense').exists()).toBe(true)
+    expect(wrapper.findAll('.expense-wb-stat-card--dense').length).toBeGreaterThan(0)
+    expect(wrapper.find('.expense-wb-toolbar--dense').exists()).toBe(true)
+    expect(wrapper.find('.expense-wb-table-shell--compact').exists()).toBe(true)
 
     await wrapper.get('[data-testid="expense-advanced-filter-trigger"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.get('[data-testid="expense-toolbar-main"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="expense-toolbar-main"]').classes()).toContain('expense-wb-toolbar__row--dense')
+    expect(wrapper.get('[data-testid="expense-toolbar-heading"]').classes()).toContain('expense-wb-toolbar__heading--inline')
     expect(wrapper.get('[data-testid="expense-advanced-panel"]').classes()).toContain('expense-wb-advanced-panel--dropdown')
     expect(wrapper.get('[data-testid="expense-advanced-grid"]').classes()).toContain('expense-wb-advanced-grid--four-column')
   })
@@ -217,5 +241,24 @@ describe('ExpenseApprovalView', () => {
     expect(vm.visibleColumnDefinitions.find((item) => item.key === 'documentCode')?.width).toBe(260)
     expect(JSON.parse(window.localStorage.getItem('expense:approval:visible-columns') || '[]')).toEqual(['taskCreatedAt', 'documentCode'])
     expect(JSON.parse(window.localStorage.getItem('expense:approval:column-order') || '[]')[0]).toBe('taskCreatedAt')
+  })
+
+  it('submits export task with filtered task ids', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filters: { paymentCompanyName: string }
+      handleExport: () => Promise<void>
+    }
+
+    vm.filters.paymentCompanyName = '华南'
+    await flushPromises()
+    await vm.handleExport()
+
+    expect(mocks.asyncTaskApi.exportExpenseScene).toHaveBeenCalledWith({
+      scene: 'PENDING_APPROVAL',
+      taskIds: [1]
+    })
+    expect(mocks.downloadCenter.openDownloadCenter).toHaveBeenCalledTimes(1)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('导出任务已提交，请到下载中心查看进度')
   })
 })

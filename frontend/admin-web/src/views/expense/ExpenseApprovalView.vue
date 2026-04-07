@@ -1,7 +1,13 @@
 ﻿<template>
-  <div class="expense-wb-page expense-wb-page--approval space-y-5">
-    <section class="expense-wb-stat-grid expense-wb-stat-grid--compact">
-      <article v-for="stat in approvalStats" :key="stat.label" class="expense-wb-stat-card expense-wb-stat-card--compact">
+  <div class="expense-wb-page expense-wb-page--approval expense-wb-page--dense-list">
+    <section
+      class="expense-wb-stat-grid expense-wb-stat-grid--compact expense-wb-stat-grid--dense expense-wb-stat-grid--list-dense"
+    >
+      <article
+        v-for="stat in approvalStats"
+        :key="stat.label"
+        class="expense-wb-stat-card expense-wb-stat-card--compact expense-wb-stat-card--dense"
+      >
         <div class="expense-wb-stat-card__top">
           <div>
             <p class="expense-wb-stat-card__label">{{ stat.label }}</p>
@@ -16,10 +22,20 @@
       </article>
     </section>
 
-    <el-card class="expense-wb-toolbar expense-wb-toolbar--compact">
-      <div class="expense-wb-toolbar__row expense-wb-toolbar__row--compact expense-wb-toolbar__main" data-testid="expense-toolbar-main">
-        <div class="expense-wb-toolbar__heading expense-wb-toolbar__heading--compact">
+    <el-card class="expense-wb-toolbar expense-wb-toolbar--compact expense-wb-toolbar--dense">
+      <div
+        class="expense-wb-toolbar__row expense-wb-toolbar__row--compact expense-wb-toolbar__row--dense expense-wb-toolbar__main"
+        data-testid="expense-toolbar-main"
+      >
+        <div
+          class="expense-wb-toolbar__heading expense-wb-toolbar__heading--compact expense-wb-toolbar__heading--inline"
+          data-testid="expense-toolbar-heading"
+        >
           <p class="expense-wb-toolbar__title">任务检索</p>
+          <div class="expense-wb-toolbar__meta">
+            <span class="expense-wb-soft-badge">待审 {{ items.length }}</span>
+            <span class="expense-wb-soft-badge expense-wb-soft-badge--warn">金额合计 {{ totalAmountText }}</span>
+          </div>
         </div>
 
         <div class="expense-wb-toolbar__group">
@@ -68,8 +84,14 @@
           </el-popover>
 
           <div class="expense-wb-toolbar__actions">
-            <el-button :icon="Refresh" @click="loadPending">刷新待办</el-button>
-            <el-button @click="goMyExpenses">返回我的报销</el-button>
+            <el-button
+              :icon="Download"
+              :loading="exporting"
+              data-testid="expense-approval-export-trigger"
+              @click="handleExport"
+            >
+              下载
+            </el-button>
           </div>
         </div>
       </div>
@@ -117,17 +139,7 @@
       </div>
     </el-card>
 
-    <el-card class="expense-wb-panel expense-wb-table-shell">
-      <div class="expense-wb-table-shell__header">
-        <div>
-          <p class="expense-wb-table-shell__title">审批任务列表</p>
-        </div>
-        <div class="expense-wb-pill-cluster">
-          <span class="expense-wb-soft-badge">待审 {{ items.length }}</span>
-          <span class="expense-wb-soft-badge expense-wb-soft-badge--warn">金额合计 {{ totalAmountText }}</span>
-        </div>
-      </div>
-
+    <el-card class="expense-wb-panel expense-wb-table-shell expense-wb-table-shell--compact">
       <el-table :data="pagedItems" style="width: 100%" v-loading="loading" @header-dragend="handleHeaderDragEnd">
         <el-table-column
           v-for="column in visibleColumnDefinitions"
@@ -185,14 +197,14 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Clock,
+  Download,
   Files,
   Filter,
   Money,
   Operation,
-  Refresh,
   User
 } from '@element-plus/icons-vue'
-import { expenseApprovalApi, type ExpenseApprovalPendingItem } from '@/api'
+import { asyncTaskApi, expenseApprovalApi, type ExpenseApprovalPendingItem } from '@/api'
 import {
   EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS,
   EXPENSE_WORKBENCH_DEFAULT_COLUMNS,
@@ -203,6 +215,7 @@ import {
   buildColumnGridDisplayOrder,
   createExpenseWorkbenchFilters,
   filterExpenseWorkbenchRows,
+  getExpenseWorkbenchStatusType,
   loadColumnOrder,
   loadColumnWidths,
   loadVisibleColumns,
@@ -217,9 +230,11 @@ import {
   sortVisibleColumnsByOrder,
   type ExpenseWorkbenchColumnKey
 } from './expenseWorkbenchListHelper'
+import { openDownloadCenter } from '@/utils/downloadCenter'
 
 const router = useRouter()
 const loading = ref(false)
+const exporting = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const items = ref<ExpenseApprovalPendingItem[]>([])
@@ -300,13 +315,7 @@ function formatAmount(value: unknown) {
 }
 
 function getStatusType(status: string) {
-  const map: Record<string, string> = {
-    审批中: 'warning',
-    已通过: 'success',
-    已驳回: 'danger',
-    流程异常: 'info'
-  }
-  return map[status] || 'info'
+  return getExpenseWorkbenchStatusType(status)
 }
 
 async function loadPending() {
@@ -393,12 +402,33 @@ function handleHeaderDragEnd(
   columnWidths.value = saveColumnWidth(columnKey, newWidth, columnWidths.value)
 }
 
-function goMyExpenses() {
-  void router.push('/expense/list')
-}
-
 function openDetail(documentCode: string) {
   void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+}
+
+async function handleExport() {
+  const taskIds = filteredItems.value
+    .map((item) => item.taskId)
+    .filter((item): item is number => typeof item === 'number')
+
+  if (!taskIds.length) {
+    ElMessage.warning('当前没有可导出的审批任务')
+    return
+  }
+
+  exporting.value = true
+  try {
+    await asyncTaskApi.exportExpenseScene({
+      scene: 'PENDING_APPROVAL',
+      taskIds
+    })
+    ElMessage.success('导出任务已提交，请到下载中心查看进度')
+    openDownloadCenter()
+  } catch (error: any) {
+    ElMessage.error(error.message || '提交导出任务失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
 async function handleAction(taskId: number, action: 'approve' | 'reject') {

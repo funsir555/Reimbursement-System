@@ -81,7 +81,7 @@ public class ExpenseDetailSystemFieldSupport {
             Map<String, Object> raw = objectMapper.readValue(schemaJson, new TypeReference<LinkedHashMap<String, Object>>() {});
             return normalizeSchema(raw, detailType);
         } catch (Exception ex) {
-            throw new IllegalStateException("费用明细表单 schema 解析失败", ex);
+            throw new IllegalStateException("璐圭敤鏄庣粏琛ㄥ崟 schema 瑙ｆ瀽澶辫触", ex);
         }
     }
 
@@ -89,7 +89,7 @@ public class ExpenseDetailSystemFieldSupport {
         try {
             return objectMapper.writeValueAsString(normalizeSchema(schema, detailType));
         } catch (Exception ex) {
-            throw new IllegalStateException("费用明细表单 schema 序列化失败", ex);
+            throw new IllegalStateException("璐圭敤鏄庣粏琛ㄥ崟 schema 搴忓垪鍖栧け璐?", ex);
         }
     }
 
@@ -224,23 +224,23 @@ public class ExpenseDetailSystemFieldSupport {
 
         if (Objects.equals(systemFieldCode, SYSTEM_EXPENSE_TYPE)) {
             props.put("controlType", CONTROL_TYPE_SELECT);
-            props.put("placeholder", "请选择费用类型");
+            props.put("placeholder", "璇烽€夋嫨璐圭敤绫诲瀷");
             props.put("options", loadExpenseTypeOptionMaps());
             return props;
         }
         if (Objects.equals(systemFieldCode, SYSTEM_BUSINESS_SCENARIO)) {
             props.put("controlType", CONTROL_TYPE_SELECT);
-            props.put("placeholder", "请选择业务场景");
+            props.put("placeholder", "璇烽€夋嫨涓氬姟鍦烘櫙");
             props.put("options", Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)
-                    ? List.of(option("到票全部支付", MODE_INVOICE_FULL_PAYMENT), option("预付未到票", MODE_PREPAY_UNBILLED))
-                    : List.of(option("到票全部支付", MODE_INVOICE_FULL_PAYMENT)));
+                    ? List.of(option("鍒扮エ鍏ㄩ儴鏀粯", MODE_INVOICE_FULL_PAYMENT), option("棰勪粯鏈埌绁?", MODE_PREPAY_UNBILLED))
+                    : List.of(option("鍒扮エ鍏ㄩ儴鏀粯", MODE_INVOICE_FULL_PAYMENT)));
             return props;
         }
         if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)
                 || Objects.equals(systemFieldCode, SYSTEM_ACTUAL_PAYMENT_AMOUNT)
                 || Objects.equals(systemFieldCode, SYSTEM_PENDING_WRITE_OFF_AMOUNT)) {
             props.put("controlType", CONTROL_TYPE_AMOUNT);
-            props.put("placeholder", "请输入金额");
+            props.put("placeholder", "璇疯緭鍏ラ噾棰?");
             props.put("precision", 2);
             if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
                 if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)) {
@@ -299,13 +299,13 @@ public class ExpenseDetailSystemFieldSupport {
 
     private String systemFieldLabel(String systemFieldCode) {
         return switch (systemFieldCode) {
-            case SYSTEM_EXPENSE_TYPE -> "费用类型";
-            case SYSTEM_BUSINESS_SCENARIO -> "业务场景";
-            case SYSTEM_INVOICE_AMOUNT -> "到票金额";
-            case SYSTEM_ACTUAL_PAYMENT_AMOUNT -> "付款金额";
-            case SYSTEM_INVOICE_ATTACHMENTS -> "上传发票";
-            case SYSTEM_PENDING_WRITE_OFF_AMOUNT -> "未到票金额";
-            default -> "系统字段";
+            case SYSTEM_EXPENSE_TYPE -> "璐圭敤绫诲瀷";
+            case SYSTEM_BUSINESS_SCENARIO -> "涓氬姟鍦烘櫙";
+            case SYSTEM_INVOICE_AMOUNT -> "鍒扮エ閲戦";
+            case SYSTEM_ACTUAL_PAYMENT_AMOUNT -> "浠樻閲戦";
+            case SYSTEM_INVOICE_ATTACHMENTS -> "涓婁紶鍙戠エ";
+            case SYSTEM_PENDING_WRITE_OFF_AMOUNT -> "鏈埌绁ㄩ噾棰?";
+            default -> "绯荤粺瀛楁";
         };
     }
 

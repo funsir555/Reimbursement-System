@@ -3,10 +3,16 @@ package com.finex.auth.service.impl;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.dto.ExpenseAttachmentVO;
+import com.finex.auth.dto.ExpenseBankLinkSaveDTO;
+import com.finex.auth.dto.ExpenseCreatePayeeAccountOptionVO;
+import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
+import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.entity.FinanceVendor;
+import com.finex.auth.entity.PmBankPaymentRecord;
 import com.finex.auth.entity.ProcessCustomArchiveDesign;
 import com.finex.auth.entity.ProcessCustomArchiveItem;
 import com.finex.auth.entity.ProcessDocumentActionLog;
@@ -21,10 +27,12 @@ import com.finex.auth.entity.ProcessFlow;
 import com.finex.auth.entity.ProcessFlowVersion;
 import com.finex.auth.entity.ProcessFormDesign;
 import com.finex.auth.entity.ProcessTemplateScope;
+import com.finex.auth.entity.SystemCompanyBankAccount;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceVendorMapper;
+import com.finex.auth.mapper.PmBankPaymentRecordMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveRuleMapper;
@@ -41,10 +49,15 @@ import com.finex.auth.mapper.ProcessFlowMapper;
 import com.finex.auth.mapper.ProcessFlowVersionMapper;
 import com.finex.auth.mapper.ProcessFormDesignMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
+import com.finex.auth.mapper.SystemCompanyBankAccountMapper;
+import com.finex.auth.mapper.SystemPermissionMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
+import com.finex.auth.mapper.SystemRolePermissionMapper;
+import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.FinanceVendorService;
 import com.finex.auth.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,10 +68,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.util.concurrent.atomic.AtomicReference;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -96,9 +110,17 @@ class ExpenseDocumentServiceImplTest {
     @Mock
     private FinanceVendorMapper financeVendorMapper;
     @Mock
+    private SystemPermissionMapper systemPermissionMapper;
+    @Mock
+    private SystemCompanyBankAccountMapper systemCompanyBankAccountMapper;
+    @Mock
     private SystemCompanyMapper systemCompanyMapper;
     @Mock
     private SystemDepartmentMapper systemDepartmentMapper;
+    @Mock
+    private SystemRolePermissionMapper systemRolePermissionMapper;
+    @Mock
+    private SystemUserRoleMapper systemUserRoleMapper;
     @Mock
     private UserMapper userMapper;
     @Mock
@@ -115,6 +137,10 @@ class ExpenseDocumentServiceImplTest {
     private ProcessDocumentRelationMapper processDocumentRelationMapper;
     @Mock
     private ProcessDocumentWriteOffMapper processDocumentWriteOffMapper;
+    @Mock
+    private PmBankPaymentRecordMapper pmBankPaymentRecordMapper;
+    @Mock
+    private ExpenseAttachmentService expenseAttachmentService;
     @Mock
     private FinanceVendorService financeVendorService;
     @Mock
@@ -142,8 +168,12 @@ class ExpenseDocumentServiceImplTest {
                 processFlowVersionMapper,
                 processTemplateScopeMapper,
                 financeVendorMapper,
+                systemPermissionMapper,
+                systemCompanyBankAccountMapper,
                 systemCompanyMapper,
                 systemDepartmentMapper,
+                systemRolePermissionMapper,
+                systemUserRoleMapper,
                 userMapper,
                 userBankAccountMapper,
                 processDocumentInstanceMapper,
@@ -152,6 +182,8 @@ class ExpenseDocumentServiceImplTest {
                 processDocumentExpenseDetailMapper,
                 processDocumentRelationMapper,
                 processDocumentWriteOffMapper,
+                pmBankPaymentRecordMapper,
+                expenseAttachmentService,
                 financeVendorService,
                 processExpenseDetailDesignMapper,
                 processExpenseTypeMapper,
@@ -540,7 +572,7 @@ class ExpenseDocumentServiceImplTest {
         ProcessFlow flow = createApprovalFlow();
         ProcessFlowVersion version = createApprovalFlowVersion();
         ExpenseDocumentSubmitDTO dto = createContractSubmitDto();
-        User submitter = createActiveUser(1L, "zhangsan");
+        User submitter = createActiveUser(1L, "张三");
         User approver = createActiveUser(2L, "李四");
         AtomicReference<ProcessDocumentInstance> storedInstance = new AtomicReference<>();
 
@@ -570,9 +602,15 @@ class ExpenseDocumentServiceImplTest {
 
         assertNotNull(result);
         assertEquals("PENDING_APPROVAL", result.getStatus());
+        assertEquals("张三", storedInstance.get().getSubmitterName());
 
         ArgumentCaptor<ProcessDocumentActionLog> logCaptor = ArgumentCaptor.forClass(ProcessDocumentActionLog.class);
         verify(processDocumentActionLogMapper, times(2)).insert(logCaptor.capture());
+        ProcessDocumentActionLog submitLog = logCaptor.getAllValues().stream()
+                .filter(item -> "SUBMIT".equals(item.getActionType()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("张三", submitLog.getActorName());
         ProcessDocumentActionLog approvalPendingLog = logCaptor.getAllValues().stream()
                 .filter(item -> "APPROVAL_PENDING".equals(item.getActionType()))
                 .findFirst()
@@ -583,6 +621,50 @@ class ExpenseDocumentServiceImplTest {
         );
         assertEquals(List.of(2), payload.get("approverUserIds"));
         assertEquals(List.of("李四"), payload.get("approverNames"));
+    }
+
+    @Test
+    void submitDocumentFallsBackToUsernameWhenUserNameIsBlank() throws Exception {
+        ProcessDocumentTemplate template = createTemplate();
+        ProcessFormDesign formDesign = createFormDesign();
+        ProcessExpenseDetailDesign detailDesign = createExpenseDetailDesign();
+        ExpenseDocumentSubmitDTO dto = createSubmitDto();
+        User submitter = new User();
+        submitter.setId(1L);
+        submitter.setUsername("zhangsan");
+        submitter.setStatus(1);
+        AtomicReference<ProcessDocumentInstance> storedInstance = new AtomicReference<>();
+
+        when(templateMapper.selectOne(any())).thenReturn(template);
+        when(processFormDesignMapper.selectOne(any())).thenReturn(formDesign);
+        when(processExpenseDetailDesignMapper.selectOne(any())).thenReturn(detailDesign);
+        when(processDocumentInstanceMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        doAnswer(invocation -> {
+            ProcessDocumentInstance instance = invocation.getArgument(0);
+            instance.setId(104L);
+            storedInstance.set(copyInstance(instance));
+            return 1;
+        }).when(processDocumentInstanceMapper).insert(any(ProcessDocumentInstance.class));
+        doAnswer(invocation -> {
+            ProcessDocumentInstance instance = invocation.getArgument(0);
+            storedInstance.set(copyInstance(instance));
+            return 1;
+        }).when(processDocumentInstanceMapper).updateById(any(ProcessDocumentInstance.class));
+        when(processDocumentInstanceMapper.selectOne(any())).thenAnswer(invocation -> storedInstance.get());
+        when(processDocumentActionLogMapper.insert(any(ProcessDocumentActionLog.class))).thenReturn(1);
+        when(processDocumentExpenseDetailMapper.insert(any(ProcessDocumentExpenseDetail.class))).thenReturn(1);
+        when(userMapper.selectById(1L)).thenReturn(submitter);
+
+        service.submitDocument(1L, "zhangsan", dto);
+
+        assertEquals("zhangsan", storedInstance.get().getSubmitterName());
+        ArgumentCaptor<ProcessDocumentActionLog> logCaptor = ArgumentCaptor.forClass(ProcessDocumentActionLog.class);
+        verify(processDocumentActionLogMapper, times(2)).insert(logCaptor.capture());
+        ProcessDocumentActionLog submitLog = logCaptor.getAllValues().stream()
+                .filter(item -> "SUBMIT".equals(item.getActionType()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("zhangsan", submitLog.getActorName());
     }
 
     @Test
@@ -908,6 +990,139 @@ class ExpenseDocumentServiceImplTest {
         assertNull(navigation.getPrevDocumentCode());
         assertNull(navigation.getNextDocumentCode());
         verify(processDocumentInstanceMapper).selectList(any());
+    }
+
+    @Test
+    void listBankLinksReturnsReadableBankLinkSummary() {
+        SystemCompanyBankAccount account = createBankAccount(1L, "COMP-001");
+        account.setDirectConnectEnabled(1);
+        account.setDirectConnectProvider("CMB");
+        account.setDirectConnectChannel("CMB_CLOUD");
+        account.setDirectConnectLastSyncStatus("最近推送成功");
+
+        PmBankPaymentRecord record = new PmBankPaymentRecord();
+        record.setCompanyBankAccountId(1L);
+        record.setReceiptStatus("RECEIVED");
+
+        when(systemCompanyBankAccountMapper.selectList(any())).thenReturn(List.of(account));
+        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(record));
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(createCompany("COMP-001", "华南公司")));
+
+        var result = service.listBankLinks();
+
+        assertEquals(1, result.size());
+        assertEquals("华南公司", result.get(0).getCompanyName());
+        assertEquals("已启用", result.get(0).getDirectConnectStatusLabel());
+        assertEquals("最近推送成功", result.get(0).getLastDirectConnectStatus());
+        assertEquals("已获取回单", result.get(0).getLastReceiptStatus());
+    }
+
+    @Test
+    void updateBankLinkEnablingCurrentAccountDisablesSiblingAccount() {
+        SystemCompanyBankAccount current = createBankAccount(1L, "COMP-001");
+        SystemCompanyBankAccount sibling = createBankAccount(2L, "COMP-001");
+        sibling.setDirectConnectEnabled(1);
+        sibling.setDirectConnectProvider("CMB");
+        sibling.setDirectConnectChannel("CMB_CLOUD");
+
+        ExpenseBankLinkSaveDTO dto = new ExpenseBankLinkSaveDTO();
+        dto.setEnabled(true);
+        dto.setDirectConnectProvider("CMB");
+        dto.setDirectConnectChannel("CMB_CLOUD");
+        dto.setOperatorKey("OP-001");
+        dto.setCallbackSecret("SECRET-001");
+        dto.setPublicKeyRef("PUB-001");
+        dto.setReceiptQueryEnabled(true);
+        dto.setDirectConnectCustomerNo("CUST-001");
+        dto.setDirectConnectApiBaseUrl("https://cmb.example.com");
+
+        when(systemCompanyBankAccountMapper.selectById(1L)).thenReturn(current);
+        when(systemCompanyBankAccountMapper.selectList(any())).thenReturn(List.of(current, sibling));
+        org.mockito.Mockito.lenient().when(systemCompanyBankAccountMapper.updateById(any(SystemCompanyBankAccount.class))).thenReturn(1);
+        org.mockito.Mockito.lenient().when(systemCompanyMapper.selectList(any())).thenReturn(List.of(createCompany("COMP-001", "华南公司")));
+
+        var result = service.updateBankLink(1L, dto);
+
+        assertEquals(1, current.getDirectConnectEnabled());
+        assertEquals("CMB", current.getDirectConnectProvider());
+        assertEquals("CMB_CLOUD", current.getDirectConnectChannel());
+        assertEquals(0, sibling.getDirectConnectEnabled());
+        assertEquals("DISABLED", sibling.getDirectConnectLastSyncStatus());
+        assertEquals("OP-001", result.getOperatorKey());
+        assertTrue(result.isReceiptQueryEnabled());
+        verify(systemCompanyBankAccountMapper, times(2)).updateById(any(SystemCompanyBankAccount.class));
+    }
+
+    @Test
+    void runBankReceiptPollingAttachesReceiptAndMarksDocumentFinished() {
+        PmBankPaymentRecord record = new PmBankPaymentRecord();
+        record.setId(91L);
+        record.setDocumentCode("DOC-PAY-001");
+        record.setCompanyBankAccountId(1L);
+        record.setManualPaid(0);
+        record.setPaidAt(LocalDateTime.of(2026, 4, 6, 9, 30));
+        record.setReceiptStatus("PENDING");
+        record.setReceiptQueryCount(0);
+        record.setBankOrderNo("BO-001");
+        record.setBankFlowNo("BF-001");
+
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-PAY-001");
+        instance.setDocumentTitle("付款单-001");
+        instance.setStatus("PAYMENT_COMPLETED");
+
+        SystemCompanyBankAccount account = createBankAccount(1L, "COMP-001");
+        account.setDirectConnectEnabled(1);
+        account.setDirectConnectProvider("CMB");
+        account.setDirectConnectChannel("CMB_CLOUD");
+        account.setDirectConnectExtJson("{\"receiptQueryEnabled\":true}");
+
+        ExpenseAttachmentVO attachment = new ExpenseAttachmentVO();
+        attachment.setAttachmentId("ATT-001");
+        attachment.setFileName("DOC-PAY-001-银行回单.txt");
+        attachment.setContentType("text/plain");
+        attachment.setFileSize(128L);
+
+        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(record));
+        when(processDocumentInstanceMapper.selectOne(any())).thenReturn(instance);
+        when(systemCompanyBankAccountMapper.selectById(1L)).thenReturn(account);
+        when(expenseAttachmentService.saveGeneratedAttachment(any(), any(), any())).thenReturn(attachment);
+        when(pmBankPaymentRecordMapper.updateById(any(PmBankPaymentRecord.class))).thenReturn(1);
+        when(processDocumentInstanceMapper.updateById(any(ProcessDocumentInstance.class))).thenReturn(1);
+
+        service.runBankReceiptPolling();
+
+        assertEquals("PAYMENT_FINISHED", instance.getStatus());
+        assertEquals("RECEIVED", record.getReceiptStatus());
+        assertEquals("ATT-001", record.getReceiptAttachmentId());
+        assertEquals("DOC-PAY-001-银行回单.txt", record.getReceiptFileName());
+        assertNotNull(record.getReceiptReceivedAt());
+        verify(expenseAttachmentService).saveGeneratedAttachment(
+                org.mockito.ArgumentMatchers.contains("DOC-PAY-001"),
+                org.mockito.ArgumentMatchers.eq("text/plain"),
+                any(byte[].class)
+        );
+        verify(pmBankPaymentRecordMapper).updateById(record);
+        verify(processDocumentInstanceMapper).updateById(instance);
+    }
+
+    private SystemCompanyBankAccount createBankAccount(Long id, String companyId) {
+        SystemCompanyBankAccount account = new SystemCompanyBankAccount();
+        account.setId(id);
+        account.setCompanyId(companyId);
+        account.setBankName("招商银行");
+        account.setAccountName("华南公司基本户");
+        account.setAccountNo("6225880011223344");
+        account.setStatus(1);
+        account.setDirectConnectEnabled(0);
+        return account;
+    }
+
+    private SystemCompany createCompany(String companyId, String companyName) {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId(companyId);
+        company.setCompanyName(companyName);
+        return company;
     }
 
     private ProcessDocumentTemplate createTemplate() {
@@ -1252,6 +1467,82 @@ class ExpenseDocumentServiceImplTest {
         instance.setSubmitterUserId(submitterUserId);
         instance.setTotalAmount(totalAmount);
         return instance;
+    }
+
+    @Test
+    void listVendorOptionsUsesCurrentUserCompanyId() {
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setStatus(1);
+        currentUser.setCompanyId("COMPANY_A");
+
+        ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
+        option.setCVenCode("VEN_A");
+        option.setCVenName("Company Vendor");
+
+        when(userMapper.selectById(1L)).thenReturn(currentUser);
+        when(financeVendorService.listActiveVendorOptions("COMPANY_A", "Vendor")).thenReturn(List.of(option));
+
+        List<ExpenseCreateVendorOptionVO> result = service.listVendorOptions(1L, "Vendor");
+
+        assertEquals(1, result.size());
+        assertEquals("VEN_A", result.get(0).getCVenCode());
+        verify(financeVendorService).listActiveVendorOptions("COMPANY_A", "Vendor");
+    }
+
+    @Test
+    void listPayeeOptionsUsesCurrentUserCompanyIdForVendorCandidates() {
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setStatus(1);
+        currentUser.setCompanyId("COMPANY_A");
+
+        ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
+        option.setCVenCode("VEN_A");
+        option.setCVenName("Company Vendor");
+        option.setSecondaryLabel("VEN_A / SHORT");
+
+        when(userMapper.selectById(1L)).thenReturn(currentUser);
+        when(financeVendorService.listActiveVendorOptions("COMPANY_A", "Vendor")).thenReturn(List.of(option));
+        when(userMapper.selectList(any())).thenReturn(List.of());
+
+        List<ExpenseCreatePayeeOptionVO> result = service.listPayeeOptions(1L, "Vendor");
+
+        assertEquals(1, result.size());
+        assertEquals("VENDOR", result.get(0).getSourceType());
+        assertEquals("VEN_A", result.get(0).getSourceCode());
+        verify(financeVendorService).listActiveVendorOptions("COMPANY_A", "Vendor");
+    }
+
+    @Test
+    void listPayeeAccountOptionsOnlyIncludesVendorAccountsFromCurrentCompany() {
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setStatus(1);
+        currentUser.setCompanyId("COMPANY_A");
+
+        FinanceVendor companyVendor = new FinanceVendor();
+        companyVendor.setCVenCode("VEN_A");
+        companyVendor.setCVenName("Company Vendor");
+        companyVendor.setCompanyId("COMPANY_A");
+        companyVendor.setCVenBank("Bank A");
+        companyVendor.setCVenAccount("6222000011112222");
+
+        FinanceVendor otherVendor = new FinanceVendor();
+        otherVendor.setCVenCode("VEN_B");
+        otherVendor.setCVenName("Other Vendor");
+        otherVendor.setCompanyId("COMPANY_B");
+        otherVendor.setCVenBank("Bank B");
+        otherVendor.setCVenAccount("6222000099998888");
+
+        when(userMapper.selectById(1L)).thenReturn(currentUser);
+        when(financeVendorMapper.selectList(any())).thenReturn(List.of(companyVendor, otherVendor));
+        when(userMapper.selectList(any())).thenReturn(List.of());
+
+        List<ExpenseCreatePayeeAccountOptionVO> result = service.listPayeeAccountOptions(1L, null);
+
+        assertEquals(1, result.size());
+        assertEquals("VEN_A", result.get(0).getOwnerCode());
     }
 
     private ProcessDocumentInstance copyInstance(ProcessDocumentInstance source) {

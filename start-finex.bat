@@ -1,17 +1,18 @@
 @echo off
 setlocal EnableExtensions
 
-set "ROOT=%~dp0"
+for %%I in ("%~dp0.") do set "ROOT=%%~fI"
+set "RUN_DIR=%ROOT%\target\run"
 
-if exist "%ROOT%backend\.env.local.cmd" (
-  call "%ROOT%backend\.env.local.cmd"
+if exist "%ROOT%\backend\.env.local.cmd" (
+  call :load_env_file "%ROOT%\backend\.env.local.cmd"
   echo [finex] Loaded backend\.env.local.cmd
 ) else (
   echo [finex] No backend\.env.local.cmd found. Using current environment variables.
 )
 
-if exist "%ROOT%backend\.env.shadow.cmd" (
-  call "%ROOT%backend\.env.shadow.cmd"
+if exist "%ROOT%\backend\.env.shadow.cmd" (
+  call :load_env_file "%ROOT%\backend\.env.shadow.cmd"
   echo [finex] Loaded backend\.env.shadow.cmd
 )
 
@@ -34,28 +35,38 @@ echo [finex] gateway port: %FINEX_GATEWAY_PORT%
 echo [finex] admin-web port: %FINEX_FRONTEND_PORT%
 echo [finex] gateway proxy target: %FINEX_GATEWAY_PROXY_TARGET%
 
+if not exist "%RUN_DIR%" (
+  mkdir "%RUN_DIR%"
+)
+
 echo [finex] Compiling backend/common for local classpath consistency...
-call mvn -f "%ROOT%backend\common\pom.xml" -DskipTests compile
+call mvn -f "%ROOT%\backend\common\pom.xml" -DskipTests compile
 if errorlevel 1 (
   echo [finex] Failed to compile backend/common
   endlocal
   exit /b 1
 )
 
-echo [finex] Checking occupied ports...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ports = @(%FINEX_FRONTEND_PORT%, %FINEX_GATEWAY_PORT%, %FINEX_AUTH_SERVICE_PORT%) | Sort-Object -Unique; " ^
-  "$connections = Get-NetTCPConnection -LocalPort $ports -State Listen -ErrorAction SilentlyContinue; " ^
-  "if ($connections) { " ^
-  "  $connections | Group-Object OwningProcess | ForEach-Object { " ^
-  "    $portsForProcess = ($_.Group | Select-Object -ExpandProperty LocalPort -Unique | Sort-Object) -join ', '; " ^
-  "    try { Stop-Process -Id [int]$_.Name -Force -ErrorAction Stop; Write-Host ('[finex] Stopped process ' + $_.Name + ' on ports ' + $portsForProcess) } " ^
-  "    catch { Write-Host ('[finex] Failed to stop process ' + $_.Name + ' on ports ' + $portsForProcess + ': ' + $_.Exception.Message) } " ^
-  "  } " ^
-  "} else { Write-Host ('[finex] Ports ' + ($ports -join ', ') + ' are free.') }"
-
-start "finex-auth-service" powershell -NoExit -Command "Set-Location -LiteralPath '%ROOT%backend\auth-service'; mvn spring-boot:run"
-start "finex-gateway" powershell -NoExit -Command "Set-Location -LiteralPath '%ROOT%backend\gateway'; mvn spring-boot:run"
-start "finex-admin-web" powershell -NoExit -Command "Set-Location -LiteralPath '%ROOT%frontend\admin-web'; npm run dev"
+echo [finex] Preparing safe restart...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\start-finex.ps1" -RootPath "%ROOT%" -RunDir "%RUN_DIR%"
+if errorlevel 1 (
+  echo [finex] Start aborted.
+  endlocal
+  exit /b 1
+)
 
 endlocal
+exit /b 0
+
+:load_env_file
+for /f "usebackq eol=; delims=" %%L in ("%~1") do call :apply_env_line "%%L"
+exit /b 0
+
+:apply_env_line
+set "FINEX_ENV_LINE=%~1"
+if not defined FINEX_ENV_LINE exit /b 0
+for /f "tokens=* delims= " %%A in ("%FINEX_ENV_LINE%") do set "FINEX_ENV_LINE=%%A"
+if /I not "%FINEX_ENV_LINE:~0,4%"=="set " exit /b 0
+for /f "tokens=1* delims==" %%A in ("%FINEX_ENV_LINE:~4%") do if not "%%~A"=="" set "%%~A=%%~B"
+set "FINEX_ENV_LINE="
+exit /b 0

@@ -106,7 +106,7 @@ public class ProcessManagementController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
         return Result.success(
-                "模板保存成功",
+                "妯℃澘淇濆瓨鎴愬姛",
                 traceCreateTemplate(request, dto)
         );
     }
@@ -119,7 +119,7 @@ public class ProcessManagementController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
         return Result.success(
-                "模板更新成功",
+                "妯℃澘鏇存柊鎴愬姛",
                 traceUpdateTemplate(id, request, dto)
         );
     }
@@ -127,7 +127,7 @@ public class ProcessManagementController {
     @DeleteMapping("/templates/{id}")
     public Result<Boolean> deleteTemplate(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("妯℃澘鍒犻櫎鎴愬姛", processManagementService.deleteTemplate(id));
+        return Result.success("濡剝婢橀崚鐘绘珟閹存劕濮?", processManagementService.deleteTemplate(id));
     }
 
     @GetMapping("/custom-archives")
@@ -157,7 +157,7 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
-        return Result.success("自定义档案保存成功", processManagementService.createCustomArchive(dto));
+        return Result.success("鑷畾涔夋。妗堜繚瀛樻垚鍔?", processManagementService.createCustomArchive(dto));
     }
 
     @PutMapping("/custom-archives/{id}")
@@ -167,7 +167,7 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("自定义档案更新成功", processManagementService.updateCustomArchive(id, dto));
+        return Result.success("鑷畾涔夋。妗堟洿鏂版垚鍔?", processManagementService.updateCustomArchive(id, dto));
     }
 
     @PatchMapping("/custom-archives/{id}/status")
@@ -177,13 +177,13 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), PROCESS_DISABLE, PROCESS_PUBLISH);
-        return Result.success("自定义档案状态更新成功", processManagementService.updateCustomArchiveStatus(id, dto.getStatus()));
+        return Result.success("鑷畾涔夋。妗堢姸鎬佹洿鏂版垚鍔?", processManagementService.updateCustomArchiveStatus(id, dto.getStatus()));
     }
 
     @DeleteMapping("/custom-archives/{id}")
     public Result<Boolean> deleteCustomArchive(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("自定义档案删除成功", processManagementService.deleteCustomArchive(id));
+        return Result.success("鑷畾涔夋。妗堝垹闄ゆ垚鍔?", processManagementService.deleteCustomArchive(id));
     }
 
     @PostMapping("/custom-archives/resolve")
@@ -272,7 +272,7 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
-        return Result.success("费用明细表单保存成功", processManagementService.createExpenseDetailDesign(dto));
+        return Result.success("璐圭敤鏄庣粏琛ㄥ崟淇濆瓨鎴愬姛", processManagementService.createExpenseDetailDesign(dto));
     }
 
     @PutMapping("/expense-detail-designs/{id}")
@@ -282,13 +282,13 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("费用明细表单更新成功", processManagementService.updateExpenseDetailDesign(id, dto));
+        return Result.success("璐圭敤鏄庣粏琛ㄥ崟鏇存柊鎴愬姛", processManagementService.updateExpenseDetailDesign(id, dto));
     }
 
     @DeleteMapping("/expense-detail-designs/{id}")
     public Result<Boolean> deleteExpenseDetailDesign(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("费用明细表单删除成功", processManagementService.deleteExpenseDetailDesign(id));
+        return Result.success("璐圭敤鏄庣粏琛ㄥ崟鍒犻櫎鎴愬姛", processManagementService.deleteExpenseDetailDesign(id));
     }
 
     @GetMapping("/form-designs")
@@ -315,7 +315,7 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
-        return Result.success("表单设计保存成功", processManagementService.createFormDesign(dto));
+        return Result.success("琛ㄥ崟璁捐淇濆瓨鎴愬姛", processManagementService.createFormDesign(dto));
     }
 
     @PutMapping("/form-designs/{id}")
@@ -325,13 +325,13 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("表单设计更新成功", processManagementService.updateFormDesign(id, dto));
+        return Result.success("琛ㄥ崟璁捐鏇存柊鎴愬姛", processManagementService.updateFormDesign(id, dto));
     }
 
     @DeleteMapping("/form-designs/{id}")
     public Result<Boolean> deleteFormDesign(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("表单设计删除成功", processManagementService.deleteFormDesign(id));
+        return Result.success("琛ㄥ崟璁捐鍒犻櫎鎴愬姛", processManagementService.deleteFormDesign(id));
     }
 
     @GetMapping("/flows")
@@ -358,7 +358,7 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
-        return Result.success("流程创建成功", processManagementService.createFlow(dto));
+        return Result.success("娴佺▼鍒涘缓鎴愬姛", processManagementService.createFlow(dto));
     }
 
     @PutMapping("/flows/{id}")
@@ -368,13 +368,13 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("流程保存成功", processManagementService.updateFlow(id, dto));
+        return Result.success("娴佺▼淇濆瓨鎴愬姛", processManagementService.updateFlow(id, dto));
     }
 
     @PostMapping("/flows/{id}/publish")
     public Result<ProcessFlowDetailVO> publishFlow(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), PROCESS_CREATE, PROCESS_EDIT, PROCESS_PUBLISH);
-        return Result.success("流程发布成功", processManagementService.publishFlow(id));
+        return Result.success("娴佺▼鍙戝竷鎴愬姛", processManagementService.publishFlow(id));
     }
 
     @PatchMapping("/flows/{id}/status")
@@ -384,7 +384,7 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), PROCESS_DISABLE, PROCESS_PUBLISH);
-        return Result.success("流程状态更新成功", processManagementService.updateFlowStatus(id, dto.getStatus()));
+        return Result.success("娴佺▼鐘舵€佹洿鏂版垚鍔?", processManagementService.updateFlowStatus(id, dto.getStatus()));
     }
 
     @PostMapping("/flow-scenes")
@@ -393,7 +393,7 @@ public class ProcessManagementController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
-        return Result.success("流程场景创建成功", processManagementService.createFlowScene(dto));
+        return Result.success("娴佺▼鍦烘櫙鍒涘缓鎴愬姛", processManagementService.createFlowScene(dto));
     }
 
     @PostMapping("/flows/resolve-approvers")
@@ -413,7 +413,7 @@ public class ProcessManagementController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("无法获取当前登录用户");
+        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {
@@ -421,7 +421,7 @@ public class ProcessManagementController {
         if (username instanceof String value && !value.isBlank()) {
             return value;
         }
-        return "流程管理员";
+        return "娴佺▼绠＄悊鍛?";
     }
     private ProcessTemplateSaveResultVO traceCreateTemplate(HttpServletRequest request, ProcessTemplateSaveDTO dto) {
         String traceId = resolveTemplateSaveTraceId(request);

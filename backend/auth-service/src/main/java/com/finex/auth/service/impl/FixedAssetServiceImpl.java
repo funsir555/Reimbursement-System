@@ -118,7 +118,7 @@ public class FixedAssetServiceImpl implements FixedAssetService {
     private static final String SOURCE_MANUAL = "MANUAL";
     private static final String SOURCE_OPENING = "OPENING";
     private static final String SOURCE_CHANGE_ADD = "CHANGE_ADD";
-    private static final String VOUCHER_TYPE = "转";
+    private static final String VOUCHER_TYPE = "杞?";
     private static final int VOUCHER_SIGN_SEQUENCE = 4;
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     private static final BigDecimal ZERO_QTY = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
@@ -158,25 +158,25 @@ public class FixedAssetServiceImpl implements FixedAssetService {
         meta.setEmployeeOptions(loadEnabledUsers(effectiveCompanyId).stream().map(this::toUserOption).toList());
         meta.setCategoryOptions(listAccessibleCategories(effectiveCompanyId).stream().map(this::toCategoryOption).toList());
         meta.setDepreciationMethodOptions(List.of(
-                option(METHOD_STRAIGHT_LINE, "平均年限法"),
-                option(METHOD_WORKLOAD, "工作量法"),
-                option(METHOD_DOUBLE_DECLINING, "双倍余额递减法")
+                option(METHOD_STRAIGHT_LINE, "骞冲潎骞撮檺娉?"),
+                option(METHOD_WORKLOAD, "宸ヤ綔閲忔硶"),
+                option(METHOD_DOUBLE_DECLINING, "鍙屽€嶄綑棰濋€掑噺娉?")
         ));
         meta.setCardStatusOptions(List.of(
-                option(CARD_STATUS_DRAFT, "草稿"),
-                option(CARD_STATUS_IN_USE, "在用"),
-                option(CARD_STATUS_IDLE, "闲置"),
-                option(CARD_STATUS_DISPOSED, "已处置")
+                option(CARD_STATUS_DRAFT, "鑽夌"),
+                option(CARD_STATUS_IN_USE, "鍦ㄧ敤"),
+                option(CARD_STATUS_IDLE, "闂茬疆"),
+                option(CARD_STATUS_DISPOSED, "宸插缃?")
         ));
         meta.setChangeTypeOptions(List.of(
-                option(CHANGE_ADD, "资产增加"),
-                option(CHANGE_TRANSFER_DEPT, "部门调整"),
-                option(CHANGE_TRANSFER_KEEPER, "保管人调整"),
-                option(CHANGE_VALUE_ADJUST, "原值调整"),
-                option(CHANGE_RESIDUAL_ADJUST, "残值调整"),
-                option(CHANGE_LIFE_ADJUST, "使用年限调整")
+                option(CHANGE_ADD, "璧勪骇澧炲姞"),
+                option(CHANGE_TRANSFER_DEPT, "閮ㄩ棬璋冩暣"),
+                option(CHANGE_TRANSFER_KEEPER, "淇濈浜鸿皟鏁?"),
+                option(CHANGE_VALUE_ADJUST, "鍘熷€艰皟鏁?"),
+                option(CHANGE_RESIDUAL_ADJUST, "娈嬪€艰皟鏁?"),
+                option(CHANGE_LIFE_ADJUST, "浣跨敤骞撮檺璋冩暣")
         ));
-        meta.setBookOptions(List.of(option(BOOK_CODE_FINANCE, "财务账")));
+        meta.setBookOptions(List.of(option(BOOK_CODE_FINANCE, "璐㈠姟璐?")));
         meta.setDefaultCompanyId(effectiveCompanyId);
         meta.setDefaultBookCode(bookCode);
         meta.setDefaultFiscalYear(effectiveYear);
@@ -491,7 +491,7 @@ public class FixedAssetServiceImpl implements FixedAssetService {
                     bill.getBookCode(),
                     bill.getFiscalPeriod(),
                     bill.getBillDate(),
-                    "固定资产变动:" + bill.getBillNo(),
+                    "鍥哄畾璧勪骇鍙樺姩:" + bill.getBillNo(),
                     voucher,
                     BUSINESS_CHANGE_BILL,
                     bill.getId(),
@@ -652,7 +652,7 @@ public class FixedAssetServiceImpl implements FixedAssetService {
                     run.getBookCode(),
                     run.getFiscalPeriod(),
                     LocalDate.of(run.getFiscalYear(), run.getFiscalPeriod(), 1),
-                    "固定资产折旧:" + run.getRunNo(),
+                    "鍥哄畾璧勪骇鎶樻棫:" + run.getRunNo(),
                     voucher,
                     BUSINESS_DEPRECIATION_RUN,
                     run.getId(),
@@ -789,7 +789,7 @@ public class FixedAssetServiceImpl implements FixedAssetService {
                     bill.getBookCode(),
                     bill.getFiscalPeriod(),
                     bill.getBillDate(),
-                    "固定资产处置:" + bill.getBillNo(),
+                    "鍥哄畾璧勪骇澶勭疆:" + bill.getBillNo(),
                     voucher,
                     BUSINESS_DISPOSAL_BILL,
                     bill.getId(),

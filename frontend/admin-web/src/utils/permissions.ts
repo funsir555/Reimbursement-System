@@ -13,10 +13,21 @@ const FALLBACK_PATHS: Array<{ path: string; permissionCodes: string[] }> = [
   { path: '/profile', permissionCodes: ['profile:menu', 'profile:view'] },
   { path: '/expense/create', permissionCodes: [...EXPENSE_CREATE_ENTRY_PERMISSION_CODES] },
   { path: '/expense/list', permissionCodes: ['expense:menu', 'expense:list:view'] },
+  { path: '/archives/agents', permissionCodes: ['agents:menu', 'agents:view'] },
   { path: '/archives/invoices', permissionCodes: ['archives:menu', 'archives:invoices:view'] },
   {
+    path: '/settings?tab=companyAccounts',
+    permissionCodes: ['settings:company_accounts:view']
+  },
+  {
     path: '/settings?tab=organization',
-    permissionCodes: ['settings:menu', 'settings:organization:view', 'settings:employees:view', 'settings:roles:view', 'settings:companies:view']
+    permissionCodes: [
+      'settings:menu',
+      'settings:organization:view',
+      'settings:employees:view',
+      'settings:roles:view',
+      'settings:companies:view'
+    ]
   }
 ]
 

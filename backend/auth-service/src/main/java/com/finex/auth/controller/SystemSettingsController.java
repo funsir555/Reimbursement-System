@@ -1,5 +1,7 @@
 package com.finex.auth.controller;
 
+import com.finex.auth.dto.CompanyBankAccountSaveDTO;
+import com.finex.auth.dto.CompanyBankAccountVO;
 import com.finex.auth.dto.CompanySaveDTO;
 import com.finex.auth.dto.CompanyVO;
 import com.finex.auth.dto.DepartmentSaveDTO;
@@ -60,6 +62,10 @@ public class SystemSettingsController {
     private static final String COMPANY_CREATE = "settings:companies:create";
     private static final String COMPANY_EDIT = "settings:companies:edit";
     private static final String COMPANY_DELETE = "settings:companies:delete";
+    private static final String COMPANY_ACCOUNT_VIEW = "settings:company_accounts:view";
+    private static final String COMPANY_ACCOUNT_CREATE = "settings:company_accounts:create";
+    private static final String COMPANY_ACCOUNT_EDIT = "settings:company_accounts:edit";
+    private static final String COMPANY_ACCOUNT_DELETE = "settings:company_accounts:delete";
 
     private final SystemSettingsService systemSettingsService;
     private final AccessControlService accessControlService;
@@ -68,7 +74,7 @@ public class SystemSettingsController {
     public Result<SystemSettingsBootstrapVO> bootstrap(HttpServletRequest request) {
         accessControlService.requireAnyPermission(
                 getCurrentUserId(request),
-                SETTINGS_MENU, ORG_VIEW, EMP_VIEW, ROLE_VIEW, COMPANY_VIEW
+                SETTINGS_MENU, ORG_VIEW, EMP_VIEW, ROLE_VIEW, COMPANY_VIEW, COMPANY_ACCOUNT_VIEW
         );
         return Result.success(systemSettingsService.getBootstrap(getCurrentUserId(request)));
     }
@@ -213,6 +219,37 @@ public class SystemSettingsController {
     public Result<Boolean> deleteCompany(@PathVariable String companyId, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), COMPANY_DELETE);
         return Result.success("公司删除成功", systemSettingsService.deleteCompany(companyId));
+    }
+
+    @GetMapping("/company-bank-accounts")
+    public Result<List<CompanyBankAccountVO>> companyBankAccounts(HttpServletRequest request) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), SETTINGS_MENU, COMPANY_ACCOUNT_VIEW);
+        return Result.success(systemSettingsService.listCompanyBankAccounts());
+    }
+
+    @PostMapping("/company-bank-accounts")
+    public Result<CompanyBankAccountVO> createCompanyBankAccount(
+            @Valid @RequestBody CompanyBankAccountSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), COMPANY_ACCOUNT_CREATE);
+        return Result.success("公司账户创建成功", systemSettingsService.createCompanyBankAccount(dto));
+    }
+
+    @PutMapping("/company-bank-accounts/{id}")
+    public Result<CompanyBankAccountVO> updateCompanyBankAccount(
+            @PathVariable Long id,
+            @Valid @RequestBody CompanyBankAccountSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), COMPANY_ACCOUNT_EDIT);
+        return Result.success("公司账户更新成功", systemSettingsService.updateCompanyBankAccount(id, dto));
+    }
+
+    @DeleteMapping("/company-bank-accounts/{id}")
+    public Result<Boolean> deleteCompanyBankAccount(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), COMPANY_ACCOUNT_DELETE);
+        return Result.success("公司账户删除成功", systemSettingsService.deleteCompanyBankAccount(id));
     }
 
     @GetMapping("/sync/connectors")

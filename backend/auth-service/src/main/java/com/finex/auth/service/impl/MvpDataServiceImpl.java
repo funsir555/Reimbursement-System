@@ -2,15 +2,14 @@ package com.finex.auth.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.finex.auth.dto.ApprovalSummaryVO;
 import com.finex.auth.dto.DashboardVO;
 import com.finex.auth.dto.ExpenseSummaryVO;
-import com.finex.auth.dto.InvoiceAlertVO;
 import com.finex.auth.dto.InvoiceSummaryVO;
 import com.finex.auth.dto.UserProfileVO;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
+import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.auth.service.MvpDataService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.support.AsyncTaskSupport;
@@ -32,6 +31,7 @@ public class MvpDataServiceImpl implements MvpDataService {
 
     private final UserService userService;
     private final AsyncTaskRecordMapper asyncTaskRecordMapper;
+    private final ExpenseDocumentService expenseDocumentService;
 
     @Override
     public UserProfileVO getCurrentUser(Long userId) {
@@ -42,8 +42,8 @@ public class MvpDataServiceImpl implements MvpDataService {
         profile.setName(getDisplayName(user));
         profile.setPhone(user.getPhone());
         profile.setEmail(user.getEmail());
-        profile.setPosition(StrUtil.blankToDefault(user.getPosition(), "员工"));
-        profile.setLaborRelationBelong(StrUtil.blankToDefault(user.getLaborRelationBelong(), "总部"));
+        profile.setPosition(StrUtil.blankToDefault(user.getPosition(), "Employee"));
+        profile.setLaborRelationBelong(StrUtil.blankToDefault(user.getLaborRelationBelong(), "Headquarters"));
         profile.setCompanyId(user.getCompanyId());
         profile.setRoles(userService.getRoleCodes(userId));
         profile.setPermissionCodes(userService.getPermissionCodes(userId));
@@ -52,46 +52,34 @@ public class MvpDataServiceImpl implements MvpDataService {
 
     @Override
     public DashboardVO getDashboard(Long userId) {
-        User user = requireUser(userId);
-        List<ExpenseSummaryVO> expenses = listExpenses(userId);
-        List<InvoiceSummaryVO> invoices = listInvoices(userId);
-
-        int userFactor = Math.max(1, userId.intValue());
+        List<ExpenseSummaryVO> recentExpenses = expenseDocumentService.listExpenseSummaries(userId).stream()
+                .filter(item -> "report".equalsIgnoreCase(StrUtil.blankToDefault(item.getTemplateType(), "")))
+                .limit(6)
+                .toList();
 
         DashboardVO dashboard = new DashboardVO();
         dashboard.setUser(getCurrentUser(userId));
-        dashboard.setPendingApprovalCount(2 + userFactor);
-        dashboard.setPendingApprovalDelta(userFactor % 3 + 1);
-        dashboard.setMonthlyExpenseAmount(BigDecimal.valueOf(6800L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(860L))));
-        dashboard.setMonthlyExpenseCount(expenses.size());
-        dashboard.setInvoiceCount(invoices.size() * 12);
-        dashboard.setMonthlyInvoiceCount(invoices.size());
-        dashboard.setBudgetRemaining(BigDecimal.valueOf(42000L).subtract(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(1200L))));
-        dashboard.setBudgetUsageRate(28 + userFactor * 4);
-        dashboard.setRecentExpenses(expenses.subList(0, Math.min(4, expenses.size())));
-        dashboard.setPendingApprovals(buildPendingApprovals(user));
-        dashboard.setInvoiceAlerts(buildInvoiceAlerts(user));
+        dashboard.setPendingApprovalCount(expenseDocumentService.listPendingApprovals(userId).size());
+        dashboard.setPendingApprovalDelta(0);
+        dashboard.setPendingRepaymentCount(expenseDocumentService.listOutstandingDocuments(userId, "LOAN").size());
+        dashboard.setPendingPrepayWriteOffCount(expenseDocumentService.listOutstandingDocuments(userId, "PREPAY_REPORT").size());
+        dashboard.setUnusedApplicationCount(0);
+        dashboard.setUnpaidContractCount(0);
+        dashboard.setMonthlyExpenseAmount(BigDecimal.ZERO);
+        dashboard.setMonthlyExpenseCount(0);
+        dashboard.setInvoiceCount(0);
+        dashboard.setMonthlyInvoiceCount(0);
+        dashboard.setBudgetRemaining(BigDecimal.ZERO);
+        dashboard.setBudgetUsageRate(0);
+        dashboard.setRecentExpenses(recentExpenses);
+        dashboard.setPendingApprovals(List.of());
+        dashboard.setInvoiceAlerts(List.of());
         return dashboard;
     }
 
     @Override
     public List<ExpenseSummaryVO> listExpenses(Long userId) {
-        User user = requireUser(userId);
-        int userFactor = Math.max(1, userId.intValue());
-        LocalDate today = LocalDate.now();
-
-        return List.of(
-                expense("BX" + today.format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "001", "差旅费",
-                        getDisplayName(user) + "华东出差费用", BigDecimal.valueOf(1800L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(350L))), today.minusDays(1), "审批中"),
-                expense("BX" + today.minusDays(2).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "002", "办公费",
-                        getDisplayName(user) + "办公用品采购", BigDecimal.valueOf(320L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(68L))), today.minusDays(2), "已通过"),
-                expense("BX" + today.minusDays(4).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "003", "招待费",
-                        getDisplayName(user) + "客户接待费用", BigDecimal.valueOf(960L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(120L))), today.minusDays(4), "已通过"),
-                expense("BX" + today.minusDays(6).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "004", "交通费",
-                        getDisplayName(user) + "市内交通", BigDecimal.valueOf(48L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(12L))), today.minusDays(6), "已驳回"),
-                expense("BX" + today.minusDays(9).format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "005", "差旅费",
-                        getDisplayName(user) + "华北出差费用", BigDecimal.valueOf(3200L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(420L))), today.minusDays(9), "已通过")
-        );
+        return expenseDocumentService.listExpenseSummaries(userId);
     }
 
     @Override
@@ -101,14 +89,14 @@ public class MvpDataServiceImpl implements MvpDataService {
         LocalDate today = LocalDate.now();
 
         List<InvoiceSummaryVO> invoices = List.of(
-                invoice("011001900211", "12345678", "增值税普通发票", getDisplayName(user) + "科技有限公司",
-                        BigDecimal.valueOf(1600L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(240L))), today.minusDays(3), "已验真", "已识别"),
-                invoice("031001900211", "87654321", "增值税专用发票", getDisplayName(user) + "贸易有限公司",
-                        BigDecimal.valueOf(3200L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(360L))), today.minusDays(5), "已验真", "已识别"),
-                invoice("011001900212", "11112222", "电子发票", getDisplayName(user) + "服务公司",
-                        BigDecimal.valueOf(680L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(100L))), today.minusDays(7), "待验真", "待识别"),
-                invoice("031001900213", "33334444", "增值税普通发票", getDisplayName(user) + "电子公司",
-                        BigDecimal.valueOf(420L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(80L))), today.minusDays(12), "验真失败", "识别失败")
+                invoice("011001900211", "12345678", "VAT invoice", getDisplayName(user) + " Technology Co.",
+                        BigDecimal.valueOf(1600L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(240L))), today.minusDays(3), "Verified", "Recognized"),
+                invoice("031001900211", "87654321", "VAT special invoice", getDisplayName(user) + " Trading Co.",
+                        BigDecimal.valueOf(3200L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(360L))), today.minusDays(5), "Verified", "Recognized"),
+                invoice("011001900212", "11112222", "Electronic invoice", getDisplayName(user) + " Service Co.",
+                        BigDecimal.valueOf(680L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(100L))), today.minusDays(7), "Pending verify", "Pending OCR"),
+                invoice("031001900213", "33334444", "VAT invoice", getDisplayName(user) + " Digital Co.",
+                        BigDecimal.valueOf(420L).add(BigDecimal.valueOf(userFactor).multiply(BigDecimal.valueOf(80L))), today.minusDays(12), "Verify failed", "OCR failed")
         );
 
         Map<String, AsyncTaskRecord> verifyTasks = latestTaskMap(userId, AsyncTaskSupport.TASK_TYPE_INVOICE_VERIFY);
@@ -120,34 +108,6 @@ public class MvpDataServiceImpl implements MvpDataService {
             applyOcrStatus(invoice, ocrTasks.get(businessKey));
         });
         return invoices;
-    }
-
-    private List<ApprovalSummaryVO> buildPendingApprovals(User user) {
-        String displayName = getDisplayName(user);
-        return List.of(
-                approval(1L, "上海出差费用报销", displayName, "10分钟前", BigDecimal.valueOf(3245L), 1),
-                approval(2L, "客户招待费用", displayName, "30分钟前", BigDecimal.valueOf(1580L), 2),
-                approval(3L, "季度办公用品采购", displayName, "1小时前", BigDecimal.valueOf(8920L), 3)
-        );
-    }
-
-    private List<InvoiceAlertVO> buildInvoiceAlerts(User user) {
-        return List.of(
-                alert(1L, "发票重复报销", "用户 " + getDisplayName(user) + " 名下存在疑似重复报销发票，请尽快核对。", "30分钟前"),
-                alert(2L, "发票验真失败", "本月 1 张发票调用税务验真失败，建议稍后重试。", "1小时前"),
-                alert(3L, "发票即将过期", "本月 3 张发票将在 7 天内超出报销时限。", "2小时前")
-        );
-    }
-
-    private ExpenseSummaryVO expense(String no, String type, String reason, BigDecimal amount, LocalDate date, String status) {
-        ExpenseSummaryVO summary = new ExpenseSummaryVO();
-        summary.setNo(no);
-        summary.setType(type);
-        summary.setReason(reason);
-        summary.setAmount(amount);
-        summary.setDate(date.format(DATE_FORMATTER));
-        summary.setStatus(status);
-        return summary;
     }
 
     private InvoiceSummaryVO invoice(String code, String number, String type, String seller,
@@ -186,14 +146,14 @@ public class MvpDataServiceImpl implements MvpDataService {
             return;
         }
         if (AsyncTaskSupport.isActive(task.getStatus())) {
-            invoice.setStatus("验真中");
+            invoice.setStatus("Verifying");
             return;
         }
         if (AsyncTaskSupport.TASK_STATUS_SUCCESS.equalsIgnoreCase(task.getStatus())) {
-            invoice.setStatus("已验真");
+            invoice.setStatus("Verified");
             return;
         }
-        invoice.setStatus("验真失败");
+        invoice.setStatus("Verify failed");
     }
 
     private void applyOcrStatus(InvoiceSummaryVO invoice, AsyncTaskRecord task) {
@@ -201,40 +161,20 @@ public class MvpDataServiceImpl implements MvpDataService {
             return;
         }
         if (AsyncTaskSupport.isActive(task.getStatus())) {
-            invoice.setOcrStatus("识别中");
+            invoice.setOcrStatus("Recognizing");
             return;
         }
         if (AsyncTaskSupport.TASK_STATUS_SUCCESS.equalsIgnoreCase(task.getStatus())) {
-            invoice.setOcrStatus("已识别");
+            invoice.setOcrStatus("Recognized");
             return;
         }
-        invoice.setOcrStatus("识别失败");
-    }
-
-    private ApprovalSummaryVO approval(Long id, String title, String submitter, String time, BigDecimal amount, int avatarSeed) {
-        ApprovalSummaryVO summary = new ApprovalSummaryVO();
-        summary.setId(id);
-        summary.setTitle(title);
-        summary.setSubmitter(submitter);
-        summary.setTime(time);
-        summary.setAmount(amount);
-        summary.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + avatarSeed);
-        return summary;
-    }
-
-    private InvoiceAlertVO alert(Long id, String title, String desc, String time) {
-        InvoiceAlertVO alert = new InvoiceAlertVO();
-        alert.setId(id);
-        alert.setTitle(title);
-        alert.setDesc(desc);
-        alert.setTime(time);
-        return alert;
+        invoice.setOcrStatus("OCR failed");
     }
 
     private User requireUser(Long userId) {
         User user = userService.getById(userId);
         if (user == null) {
-            throw new IllegalArgumentException("当前用户不存在");
+            throw new IllegalArgumentException("Current user does not exist");
         }
         return user;
     }

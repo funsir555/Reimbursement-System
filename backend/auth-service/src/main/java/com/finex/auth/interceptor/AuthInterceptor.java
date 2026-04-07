@@ -13,7 +13,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 简单鉴权拦截器
+ * 绠€鍗曢壌鏉冩嫤鎴櫒
  */
 @Component
 @RequiredArgsConstructor
@@ -49,6 +49,6 @@ public class AuthInterceptor implements HandlerInterceptor {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write(objectMapper.writeValueAsString(Result.unauthorized("未登录或登录已过期")));
+        response.getWriter().write(objectMapper.writeValueAsString(Result.unauthorized("鏈櫥褰曟垨鐧诲綍宸茶繃鏈?")));
     }
 }

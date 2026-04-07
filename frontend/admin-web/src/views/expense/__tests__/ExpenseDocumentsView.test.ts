@@ -10,9 +10,16 @@ const mocks = vi.hoisted(() => ({
   expenseApi: {
     queryDocuments: vi.fn()
   },
+  asyncTaskApi: {
+    exportExpenseScene: vi.fn()
+  },
   elMessage: {
     error: vi.fn(),
-    warning: vi.fn()
+    warning: vi.fn(),
+    success: vi.fn()
+  },
+  downloadCenter: {
+    openDownloadCenter: vi.fn()
   }
 }))
 
@@ -21,11 +28,16 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/api', () => ({
-  expenseApi: mocks.expenseApi
+  expenseApi: mocks.expenseApi,
+  asyncTaskApi: mocks.asyncTaskApi
 }))
 
 vi.mock('element-plus', () => ({
   ElMessage: mocks.elMessage
+}))
+
+vi.mock('@/utils/downloadCenter', () => ({
+  openDownloadCenter: mocks.downloadCenter.openDownloadCenter
 }))
 
 const SimpleContainer = defineComponent({
@@ -165,6 +177,7 @@ describe('ExpenseDocumentsView', () => {
         }
       ]
     })
+    mocks.asyncTaskApi.exportExpenseScene.mockResolvedValue({ code: 200 })
   })
 
   it('loads query documents data and keeps only non-draft rows', async () => {
@@ -174,14 +187,26 @@ describe('ExpenseDocumentsView', () => {
     expect(mocks.expenseApi.queryDocuments).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('高级筛选')
     expect(wrapper.text()).toContain('显示字段')
-    expect(wrapper.text()).toContain('刷新列表')
-    expect(wrapper.text()).toContain('返回待我审批')
+    expect(wrapper.text()).toContain('下载')
+    expect(wrapper.text()).not.toContain('刷新列表')
+    expect(wrapper.text()).not.toContain('返回待我审批')
+    expect(wrapper.text()).toContain('总数 1')
+    expect(wrapper.text()).toContain('已过滤 1')
+    expect(wrapper.text()).not.toContain('单据查询列表')
     expect(wrapper.find('[data-testid="expense-advanced-panel"]').exists()).toBe(false)
+    expect(wrapper.classes()).toContain('expense-wb-page--dense-list')
+    expect(wrapper.find('.expense-wb-stat-grid--dense').exists()).toBe(true)
+    expect(wrapper.find('.expense-wb-stat-grid--list-dense').exists()).toBe(true)
+    expect(wrapper.findAll('.expense-wb-stat-card--dense').length).toBeGreaterThan(0)
+    expect(wrapper.find('.expense-wb-toolbar--dense').exists()).toBe(true)
+    expect(wrapper.find('.expense-wb-table-shell--compact').exists()).toBe(true)
 
     await wrapper.get('[data-testid="expense-advanced-filter-trigger"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.get('[data-testid="expense-toolbar-main"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="expense-toolbar-main"]').classes()).toContain('expense-wb-toolbar__row--dense')
+    expect(wrapper.get('[data-testid="expense-toolbar-heading"]').classes()).toContain('expense-wb-toolbar__heading--inline')
     expect(wrapper.get('[data-testid="expense-advanced-panel"]').classes()).toContain('expense-wb-advanced-panel--dropdown')
     expect(wrapper.get('[data-testid="expense-advanced-grid"]').classes()).toContain('expense-wb-advanced-grid--four-column')
     expect(vm.filteredExpenseList.map((item) => item.no)).toEqual(['DOC-001'])
@@ -235,5 +260,24 @@ describe('ExpenseDocumentsView', () => {
     vm.openDetail({ documentCode: 'DOC-001', no: 'DOC-001' })
 
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+  })
+
+  it('submits export task with current filtered document codes', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filters: { payeeName: string }
+      handleExport: () => Promise<void>
+    }
+
+    vm.filters.payeeName = '李四'
+    await flushPromises()
+    await vm.handleExport()
+
+    expect(mocks.asyncTaskApi.exportExpenseScene).toHaveBeenCalledWith({
+      scene: 'DOCUMENT_QUERY',
+      documentCodes: ['DOC-001']
+    })
+    expect(mocks.downloadCenter.openDownloadCenter).toHaveBeenCalledTimes(1)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('导出任务已提交，请到下载中心查看进度')
   })
 })

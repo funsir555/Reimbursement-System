@@ -20,4 +20,8 @@ public class DownloadRecordVO {
     private String createdAt;
 
     private String finishedAt;
+
+    private String downloadUrl;
+
+    private Boolean downloadable;
 }

@@ -40,6 +40,12 @@ public class SystemDepartment {
 
     private String syncRemark;
 
+    private String statDepartmentBelong;
+
+    private String statRegionBelong;
+
+    private String statAreaBelong;
+
     private LocalDateTime lastSyncAt;
 
     private Integer status;

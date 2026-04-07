@@ -7,7 +7,9 @@ import com.finex.auth.dto.FinanceVendorDetailVO;
 import com.finex.auth.dto.FinanceVendorSaveDTO;
 import com.finex.auth.dto.FinanceVendorSummaryVO;
 import com.finex.auth.entity.FinanceVendor;
+import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceVendorMapper;
+import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceVendorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
@@ -26,11 +28,13 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
     private static final DateTimeFormatter CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final FinanceVendorMapper financeVendorMapper;
+    private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
 
     @Override
-    public List<FinanceVendorSummaryVO> listVendors(String keyword, Boolean includeDisabled) {
+    public List<FinanceVendorSummaryVO> listVendors(String companyId, String keyword, Boolean includeDisabled) {
         QueryWrapper<FinanceVendor> query = new QueryWrapper<>();
+        query.eq("company_id", requireCompanyId(companyId));
         String normalizedKeyword = trimToNull(keyword);
         if (normalizedKeyword != null) {
             query.and(wrapper -> wrapper
@@ -48,17 +52,19 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
     }
 
     @Override
-    public FinanceVendorDetailVO getVendorDetail(String vendorCode) {
-        return toDetail(requireVendor(vendorCode));
+    public FinanceVendorDetailVO getVendorDetail(String companyId, String vendorCode) {
+        return toDetail(requireVendor(companyId, vendorCode));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public FinanceVendorDetailVO createVendor(FinanceVendorSaveDTO dto, String operatorName) {
+    public FinanceVendorDetailVO createVendor(String companyId, FinanceVendorSaveDTO dto, String operatorName) {
         validateSave(dto, null);
+        String normalizedCompanyId = requireCompanyId(companyId);
 
         FinanceVendor vendor = objectMapper.convertValue(dto, FinanceVendor.class);
         vendor.setCVenCode(trimToNull(dto.getCVenCode()) == null ? buildVendorCode() : dto.getCVenCode().trim());
+        vendor.setCompanyId(normalizedCompanyId);
         vendor.setCCreatePerson(defaultOperator(operatorName));
         vendor.setCModifyPerson(defaultOperator(operatorName));
         vendor.setDModifyDate(LocalDateTime.now());
@@ -66,33 +72,41 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
         vendor.setCreatedAt(LocalDateTime.now());
 
         if (financeVendorMapper.selectById(vendor.getCVenCode()) != null) {
-            throw new IllegalStateException("供应商编码已存在");
+            throw new IllegalStateException("渚涘簲鍟嗙紪鐮佸凡瀛樺湪");
         }
 
         financeVendorMapper.insert(vendor);
-        return toDetail(requireVendor(vendor.getCVenCode()));
+        return toDetail(requireVendor(normalizedCompanyId, vendor.getCVenCode()));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public FinanceVendorDetailVO updateVendor(String vendorCode, FinanceVendorSaveDTO dto, String operatorName) {
-        FinanceVendor existing = requireVendor(vendorCode);
+    public FinanceVendorDetailVO createVendor(Long currentUserId, FinanceVendorSaveDTO dto, String operatorName) {
+        return createVendor(requireCurrentUserCompanyId(currentUserId), dto, operatorName);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVendorDetailVO updateVendor(String companyId, String vendorCode, FinanceVendorSaveDTO dto, String operatorName) {
+        String normalizedCompanyId = requireCompanyId(companyId);
+        FinanceVendor existing = requireVendor(normalizedCompanyId, vendorCode);
         validateSave(dto, existing);
 
         FinanceVendor next = objectMapper.convertValue(dto, FinanceVendor.class);
         BeanUtils.copyProperties(next, existing, "cVenCode", "createdAt", "updatedAt", "cCreatePerson");
         existing.setCVenCode(vendorCode);
+        existing.setCompanyId(normalizedCompanyId);
         existing.setCModifyPerson(defaultOperator(operatorName));
         existing.setDModifyDate(LocalDateTime.now());
         existing.setUpdatedAt(LocalDateTime.now());
         financeVendorMapper.updateById(existing);
-        return toDetail(requireVendor(vendorCode));
+        return toDetail(requireVendor(normalizedCompanyId, vendorCode));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean disableVendor(String vendorCode, String operatorName) {
-        FinanceVendor vendor = requireVendor(vendorCode);
+    public Boolean disableVendor(String companyId, String vendorCode, String operatorName) {
+        FinanceVendor vendor = requireVendor(companyId, vendorCode);
         vendor.setDEndDate(LocalDateTime.now());
         vendor.setCModifyPerson(defaultOperator(operatorName));
         vendor.setDModifyDate(LocalDateTime.now());
@@ -102,8 +116,23 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
     }
 
     @Override
-    public List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String keyword) {
-        return listVendors(keyword, false).stream().map(item -> {
+    public List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String companyId, String keyword) {
+        String normalizedCompanyId = requireCompanyId(companyId);
+        QueryWrapper<FinanceVendor> query = new QueryWrapper<>();
+        String normalizedKeyword = trimToNull(keyword);
+        query.eq("company_id", normalizedCompanyId);
+        if (normalizedKeyword != null) {
+            query.and(wrapper -> wrapper
+                    .like("cVenCode", normalizedKeyword)
+                    .or()
+                    .like("cVenName", normalizedKeyword)
+                    .or()
+                    .like("cVenAbbName", normalizedKeyword));
+        }
+        query.isNull("dEndDate").orderByAsc("cVenName").orderByAsc("cVenCode");
+        return financeVendorMapper.selectList(query).stream()
+                .filter(item -> normalizedCompanyId.equals(trimToNull(item.getCompanyId())))
+                .map(this::toSummary).map(item -> {
             ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
             option.setValue(item.getCVenCode());
             option.setLabel(item.getCVenName());
@@ -117,25 +146,29 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
 
     private void validateSave(FinanceVendorSaveDTO dto, FinanceVendor existing) {
         if (trimToNull(dto.getCVenName()) == null) {
-            throw new IllegalArgumentException("供应商名称不能为空");
+            throw new IllegalArgumentException("渚涘簲鍟嗗悕绉颁笉鑳戒负绌?");
         }
         if (existing == null && trimToNull(dto.getCVenCode()) != null) {
             QueryWrapper<FinanceVendor> query = new QueryWrapper<>();
             query.eq("cVenCode", dto.getCVenCode().trim()).last("limit 1");
             if (financeVendorMapper.selectOne(query) != null) {
-                throw new IllegalStateException("供应商编码已存在");
+                throw new IllegalStateException("渚涘簲鍟嗙紪鐮佸凡瀛樺湪");
             }
         }
     }
 
-    private FinanceVendor requireVendor(String vendorCode) {
+    private FinanceVendor requireVendor(String companyId, String vendorCode) {
+        String normalizedCompanyId = requireCompanyId(companyId);
         String normalizedCode = trimToNull(vendorCode);
         if (normalizedCode == null) {
-            throw new IllegalArgumentException("供应商编码不能为空");
+            throw new IllegalArgumentException("渚涘簲鍟嗙紪鐮佷笉鑳戒负绌?");
         }
         FinanceVendor vendor = financeVendorMapper.selectById(normalizedCode);
         if (vendor == null) {
-            throw new IllegalStateException("供应商不存在");
+            throw new IllegalStateException("渚涘簲鍟嗕笉瀛樺湪");
+        }
+        if (!normalizedCompanyId.equals(trimToNull(vendor.getCompanyId()))) {
+            throw new SecurityException("鏃犳潈璁块棶褰撳墠渚涘簲鍟?");
         }
         return vendor;
     }
@@ -184,6 +217,29 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
     private String defaultOperator(String operatorName) {
         String normalized = trimToNull(operatorName);
         return normalized == null ? "system" : normalized;
+    }
+
+    private String requireCompanyId(String companyId) {
+        String normalized = trimToNull(companyId);
+        if (normalized == null) {
+            throw new IllegalArgumentException("鍏徃涓讳綋涓嶈兘涓虹┖");
+        }
+        return normalized;
+    }
+
+    private String requireCurrentUserCompanyId(Long currentUserId) {
+        if (currentUserId == null) {
+            throw new IllegalArgumentException("瑜版挸澧犻悽銊﹀煕娑撳秷鍏樻稉铏光敄");
+        }
+        User currentUser = userMapper.selectById(currentUserId);
+        if (currentUser == null) {
+            throw new IllegalStateException("瑜版挸澧犻悽銊﹀煕娑撳秴鐡ㄩ崷?");
+        }
+        String companyId = trimToNull(currentUser.getCompanyId());
+        if (companyId == null) {
+            throw new IllegalStateException("瑜版挸澧犻悽銊﹀煕閺堫亞绮︾€规艾鍙曢崣闀愬瘜娴?");
+        }
+        return companyId;
     }
 
     private String trimToNull(String value) {

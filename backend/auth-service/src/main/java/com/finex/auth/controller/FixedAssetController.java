@@ -71,13 +71,13 @@ public class FixedAssetController {
     @PostMapping("/categories")
     public Result<FixedAssetCategoryVO> createCategory(@Valid @RequestBody FixedAssetCategorySaveDTO dto, HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), CREATE, EDIT);
-        return Result.success("固定资产类别保存成功", fixedAssetService.createCategory(dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇绫诲埆淇濆瓨鎴愬姛", fixedAssetService.createCategory(dto, getCurrentUsername(request)));
     }
 
     @PutMapping("/categories/{id}")
     public Result<FixedAssetCategoryVO> updateCategory(@PathVariable Long id, @Valid @RequestBody FixedAssetCategorySaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EDIT);
-        return Result.success("固定资产类别更新成功", fixedAssetService.updateCategory(id, dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇绫诲埆鏇存柊鎴愬姛", fixedAssetService.updateCategory(id, dto, getCurrentUsername(request)));
     }
 
     @GetMapping("/cards")
@@ -100,13 +100,13 @@ public class FixedAssetController {
     @PostMapping("/cards")
     public Result<FixedAssetCardVO> createCard(@Valid @RequestBody FixedAssetCardSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CREATE);
-        return Result.success("固定资产卡片保存成功", fixedAssetService.createCard(dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鍗＄墖淇濆瓨鎴愬姛", fixedAssetService.createCard(dto, getCurrentUsername(request)));
     }
 
     @PutMapping("/cards/{id}")
     public Result<FixedAssetCardVO> updateCard(@PathVariable Long id, @Valid @RequestBody FixedAssetCardSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EDIT);
-        return Result.success("固定资产卡片更新成功", fixedAssetService.updateCard(id, dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鍗＄墖鏇存柊鎴愬姛", fixedAssetService.updateCard(id, dto, getCurrentUsername(request)));
     }
 
     @PostMapping("/opening-import/template")
@@ -122,7 +122,7 @@ public class FixedAssetController {
     @PostMapping("/opening-import")
     public Result<FixedAssetOpeningImportResultVO> importOpening(@Valid @RequestBody FixedAssetOpeningImportDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), IMPORT);
-        return Result.success("固定资产期初导入完成", fixedAssetService.importOpening(dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鏈熷垵瀵煎叆瀹屾垚", fixedAssetService.importOpening(dto, getCurrentUsername(request)));
     }
 
     @GetMapping("/opening-import/{batchId}")
@@ -144,13 +144,13 @@ public class FixedAssetController {
     @PostMapping("/change-bills")
     public Result<FixedAssetChangeBillVO> createChangeBill(@Valid @RequestBody FixedAssetChangeBillSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CHANGE);
-        return Result.success("固定资产变动单保存成功", fixedAssetService.createChangeBill(dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鍙樺姩鍗曚繚瀛樻垚鍔?", fixedAssetService.createChangeBill(dto, getCurrentUsername(request)));
     }
 
     @PostMapping("/change-bills/{id}/post")
     public Result<FixedAssetChangeBillVO> postChangeBill(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CHANGE);
-        return Result.success("固定资产变动单过账成功", fixedAssetService.postChangeBill(id, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鍙樺姩鍗曡繃璐︽垚鍔?", fixedAssetService.postChangeBill(id, getCurrentUsername(request)));
     }
 
     @PostMapping("/depreciation-runs/preview")
@@ -172,13 +172,13 @@ public class FixedAssetController {
     @PostMapping("/depreciation-runs")
     public Result<FixedAssetDeprRunVO> createDepreciationRun(@Valid @RequestBody FixedAssetDeprPreviewDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DEPRECIATE);
-        return Result.success("固定资产折旧批次生成成功", fixedAssetService.createDepreciationRun(dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鎶樻棫鎵规鐢熸垚鎴愬姛", fixedAssetService.createDepreciationRun(dto, getCurrentUsername(request)));
     }
 
     @PostMapping("/depreciation-runs/{id}/post")
     public Result<FixedAssetDeprRunVO> postDepreciationRun(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DEPRECIATE);
-        return Result.success("固定资产折旧过账成功", fixedAssetService.postDepreciationRun(id, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鎶樻棫杩囪处鎴愬姛", fixedAssetService.postDepreciationRun(id, getCurrentUsername(request)));
     }
 
     @GetMapping("/disposal-bills")
@@ -194,19 +194,19 @@ public class FixedAssetController {
     @PostMapping("/disposal-bills")
     public Result<FixedAssetDisposalBillVO> createDisposalBill(@Valid @RequestBody FixedAssetDisposalBillSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DISPOSE);
-        return Result.success("固定资产处置单保存成功", fixedAssetService.createDisposalBill(dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇澶勭疆鍗曚繚瀛樻垚鍔?", fixedAssetService.createDisposalBill(dto, getCurrentUsername(request)));
     }
 
     @PostMapping("/disposal-bills/{id}/post")
     public Result<FixedAssetDisposalBillVO> postDisposalBill(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DISPOSE);
-        return Result.success("固定资产处置过账成功", fixedAssetService.postDisposalBill(id, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇澶勭疆杩囪处鎴愬姛", fixedAssetService.postDisposalBill(id, getCurrentUsername(request)));
     }
 
     @PostMapping("/period-close")
     public Result<FixedAssetPeriodStatusVO> closePeriod(@Valid @RequestBody FixedAssetPeriodCloseDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CLOSE_PERIOD);
-        return Result.success("固定资产期间结账成功", fixedAssetService.closePeriod(dto, getCurrentUsername(request)));
+        return Result.success("鍥哄畾璧勪骇鏈熼棿缁撹处鎴愬姛", fixedAssetService.closePeriod(dto, getCurrentUsername(request)));
     }
 
     @GetMapping("/period-close/status")

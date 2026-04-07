@@ -41,6 +41,9 @@ public class ExpenseSummaryVO {
     @MoneyValue
     private BigDecimal amount;
 
+    @MoneyValue
+    private BigDecimal outstandingAmount;
+
     private String date;
 
     private String status;

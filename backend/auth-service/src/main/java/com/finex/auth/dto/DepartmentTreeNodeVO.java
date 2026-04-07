@@ -33,6 +33,12 @@ public class DepartmentTreeNodeVO {
 
     private String syncRemark;
 
+    private String statDepartmentBelong;
+
+    private String statRegionBelong;
+
+    private String statAreaBelong;
+
     private Integer status;
 
     private Integer sortOrder;

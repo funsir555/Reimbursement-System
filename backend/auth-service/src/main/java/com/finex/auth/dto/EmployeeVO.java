@@ -31,6 +31,12 @@ public class EmployeeVO {
 
     private String laborRelationBelong;
 
+    private String statDepartmentBelong;
+
+    private String statRegionBelong;
+
+    private String statAreaBelong;
+
     private Integer status;
 
     private String sourceType;

@@ -41,8 +41,8 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
     @Override
     public ExternalSyncPayload pull(SystemSyncConnector connector) {
         Map<String, String> config = readConnectorConfig(connector.getConfigJson());
-        String corpId = requireConfigValue(config, "corpId", "企业 ID");
-        String appSecret = requireConfigValue(config, "appSecret", "通讯录 Secret");
+        String corpId = requireConfigValue(config, "corpId", "浼佷笟 ID");
+        String appSecret = requireConfigValue(config, "appSecret", "閫氳褰?Secret");
 
         String accessToken = fetchAccessToken(corpId, appSecret);
         List<ExternalDepartmentData> departments = fetchDepartments(accessToken);
@@ -56,10 +56,10 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
                 .queryParam("corpsecret", appSecret)
                 .build(true)
                 .toUri();
-        JsonNode body = requestJson(uri, "获取 access_token");
+        JsonNode body = requestJson(uri, "鑾峰彇 access_token");
         String accessToken = trimToNull(body.path("access_token").asText(null));
         if (accessToken == null) {
-            throw new IllegalArgumentException("企微获取 access_token 失败：返回结果缺少 access_token");
+            throw new IllegalArgumentException("浼佸井鑾峰彇 access_token 澶辫触锛氳繑鍥炵粨鏋滅己灏?access_token");
         }
         return accessToken;
     }
@@ -69,7 +69,7 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
                 .queryParam("access_token", accessToken)
                 .build(true)
                 .toUri();
-        JsonNode body = requestJson(uri, "拉取部门列表");
+        JsonNode body = requestJson(uri, "鎷夊彇閮ㄩ棬鍒楄〃");
         JsonNode departmentsNode = body.path("department");
         List<ExternalDepartmentData> departments = new ArrayList<>();
         if (!departmentsNode.isArray()) {
@@ -112,7 +112,7 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
                     .queryParam("fetch_child", 0)
                     .build(true)
                     .toUri();
-            JsonNode body = requestJson(uri, "拉取部门[" + department.getDeptName() + "]员工列表");
+            JsonNode body = requestJson(uri, "鎷夊彇閮ㄩ棬[" + department.getDeptName() + "]鍛樺伐鍒楄〃");
             JsonNode usersNode = body.path("userlist");
             if (!usersNode.isArray()) {
                 continue;
@@ -164,13 +164,13 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() != 200) {
-                throw new IllegalArgumentException("企微" + stage + "失败：HTTP " + response.statusCode());
+                throw new IllegalArgumentException("浼佸井" + stage + "澶辫触锛欻TTP " + response.statusCode());
             }
             responseBody = response.body();
         } catch (IllegalArgumentException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new IllegalArgumentException("企微" + stage + "失败：" + ex.getMessage(), ex);
+            throw new IllegalArgumentException("??" + stage + "????: " + ex.getMessage(), ex);
         }
 
         try {
@@ -180,7 +180,7 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
         } catch (IllegalArgumentException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new IllegalArgumentException("企微" + stage + "失败：响应解析异常", ex);
+            throw new IllegalArgumentException("??" + stage + "??????", ex);
         }
     }
 
@@ -191,7 +191,7 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
         }
         String errMsg = trimToNull(body.path("errmsg").asText(null));
         throw new IllegalArgumentException(
-                "企微" + stage + "失败：errcode=" + errCode + (errMsg == null ? "" : ", errmsg=" + errMsg)
+                "浼佸井" + stage + "澶辫触锛歟rrcode=" + errCode + (errMsg == null ? "" : ", errmsg=" + errMsg)
         );
     }
 
@@ -203,14 +203,14 @@ public class WecomSyncAdapter implements OrganizationSyncAdapter {
             return objectMapper.readValue(configJson, new TypeReference<>() {
             });
         } catch (Exception ex) {
-            throw new IllegalArgumentException("企微同步配置解析失败", ex);
+            throw new IllegalArgumentException("浼佸井鍚屾閰嶇疆瑙ｆ瀽澶辫触", ex);
         }
     }
 
     private String requireConfigValue(Map<String, String> config, String key, String fieldName) {
         String value = trimToNull(config.get(key));
         if (value == null) {
-            throw new IllegalArgumentException("企微同步缺少" + fieldName);
+            throw new IllegalArgumentException("浼佸井鍚屾缂哄皯" + fieldName);
         }
         return value;
     }

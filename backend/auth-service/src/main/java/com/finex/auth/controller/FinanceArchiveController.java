@@ -36,49 +36,54 @@ public class FinanceArchiveController {
 
     @GetMapping
     public Result<List<FinanceVendorSummaryVO>> listVendors(
+            @RequestParam String companyId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean includeDisabled,
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), SUPPLIER_VIEW);
-        return Result.success(financeVendorService.listVendors(keyword, includeDisabled));
+        return Result.success(financeVendorService.listVendors(companyId, keyword, includeDisabled));
     }
 
     @GetMapping("/{vendorCode}")
     public Result<FinanceVendorDetailVO> getVendorDetail(
+            @RequestParam String companyId,
             @PathVariable String vendorCode,
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), SUPPLIER_VIEW);
-        return Result.success(financeVendorService.getVendorDetail(vendorCode));
+        return Result.success(financeVendorService.getVendorDetail(companyId, vendorCode));
     }
 
     @PostMapping
     public Result<FinanceVendorDetailVO> createVendor(
+            @RequestParam String companyId,
             @Valid @RequestBody FinanceVendorSaveDTO dto,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), SUPPLIER_CREATE, SUPPLIER_EDIT);
-        return Result.success("供应商保存成功", financeVendorService.createVendor(dto, getCurrentUsername(request)));
+        return Result.success("渚涘簲鍟嗕繚瀛樻垚鍔?", financeVendorService.createVendor(companyId, dto, getCurrentUsername(request)));
     }
 
     @PutMapping("/{vendorCode}")
     public Result<FinanceVendorDetailVO> updateVendor(
+            @RequestParam String companyId,
             @PathVariable String vendorCode,
             @Valid @RequestBody FinanceVendorSaveDTO dto,
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), SUPPLIER_EDIT);
-        return Result.success("供应商更新成功", financeVendorService.updateVendor(vendorCode, dto, getCurrentUsername(request)));
+        return Result.success("渚涘簲鍟嗘洿鏂版垚鍔?", financeVendorService.updateVendor(companyId, vendorCode, dto, getCurrentUsername(request)));
     }
 
     @DeleteMapping("/{vendorCode}")
     public Result<Boolean> disableVendor(
+            @RequestParam String companyId,
             @PathVariable String vendorCode,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), SUPPLIER_DELETE, SUPPLIER_EDIT);
-        return Result.success("供应商已停用", financeVendorService.disableVendor(vendorCode, getCurrentUsername(request)));
+        return Result.success("渚涘簲鍟嗗凡鍋滅敤", financeVendorService.disableVendor(companyId, vendorCode, getCurrentUsername(request)));
     }
 
     private Long getCurrentUserId(HttpServletRequest request) {
@@ -89,7 +94,7 @@ public class FinanceArchiveController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("无法获取当前登录用户");
+        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {

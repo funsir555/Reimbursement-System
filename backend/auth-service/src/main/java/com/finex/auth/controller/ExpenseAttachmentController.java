@@ -53,7 +53,7 @@ public class ExpenseAttachmentController {
                 EXPENSE_APPROVAL_VIEW,
                 EXPENSE_APPROVAL_APPROVE
         );
-        return Result.success("附件上传成功", expenseAttachmentService.uploadAttachment(file));
+        return Result.success("闄勪欢涓婁紶鎴愬姛", expenseAttachmentService.uploadAttachment(file));
     }
 
     @GetMapping("/{attachmentId}/content")
@@ -62,7 +62,7 @@ public class ExpenseAttachmentController {
             @RequestParam("token") String token
     ) {
         if (!JwtUtil.verify(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.unauthorized("未登录或登录已过期"));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.unauthorized("鏈櫥褰曟垨鐧诲綍宸茶繃鏈?"));
         }
 
         accessControlService.requireAnyPermission(
@@ -108,6 +108,6 @@ public class ExpenseAttachmentController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("无法获取当前登录用户");
+        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
     }
 }

@@ -43,9 +43,10 @@
           />
           <money-input
             v-else-if="controlType(block) === 'AMOUNT'"
-            v-model="formData[block.fieldKey]"
+            :model-value="toOptionalString(formData[block.fieldKey])"
             class="w-full"
             :disabled="isReadOnly(block)"
+            @update:model-value="formData[block.fieldKey] = $event"
           />
           <el-date-picker
             v-else-if="controlType(block) === 'DATE'"
@@ -419,9 +420,6 @@
         <el-form-item label="电话" class="!mb-0">
           <el-input v-model="vendorDraft.cVenPhone" placeholder="请输入联系电话" />
         </el-form-item>
-        <el-form-item label="公司主体编码" class="!mb-0">
-          <el-input v-model="vendorDraft.companyId" placeholder="请输入公司主体编码" />
-        </el-form-item>
         <el-form-item label="开户地址" class="!mb-0">
           <el-input v-model="vendorDraft.cVenAddress" placeholder="请输入开户地址" />
         </el-form-item>
@@ -635,7 +633,6 @@ const vendorDraft = reactive<FinanceVendorSavePayload>({
   cVenBank: '',
   cVenAccount: '',
   cVenBankNub: '',
-  companyId: '',
   cMemo: ''
 })
 
@@ -1061,7 +1058,6 @@ function openVendorDialog() {
     cVenBank: '',
     cVenAccount: '',
     cVenBankNub: '',
-    companyId: '',
     cMemo: ''
   })
   vendorDialogVisible.value = true
@@ -1150,6 +1146,16 @@ function toOptionalMoney(value: unknown) {
   }
   if (typeof value === 'string' && value.trim()) {
     return normalizeMoneyValue(value)
+  }
+  return undefined
+}
+
+function toOptionalString(value: unknown) {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
   }
   return undefined
 }

@@ -60,8 +60,11 @@ INSERT INTO tmp_permission_seed (
     ('expense:approval:reject', '审批驳回', 'BUTTON', 'expense:approval:view', 'expense', NULL, 3032, 1),
     ('expense:payment:menu', '支付', 'MENU', 'expense:menu', 'expense-payment', '/expense/payment', 304, 1),
     ('expense:payment:bank_link:view', '银企直连', 'MENU', 'expense:payment:menu', 'expense', '/expense/payment/bank-link', 3041, 1),
-    ('expense:payment:bank_link:pay', '发起支付', 'BUTTON', 'expense:payment:bank_link:view', 'expense', NULL, 30411, 1),
-    ('expense:documents:view', '单据查询', 'MENU', 'expense:menu', 'expense', '/expense/documents', 305, 1),
+    ('expense:payment:bank_link:edit', '编辑直连配置', 'BUTTON', 'expense:payment:bank_link:view', 'expense', NULL, 30411, 1),
+    ('expense:payment:bank_link:pay', '发起支付', 'BUTTON', 'expense:payment:bank_link:view', 'expense', NULL, 30412, 1),
+    ('expense:payment:payment_order:view', '付款单', 'MENU', 'expense:payment:menu', 'expense', '/expense/payment/orders', 3042, 1),
+    ('expense:payment:payment_order:execute', '执行付款', 'BUTTON', 'expense:payment:payment_order:view', 'expense', NULL, 30421, 1),
+        ('expense:documents:view', '单据查询', 'MENU', 'expense:menu', 'expense', '/expense/documents', 305, 1),
     ('expense:voucher_generation:view', CONVERT(0xe587ade8af81e7949fe68890 USING utf8mb4), 'MENU', 'expense:menu', 'expense', '/expense/workbench/process-management', 306, 1),
     ('expense:voucher_generation:generate', '生成凭证', 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3061, 1),
     ('expense:voucher_generation:mapping:view', CONVERT(0xe587ade8af81e7a791e79baee698a0e5b084 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3062, 1),
@@ -83,6 +86,7 @@ INSERT INTO tmp_permission_seed (
     ('finance:general_ledger:new_voucher:create', '新增凭证', 'BUTTON', 'finance:general_ledger:new_voucher:view', 'finance', NULL, 40111, 1),
     ('finance:general_ledger:query_voucher:view', '查询凭证', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/query-voucher', 4012, 1),
     ('finance:general_ledger:query_voucher:export', '导出凭证', 'BUTTON', 'finance:general_ledger:query_voucher:view', 'finance', NULL, 40121, 1),
+    ('finance:general_ledger:query_voucher:edit', '修改凭证', 'BUTTON', 'finance:general_ledger:query_voucher:view', 'finance', NULL, 40122, 1),
     ('finance:general_ledger:review_voucher:view', '审核凭证', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/review-voucher', 4013, 1),
     ('finance:general_ledger:review_voucher:review', '审核通过', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40131, 1),
     ('finance:general_ledger:review_voucher:unreview', '取消审核', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40132, 1),
@@ -151,6 +155,15 @@ INSERT INTO tmp_permission_seed (
     ('archives:account_books:edit', '编辑账套', 'BUTTON', 'archives:account_books:view', 'archives', NULL, 5022, 1),
     ('archives:account_books:delete', '删除账套', 'BUTTON', 'archives:account_books:view', 'archives', NULL, 5023, 1),
 
+    ('agents:menu', 'Agent', 'MENU', NULL, 'agents', '/archives/agents', 55, 1),
+    ('agents:view', CONVERT(0x4167656e74e5b7a5e4bd9ce58fb0 USING utf8mb4), 'MENU', 'agents:menu', 'agents', '/archives/agents', 551, 1),
+    ('agents:create', CONVERT(0xe696b0e5bbba204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5511, 1),
+    ('agents:edit', CONVERT(0xe7bc96e8be91204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5512, 1),
+    ('agents:delete', CONVERT(0xe588a0e999a4204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5513, 1),
+    ('agents:run', CONVERT(0xe8bf90e8a18c204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5514, 1),
+    ('agents:publish', CONVERT(0xe58f91e5b883204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5515, 1),
+    ('agents:view_logs', CONVERT(0xe69fa5e79c8be8bf90e8a18ce697a5e5bf97 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5516, 1),
+
     ('settings:menu', '系统设置', 'MENU', NULL, 'settings', '/settings', 60, 1),
     ('settings:organization:view', '组织架构', 'MENU', 'settings:menu', 'organization', '/settings?tab=organization', 601, 1),
     ('settings:organization:create', '新增部门', 'BUTTON', 'settings:organization:view', 'organization', NULL, 6011, 1),
@@ -168,10 +181,14 @@ INSERT INTO tmp_permission_seed (
     ('settings:roles:delete', '删除角色', 'BUTTON', 'settings:roles:view', 'roles', NULL, 6033, 1),
     ('settings:roles:assign_permissions', '分配权限', 'BUTTON', 'settings:roles:view', 'roles', NULL, 6034, 1),
     ('settings:roles:assign_users', '分配用户', 'BUTTON', 'settings:roles:view', 'roles', NULL, 6035, 1),
-    ('settings:companies:view', '公司管理', 'MENU', 'settings:menu', 'companies', '/settings?tab=companies', 604, 1),
-    ('settings:companies:create', '新增公司', 'BUTTON', 'settings:companies:view', 'companies', NULL, 6041, 1),
-    ('settings:companies:edit', '编辑公司', 'BUTTON', 'settings:companies:view', 'companies', NULL, 6042, 1),
-    ('settings:companies:delete', '删除公司', 'BUTTON', 'settings:companies:view', 'companies', NULL, 6043, 1);
+    ('settings:companies:view', CONVERT(0xe585ace58fb8e7aea1e79086 USING utf8mb4), 'MENU', 'settings:menu', 'companies', '/settings?tab=companies', 604, 1),
+    ('settings:companies:create', CONVERT(0xe696b0e5a29ee585ace58fb8 USING utf8mb4), 'BUTTON', 'settings:companies:view', 'companies', NULL, 6041, 1),
+    ('settings:companies:edit', CONVERT(0xe7bc96e8be91e585ace58fb8 USING utf8mb4), 'BUTTON', 'settings:companies:view', 'companies', NULL, 6042, 1),
+    ('settings:companies:delete', CONVERT(0xe588a0e999a4e585ace58fb8 USING utf8mb4), 'BUTTON', 'settings:companies:view', 'companies', NULL, 6043, 1),
+    ('settings:company_accounts:view', CONVERT(0xe585ace58fb8e8b4a6e688b7e7aea1e79086 USING utf8mb4), 'MENU', 'settings:menu', 'companyAccounts', '/settings?tab=companyAccounts', 605, 1),
+    ('settings:company_accounts:create', CONVERT(0xe696b0e5a29ee585ace58fb8e8b4a6e688b7 USING utf8mb4), 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6051, 1),
+    ('settings:company_accounts:edit', CONVERT(0xe7bc96e8be91e585ace58fb8e8b4a6e688b7 USING utf8mb4), 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6052, 1),
+    ('settings:company_accounts:delete', CONVERT(0xe588a0e999a4e585ace58fb8e8b4a6e688b7 USING utf8mb4), 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6053, 1);
 
 INSERT INTO sys_permission (
     permission_code,
@@ -249,6 +266,7 @@ WHERE permission_code IN (
     'finance:reports:menu',
     'finance:archives:menu',
     'archives:menu',
+    'agents:menu',
     'settings:menu'
 )
 ORDER BY sort_order, permission_code;

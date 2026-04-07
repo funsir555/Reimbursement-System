@@ -9,11 +9,8 @@
         <el-button :icon="RefreshRight" @click="loadPage">刷新</el-button>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3" data-testid="process-form-designer-header-actions">
         <el-tag effect="plain">{{ templateTypeLabel }}</el-tag>
-        <el-button type="primary" :icon="Check" :loading="saving" :disabled="!canEdit" @click="saveFormDesign">
-          {{ designerSaveLabel }}
-        </el-button>
       </div>
     </div>
 
@@ -507,6 +504,37 @@
         <el-empty v-else description="请先在中间画布选中一个组件" :image-size="92" />
       </el-card>
     </div>
+
+    <div
+      class="process-form-designer-floating-bar sticky bottom-4 z-10"
+      data-testid="process-form-designer-floating-bar"
+    >
+      <div
+        class="process-form-designer-floating-bar__inner"
+        data-testid="process-form-designer-floating-bar-inner"
+      >
+        <el-button
+          class="process-form-designer-floating-bar__button"
+          type="primary"
+          :icon="Check"
+          :loading="savingDraft"
+          :disabled="!canEdit || isSaving"
+          @click="saveFormDesign('draft')"
+        >
+          保存草稿
+        </el-button>
+        <el-button
+          class="process-form-designer-floating-bar__button process-form-designer-floating-bar__button--success"
+          type="success"
+          :icon="Check"
+          :loading="savingFinal"
+          :disabled="!canEdit || isSaving"
+          @click="saveFormDesign('final')"
+        >
+          {{ designerSaveLabel }}
+        </el-button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -576,7 +604,7 @@ const initialFormId = Number(route.params.id)
 const initialIsCreateMode = !Number.isFinite(initialFormId) || initialFormId <= 0
 const isExpenseDetailDesigner = computed(() => String(route.name || '').includes('expense-detail'))
 const loading = ref(false)
-const saving = ref(false)
+const savingMode = ref<'draft' | 'final' | null>(null)
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const activePaletteTab = ref<PaletteTabKey>('controls')
 const activeInspectorTab = ref<'properties' | 'permissions'>('properties')
@@ -612,8 +640,12 @@ const designerNameLabel = computed(() => isExpenseDetailDesigner.value ? '明细
 const designerCodeLabel = computed(() => isExpenseDetailDesigner.value ? '明细表单编码' : '表单编码')
 const designerDescriptionLabel = computed(() => isExpenseDetailDesigner.value ? '明细表单说明' : '表单说明')
 const designerSaveLabel = computed(() => isExpenseDetailDesigner.value ? '保存费用明细表单' : '保存表单设计')
+const designerDraftSaveSuccessText = computed(() => isExpenseDetailDesigner.value ? '费用明细表单草稿已保存' : '表单草稿已保存')
 const designerSaveSuccessText = computed(() => formId.value !== null ? (isExpenseDetailDesigner.value ? '费用明细表单已更新' : '表单设计已更新') : (isExpenseDetailDesigner.value ? '费用明细表单已创建' : '表单设计已创建'))
 const designerLoadErrorText = computed(() => isExpenseDetailDesigner.value ? '加载费用明细表单失败' : '加载表单设计失败')
+const isSaving = computed(() => savingMode.value !== null)
+const savingDraft = computed(() => savingMode.value === 'draft')
+const savingFinal = computed(() => savingMode.value === 'final')
 const businessPaletteItems = computed(() => buildBusinessComponentPaletteItems())
 const sharedArchiveOptions = computed(() => customArchives.value.filter((item) => item.status === 1 && item.archiveType === 'SELECT'))
 const sharedPaletteItems = computed(() => buildSharedFieldPaletteItems(sharedArchiveOptions.value))
@@ -1235,7 +1267,7 @@ function placeholderPreview(block: ProcessFormDesignBlock) {
   return stringProp(block, 'placeholder', '暂无默认内容')
 }
 
-async function saveFormDesign() {
+async function saveFormDesign(mode: 'draft' | 'final' = 'final') {
   if (!canEdit.value) {
     ElMessage.warning(isCreateMode.value
       ? (isExpenseDetailDesigner.value ? '当前账号没有新建费用明细表单权限' : '当前账号没有新建表单设计权限')
@@ -1246,7 +1278,7 @@ async function saveFormDesign() {
     ElMessage.warning(`请先填写${designerNameLabel.value}`)
     return
   }
-  saving.value = true
+  savingMode.value = mode
   try {
     const schema = normalizeFormSchema(working.schema)
     const res = isExpenseDetailDesigner.value
@@ -1278,7 +1310,7 @@ async function saveFormDesign() {
         } satisfies ProcessFormDesignSavePayload))
     assignDetail(res.data)
     selectedBlockId.value = selectedBlockId.value || working.schema.blocks[0]?.blockId || ''
-    ElMessage.success(designerSaveSuccessText.value)
+    ElMessage.success(mode === 'draft' ? designerDraftSaveSuccessText.value : designerSaveSuccessText.value)
     const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
     const createdCode = isExpenseDetailDesigner.value
       ? String((res.data as ProcessExpenseDetailDesignDetail).detailCode || '')
@@ -1299,7 +1331,7 @@ async function saveFormDesign() {
       ? (isExpenseDetailDesigner.value ? '保存费用明细表单失败' : '保存表单设计失败')
       : (isExpenseDetailDesigner.value ? '更新费用明细表单失败' : '更新表单设计失败')))
   } finally {
-    saving.value = false
+    savingMode.value = null
   }
 }
 
@@ -1376,12 +1408,50 @@ function goBack() {
 .palette-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(148,163,184,.85); }
 .palette-scroll::-webkit-scrollbar-track { background: rgba(241,245,249,.92); }
 .designer-side-scroll { max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 4px; }
+.process-form-designer-floating-bar { display: flex; justify-content: center; width: 100%; }
+.process-form-designer-floating-bar__inner {
+  display: flex;
+  width: min(95vw, 1680px);
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(248, 250, 252, 0.1) 100%);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(18px);
+  padding: 18px 22px;
+  font-size: 15px;
+}
+:deep(.process-form-designer-floating-bar__button.el-button) {
+  min-height: 38px;
+  padding: 0 20px;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+:deep(.process-form-designer-floating-bar__button--success.el-button) {
+  box-shadow: 0 12px 24px rgba(34, 197, 94, 0.14);
+}
 @media (min-width: 1280px) { .palette-scroll { max-height: calc(100vh - 220px); overflow-y: auto; } }
 @media (max-width: 1279px) {
   .palette-grid { grid-template-columns: 1fr; }
   .palette-scroll, .designer-side-scroll { max-height: none; overflow-y: visible; padding-right: 0; }
 }
 @media (max-width: 767px) {
+  .process-form-designer-floating-bar__inner {
+    width: calc(100vw - 24px);
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 14px;
+    font-size: 14px;
+  }
+  :deep(.process-form-designer-floating-bar__button.el-button) {
+    flex: 1 1 calc(50% - 5px);
+    min-height: 34px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
   .form-block-shell { grid-template-columns: minmax(0, 1fr) 32px; gap: 6px; }
   .form-block-action-slot { min-width: 32px; }
   .block-expand-action { width: 28px; height: 56px; font-size: 16px; }

@@ -77,28 +77,28 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
     private static final String PUSH_STATUS_FAILED = "FAILED";
     private static final String PUSH_STATUS_UNPUSHED = "UNPUSHED";
     private static final String PAYMENT_COMPANY_COMPONENT_CODE = "payment-company";
-    private static final String DEFAULT_VOUCHER_TYPE = "记";
+    private static final String DEFAULT_VOUCHER_TYPE = "GENERAL";
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final DateTimeFormatter BATCH_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private static final List<OptionSeed> VOUCHER_TYPE_SEEDS = List.of(
-            new OptionSeed("记", "记账凭证"),
-            new OptionSeed("收", "收款凭证"),
-            new OptionSeed("付", "付款凭证"),
-            new OptionSeed("转", "转账凭证")
+            new OptionSeed("GENERAL", "????"),
+            new OptionSeed("RECEIPT", "????"),
+            new OptionSeed("PAYMENT", "????"),
+            new OptionSeed("TRANSFER", "????")
     );
 
     private static final List<OptionSeed> ACCOUNT_SEEDS = List.of(
-            new OptionSeed("1001", "1001 库存现金"),
-            new OptionSeed("1002", "1002 银行存款"),
-            new OptionSeed("1122", "1122 其他应收款"),
-            new OptionSeed("2202", "2202 其他应付款"),
-            new OptionSeed("2221", "2221 应交税费"),
-            new OptionSeed("660100", "660100 差旅费"),
-            new OptionSeed("660200", "660200 福利费"),
-            new OptionSeed("660300", "660300 办公费"),
-            new OptionSeed("660500", "660500 招待费")
+            new OptionSeed("1001", "1001 ????"),
+            new OptionSeed("1002", "1002 ????"),
+            new OptionSeed("1122", "1122 ?????"),
+            new OptionSeed("2202", "2202 ?????"),
+            new OptionSeed("2221", "2221 ????"),
+            new OptionSeed("660100", "660100 ???"),
+            new OptionSeed("660200", "660200 ???"),
+            new OptionSeed("660300", "660300 ???"),
+            new OptionSeed("660500", "660500 ???")
     );
 
     private final ExpVoucherTemplatePolicyMapper templatePolicyMapper;
@@ -132,9 +132,9 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
         meta.setAccountOptions(loadAccountOptions());
         meta.setVoucherTypeOptions(toOptions(VOUCHER_TYPE_SEEDS));
         meta.setPushStatusOptions(List.of(
-                option(PUSH_STATUS_UNPUSHED, "待推送"),
-                option(PUSH_STATUS_SUCCESS, "推送成功"),
-                option(PUSH_STATUS_FAILED, "推送失败")
+                option(PUSH_STATUS_UNPUSHED, "寰呮帹閫?"),
+                option(PUSH_STATUS_SUCCESS, "鎺ㄩ€佹垚鍔?"),
+                option(PUSH_STATUS_FAILED, "鎺ㄩ€佸け璐?")
         ));
         meta.setDefaultCompanyId(resolveDefaultCompanyId(currentUserId, companies));
         meta.setLatestBatchNo(resolveLatestBatchNo());
@@ -286,7 +286,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (documentCodes.isEmpty()) {
-            throw new IllegalArgumentException("请选择需要推送的单据");
+            throw new IllegalArgumentException("璇烽€夋嫨闇€瑕佹帹閫佺殑鍗曟嵁");
         }
 
         Map<String, ProcessDocumentInstance> documentMap = documentInstanceMapper.selectList(
@@ -302,7 +302,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
         for (String documentCode : documentCodes) {
             ProcessDocumentInstance document = documentMap.get(documentCode);
             if (document == null) {
-                result.getResults().add(buildFailureResult(documentCode, null, null, null, "单据不存在，无法推送凭证"));
+                result.getResults().add(buildFailureResult(documentCode, null, null, null, "鍗曟嵁涓嶅瓨鍦紝鏃犳硶鎺ㄩ€佸嚟璇?"));
                 result.setFailureCount(result.getFailureCount() + 1);
                 continue;
             }
@@ -316,7 +316,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                 result.getResults().add(pushResult);
                 result.setSuccessCount(result.getSuccessCount() + 1);
             } catch (Exception ex) {
-                String errorMessage = defaultText(ex.getMessage(), "推送失败");
+                String errorMessage = defaultText(ex.getMessage(), "鎺ㄩ€佸け璐?");
                 if (companyId != null) {
                     batchContext = batchContext == null ? batchMap.computeIfAbsent(companyId, key -> createBatchContext(key, currentUsername)) : batchContext;
                     saveFailedPushDocument(document, batchContext, errorMessage);
@@ -361,7 +361,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
     public ExpenseVoucherGeneratedRecordDetailVO getGeneratedVoucherDetail(Long id) {
         ExpVoucherPushDocument pushDocument = pushDocumentMapper.selectById(id);
         if (pushDocument == null) {
-            throw new IllegalArgumentException("推送记录不存在");
+            throw new IllegalArgumentException("鎺ㄩ€佽褰曚笉瀛樺湪");
         }
         ExpenseVoucherGeneratedRecordDetailVO detail = new ExpenseVoucherGeneratedRecordDetailVO();
         detail.setRecord(toGeneratedRecordVO(pushDocument, companyNameMap()));
@@ -372,7 +372,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                 ).stream().map(this::toEntrySnapshotVO).toList());
         if (hasText(pushDocument.getVoucherNo())) {
             try {
-                detail.setVoucherDetail(financeVoucherService.getDetail(pushDocument.getVoucherNo()));
+                detail.setVoucherDetail(financeVoucherService.getDetail(pushDocument.getCompanyId(), pushDocument.getVoucherNo()));
             } catch (Exception ignored) {
                 detail.setVoucherDetail(null);
             }
@@ -382,29 +382,23 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
 
     private ExpenseVoucherPushResultVO pushOneDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, Long currentUserId, String currentUsername) {
         if (!DOCUMENT_STATUS_APPROVED.equals(trim(document.getStatus()))) {
-            throw new IllegalStateException("只有已审批通过的单据才能推送凭证");
-        }
-        String companyId = requireDocumentCompanyId(document);
-        ExpVoucherPushDocument existingPush = findPushDocument(companyId, document.getDocumentCode());
-        if (existingPush != null && PUSH_STATUS_SUCCESS.equals(existingPush.getPushStatus())) {
-            throw new IllegalStateException("该单据已推送凭证，凭证号：" + existingPush.getVoucherNo());
+            throw new IllegalStateException("当前单据未审批通过，不能生成凭证");
         }
 
+        String companyId = requireDocumentCompanyId(document);
+        ExpVoucherTemplatePolicy templatePolicy = requireEnabledTemplatePolicy(companyId, document.getTemplateCode());
         List<ProcessDocumentExpenseDetail> details = listExpenseDetails(document.getDocumentCode());
         if (details.isEmpty()) {
-            throw new IllegalStateException("单据没有费用明细，无法生成凭证");
+            throw new IllegalStateException("当前单据没有可生成凭证的费用明细");
         }
-        ExpVoucherTemplatePolicy templatePolicy = requireEnabledTemplatePolicy(companyId, document.getTemplateCode());
-        Map<String, ExpVoucherSubjectMapping> subjectMap = listEnabledSubjectMappings(companyId, document.getTemplateCode()).stream()
-                .collect(Collectors.toMap(ExpVoucherSubjectMapping::getExpenseTypeCode, Function.identity(), (left, right) -> left));
-        Map<String, String> expenseTypeMap = expenseTypeNameMap();
+
         LinkedHashMap<String, BigDecimal> debitAmounts = aggregateExpenseAmounts(details);
-        if (debitAmounts.isEmpty()) {
-            throw new IllegalStateException("未识别到可推送的费用金额");
-        }
+        Map<String, String> expenseTypeMap = expenseTypeNameMap();
+        Map<String, ExpVoucherSubjectMapping> subjectMap = listEnabledSubjectMappings(companyId, document.getTemplateCode()).stream()
+                .collect(Collectors.toMap(ExpVoucherSubjectMapping::getExpenseTypeCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         for (String expenseTypeCode : debitAmounts.keySet()) {
             if (!subjectMap.containsKey(expenseTypeCode)) {
-                throw new IllegalStateException("费用类型“" + expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode) + "”缺少借方科目映射");
+                throw new IllegalStateException("未配置费用类型对应的会计科目: " + expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
             }
         }
 
@@ -425,7 +419,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
         dto.setCsign(defaultText(templatePolicy.getVoucherType(), DEFAULT_VOUCHER_TYPE));
         dto.setCbill(currentUsername);
         dto.setIdoc(0);
-        dto.setCtext1("报销凭证-" + document.getDocumentCode());
+        dto.setCtext1("鎶ラ攢鍑瘉-" + document.getDocumentCode());
         dto.setCtext2(defaultText(document.getTemplateName(), document.getTemplateCode()));
 
         List<FinanceVoucherEntryDTO> entries = new ArrayList<>();
@@ -443,7 +437,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
             totalAmount = totalAmount.add(amount);
         }
         FinanceVoucherEntryDTO creditEntry = new FinanceVoucherEntryDTO();
-        creditEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, "银行科目"));
+        creditEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, "閾惰绉戠洰"));
         creditEntry.setCcode(templatePolicy.getCreditAccountCode());
         creditEntry.setMd(ZERO);
         creditEntry.setMc(totalAmount);
@@ -538,7 +532,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                 entry.setExpenseTypeName(expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
             } else {
                 entry.setExpenseTypeCode(null);
-                entry.setExpenseTypeName(defaultText(templatePolicy.getTemplateName(), "统一贷方科目"));
+                entry.setExpenseTypeName(defaultText(templatePolicy.getTemplateName(), "缁熶竴璐锋柟绉戠洰"));
             }
             pushEntryMapper.insert(entry);
         }
@@ -566,7 +560,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                         .last("limit 1")
         );
         if (policy == null) {
-            throw new IllegalStateException("当前公司和报销模板未配置统一贷方科目策略");
+            throw new IllegalStateException("褰撳墠鍏徃鍜屾姤閿€妯℃澘鏈厤缃粺涓€璐锋柟绉戠洰绛栫暐");
         }
         return policy;
     }
@@ -731,7 +725,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
             }
             String code = trim(String.valueOf(dbCode));
             if (code != null && !labels.containsKey(code)) {
-                labels.put(code, code + " 会计科目");
+                labels.put(code, code + " 浼氳绉戠洰");
             }
         }
         return labels.entrySet().stream().map(entry -> option(entry.getKey(), entry.getValue())).toList();
@@ -780,7 +774,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
     private String requireDocumentCompanyId(ProcessDocumentInstance document) {
         String companyId = resolveDocumentCompanyId(document);
         if (companyId == null) {
-            throw new IllegalStateException("单据未识别到付款公司，无法推送凭证");
+            throw new IllegalStateException("鍗曟嵁鏈瘑鍒埌浠樻鍏徃锛屾棤娉曟帹閫佸嚟璇?");
         }
         return companyId;
     }
@@ -834,10 +828,10 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
 
     private void validateTemplatePolicy(ExpenseVoucherTemplatePolicySaveDTO dto, Long currentId) {
         if (!hasText(dto.getCompanyId()) || systemCompanyMapper.selectById(trim(dto.getCompanyId())) == null) {
-            throw new IllegalArgumentException("公司不存在，无法保存模板科目策略");
+            throw new IllegalArgumentException("鍏徃涓嶅瓨鍦紝鏃犳硶淇濆瓨妯℃澘绉戠洰绛栫暐");
         }
         if (!existsTemplate(dto.getTemplateCode())) {
-            throw new IllegalArgumentException("报销模板不存在，无法保存模板科目策略");
+            throw new IllegalArgumentException("鎶ラ攢妯℃澘涓嶅瓨鍦紝鏃犳硶淇濆瓨妯℃澘绉戠洰绛栫暐");
         }
         ExpVoucherTemplatePolicy duplicate = templatePolicyMapper.selectOne(
                 Wrappers.<ExpVoucherTemplatePolicy>lambdaQuery()
@@ -847,19 +841,19 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                         .last("limit 1")
         );
         if (duplicate != null) {
-            throw new IllegalArgumentException("同一公司和报销模板只能维护一套统一贷方策略");
+            throw new IllegalArgumentException("鍚屼竴鍏徃鍜屾姤閿€妯℃澘鍙兘缁存姢涓€濂楃粺涓€璐锋柟绛栫暐");
         }
     }
 
     private void validateSubjectMapping(ExpenseVoucherSubjectMappingSaveDTO dto, Long currentId) {
         if (!hasText(dto.getCompanyId()) || systemCompanyMapper.selectById(trim(dto.getCompanyId())) == null) {
-            throw new IllegalArgumentException("公司不存在，无法保存费用类型映射");
+            throw new IllegalArgumentException("鍏徃涓嶅瓨鍦紝鏃犳硶淇濆瓨璐圭敤绫诲瀷鏄犲皠");
         }
         if (!existsTemplate(dto.getTemplateCode())) {
-            throw new IllegalArgumentException("报销模板不存在，无法保存费用类型映射");
+            throw new IllegalArgumentException("鎶ラ攢妯℃澘涓嶅瓨鍦紝鏃犳硶淇濆瓨璐圭敤绫诲瀷鏄犲皠");
         }
         if (!existsExpenseType(dto.getExpenseTypeCode())) {
-            throw new IllegalArgumentException("费用类型不存在，无法保存科目映射");
+            throw new IllegalArgumentException("璐圭敤绫诲瀷涓嶅瓨鍦紝鏃犳硶淇濆瓨绉戠洰鏄犲皠");
         }
         ExpVoucherSubjectMapping duplicate = subjectMappingMapper.selectOne(
                 Wrappers.<ExpVoucherSubjectMapping>lambdaQuery()
@@ -870,7 +864,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                         .last("limit 1")
         );
         if (duplicate != null) {
-            throw new IllegalArgumentException("同一公司、报销模板和费用类型不能重复维护借方科目");
+            throw new IllegalArgumentException("鍚屼竴鍏徃銆佹姤閿€妯℃澘鍜岃垂鐢ㄧ被鍨嬩笉鑳介噸澶嶇淮鎶ゅ€熸柟绉戠洰");
         }
     }
 
@@ -941,7 +935,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
     private ExpVoucherTemplatePolicy requireTemplatePolicy(Long id) {
         ExpVoucherTemplatePolicy entity = templatePolicyMapper.selectById(id);
         if (entity == null) {
-            throw new IllegalArgumentException("模板科目策略不存在");
+            throw new IllegalArgumentException("妯℃澘绉戠洰绛栫暐涓嶅瓨鍦?");
         }
         return entity;
     }
@@ -949,7 +943,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
     private ExpVoucherSubjectMapping requireSubjectMapping(Long id) {
         ExpVoucherSubjectMapping entity = subjectMappingMapper.selectById(id);
         if (entity == null) {
-            throw new IllegalArgumentException("费用类型科目映射不存在");
+            throw new IllegalArgumentException("璐圭敤绫诲瀷绉戠洰鏄犲皠涓嶅瓨鍦?");
         }
         return entity;
     }
@@ -1035,7 +1029,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
     }
 
     private String resolveSummary(String templateRule, ProcessDocumentInstance document, String expenseTypeName) {
-        String summary = hasText(templateRule) ? trim(templateRule) : "报销单${documentCode}-${expenseTypeName}";
+        String summary = hasText(templateRule) ? trim(templateRule) : "鎶ラ攢鍗?{documentCode}-${expenseTypeName}";
         return summary
                 .replace("${documentCode}", defaultText(document.getDocumentCode(), ""))
                 .replace("${templateName}", defaultText(document.getTemplateName(), ""))
@@ -1061,7 +1055,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
         result.setTemplateCode(templateCode);
         result.setTemplateName(templateName);
         result.setPushStatus(PUSH_STATUS_FAILED);
-        result.setErrorMessage(defaultText(errorMessage, "推送失败"));
+        result.setErrorMessage(defaultText(errorMessage, "鎺ㄩ€佸け璐?"));
         return result;
     }
 
@@ -1154,7 +1148,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                 return seed.label;
             }
         }
-        return code + " 会计科目";
+        return code + " 浼氳绉戠洰";
     }
 
     private String resolveVoucherTypeLabel(String voucherType) {
@@ -1172,9 +1166,9 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
 
     private String resolvePushStatusLabel(String pushStatus) {
         return switch (defaultText(pushStatus, PUSH_STATUS_UNPUSHED)) {
-            case PUSH_STATUS_SUCCESS -> "推送成功";
-            case PUSH_STATUS_FAILED -> "推送失败";
-            default -> "待推送";
+            case PUSH_STATUS_SUCCESS -> "鎺ㄩ€佹垚鍔?";
+            case PUSH_STATUS_FAILED -> "鎺ㄩ€佸け璐?";
+            default -> "寰呮帹閫?";
         };
     }
 

@@ -4,6 +4,8 @@ import com.finex.auth.config.GlobalExceptionHandler;
 import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
+import com.finex.auth.dto.FinanceVendorDetailVO;
+import com.finex.auth.dto.FinanceVendorSaveDTO;
 import com.finex.auth.dto.ProcessFormOptionVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ExpenseDocumentService;
@@ -13,16 +15,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -56,7 +62,7 @@ class ExpenseDocumentControllerTest {
     void listTemplatesAllowsAnyExpenseCreateEntryPermission() throws Exception {
         ExpenseCreateTemplateSummaryVO summary = new ExpenseCreateTemplateSummaryVO();
         summary.setTemplateCode("TPL-001");
-        summary.setTemplateName("差旅报销");
+        summary.setTemplateName("Travel Reimbursement");
 
         doNothing().when(accessControlService).requireAnyPermission(
                 1L,
@@ -84,10 +90,10 @@ class ExpenseDocumentControllerTest {
     void getTemplateDetailAllowsAnyExpenseCreateEntryPermission() throws Exception {
         ExpenseCreateTemplateDetailVO detail = new ExpenseCreateTemplateDetailVO();
         detail.setTemplateCode("TPL-001");
-        detail.setTemplateName("差旅报销");
+        detail.setTemplateName("Travel Reimbursement");
         ProcessFormOptionVO companyOption = new ProcessFormOptionVO();
         companyOption.setValue("COMPANY-001");
-        companyOption.setLabel("\u4e0a\u6d77\u5206\u516c\u53f8");
+        companyOption.setLabel("Shanghai Branch");
         detail.setCompanyOptions(List.of(companyOption));
 
         doNothing().when(accessControlService).requireAnyPermission(
@@ -117,7 +123,7 @@ class ExpenseDocumentControllerTest {
     void listVendorOptionsAllowsAnyExpenseCreateEntryPermission() throws Exception {
         ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
         option.setValue("VENDOR-001");
-        option.setLabel("上海测试供应商");
+        option.setLabel("Shanghai Test Vendor");
 
         doNothing().when(accessControlService).requireAnyPermission(
                 1L,
@@ -125,11 +131,11 @@ class ExpenseDocumentControllerTest {
                 "expense:create:create",
                 "expense:create:submit"
         );
-        when(expenseDocumentService.listVendorOptions("上")).thenReturn(List.of(option));
+        when(expenseDocumentService.listVendorOptions(1L, "Shanghai")).thenReturn(List.of(option));
 
         mockMvc.perform(get("/auth/expenses/create/vendors/options")
                         .requestAttr("currentUserId", 1L)
-                        .param("keyword", "上"))
+                        .param("keyword", "Shanghai"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].value").value("VENDOR-001"));
@@ -140,6 +146,36 @@ class ExpenseDocumentControllerTest {
                 "expense:create:create",
                 "expense:create:submit"
         );
-        verify(expenseDocumentService).listVendorOptions("上");
+        verify(expenseDocumentService).listVendorOptions(1L, "Shanghai");
+    }
+
+    @Test
+    void createVendorUsesCurrentUserIdInsteadOfPayloadCompanyId() throws Exception {
+        FinanceVendorDetailVO detail = new FinanceVendorDetailVO();
+        detail.setCVenCode("VEN202604050001");
+        detail.setCompanyId("COMPANY_A");
+
+        doNothing().when(accessControlService).requireAnyPermission(
+                1L,
+                "expense:create:create",
+                "expense:create:submit"
+        );
+        when(financeVendorService.createVendor(eq(1L), any(FinanceVendorSaveDTO.class), eq("tester"))).thenReturn(detail);
+
+        mockMvc.perform(post("/auth/expenses/create/vendors")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "tester")
+                        .content("""
+                                {
+                                  "cVenName": "Quick Vendor",
+                                  "companyId": "COMPANY_B"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.companyId").value("COMPANY_A"));
+
+        verify(financeVendorService).createVendor(eq(1L), any(FinanceVendorSaveDTO.class), eq("tester"));
     }
 }

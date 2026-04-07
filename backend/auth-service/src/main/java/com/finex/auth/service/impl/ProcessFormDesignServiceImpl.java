@@ -79,7 +79,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
                         .eq(ProcessDocumentTemplate::getFormDesignCode, formDesign.getFormCode())
         );
         if (referencedCount != null && referencedCount > 0) {
-            throw new IllegalStateException("当前表单设计已被模板引用，不能删除");
+            throw new IllegalStateException("褰撳墠琛ㄥ崟璁捐宸茶妯℃澘寮曠敤锛屼笉鑳藉垹闄?");
         }
         processFormDesignMapper.deleteById(id);
         return Boolean.TRUE;
@@ -104,7 +104,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         if (normalizedCode == null) {
             List<ProcessFormOptionVO> options = listFormDesignOptions(templateType);
             if (options.isEmpty()) {
-                throw new IllegalArgumentException("璇峰厛閫夋嫨琛ㄥ崟璁捐");
+                throw new IllegalArgumentException("鐠囧嘲鍘涢柅澶嬪鐞涖劌宕熺拋鎹愵吀");
             }
             return options.get(0).getValue();
         }
@@ -115,10 +115,10 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
                         .last("limit 1")
         );
         if (formDesign == null) {
-            throw new IllegalArgumentException("鎵€閫夎〃鍗曡璁′笉瀛樺湪");
+            throw new IllegalArgumentException("閹碘偓闁銆冮崡鏇☆啎鐠佲€茬瑝鐎涙ê婀?");
         }
         if (!Objects.equals(normalizeTemplateType(templateType), normalizeTemplateType(formDesign.getTemplateType()))) {
-            throw new IllegalArgumentException("鎵€閫夎〃鍗曡璁′笉灞炰簬褰撳墠妯℃澘绫诲瀷");
+            throw new IllegalArgumentException("閹碘偓闁銆冮崡鏇☆啎鐠佲€茬瑝鐏炵偘绨ぐ鎾冲濡剝婢樼猾璇茬€?");
         }
         return normalizedCode;
     }
@@ -157,14 +157,14 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
 
     private void validateSave(ProcessFormDesignSaveDTO dto, ProcessFormDesign existing) {
         if (trimToNull(dto.getFormName()) == null) {
-            throw new IllegalArgumentException("琛ㄥ崟鍚嶇О涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("鐞涖劌宕熼崥宥囆炴稉宥堝厴娑撹櫣鈹?");
         }
         if (trimToNull(dto.getTemplateType()) == null) {
-            throw new IllegalArgumentException("琛ㄥ崟绫诲瀷涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("鐞涖劌宕熺猾璇茬€锋稉宥堝厴娑撹櫣鈹?");
         }
         if (existing != null && isFormDesignReferenced(existing.getFormCode())
                 && !Objects.equals(normalizeTemplateType(existing.getTemplateType()), normalizeTemplateType(dto.getTemplateType()))) {
-            throw new IllegalStateException("当前表单设计已被模板引用，不能修改模板类型");
+            throw new IllegalStateException("褰撳墠琛ㄥ崟璁捐宸茶妯℃澘寮曠敤锛屼笉鑳戒慨鏀规ā鏉跨被鍨?");
         }
     }
 
@@ -179,7 +179,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
     private ProcessFormDesign requireFormDesign(Long id) {
         ProcessFormDesign formDesign = processFormDesignMapper.selectById(id);
         if (formDesign == null) {
-            throw new IllegalStateException("表单设计不存在");
+            throw new IllegalStateException("琛ㄥ崟璁捐涓嶅瓨鍦?");
         }
         return formDesign;
     }
@@ -201,7 +201,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         try {
             return objectMapper.readValue(schemaJson, objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class));
         } catch (Exception ex) {
-            throw new IllegalStateException("鍙嶅簭鍒楀寲琛ㄥ崟璁捐澶辫触", ex);
+            throw new IllegalStateException("閸欏秴绨崚妤€瀵茬悰銊ュ礋鐠佹崘顓告径杈Е", ex);
         }
     }
 
@@ -209,7 +209,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         try {
             return objectMapper.writeValueAsString(schema == null || schema.isEmpty() ? defaultSchema() : schema);
         } catch (Exception ex) {
-            throw new IllegalStateException("序列化表单设计失败", ex);
+            throw new IllegalStateException("搴忓垪鍖栬〃鍗曡璁″け璐?", ex);
         }
     }
 
@@ -233,7 +233,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         return switch (normalizeTemplateType(templateType)) {
             case "application" -> "Application";
             case "loan" -> "Loan";
-            case "contract" -> "合同单";
+            case "contract" -> "鍚堝悓鍗?";
             default -> "Expense";
         };
     }

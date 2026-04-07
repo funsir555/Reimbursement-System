@@ -12,10 +12,16 @@ public class DepartmentSaveDTO {
 
     private Long leaderUserId;
 
-    @NotBlank(message = "部门名称不能为空")
+    @NotBlank(message = "\u90e8\u95e8\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a")
     private String deptName;
 
     private Long parentId;
+
+    private String statDepartmentBelong;
+
+    private String statRegionBelong;
+
+    private String statAreaBelong;
 
     private Integer status;
 

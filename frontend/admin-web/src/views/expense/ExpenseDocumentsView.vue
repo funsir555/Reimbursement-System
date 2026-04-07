@@ -1,7 +1,13 @@
 ﻿<template>
-  <div class="expense-wb-page expense-wb-page--list space-y-5">
-    <section class="expense-wb-stat-grid expense-wb-stat-grid--compact">
-      <article v-for="stat in listStats" :key="stat.label" class="expense-wb-stat-card expense-wb-stat-card--compact">
+  <div class="expense-wb-page expense-wb-page--list expense-wb-page--dense-list">
+    <section
+      class="expense-wb-stat-grid expense-wb-stat-grid--compact expense-wb-stat-grid--dense expense-wb-stat-grid--list-dense"
+    >
+      <article
+        v-for="stat in listStats"
+        :key="stat.label"
+        class="expense-wb-stat-card expense-wb-stat-card--compact expense-wb-stat-card--dense"
+      >
         <div class="expense-wb-stat-card__top">
           <div>
             <p class="expense-wb-stat-card__label">{{ stat.label }}</p>
@@ -16,10 +22,20 @@
       </article>
     </section>
 
-    <el-card class="expense-wb-toolbar expense-wb-toolbar--compact">
-      <div class="expense-wb-toolbar__row expense-wb-toolbar__row--compact expense-wb-toolbar__main" data-testid="expense-toolbar-main">
-        <div class="expense-wb-toolbar__heading expense-wb-toolbar__heading--compact">
+    <el-card class="expense-wb-toolbar expense-wb-toolbar--compact expense-wb-toolbar--dense">
+      <div
+        class="expense-wb-toolbar__row expense-wb-toolbar__row--compact expense-wb-toolbar__row--dense expense-wb-toolbar__main"
+        data-testid="expense-toolbar-main"
+      >
+        <div
+          class="expense-wb-toolbar__heading expense-wb-toolbar__heading--compact expense-wb-toolbar__heading--inline"
+          data-testid="expense-toolbar-heading"
+        >
           <p class="expense-wb-toolbar__title">筛选与检索</p>
+          <div class="expense-wb-toolbar__meta">
+            <span class="expense-wb-soft-badge">总数 {{ expenseList.length }}</span>
+            <span class="expense-wb-soft-badge expense-wb-soft-badge--success">已过滤 {{ filteredExpenseList.length }}</span>
+          </div>
         </div>
 
         <div class="expense-wb-toolbar__group">
@@ -68,8 +84,14 @@
           </el-popover>
 
           <div class="expense-wb-toolbar__actions">
-            <el-button :icon="Refresh" @click="reloadList">刷新列表</el-button>
-            <el-button @click="goApproval">返回待我审批</el-button>
+            <el-button
+              :icon="Download"
+              :loading="exporting"
+              data-testid="expense-documents-export-trigger"
+              @click="handleExport"
+            >
+              下载
+            </el-button>
           </div>
         </div>
       </div>
@@ -117,17 +139,7 @@
       </div>
     </el-card>
 
-    <el-card class="expense-wb-panel expense-wb-table-shell">
-      <div class="expense-wb-table-shell__header">
-        <div>
-          <p class="expense-wb-table-shell__title">单据查询列表</p>
-        </div>
-        <div class="expense-wb-pill-cluster">
-          <span class="expense-wb-soft-badge">总数 {{ expenseList.length }}</span>
-          <span class="expense-wb-soft-badge expense-wb-soft-badge--success">已过滤 {{ filteredExpenseList.length }}</span>
-        </div>
-      </div>
-
+    <el-card class="expense-wb-panel expense-wb-table-shell expense-wb-table-shell--compact">
       <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading" @header-dragend="handleHeaderDragEnd">
         <el-table-column
           v-for="column in visibleColumnDefinitions"
@@ -186,13 +198,13 @@ import { ElMessage } from 'element-plus'
 import {
   CircleCheckFilled,
   Clock,
+  Download,
   Files,
   Filter,
   Operation,
-  Refresh,
   WarningFilled
 } from '@element-plus/icons-vue'
-import { expenseApi, type ExpenseSummary } from '@/api'
+import { asyncTaskApi, expenseApi, type ExpenseSummary } from '@/api'
 import {
   EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS,
   EXPENSE_WORKBENCH_DEFAULT_COLUMNS,
@@ -203,6 +215,10 @@ import {
   buildColumnGridDisplayOrder,
   createExpenseWorkbenchFilters,
   filterExpenseWorkbenchRows,
+  getExpenseWorkbenchStatusType,
+  isExpenseWorkbenchCompletedLikeStatus,
+  isExpenseWorkbenchExceptionLikeStatus,
+  isExpenseWorkbenchPendingLikeStatus,
   loadColumnOrder,
   loadColumnWidths,
   loadVisibleColumns,
@@ -217,8 +233,10 @@ import {
   sortVisibleColumnsByOrder,
   type ExpenseWorkbenchColumnKey
 } from './expenseWorkbenchListHelper'
+import { openDownloadCenter } from '@/utils/downloadCenter'
 
 const loading = ref(false)
+const exporting = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const expenseList = ref<ExpenseSummary[]>([])
@@ -269,19 +287,19 @@ const listStats = computed(() => [
   },
   {
     label: '审批中',
-    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '审批中').length,
+    value: expenseList.value.filter((item) => isExpenseWorkbenchPendingLikeStatus(resolveDocumentStatusLabel(item))).length,
     icon: Clock,
     tone: 'amber'
   },
   {
     label: '已通过',
-    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '已通过').length,
+    value: expenseList.value.filter((item) => isExpenseWorkbenchCompletedLikeStatus(resolveDocumentStatusLabel(item))).length,
     icon: CircleCheckFilled,
     tone: 'green'
   },
   {
     label: '流程异常',
-    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '流程异常').length,
+    value: expenseList.value.filter((item) => isExpenseWorkbenchExceptionLikeStatus(resolveDocumentStatusLabel(item))).length,
     icon: WarningFilled,
     tone: 'rose'
   }
@@ -299,13 +317,7 @@ function formatAmount(value: unknown) {
 }
 
 function getStatusType(status: string) {
-  const map: Record<string, string> = {
-    审批中: 'warning',
-    已通过: 'success',
-    已驳回: 'danger',
-    流程异常: 'info'
-  }
-  return map[status] || 'info'
+  return getExpenseWorkbenchStatusType(status)
 }
 
 function resetFilters() {
@@ -380,10 +392,6 @@ function handleHeaderDragEnd(
   columnWidths.value = saveColumnWidth(columnKey, newWidth, columnWidths.value)
 }
 
-function goApproval() {
-  void router.push('/expense/approval')
-}
-
 function openDetail(row: ExpenseSummary) {
   const documentCode = row.documentCode || row.no
   if (!documentCode) {
@@ -395,6 +403,31 @@ function openDetail(row: ExpenseSummary) {
 
 async function reloadList() {
   await loadExpenseList()
+}
+
+async function handleExport() {
+  const documentCodes = filteredExpenseList.value
+    .map((item) => item.documentCode || item.no)
+    .filter((item): item is string => Boolean(item))
+
+  if (!documentCodes.length) {
+    ElMessage.warning('当前没有可导出的单据')
+    return
+  }
+
+  exporting.value = true
+  try {
+    await asyncTaskApi.exportExpenseScene({
+      scene: 'DOCUMENT_QUERY',
+      documentCodes
+    })
+    ElMessage.success('导出任务已提交，请到下载中心查看进度')
+    openDownloadCenter()
+  } catch (error: any) {
+    ElMessage.error(error.message || '提交导出任务失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
 async function loadExpenseList() {

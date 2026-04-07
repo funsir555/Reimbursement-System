@@ -76,9 +76,9 @@ DEALLOCATE PREPARE stmt;
 
 SET @sql = (
     SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE sys_company ADD COLUMN bank_name VARCHAR(200) NULL COMMENT ''bank name'' AFTER tax_no',
-        'SELECT ''sys_company.bank_name exists'''
+        COUNT(*) = 1,
+        'ALTER TABLE sys_company DROP COLUMN bank_name',
+        'SELECT ''sys_company.bank_name not exists'''
     )
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_company' AND COLUMN_NAME = 'bank_name'
@@ -89,9 +89,9 @@ DEALLOCATE PREPARE stmt;
 
 SET @sql = (
     SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE sys_company ADD COLUMN bank_account_name VARCHAR(200) NULL COMMENT ''bank account name'' AFTER bank_name',
-        'SELECT ''sys_company.bank_account_name exists'''
+        COUNT(*) = 1,
+        'ALTER TABLE sys_company DROP COLUMN bank_account_name',
+        'SELECT ''sys_company.bank_account_name not exists'''
     )
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_company' AND COLUMN_NAME = 'bank_account_name'
@@ -102,9 +102,9 @@ DEALLOCATE PREPARE stmt;
 
 SET @sql = (
     SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE sys_company ADD COLUMN bank_account_no VARCHAR(100) NULL COMMENT ''bank account no'' AFTER bank_account_name',
-        'SELECT ''sys_company.bank_account_no exists'''
+        COUNT(*) = 1,
+        'ALTER TABLE sys_company DROP COLUMN bank_account_no',
+        'SELECT ''sys_company.bank_account_no not exists'''
     )
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_company' AND COLUMN_NAME = 'bank_account_no'
@@ -112,6 +112,47 @@ SET @sql = (
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+CREATE TABLE IF NOT EXISTS sys_company_bank_account (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'company bank account id',
+    company_id VARCHAR(64) NOT NULL COMMENT 'company id',
+    bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
+    branch_name VARCHAR(200) NULL COMMENT 'branch name',
+    bank_code VARCHAR(64) NULL COMMENT 'bank code',
+    branch_code VARCHAR(64) NULL COMMENT 'branch code',
+    cnaps_code VARCHAR(64) NULL COMMENT 'cnaps code',
+    account_name VARCHAR(200) NOT NULL COMMENT 'account name',
+    account_no VARCHAR(100) NOT NULL COMMENT 'account no',
+    account_type VARCHAR(64) NULL COMMENT 'account type',
+    account_usage VARCHAR(100) NULL COMMENT 'account usage',
+    currency_code VARCHAR(32) NULL COMMENT 'currency code',
+    default_account TINYINT NOT NULL DEFAULT 0 COMMENT 'default account',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT 'status',
+    remark VARCHAR(500) NULL COMMENT 'remark',
+    direct_connect_enabled TINYINT NOT NULL DEFAULT 0 COMMENT 'direct connect enabled',
+    direct_connect_provider VARCHAR(100) NULL COMMENT 'direct connect provider',
+    direct_connect_channel VARCHAR(100) NULL COMMENT 'direct connect channel',
+    direct_connect_protocol VARCHAR(100) NULL COMMENT 'direct connect protocol',
+    direct_connect_customer_no VARCHAR(100) NULL COMMENT 'direct connect customer no',
+    direct_connect_app_id VARCHAR(100) NULL COMMENT 'direct connect app id',
+    direct_connect_account_alias VARCHAR(100) NULL COMMENT 'direct connect account alias',
+    direct_connect_auth_mode VARCHAR(100) NULL COMMENT 'direct connect auth mode',
+    direct_connect_api_base_url VARCHAR(500) NULL COMMENT 'direct connect api base url',
+    direct_connect_cert_ref VARCHAR(200) NULL COMMENT 'direct connect cert ref',
+    direct_connect_secret_ref VARCHAR(200) NULL COMMENT 'direct connect secret ref',
+    direct_connect_sign_type VARCHAR(100) NULL COMMENT 'direct connect sign type',
+    direct_connect_encrypt_type VARCHAR(100) NULL COMMENT 'direct connect encrypt type',
+    direct_connect_last_sync_at DATETIME NULL COMMENT 'direct connect last sync at',
+    direct_connect_last_sync_status VARCHAR(64) NULL COMMENT 'direct connect last sync status',
+    direct_connect_last_error_msg VARCHAR(1000) NULL COMMENT 'direct connect last error message',
+    direct_connect_ext_json JSON NULL COMMENT 'direct connect ext json',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
+    CONSTRAINT fk_sys_company_bank_account_company_id FOREIGN KEY (company_id) REFERENCES sys_company(company_id),
+    CONSTRAINT uk_sys_company_bank_account_company_no UNIQUE (company_id, account_no),
+    KEY idx_sys_company_bank_account_company_status (company_id, status),
+    KEY idx_sys_company_bank_account_company_default (company_id, default_account)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='company bank account';
 
 SET @sql = (
     SELECT IF(
@@ -194,6 +235,45 @@ DEALLOCATE PREPARE stmt;
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
+        'ALTER TABLE sys_department ADD COLUMN stat_department_belong VARCHAR(100) NULL COMMENT ''stat department belong'' AFTER sync_remark',
+        'SELECT ''sys_department.stat_department_belong exists'''
+    )
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_department' AND COLUMN_NAME = 'stat_department_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE sys_department ADD COLUMN stat_region_belong VARCHAR(100) NULL COMMENT ''stat region belong'' AFTER stat_department_belong',
+        'SELECT ''sys_department.stat_region_belong exists'''
+    )
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_department' AND COLUMN_NAME = 'stat_region_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE sys_department ADD COLUMN stat_area_belong VARCHAR(100) NULL COMMENT ''stat area belong'' AFTER stat_region_belong',
+        'SELECT ''sys_department.stat_area_belong exists'''
+    )
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_department' AND COLUMN_NAME = 'stat_area_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0,
         'ALTER TABLE sys_user ADD COLUMN source_type VARCHAR(32) NULL COMMENT ''MANUAL DINGTALK WECOM FEISHU'' AFTER status',
         'SELECT ''sys_user.source_type exists'''
     )
@@ -225,6 +305,45 @@ SET @sql = (
     )
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_user' AND COLUMN_NAME = 'last_sync_at'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE sys_user ADD COLUMN stat_department_belong VARCHAR(100) NULL COMMENT ''stat department belong'' AFTER labor_relation_belong',
+        'SELECT ''sys_user.stat_department_belong exists'''
+    )
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_user' AND COLUMN_NAME = 'stat_department_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE sys_user ADD COLUMN stat_region_belong VARCHAR(100) NULL COMMENT ''stat region belong'' AFTER stat_department_belong',
+        'SELECT ''sys_user.stat_region_belong exists'''
+    )
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_user' AND COLUMN_NAME = 'stat_region_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+    SELECT IF(
+        COUNT(*) = 0,
+        'ALTER TABLE sys_user ADD COLUMN stat_area_belong VARCHAR(100) NULL COMMENT ''stat area belong'' AFTER stat_region_belong',
+        'SELECT ''sys_user.stat_area_belong exists'''
+    )
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = @schema_name AND TABLE_NAME = 'sys_user' AND COLUMN_NAME = 'stat_area_belong'
 );
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -330,6 +449,7 @@ FROM (
     UNION ALL SELECT 'expense:menu', 'Expense', 'MENU', NULL, 'expense', '/expense', 300, 1
     UNION ALL SELECT 'finance:menu', 'Finance', 'MENU', NULL, 'finance', '/finance', 400, 1
     UNION ALL SELECT 'archives:menu', 'Archives', 'MENU', NULL, 'archives', '/archives', 500, 1
+    UNION ALL SELECT 'agents:menu', 'Agent', 'MENU', NULL, 'agents', '/archives/agents', 550, 1
 ) t
 WHERE NOT EXISTS (SELECT 1 FROM sys_permission x WHERE x.permission_code = t.permission_code);
 
@@ -340,12 +460,14 @@ FROM (
     UNION ALL SELECT 'settings:employees:view', 'Employees', 'MENU', p.id, 'employees', '/settings?tab=employees', 20, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'settings:roles:view', 'Roles', 'MENU', p.id, 'roles', '/settings?tab=roles', 30, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'settings:companies:view', 'Companies', 'MENU', p.id, 'companies', '/settings?tab=companies', 40, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
+    UNION ALL SELECT 'settings:company_accounts:view', 'Company Accounts', 'MENU', p.id, 'companyAccounts', '/settings?tab=companyAccounts', 605, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'dashboard:view', 'Dashboard Home', 'MENU', p.id, 'dashboard', '/dashboard', 101, 1 FROM sys_permission p WHERE p.permission_code = 'dashboard:menu'
     UNION ALL SELECT 'profile:view', 'Profile Center', 'MENU', p.id, 'profile', '/profile', 201, 1 FROM sys_permission p WHERE p.permission_code = 'profile:menu'
     UNION ALL SELECT 'expense:create:view', 'Expense Create', 'MENU', p.id, 'expense', '/expense/create', 301, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:list:view', 'Expense List', 'MENU', p.id, 'expense', '/expense/list', 302, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:approval:view', 'Expense Approval', 'MENU', p.id, 'expense', '/expense/approval', 303, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:payment:bank_link:view', 'Expense Bank Link', 'MENU', p.id, 'expense', '/expense/payment/bank-link', 304, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
+    UNION ALL SELECT 'expense:payment:payment_order:view', 'Expense Payment Orders', 'MENU', p.id, 'expense', '/expense/payment/orders', 3042, 1 FROM sys_permission p WHERE p.permission_code = 'expense:payment:menu'
     UNION ALL SELECT 'expense:documents:view', 'Expense Documents', 'MENU', p.id, 'expense', '/expense/documents', 305, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:voucher_generation:view', 'Expense Voucher Generation', 'MENU', p.id, 'expense', '/expense/workbench/process-management', 306, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
     UNION ALL SELECT 'expense:process_management:view', 'Expense Process Management', 'MENU', p.id, 'expense', '/expense/workbench/process-management', 307, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
@@ -365,6 +487,7 @@ FROM (
     UNION ALL SELECT 'finance:archives:account_subjects:view', 'Finance Account Subjects', 'MENU', p.id, 'finance', '/finance/archives/account-subjects', 413, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'archives:invoices:view', 'Invoice Archive', 'MENU', p.id, 'archives', '/archives/invoices', 501, 1 FROM sys_permission p WHERE p.permission_code = 'archives:menu'
     UNION ALL SELECT 'archives:account_books:view', 'Account Books', 'MENU', p.id, 'archives', '/archives/account-books', 502, 1 FROM sys_permission p WHERE p.permission_code = 'archives:menu'
+    UNION ALL SELECT 'agents:view', 'Agent Workbench', 'MENU', p.id, 'agents', '/archives/agents', 551, 1 FROM sys_permission p WHERE p.permission_code = 'agents:menu'
 ) t
 WHERE NOT EXISTS (SELECT 1 FROM sys_permission x WHERE x.permission_code = t.permission_code);
 
@@ -387,6 +510,9 @@ FROM (
     UNION ALL SELECT 'settings:companies:create', 'Company Create', p.id, 'companies', 41 FROM sys_permission p WHERE p.permission_code = 'settings:companies:view'
     UNION ALL SELECT 'settings:companies:edit', 'Company Edit', p.id, 'companies', 42 FROM sys_permission p WHERE p.permission_code = 'settings:companies:view'
     UNION ALL SELECT 'settings:companies:delete', 'Company Delete', p.id, 'companies', 43 FROM sys_permission p WHERE p.permission_code = 'settings:companies:view'
+    UNION ALL SELECT 'settings:company_accounts:create', 'Company Account Create', p.id, 'companyAccounts', 6051 FROM sys_permission p WHERE p.permission_code = 'settings:company_accounts:view'
+    UNION ALL SELECT 'settings:company_accounts:edit', 'Company Account Edit', p.id, 'companyAccounts', 6052 FROM sys_permission p WHERE p.permission_code = 'settings:company_accounts:view'
+    UNION ALL SELECT 'settings:company_accounts:delete', 'Company Account Delete', p.id, 'companyAccounts', 6053 FROM sys_permission p WHERE p.permission_code = 'settings:company_accounts:view'
     UNION ALL SELECT 'profile:password:update', 'Profile Update Password', p.id, 'profile', 211 FROM sys_permission p WHERE p.permission_code = 'profile:view'
     UNION ALL SELECT 'profile:downloads:view', 'Profile View Downloads', p.id, 'profile', 212 FROM sys_permission p WHERE p.permission_code = 'profile:view'
     UNION ALL SELECT 'expense:create:create', 'Expense Create Record', p.id, 'expense', 311 FROM sys_permission p WHERE p.permission_code = 'expense:create:view'
@@ -398,12 +524,8 @@ FROM (
     UNION ALL SELECT 'expense:approval:approve', 'Expense Approval Approve', p.id, 'expense', 331 FROM sys_permission p WHERE p.permission_code = 'expense:approval:view'
     UNION ALL SELECT 'expense:approval:reject', 'Expense Approval Reject', p.id, 'expense', 332 FROM sys_permission p WHERE p.permission_code = 'expense:approval:view'
     UNION ALL SELECT 'expense:payment:bank_link:pay', 'Expense Bank Link Pay', p.id, 'expense', 341 FROM sys_permission p WHERE p.permission_code = 'expense:payment:bank_link:view'
+    UNION ALL SELECT 'expense:payment:payment_order:execute', 'Expense Payment Order Execute', p.id, 'expense', 342 FROM sys_permission p WHERE p.permission_code = 'expense:payment:payment_order:view'
     UNION ALL SELECT 'expense:voucher_generation:generate', 'Expense Voucher Generate', p.id, 'expense', 351 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
-    ('expense:voucher_generation:mapping:view', CONVERT(0xe587ade8af81e7a791e79baee698a0e5b084 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3062, 1),
-    ('expense:voucher_generation:mapping:edit', CONVERT(0xe7bc96e8be91e587ade8af81e7a791e79baee698a0e5b084 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3063, 1),
-    ('expense:voucher_generation:push:view', CONVERT(0xe68ea8e98081e587ade8af81 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3064, 1),
-    ('expense:voucher_generation:push:execute', CONVERT(0xe689a7e8a18ce587ade8af81e68ea8e98081 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3065, 1),
-    ('expense:voucher_generation:query:view', CONVERT(0xe587ade8af81e69fa5e8afa2 USING utf8mb4), 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3066, 1),
     UNION ALL SELECT 'expense:voucher_generation:mapping:view', 'Expense Voucher Mapping View', p.id, 'expense', 352 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
     UNION ALL SELECT 'expense:voucher_generation:mapping:edit', 'Expense Voucher Mapping Edit', p.id, 'expense', 353 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
     UNION ALL SELECT 'expense:voucher_generation:push:view', 'Expense Voucher Push View', p.id, 'expense', 354 FROM sys_permission p WHERE p.permission_code = 'expense:voucher_generation:view'
@@ -415,6 +537,7 @@ FROM (
     UNION ALL SELECT 'expense:process_management:disable', 'Process Management Disable', p.id, 'expense', 364 FROM sys_permission p WHERE p.permission_code = 'expense:process_management:view'
     UNION ALL SELECT 'finance:general_ledger:new_voucher:create', 'Finance New Voucher Create', p.id, 'finance', 421 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:new_voucher:view'
     UNION ALL SELECT 'finance:general_ledger:query_voucher:export', 'Finance Query Voucher Export', p.id, 'finance', 431 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:query_voucher:view'
+    UNION ALL SELECT 'finance:general_ledger:query_voucher:edit', 'Finance Query Voucher Edit', p.id, 'finance', 432 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:query_voucher:view'
     UNION ALL SELECT 'finance:general_ledger:review_voucher:review', 'Finance Review Voucher Review', p.id, 'finance', 441 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:review_voucher:view'
     UNION ALL SELECT 'finance:general_ledger:review_voucher:unreview', 'Finance Review Voucher Unreview', p.id, 'finance', 442 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:review_voucher:view'
     UNION ALL SELECT 'finance:general_ledger:balance_sheet:export', 'Finance Ledger Balance Sheet Export', p.id, 'finance', 451 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:balance_sheet:view'
@@ -458,6 +581,12 @@ FROM (
     UNION ALL SELECT 'archives:account_books:create', 'Account Books Create', p.id, 'archives', 521 FROM sys_permission p WHERE p.permission_code = 'archives:account_books:view'
     UNION ALL SELECT 'archives:account_books:edit', 'Account Books Edit', p.id, 'archives', 522 FROM sys_permission p WHERE p.permission_code = 'archives:account_books:view'
     UNION ALL SELECT 'archives:account_books:delete', 'Account Books Delete', p.id, 'archives', 523 FROM sys_permission p WHERE p.permission_code = 'archives:account_books:view'
+    UNION ALL SELECT 'agents:create', 'Agent Create', p.id, 'agents', 5511 FROM sys_permission p WHERE p.permission_code = 'agents:view'
+    UNION ALL SELECT 'agents:edit', 'Agent Edit', p.id, 'agents', 5512 FROM sys_permission p WHERE p.permission_code = 'agents:view'
+    UNION ALL SELECT 'agents:delete', 'Agent Delete', p.id, 'agents', 5513 FROM sys_permission p WHERE p.permission_code = 'agents:view'
+    UNION ALL SELECT 'agents:run', 'Agent Run', p.id, 'agents', 5514 FROM sys_permission p WHERE p.permission_code = 'agents:view'
+    UNION ALL SELECT 'agents:publish', 'Agent Publish', p.id, 'agents', 5515 FROM sys_permission p WHERE p.permission_code = 'agents:view'
+    UNION ALL SELECT 'agents:view_logs', 'Agent Logs', p.id, 'agents', 5516 FROM sys_permission p WHERE p.permission_code = 'agents:view'
 ) t
 WHERE NOT EXISTS (SELECT 1 FROM sys_permission x WHERE x.permission_code = t.permission_code);
 
@@ -543,6 +672,8 @@ INSERT INTO tmp_permission_seed (
     ('expense:payment:menu', '支付', 'MENU', 'expense:menu', 'expense-payment', '/expense/payment', 304, 1),
     ('expense:payment:bank_link:view', '银企直连', 'MENU', 'expense:payment:menu', 'expense', '/expense/payment/bank-link', 3041, 1),
     ('expense:payment:bank_link:pay', '发起支付', 'BUTTON', 'expense:payment:bank_link:view', 'expense', NULL, 30411, 1),
+    ('expense:payment:payment_order:view', '???', 'MENU', 'expense:payment:menu', 'expense', '/expense/payment/orders', 3042, 1),
+    ('expense:payment:payment_order:execute', '????', 'BUTTON', 'expense:payment:payment_order:view', 'expense', NULL, 30421, 1),
     ('expense:documents:view', '单据查询', 'MENU', 'expense:menu', 'expense', '/expense/documents', 305, 1),
     ('expense:voucher_generation:view', CONVERT(0xe587ade8af81e7949fe68890 USING utf8mb4), 'MENU', 'expense:menu', 'expense', '/expense/workbench/process-management', 306, 1),
     ('expense:voucher_generation:generate', '生成凭证', 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3061, 1),
@@ -560,6 +691,7 @@ INSERT INTO tmp_permission_seed (
     ('finance:general_ledger:new_voucher:create', '新增凭证', 'BUTTON', 'finance:general_ledger:new_voucher:view', 'finance', NULL, 40111, 1),
     ('finance:general_ledger:query_voucher:view', '查询凭证', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/query-voucher', 4012, 1),
     ('finance:general_ledger:query_voucher:export', '导出凭证', 'BUTTON', 'finance:general_ledger:query_voucher:view', 'finance', NULL, 40121, 1),
+    ('finance:general_ledger:query_voucher:edit', '修改凭证', 'BUTTON', 'finance:general_ledger:query_voucher:view', 'finance', NULL, 40122, 1),
     ('finance:general_ledger:review_voucher:view', '审核凭证', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/review-voucher', 4013, 1),
     ('finance:general_ledger:review_voucher:review', '审核通过', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40131, 1),
     ('finance:general_ledger:review_voucher:unreview', '取消审核', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40132, 1),
@@ -627,6 +759,15 @@ INSERT INTO tmp_permission_seed (
     ('archives:account_books:create', '新增账套', 'BUTTON', 'archives:account_books:view', 'archives', NULL, 5021, 1),
     ('archives:account_books:edit', '编辑账套', 'BUTTON', 'archives:account_books:view', 'archives', NULL, 5022, 1),
     ('archives:account_books:delete', '删除账套', 'BUTTON', 'archives:account_books:view', 'archives', NULL, 5023, 1),
+
+    ('agents:menu', 'Agent', 'MENU', NULL, 'agents', '/archives/agents', 55, 1),
+    ('agents:view', CONVERT(0x4167656e74e5b7a5e4bd9ce58fb0 USING utf8mb4), 'MENU', 'agents:menu', 'agents', '/archives/agents', 551, 1),
+    ('agents:create', CONVERT(0xe696b0e5bbba204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5511, 1),
+    ('agents:edit', CONVERT(0xe7bc96e8be91204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5512, 1),
+    ('agents:delete', CONVERT(0xe588a0e999a4204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5513, 1),
+    ('agents:run', CONVERT(0xe8bf90e8a18c204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5514, 1),
+    ('agents:publish', CONVERT(0xe58f91e5b883204167656e74 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5515, 1),
+    ('agents:view_logs', CONVERT(0xe69fa5e79c8be8bf90e8a18ce697a5e5bf97 USING utf8mb4), 'BUTTON', 'agents:view', 'agents', NULL, 5516, 1),
 
     ('settings:menu', '系统设置', 'MENU', NULL, 'settings', '/settings', 60, 1),
     ('settings:organization:view', '组织架构', 'MENU', 'settings:menu', 'organization', '/settings?tab=organization', 601, 1),

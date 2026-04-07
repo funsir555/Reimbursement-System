@@ -1,5 +1,7 @@
 package com.finex.auth.service;
 
+import com.finex.auth.dto.CompanyBankAccountSaveDTO;
+import com.finex.auth.dto.CompanyBankAccountVO;
 import com.finex.auth.dto.CompanySaveDTO;
 import com.finex.auth.dto.CompanyVO;
 import com.finex.auth.dto.DepartmentSaveDTO;
@@ -61,6 +63,14 @@ public interface SystemSettingsService {
     CompanyVO updateCompany(String companyId, CompanySaveDTO dto);
 
     Boolean deleteCompany(String companyId);
+
+    List<CompanyBankAccountVO> listCompanyBankAccounts();
+
+    CompanyBankAccountVO createCompanyBankAccount(CompanyBankAccountSaveDTO dto);
+
+    CompanyBankAccountVO updateCompanyBankAccount(Long id, CompanyBankAccountSaveDTO dto);
+
+    Boolean deleteCompanyBankAccount(Long id);
 
     List<SyncConnectorVO> listSyncConnectors();
 

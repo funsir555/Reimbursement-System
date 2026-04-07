@@ -1,51 +1,43 @@
 <template>
-  <div class="space-y-6">
-    <section class="rounded-[32px] border border-slate-100 bg-white px-8 py-7 shadow-sm">
-      <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 class="text-3xl font-bold text-slate-800">员工档案</h1>
-          <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-500">
-            与系统设置中的员工管理共用同一套员工主数据，这里仅提供财务档案查询与查看，不提供新增、编辑、删除。
-          </p>
+  <div class="space-y-4">
+    <section class="rounded-[26px] border border-slate-100 bg-white px-6 py-4 shadow-sm">
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div class="flex flex-wrap items-center gap-3">
+          <h1 class="text-2xl font-bold text-slate-800">员工档案</h1>
+          <div class="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sm text-sky-700">
+            <span class="font-semibold">当前公司</span>
+            <strong>{{ currentCompanyName || '未设置' }}</strong>
+          </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <el-card class="!rounded-3xl !border-slate-100" shadow="never">
-            <div class="text-xs text-slate-400">员工总数</div>
-            <div class="mt-2 text-2xl font-semibold text-slate-800">{{ employees.length }}</div>
-          </el-card>
-          <el-card class="!rounded-3xl !border-slate-100" shadow="never">
-            <div class="text-xs text-slate-400">启用员工</div>
-            <div class="mt-2 text-2xl font-semibold text-emerald-600">{{ enabledCount }}</div>
-          </el-card>
-          <el-card class="!rounded-3xl !border-slate-100" shadow="never">
-            <div class="text-xs text-slate-400">停用员工</div>
-            <div class="mt-2 text-2xl font-semibold text-slate-600">{{ disabledCount }}</div>
-          </el-card>
-          <el-card class="!rounded-3xl !border-slate-100" shadow="never">
-            <div class="text-xs text-slate-400">同步来源员工</div>
-            <div class="mt-2 text-2xl font-semibold text-sky-600">{{ syncedCount }}</div>
-          </el-card>
+        <div class="flex flex-wrap gap-2">
+          <div class="archive-stat-chip">
+            <span>员工总数</span>
+            <strong>{{ employees.length }}</strong>
+          </div>
+          <div class="archive-stat-chip archive-stat-chip-success">
+            <span>启用</span>
+            <strong>{{ enabledCount }}</strong>
+          </div>
+          <div class="archive-stat-chip archive-stat-chip-muted">
+            <span>停用</span>
+            <strong>{{ disabledCount }}</strong>
+          </div>
+          <div class="archive-stat-chip archive-stat-chip-info">
+            <span>同步来源</span>
+            <strong>{{ syncedCount }}</strong>
+          </div>
         </div>
       </div>
     </section>
 
     <el-card class="!rounded-3xl !shadow-sm">
-      <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr),220px,220px,160px,140px]">
+      <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr),260px,160px,140px]">
         <el-input v-model="filters.keyword" clearable placeholder="搜索姓名 / 用户名 / 手机号 / 邮箱" @keyup.enter="loadEmployees">
           <template #append>
             <el-button :icon="Search" @click="loadEmployees" />
           </template>
         </el-input>
-
-        <el-select v-model="filters.companyId" clearable filterable placeholder="公司">
-          <el-option
-            v-for="item in companyOptions"
-            :key="item.companyId"
-            :label="item.companyName"
-            :value="item.companyId"
-          />
-        </el-select>
 
         <el-select v-model="filters.deptId" clearable filterable placeholder="部门">
           <el-option
@@ -155,16 +147,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { RefreshRight, Search } from '@element-plus/icons-vue'
 import {
   financeArchiveApi,
-  type CompanyRecord,
   type DepartmentTreeNode,
   type EmployeeQueryPayload,
   type EmployeeRecord
 } from '@/api'
+import { useFinanceCompanyStore } from '@/stores/financeCompany'
 
 type DepartmentOption = {
   id: number
@@ -173,14 +165,13 @@ type DepartmentOption = {
 
 const loading = ref(false)
 const employees = ref<EmployeeRecord[]>([])
-const companies = ref<CompanyRecord[]>([])
 const departments = ref<DepartmentTreeNode[]>([])
 const currentEmployee = ref<EmployeeRecord>()
 const detailVisible = ref(false)
+const financeCompany = useFinanceCompanyStore()
 
 const filters = ref<EmployeeQueryPayload>({
   keyword: '',
-  companyId: undefined,
   deptId: undefined,
   status: undefined
 })
@@ -192,20 +183,32 @@ const sourceLabelMap: Record<string, string> = {
   FEISHU: '飞书'
 }
 
-const companyOptions = computed(() => flattenCompanies(companies.value))
-const departmentOptions = computed(() => flattenDepartments(departments.value))
+const currentCompanyId = computed(() => financeCompany.currentCompanyId)
+const currentCompanyName = computed(() => financeCompany.currentCompanyName)
+const departmentOptions = computed(() => flattenDepartments(departments.value, currentCompanyId.value))
 const enabledCount = computed(() => employees.value.filter((item) => item.status === 1).length)
 const disabledCount = computed(() => employees.value.filter((item) => item.status !== 1).length)
 const syncedCount = computed(() => employees.value.filter((item) => item.sourceType && item.sourceType !== 'MANUAL').length)
 
 onMounted(async () => {
-  await Promise.all([loadMeta(), loadEmployees()])
+  await loadMeta()
 })
+
+watch(
+  () => financeCompany.currentCompanyId,
+  async (companyId, previousCompanyId) => {
+    if (!companyId) return
+    if (companyId !== previousCompanyId) {
+      filters.value.deptId = undefined
+    }
+    await loadEmployees()
+  },
+  { immediate: true }
+)
 
 async function loadMeta() {
   try {
     const res = await financeArchiveApi.getEmployeeMeta()
-    companies.value = res.data.companies || []
     departments.value = res.data.departments || []
   } catch (error: any) {
     ElMessage.error(error?.message || '员工档案筛选项加载失败')
@@ -217,7 +220,7 @@ async function loadEmployees() {
   try {
     const payload: EmployeeQueryPayload = {
       keyword: normalizeText(filters.value.keyword),
-      companyId: normalizeText(filters.value.companyId),
+      companyId: normalizeText(financeCompany.currentCompanyId),
       deptId: filters.value.deptId,
       status: filters.value.status
     }
@@ -233,7 +236,6 @@ async function loadEmployees() {
 function resetFilters() {
   filters.value = {
     keyword: '',
-    companyId: undefined,
     deptId: undefined,
     status: undefined
   }
@@ -270,24 +272,17 @@ function formatDateTime(value?: string) {
   return value.replace('T', ' ').slice(0, 19)
 }
 
-function flattenCompanies(items: CompanyRecord[], result: CompanyRecord[] = []) {
+function flattenDepartments(items: DepartmentTreeNode[], companyId?: string, level = 0, result: DepartmentOption[] = []) {
   items.forEach((item) => {
-    result.push(item)
-    if (item.children?.length) {
-      flattenCompanies(item.children, result)
+    if (companyId && item.companyId && item.companyId !== companyId) {
+      return
     }
-  })
-  return result
-}
-
-function flattenDepartments(items: DepartmentTreeNode[], level = 0, result: DepartmentOption[] = []) {
-  items.forEach((item) => {
     result.push({
       id: item.id,
       label: `${'—'.repeat(level)}${level > 0 ? ' ' : ''}${item.deptName}`
     })
     if (item.children?.length) {
-      flattenDepartments(item.children, level + 1, result)
+      flattenDepartments(item.children, companyId, level + 1, result)
     }
   })
   return result
@@ -295,6 +290,50 @@ function flattenDepartments(items: DepartmentTreeNode[], level = 0, result: Depa
 </script>
 
 <style scoped>
+.archive-stat-chip {
+  display: inline-flex;
+  min-width: 84px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 8px 12px;
+  color: #475569;
+}
+
+.archive-stat-chip span {
+  font-size: 12px;
+}
+
+.archive-stat-chip strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.archive-stat-chip-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.archive-stat-chip-success strong {
+  color: #047857;
+}
+
+.archive-stat-chip-muted strong {
+  color: #475569;
+}
+
+.archive-stat-chip-info {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.archive-stat-chip-info strong {
+  color: #0369a1;
+}
+
 .detail-item {
   display: flex;
   flex-direction: column;

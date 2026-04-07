@@ -7,6 +7,10 @@ import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.ExpenseActionUserOptionVO;
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
+import com.finex.auth.dto.ExpenseBankCallbackDTO;
+import com.finex.auth.dto.ExpenseBankLinkConfigVO;
+import com.finex.auth.dto.ExpenseBankLinkSaveDTO;
+import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseApprovalPendingItemVO;
 import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDocumentCommentDTO;
@@ -15,6 +19,7 @@ import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
+import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -30,17 +35,19 @@ public interface ExpenseDocumentService {
 
     ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode);
 
-    List<ExpenseCreateVendorOptionVO> listVendorOptions(String keyword);
+    List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword);
 
-    List<ExpenseCreatePayeeOptionVO> listPayeeOptions(String keyword);
+    List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword);
 
-    List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(String keyword);
+    List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(Long userId, String keyword);
 
     ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto);
 
     List<ExpenseSummaryVO> listExpenseSummaries(Long userId);
 
     List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId);
+
+    List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind);
 
     ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView);
 
@@ -57,7 +64,29 @@ public interface ExpenseDocumentService {
             boolean allowCrossView
     );
 
+    ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
+            Long userId,
+            String targetDocumentCode,
+            String keyword,
+            Integer page,
+            Integer pageSize
+    );
+
     List<ExpenseApprovalPendingItemVO> listPendingApprovals(Long userId);
+
+    List<ExpensePaymentOrderVO> listPaymentOrders(Long userId, String status);
+
+    List<ExpenseBankLinkSummaryVO> listBankLinks();
+
+    ExpenseBankLinkConfigVO getBankLink(Long companyBankAccountId);
+
+    ExpenseBankLinkConfigVO updateBankLink(Long companyBankAccountId, ExpenseBankLinkSaveDTO dto);
+
+    ExpenseDocumentDetailVO handleCmbCloudCallback(ExpenseBankCallbackDTO dto);
+
+    void runBankReceiptPolling();
+
+    boolean bindDashboardWriteOff(Long userId, String targetDocumentCode, String sourceReportDocumentCode);
 
     ExpenseDocumentDetailVO recallDocument(Long userId, String username, String documentCode);
 
@@ -74,6 +103,12 @@ public interface ExpenseDocumentService {
     ExpenseDocumentDetailVO approveTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto);
 
     ExpenseDocumentDetailVO rejectTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto);
+
+    ExpenseDocumentDetailVO startPaymentTask(Long userId, String username, Long taskId);
+
+    ExpenseDocumentDetailVO completePaymentTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto);
+
+    ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto);
 
     ExpenseDocumentEditContextVO getTaskModifyContext(Long userId, Long taskId);
 

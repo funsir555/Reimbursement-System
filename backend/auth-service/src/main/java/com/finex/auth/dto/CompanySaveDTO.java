@@ -17,11 +17,5 @@ public class CompanySaveDTO {
 
     private String taxNo;
 
-    private String bankName;
-
-    private String bankAccountName;
-
-    private String bankAccountNo;
-
     private Integer status;
 }

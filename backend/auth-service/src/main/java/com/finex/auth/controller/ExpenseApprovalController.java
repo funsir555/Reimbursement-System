@@ -51,7 +51,7 @@ public class ExpenseApprovalController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
         return Result.success(
-                "审批已通过",
+                "瀹℃壒宸查€氳繃",
                 expenseDocumentService.approveTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto == null ? new ExpenseApprovalActionDTO() : dto)
         );
     }
@@ -64,7 +64,7 @@ public class ExpenseApprovalController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_REJECT);
         return Result.success(
-                "审批已驳回",
+                "瀹℃壒宸查┏鍥?",
                 expenseDocumentService.rejectTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto == null ? new ExpenseApprovalActionDTO() : dto)
         );
     }
@@ -83,7 +83,7 @@ public class ExpenseApprovalController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
         return Result.success(
-                "审批单已更新",
+                "瀹℃壒鍗曞凡鏇存柊",
                 expenseDocumentService.modifyTaskDocument(getCurrentUserId(request), getCurrentUsername(request), taskId, dto)
         );
     }
@@ -96,7 +96,7 @@ public class ExpenseApprovalController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
         return Result.success(
-                "已发起加签",
+                "宸插彂璧峰姞绛?",
                 expenseDocumentService.addSignTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto)
         );
     }
@@ -109,7 +109,7 @@ public class ExpenseApprovalController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
         return Result.success(
-                "审批任务已转交",
+                "瀹℃壒浠诲姟宸茶浆浜?",
                 expenseDocumentService.transferTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto)
         );
     }
@@ -131,7 +131,7 @@ public class ExpenseApprovalController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("无法获取当前登录用户");
+        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {
@@ -139,6 +139,6 @@ public class ExpenseApprovalController {
         if (username instanceof String value && !value.isBlank()) {
             return value;
         }
-        return "当前用户";
+        return "褰撳墠鐢ㄦ埛";
     }
 }

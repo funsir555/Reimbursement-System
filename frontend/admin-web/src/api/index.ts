@@ -39,6 +39,9 @@ export interface DepartmentTreeNode {
   leaderName?: string
   deptName: string
   parentId?: number
+  statDepartmentBelong?: string
+  statRegionBelong?: string
+  statAreaBelong?: string
   syncSource: string
   syncManaged: boolean
   syncEnabled: boolean
@@ -56,6 +59,9 @@ export interface DepartmentSavePayload {
   leaderUserId?: number
   deptName: string
   parentId?: number
+  statDepartmentBelong?: string
+  statRegionBelong?: string
+  statAreaBelong?: string
   status?: number
   sortOrder?: number
   syncEnabled?: number
@@ -73,6 +79,9 @@ export interface EmployeeRecord {
   deptName?: string
   position?: string
   laborRelationBelong?: string
+  statDepartmentBelong?: string
+  statRegionBelong?: string
+  statAreaBelong?: string
   status: number
   sourceType: string
   syncManaged: boolean
@@ -89,6 +98,9 @@ export interface EmployeeSavePayload {
   deptId?: number
   position?: string
   laborRelationBelong?: string
+  statDepartmentBelong?: string
+  statRegionBelong?: string
+  statAreaBelong?: string
   status?: number
 }
 
@@ -145,11 +157,60 @@ export interface CompanyRecord {
   companyName: string
   invoiceTitle?: string
   taxNo?: string
-  bankName?: string
-  bankAccountName?: string
-  bankAccountNo?: string
   status: number
   children: CompanyRecord[]
+}
+
+export interface CompanyBankAccountRecord {
+  id: number
+  companyId: string
+  companyName?: string
+  bankName: string
+  branchName?: string
+  bankCode?: string
+  branchCode?: string
+  cnapsCode?: string
+  accountName: string
+  accountNo: string
+  accountType?: string
+  accountUsage?: string
+  currencyCode?: string
+  defaultAccount: number
+  status: number
+  remark?: string
+  directConnectEnabled: number
+  directConnectProvider?: string
+  directConnectChannel?: string
+  directConnectProtocol?: string
+  directConnectCustomerNo?: string
+  directConnectAppId?: string
+  directConnectAccountAlias?: string
+  directConnectAuthMode?: string
+  directConnectApiBaseUrl?: string
+  directConnectCertRef?: string
+  directConnectSecretRef?: string
+  directConnectSignType?: string
+  directConnectEncryptType?: string
+  directConnectLastSyncAt?: string
+  directConnectLastSyncStatus?: string
+  directConnectLastErrorMsg?: string
+  directConnectExtJson?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface FinanceCompanyOption {
+  companyId: string
+  companyCode: string
+  companyName: string
+  label: string
+  value: string
+}
+
+export interface FinanceContextMeta {
+  companyOptions: FinanceCompanyOption[]
+  currentUserCompanyId?: string
+  defaultCompanyId?: string
 }
 
 export interface CompanySavePayload {
@@ -158,10 +219,41 @@ export interface CompanySavePayload {
   companyName: string
   invoiceTitle?: string
   taxNo?: string
-  bankName?: string
-  bankAccountName?: string
-  bankAccountNo?: string
   status?: number
+}
+
+export interface CompanyBankAccountSavePayload {
+  companyId: string
+  bankName: string
+  branchName?: string
+  bankCode?: string
+  branchCode?: string
+  cnapsCode?: string
+  accountName: string
+  accountNo: string
+  accountType?: string
+  accountUsage?: string
+  currencyCode?: string
+  defaultAccount?: number
+  status?: number
+  remark?: string
+  directConnectEnabled?: number
+  directConnectProvider?: string
+  directConnectChannel?: string
+  directConnectProtocol?: string
+  directConnectCustomerNo?: string
+  directConnectAppId?: string
+  directConnectAccountAlias?: string
+  directConnectAuthMode?: string
+  directConnectApiBaseUrl?: string
+  directConnectCertRef?: string
+  directConnectSecretRef?: string
+  directConnectSignType?: string
+  directConnectEncryptType?: string
+  directConnectLastSyncAt?: string
+  directConnectLastSyncStatus?: string
+  directConnectLastErrorMsg?: string
+  directConnectExtJson?: string
 }
 
 export interface SyncConnectorConfig {
@@ -215,8 +307,153 @@ export interface SystemSettingsBootstrapData {
   roles: RoleRecord[]
   permissions: PermissionTreeNode[]
   companies: CompanyRecord[]
+  companyBankAccounts: CompanyBankAccountRecord[]
   connectors: SyncConnectorConfig[]
   jobs: SyncJobRecord[]
+}
+
+export interface ArchiveAgentVersionRecord {
+  id: number
+  versionNo: number
+  versionLabel?: string
+  published: boolean
+  createdByName?: string
+  createdAt?: string
+}
+
+export interface ArchiveAgentTriggerConfig {
+  triggerType: 'MANUAL' | 'SCHEDULE' | 'EVENT'
+  enabled?: boolean
+  scheduleMode?: 'CRON' | 'INTERVAL'
+  cronExpression?: string
+  intervalMinutes?: number
+  eventCode?: string
+}
+
+export interface ArchiveAgentWorkflowNode {
+  nodeKey: string
+  nodeType: 'start' | 'llm' | 'condition' | 'tool' | 'transform' | 'notify' | 'end'
+  label: string
+  config?: Record<string, unknown>
+}
+
+export interface ArchiveAgentWorkflowEdge {
+  source: string
+  target: string
+}
+
+export interface ArchiveAgentToolDefinition {
+  toolCode: string
+  label: string
+  category?: string
+  available?: boolean
+  enabled?: boolean
+  credentialRefCode?: string
+  url?: string
+  title?: string
+  content?: string
+}
+
+export interface ArchiveAgentSummary {
+  id: number
+  agentCode: string
+  agentName: string
+  agentDescription?: string
+  iconKey?: string
+  themeKey?: string
+  coverColor?: string
+  tags: string[]
+  status: 'DRAFT' | 'READY' | 'DISABLED' | 'ARCHIVED'
+  latestVersionNo?: number
+  publishedVersionNo?: number
+  runtimeStatus?: 'DRAFT' | 'READY' | 'RUNNING' | 'FAILED' | 'DISABLED'
+  lastRunStatus?: string
+  lastRunSummary?: string
+  lastRunAt?: string
+  enabledTriggerCount?: number
+}
+
+export interface ArchiveAgentDetail extends ArchiveAgentSummary {
+  promptConfig: Record<string, unknown>
+  modelConfig: Record<string, unknown>
+  tools: ArchiveAgentToolDefinition[]
+  workflow: {
+    nodes: ArchiveAgentWorkflowNode[]
+    edges: ArchiveAgentWorkflowEdge[]
+  }
+  triggers: ArchiveAgentTriggerConfig[]
+  inputSchema: Record<string, unknown>
+  versions: ArchiveAgentVersionRecord[]
+}
+
+export interface ArchiveAgentSavePayload {
+  agentName: string
+  agentDescription?: string
+  iconKey?: string
+  themeKey?: string
+  coverColor?: string
+  tags: string[]
+  promptConfig: Record<string, unknown>
+  modelConfig: Record<string, unknown>
+  tools: Array<Record<string, unknown>>
+  workflow: {
+    nodes: ArchiveAgentWorkflowNode[]
+    edges: ArchiveAgentWorkflowEdge[]
+  }
+  triggers: Array<Record<string, unknown>>
+  inputSchema: Record<string, unknown>
+}
+
+export interface ArchiveAgentRunRecord {
+  id: number
+  runNo: string
+  agentId: number
+  triggerType: string
+  triggerSource?: string
+  status: string
+  summary?: string
+  errorMessage?: string
+  startedAt?: string
+  finishedAt?: string
+  durationMs?: number
+}
+
+export interface ArchiveAgentRunStepRecord {
+  stepNo: number
+  nodeKey: string
+  nodeType: string
+  nodeLabel?: string
+  status: string
+  errorMessage?: string
+  startedAt?: string
+  finishedAt?: string
+  durationMs?: number
+  inputPayload: Record<string, unknown>
+  outputPayload: Record<string, unknown>
+}
+
+export interface ArchiveAgentRunDetail extends ArchiveAgentRunRecord {
+  agentName?: string
+  agentVersionNo?: number
+  inputPayload: Record<string, unknown>
+  outputPayload: Record<string, unknown>
+  steps: ArchiveAgentRunStepRecord[]
+  artifacts: Array<Record<string, unknown>>
+}
+
+export interface ArchiveAgentTestRunPayload {
+  triggerSource?: string
+  inputPayload: Record<string, unknown>
+}
+
+export interface ArchiveAgentMeta {
+  modelProviders: Array<Record<string, unknown>>
+  tools: Array<Record<string, unknown>>
+  nodeTypes: Array<Record<string, unknown>>
+  triggerTypes: Array<Record<string, unknown>>
+  iconOptions: Array<Record<string, unknown>>
+  themeOptions: Array<Record<string, unknown>>
+  defaultSystemPrompt: string
 }
 
 export interface ExpenseSummary {
@@ -235,6 +472,7 @@ export interface ExpenseSummary {
   documentStatus?: string
   documentStatusLabel?: string
   amount: MoneyValue
+  outstandingAmount?: MoneyValue
   date: string
   status: string
   submittedAt?: string
@@ -301,6 +539,99 @@ export interface ExpenseApprovalPendingItem {
   undertakeDepartmentNames?: string[]
   tagNames?: string[]
   taskCreatedAt?: string
+}
+
+export interface ExpensePaymentOrder {
+  taskId: number
+  documentCode: string
+  documentTitle: string
+  templateName?: string
+  templateType?: string
+  templateTypeLabel?: string
+  submitterName?: string
+  submitterDeptName?: string
+  currentNodeName?: string
+  documentStatus?: string
+  documentStatusLabel?: string
+  amount: MoneyValue
+  submittedAt?: string
+  paymentDate?: string
+  paymentCompanyName?: string
+  paymentStatusCode?: string
+  paymentStatusLabel?: string
+  manualPaid?: boolean
+  paidAt?: string
+  receiptStatusLabel?: string
+  receiptReceivedAt?: string
+  bankFlowNo?: string
+  companyBankAccountName?: string
+  taskCreatedAt?: string
+  allowRetry?: boolean
+}
+
+export interface ExpenseBankLinkSummary {
+  companyBankAccountId: number
+  companyId: string
+  companyName?: string
+  accountName: string
+  accountNo: string
+  bankName: string
+  accountStatus?: number
+  directConnectEnabled: boolean
+  directConnectProvider?: string
+  directConnectChannel?: string
+  directConnectStatusLabel?: string
+  lastDirectConnectStatus?: string
+  lastReceiptStatus?: string
+}
+
+export interface ExpenseBankLinkConfig {
+  companyBankAccountId: number
+  companyId: string
+  companyName?: string
+  accountName: string
+  accountNo: string
+  bankName: string
+  accountStatus?: number
+  directConnectEnabled: boolean
+  directConnectProvider?: string
+  directConnectChannel?: string
+  directConnectProtocol?: string
+  directConnectCustomerNo?: string
+  directConnectAppId?: string
+  directConnectAccountAlias?: string
+  directConnectAuthMode?: string
+  directConnectApiBaseUrl?: string
+  directConnectCertRef?: string
+  directConnectSecretRef?: string
+  directConnectSignType?: string
+  directConnectEncryptType?: string
+  operatorKey?: string
+  callbackSecret?: string
+  publicKeyRef?: string
+  receiptQueryEnabled?: boolean
+  lastDirectConnectStatus?: string
+  lastDirectConnectError?: string
+}
+
+export interface ExpenseBankLinkSavePayload {
+  enabled?: boolean
+  directConnectProvider: string
+  directConnectChannel: string
+  directConnectProtocol?: string
+  directConnectCustomerNo?: string
+  directConnectAppId?: string
+  directConnectAccountAlias?: string
+  directConnectAuthMode?: string
+  directConnectApiBaseUrl?: string
+  directConnectCertRef?: string
+  directConnectSecretRef?: string
+  directConnectSignType?: string
+  directConnectEncryptType?: string
+  operatorKey?: string
+  callbackSecret?: string
+  publicKeyRef?: string
+  receiptQueryEnabled?: boolean
 }
 
 export interface ExpenseApprovalActionPayload {
@@ -370,6 +701,32 @@ export interface ExpenseDocumentDetail {
   expenseDetails: ExpenseDetailInstanceSummary[]
   currentTasks: ExpenseApprovalTask[]
   actionLogs: ExpenseApprovalLog[]
+  bankPayment?: ExpenseDocumentBankPayment
+  bankReceipts?: ExpenseDocumentBankReceipt[]
+}
+
+export interface ExpenseDocumentBankPayment {
+  bankProvider?: string
+  bankChannel?: string
+  companyBankAccountName?: string
+  paymentStatusCode?: string
+  paymentStatusLabel?: string
+  manualPaid?: boolean
+  paidAt?: string
+  receiptStatusLabel?: string
+  receiptReceivedAt?: string
+  bankFlowNo?: string
+  bankOrderNo?: string
+  lastErrorMessage?: string
+}
+
+export interface ExpenseDocumentBankReceipt {
+  attachmentId?: string
+  fileName: string
+  contentType?: string
+  fileSize?: number
+  previewUrl?: string
+  receivedAt?: string
 }
 
 export interface ExpenseDetailInstance {
@@ -509,6 +866,77 @@ export interface FinanceVendorDetail extends FinanceVendorSummary {
 export type FinanceVendorSavePayload = Partial<FinanceVendorDetail> & {
   cVenCode?: string
   cVenName: string
+}
+
+export interface FinanceCustomerSummary {
+  cCusCode: string
+  cCusName: string
+  cCusAbbName?: string
+  cCusPerson?: string
+  cCusHand?: string
+  cCusBank?: string
+  cCusAccount?: string
+  iARMoney?: MoneyValue
+  companyId?: string
+  active: boolean
+  dEndDate?: string
+  updatedAt?: string
+}
+
+export interface FinanceCustomerDetail extends FinanceCustomerSummary {
+  cCCCode?: string
+  cDCCode?: string
+  cCusTradeCCode?: string
+  cTrade?: string
+  cCusAddress?: string
+  cCusPostCode?: string
+  cCusRegCode?: string
+  cCusLPerson?: string
+  cCusCreGrade?: string
+  iCusCreLine?: MoneyValue
+  iCusCreDate?: number
+  cCusOAddress?: string
+  cCusOType?: string
+  cCusHeadCode?: string
+  cCusWhCode?: string
+  cCusDepart?: string
+  dLastDate?: string
+  iLastMoney?: MoneyValue
+  dLRDate?: string
+  iLRMoney?: MoneyValue
+  cCusBankCode?: string
+  cCusDefine1?: string
+  cCusDefine2?: string
+  cCusDefine3?: string
+  cCusDefine4?: string
+  cCusDefine5?: string
+  cCusDefine6?: string
+  cCusDefine7?: string
+  cCusDefine8?: string
+  cCusDefine9?: string
+  cCusDefine10?: string
+  cCusDefine11?: number
+  cCusDefine12?: number
+  cCusDefine13?: number
+  cCusDefine14?: number
+  cCusDefine15?: string
+  cCusDefine16?: string
+  cInvoiceCompany?: string
+  bCredit?: number
+  bCreditDate?: number
+  bCreditByHead?: number
+  cMemo?: string
+  fCommisionRate?: number
+  fInsueRate?: number
+  customerKCode?: string
+  bCusState?: number
+  createdAt?: string
+  [key: string]: unknown
+}
+
+export type FinanceCustomerSavePayload = Partial<FinanceCustomerDetail> & {
+  cCusCode?: string
+  cCusName: string
 }
 
 export interface ExpenseCreateTemplateSummary {
@@ -739,11 +1167,44 @@ export interface FinanceVoucherMeta {
   defaultCurrency: string
 }
 
-export interface FinanceVoucherDetail {
+export interface FinanceVoucherQueryParams {
+  companyId: string
+  voucherNo?: string
+  csign?: string
+  billMonth?: string
+  billMonthFrom?: string
+  billMonthTo?: string
+  summary?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface FinanceVoucherSummary {
   voucherNo: string
+  displayVoucherNo: string
   companyId: string
   iperiod: number
   csign: string
+  voucherTypeLabel: string
+  dbillDate: string
+  summary: string
+  cbill: string
+  idoc: number
+  status: string
+  statusLabel: string
+  editable: boolean
+  entryCount: number
+  totalDebit: MoneyValue
+  totalCredit: MoneyValue
+}
+
+export interface FinanceVoucherDetail {
+  voucherNo: string
+  displayVoucherNo: string
+  companyId: string
+  iperiod: number
+  csign: string
+  voucherTypeLabel: string
   inoId: number
   dbillDate: string
   idoc: number
@@ -751,6 +1212,8 @@ export interface FinanceVoucherDetail {
   ctext1?: string
   ctext2?: string
   status: string
+  statusLabel: string
+  editable: boolean
   totalDebit: MoneyValue
   totalCredit: MoneyValue
   entries: FinanceVoucherEntry[]
@@ -1114,6 +1577,10 @@ export interface DashboardData {
   user: UserProfile
   pendingApprovalCount: number
   pendingApprovalDelta: number
+  pendingRepaymentCount: number
+  pendingPrepayWriteOffCount: number
+  unusedApplicationCount: number
+  unpaidContractCount: number
   monthlyExpenseAmount: MoneyValue
   monthlyExpenseCount: number
   invoiceCount: number
@@ -1123,6 +1590,13 @@ export interface DashboardData {
   recentExpenses: ExpenseSummary[]
   pendingApprovals: ApprovalSummary[]
   invoiceAlerts: InvoiceAlert[]
+}
+
+export type DashboardOutstandingKind = 'LOAN' | 'PREPAY_REPORT'
+
+export interface DashboardWriteoffBindingPayload {
+  targetDocumentCode: string
+  sourceReportDocumentCode: string
 }
 
 export interface ProcessCenterNavItem {
@@ -1677,6 +2151,8 @@ export interface DownloadRecord {
   fileSize: string
   createdAt: string
   finishedAt?: string
+  downloadUrl?: string
+  downloadable?: boolean
 }
 
 export interface DownloadCenterData {
@@ -1698,11 +2174,31 @@ export interface AsyncTaskSubmitResult {
   downloadRecordId?: number
 }
 
+export type ExpenseExportScene = 'MY_EXPENSES' | 'PENDING_APPROVAL' | 'DOCUMENT_QUERY' | 'OUTSTANDING'
+
+export interface ExpenseExportPayload {
+  scene: ExpenseExportScene
+  documentCodes?: string[]
+  taskIds?: number[]
+  kind?: 'LOAN' | 'PREPAY_REPORT'
+}
+
 export interface NotificationSummary {
   unreadCount: number
   latestTitle?: string
   latestContent?: string
   latestCreatedAt?: string
+}
+
+export interface NotificationItem {
+  id: number
+  title?: string
+  content?: string
+  type?: string
+  status: string
+  relatedTaskNo?: string
+  createdAt?: string
+  readAt?: string
 }
 
 export interface PageResult<T> {
@@ -1958,6 +2454,63 @@ function buildQueryString(params: Record<string, string | number | boolean | und
   return query ? `?${query}` : ''
 }
 
+function decodeContentDispositionFileName(contentDisposition: string | null) {
+  if (!contentDisposition) {
+    return ''
+  }
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch {
+      return utf8Match[1]
+    }
+  }
+  const plainMatch = contentDisposition.match(/filename="?([^"]+)"?/i)
+  return plainMatch?.[1] || ''
+}
+
+async function downloadBinaryFile(url: string, fallbackFileName?: string) {
+  const token = localStorage.getItem('token')
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch(`${API_BASE_URL}${url}`, {
+    method: 'GET',
+    headers
+  })
+
+  if (response.status === 401) {
+    clearLoginState()
+    window.location.href = '/login'
+    throw new Error('登录已过期，请重新登录')
+  }
+
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`
+    try {
+      const payload = await response.json()
+      message = payload?.message || message
+    } catch {
+      // Ignore JSON parsing failures for binary responses.
+    }
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  const fileName = decodeContentDispositionFileName(response.headers.get('Content-Disposition')) || fallbackFileName || 'download.xlsx'
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.URL.revokeObjectURL(objectUrl)
+}
+
 export const authApi = {
   loginByPassword: (username: string, password: string) =>
     request<LoginResponse>('/auth/login', {
@@ -1968,7 +2521,18 @@ export const authApi = {
 }
 
 export const dashboardApi = {
-  getOverview: () => request<DashboardData>('/auth/dashboard')
+  getOverview: () => request<DashboardData>('/auth/dashboard'),
+  listOutstandingDocuments: (kind: DashboardOutstandingKind) =>
+    request<ExpenseSummary[]>(`/auth/dashboard/outstanding-documents${buildQueryString({ kind })}`),
+  getWriteoffReportPicker: (targetDocumentCode: string, keyword?: string, page?: number, pageSize?: number) =>
+    request<ExpenseDocumentPickerResult>(
+      `/auth/dashboard/writeoff-report-picker${buildQueryString({ targetDocumentCode, keyword, page, pageSize })}`
+    ),
+  bindWriteoff: (payload: DashboardWriteoffBindingPayload) =>
+    request<boolean>('/auth/dashboard/writeoff-bindings', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
 }
 
 export const expenseApi = {
@@ -2116,6 +2680,33 @@ export const expenseApprovalApi = {
     request<ExpenseActionUserOption[]>(`/auth/expense-approval/action-users${buildQueryString({ keyword })}`)
 }
 
+export const expensePaymentApi = {
+  listOrders: (status?: string) =>
+    request<ExpensePaymentOrder[]>(`/auth/expense-payment/orders${buildQueryString({ status })}`),
+  startTask: (taskId: number) =>
+    request<ExpenseDocumentDetail>(`/auth/expense-payment/tasks/${taskId}/start`, {
+      method: 'POST'
+    }),
+  completeTask: (taskId: number, payload: ExpenseApprovalActionPayload = {}) =>
+    request<ExpenseDocumentDetail>(`/auth/expense-payment/tasks/${taskId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  markException: (taskId: number, payload: ExpenseApprovalActionPayload = {}) =>
+    request<ExpenseDocumentDetail>(`/auth/expense-payment/tasks/${taskId}/exception`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  listBankLinks: () => request<ExpenseBankLinkSummary[]>('/auth/expense-payment/bank-links'),
+  getBankLink: (companyBankAccountId: number) =>
+    request<ExpenseBankLinkConfig>(`/auth/expense-payment/bank-links/${companyBankAccountId}`),
+  updateBankLink: (companyBankAccountId: number, payload: ExpenseBankLinkSavePayload) =>
+    request<ExpenseBankLinkConfig>(`/auth/expense-payment/bank-links/${companyBankAccountId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    })
+}
+
 export const invoiceApi = {
   list: () => request<InvoiceSummary[]>('/auth/invoices')
 }
@@ -2123,32 +2714,59 @@ export const invoiceApi = {
 export const financeApi = {
   getVoucherMeta: (params: { companyId?: string; billDate?: string; csign?: string } = {}) =>
     request<FinanceVoucherMeta>(`/auth/finance/vouchers/meta${buildQueryString(params)}`),
-  getVoucherDetail: (voucherNo: string) =>
-    request<FinanceVoucherDetail>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}`),
+  listVouchers: (params: FinanceVoucherQueryParams) =>
+    request<PageResult<FinanceVoucherSummary>>(`/auth/finance/vouchers${buildQueryString(params)}`),
+  getVoucherDetail: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherDetail>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}${buildQueryString({ companyId })}`),
   createVoucher: (payload: FinanceVoucherSavePayload) =>
     request<FinanceVoucherSaveResult>('/auth/finance/vouchers', {
       method: 'POST',
       body: JSON.stringify(payload)
-    })
-}
-
-export const financeArchiveApi = {
-  listSuppliers: (params: { keyword?: string; includeDisabled?: boolean } = {}) =>
-    request<FinanceVendorSummary[]>(`/auth/finance/archives/suppliers${buildQueryString(params)}`),
-  getSupplierDetail: (vendorCode: string) =>
-    request<FinanceVendorDetail>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}`),
-  createSupplier: (payload: FinanceVendorSavePayload) =>
-    request<FinanceVendorDetail>('/auth/finance/archives/suppliers', {
-      method: 'POST',
-      body: JSON.stringify(payload)
     }),
-  updateSupplier: (vendorCode: string, payload: FinanceVendorSavePayload) =>
-    request<FinanceVendorDetail>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}`, {
+  updateVoucher: (companyId: string, voucherNo: string, payload: FinanceVoucherSavePayload) =>
+    request<FinanceVoucherSaveResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}${buildQueryString({ companyId })}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
     }),
-  disableSupplier: (vendorCode: string) =>
-    request<boolean>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}`, {
+  exportVouchers: (params: FinanceVoucherQueryParams) =>
+    downloadBinaryFile(`/auth/finance/vouchers/export${buildQueryString(params)}`, '凭证查询.csv')
+}
+
+export const financeArchiveApi = {
+  listCustomers: (params: { companyId: string; keyword?: string; includeDisabled?: boolean }) =>
+    request<FinanceCustomerSummary[]>(`/auth/finance/archives/customers${buildQueryString(params)}`),
+  getCustomerDetail: (companyId: string, customerCode: string) =>
+    request<FinanceCustomerDetail>(`/auth/finance/archives/customers/${encodeURIComponent(customerCode)}${buildQueryString({ companyId })}`),
+  createCustomer: (companyId: string, payload: FinanceCustomerSavePayload) =>
+    request<FinanceCustomerDetail>(`/auth/finance/archives/customers${buildQueryString({ companyId })}`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateCustomer: (companyId: string, customerCode: string, payload: FinanceCustomerSavePayload) =>
+    request<FinanceCustomerDetail>(`/auth/finance/archives/customers/${encodeURIComponent(customerCode)}${buildQueryString({ companyId })}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  disableCustomer: (companyId: string, customerCode: string) =>
+    request<boolean>(`/auth/finance/archives/customers/${encodeURIComponent(customerCode)}${buildQueryString({ companyId })}`, {
+      method: 'DELETE'
+    }),
+  listSuppliers: (params: { companyId: string; keyword?: string; includeDisabled?: boolean }) =>
+    request<FinanceVendorSummary[]>(`/auth/finance/archives/suppliers${buildQueryString(params)}`),
+  getSupplierDetail: (companyId: string, vendorCode: string) =>
+    request<FinanceVendorDetail>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}${buildQueryString({ companyId })}`),
+  createSupplier: (companyId: string, payload: FinanceVendorSavePayload) =>
+    request<FinanceVendorDetail>(`/auth/finance/archives/suppliers${buildQueryString({ companyId })}`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateSupplier: (companyId: string, vendorCode: string, payload: FinanceVendorSavePayload) =>
+    request<FinanceVendorDetail>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}${buildQueryString({ companyId })}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  disableSupplier: (companyId: string, vendorCode: string) =>
+    request<boolean>(`/auth/finance/archives/suppliers/${encodeURIComponent(vendorCode)}${buildQueryString({ companyId })}`, {
       method: 'DELETE'
     }),
   getEmployeeMeta: () =>
@@ -2158,6 +2776,10 @@ export const financeArchiveApi = {
       method: 'POST',
       body: JSON.stringify(payload)
     })
+}
+
+export const financeContextApi = {
+  getMeta: () => request<FinanceContextMeta>('/auth/finance/context/meta')
 }
 
 export const fixedAssetApi = {
@@ -2253,12 +2875,12 @@ export const expenseCreateApi = {
   listTemplates: () =>
     request<ExpenseCreateTemplateSummary[]>('/auth/expenses/create/templates', {
       timeoutMs: 10000,
-      timeoutMessage: '?????????????????????'
+      timeoutMessage: '加载模板列表超时，请稍后重试'
     }),
   getTemplateDetail: (templateCode: string) =>
     request<ExpenseCreateTemplateDetail>(`/auth/expenses/create/templates/${encodeURIComponent(templateCode)}`, {
       timeoutMs: 10000,
-      timeoutMessage: '???????????????????????'
+      timeoutMessage: '加载模板详情超时，请稍后重试'
     }),
   listVendorOptions: (keyword?: string) =>
     request<ExpenseCreateVendorOption[]>(`/auth/expenses/create/vendors/options${buildQueryString({ keyword })}`),
@@ -2439,6 +3061,43 @@ export const processApi = {
     })
 }
 
+export const archiveAgentApi = {
+  list: (params: { keyword?: string; status?: string } = {}) =>
+    request<ArchiveAgentSummary[]>(`/auth/archives/agents${buildQueryString(params)}`),
+  getMeta: () =>
+    request<ArchiveAgentMeta>('/auth/archives/agents/meta'),
+  getDetail: (id: number) =>
+    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}`),
+  create: (payload: ArchiveAgentSavePayload) =>
+    request<ArchiveAgentDetail>('/auth/archives/agents', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  update: (id: number, payload: ArchiveAgentSavePayload) =>
+    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  publish: (id: number) =>
+    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}/publish`, {
+      method: 'POST'
+    }),
+  run: (id: number, payload: ArchiveAgentTestRunPayload) =>
+    request<ArchiveAgentRunRecord>(`/auth/archives/agents/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  listRuns: (id: number) =>
+    request<ArchiveAgentRunRecord[]>(`/auth/archives/agents/${id}/runs`),
+  getRunDetail: (runId: number) =>
+    request<ArchiveAgentRunDetail>(`/auth/archives/agents/runs/${runId}`),
+  toggleStatus: (id: number, status: string) =>
+    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}/toggle-status`, {
+      method: 'POST',
+      body: JSON.stringify({ status })
+    })
+}
+
 export const profileApi = {
   getOverview: () => request<PersonalCenterData>('/auth/user-center/profile'),
   changePassword: (payload: ChangePasswordPayload) =>
@@ -2449,13 +3108,20 @@ export const profileApi = {
 }
 
 export const downloadApi = {
-  getCenter: () => request<DownloadCenterData>('/auth/user-center/downloads')
+  getCenter: () => request<DownloadCenterData>('/auth/user-center/downloads'),
+  downloadFile: (id: number, fileName?: string) =>
+    downloadBinaryFile(`/auth/user-center/downloads/${id}/content`, fileName)
 }
 
 export const asyncTaskApi = {
   exportInvoices: () =>
     request<AsyncTaskSubmitResult>('/auth/async-tasks/exports/invoices', {
       method: 'POST'
+    }),
+  exportExpenseScene: (payload: ExpenseExportPayload) =>
+    request<AsyncTaskSubmitResult>('/auth/async-tasks/exports/expenses', {
+      method: 'POST',
+      body: JSON.stringify(payload)
     }),
   verifyInvoice: (payload: InvoiceTaskPayload) =>
     request<AsyncTaskSubmitResult>('/auth/async-tasks/invoices/verify', {
@@ -2470,7 +3136,16 @@ export const asyncTaskApi = {
 }
 
 export const notificationApi = {
-  getSummary: () => request<NotificationSummary>('/auth/async-tasks/notifications/summary')
+  getSummary: () => request<NotificationSummary>('/auth/async-tasks/notifications/summary'),
+  list: () => request<NotificationItem[]>('/auth/async-tasks/notifications'),
+  markRead: (id: number) =>
+    request<boolean>(`/auth/async-tasks/notifications/${id}/read`, {
+      method: 'POST'
+    }),
+  markAllRead: () =>
+    request<boolean>('/auth/async-tasks/notifications/read-all', {
+      method: 'POST'
+    })
 }
 
 export const systemSettingsApi = {
@@ -2548,6 +3223,21 @@ export const systemSettingsApi = {
     }),
   deleteCompany: (companyId: string) =>
     request<boolean>(`/auth/system-settings/companies/${companyId}`, {
+      method: 'DELETE'
+    }),
+  listCompanyBankAccounts: () => request<CompanyBankAccountRecord[]>('/auth/system-settings/company-bank-accounts'),
+  createCompanyBankAccount: (payload: CompanyBankAccountSavePayload) =>
+    request<CompanyBankAccountRecord>('/auth/system-settings/company-bank-accounts', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateCompanyBankAccount: (id: number, payload: CompanyBankAccountSavePayload) =>
+    request<CompanyBankAccountRecord>(`/auth/system-settings/company-bank-accounts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  deleteCompanyBankAccount: (id: number) =>
+    request<boolean>(`/auth/system-settings/company-bank-accounts/${id}`, {
       method: 'DELETE'
     }),
   listSyncConnectors: () => request<SyncConnectorConfig[]>('/auth/system-settings/sync/connectors'),

@@ -1,11 +1,16 @@
 package com.finex.auth.service.impl;
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseActionUserOptionVO;
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
+import com.finex.auth.dto.ExpenseBankCallbackDTO;
+import com.finex.auth.dto.ExpenseBankLinkConfigVO;
+import com.finex.auth.dto.ExpenseBankLinkSaveDTO;
+import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseApprovalLogVO;
 import com.finex.auth.dto.ExpenseApprovalPendingItemVO;
 import com.finex.auth.dto.ExpenseApprovalTaskVO;
@@ -17,6 +22,8 @@ import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
 import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
+import com.finex.auth.dto.ExpenseDocumentBankPaymentVO;
+import com.finex.auth.dto.ExpenseDocumentBankReceiptVO;
 import com.finex.auth.dto.ExpenseDocumentCommentDTO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
@@ -24,6 +31,7 @@ import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerGroupVO;
 import com.finex.auth.dto.ExpenseDocumentPickerItemVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
+import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
@@ -50,14 +58,19 @@ import com.finex.auth.entity.ProcessDocumentRelation;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.ProcessDocumentTemplate;
 import com.finex.auth.entity.ProcessDocumentWriteOff;
+import com.finex.auth.entity.PmBankPaymentRecord;
 import com.finex.auth.entity.ProcessExpenseDetailDesign;
 import com.finex.auth.entity.ProcessExpenseType;
 import com.finex.auth.entity.ProcessFlow;
 import com.finex.auth.entity.ProcessFlowVersion;
 import com.finex.auth.entity.ProcessFormDesign;
 import com.finex.auth.entity.ProcessTemplateScope;
+import com.finex.auth.entity.SystemPermission;
+import com.finex.auth.entity.SystemCompanyBankAccount;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
+import com.finex.auth.entity.SystemRolePermission;
+import com.finex.auth.entity.SystemUserRole;
 import com.finex.auth.entity.User;
 import com.finex.auth.entity.UserBankAccount;
 import com.finex.auth.mapper.FinanceVendorMapper;
@@ -71,16 +84,22 @@ import com.finex.auth.mapper.ProcessDocumentRelationMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessDocumentWriteOffMapper;
+import com.finex.auth.mapper.PmBankPaymentRecordMapper;
 import com.finex.auth.mapper.ProcessExpenseDetailDesignMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessFlowMapper;
 import com.finex.auth.mapper.ProcessFlowVersionMapper;
 import com.finex.auth.mapper.ProcessFormDesignMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
+import com.finex.auth.mapper.SystemPermissionMapper;
+import com.finex.auth.mapper.SystemCompanyBankAccountMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
+import com.finex.auth.mapper.SystemRolePermissionMapper;
+import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.auth.service.FinanceVendorService;
 import com.finex.auth.service.NotificationService;
@@ -90,6 +109,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -103,6 +123,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -119,7 +140,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private static final String PAYEE_COMPONENT_CODE = "payee";
     private static final String COUNTERPARTY_COMPONENT_CODE = "counterparty";
     private static final String CONTROL_TYPE_DATE = "DATE";
-    private static final Set<String> PAYMENT_DATE_LABELS = Set.of("支付日期", "付款日期");
+    private static final Set<String> PAYMENT_DATE_LABELS = Set.of("鏀粯鏃ユ湡", "浠樻鏃ユ湡");
     private static final String TEMPLATE_SCOPE_TYPE_TAG_ARCHIVE = "TAG_ARCHIVE";
     private static final String DETAIL_TYPE_NORMAL = "NORMAL_REIMBURSEMENT";
     private static final String DETAIL_TYPE_ENTERPRISE = "ENTERPRISE_TRANSACTION";
@@ -143,6 +164,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private static final String WRITEOFF_STATUS_VOID = "VOID";
     private static final String WRITEOFF_SOURCE_LOAN = "LOAN";
     private static final String WRITEOFF_SOURCE_PREPAY_REPORT = "PREPAY_REPORT";
+    private static final String DASHBOARD_WRITEOFF_SOURCE_FIELD_KEY = "dashboard-writeoff";
 
     private static final String NODE_TYPE_APPROVAL = "APPROVAL";
     private static final String NODE_TYPE_CC = "CC";
@@ -152,18 +174,34 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private static final String APPROVER_TYPE_MANAGER = "MANAGER";
     private static final String APPROVER_TYPE_DESIGNATED_MEMBER = "DESIGNATED_MEMBER";
     private static final String APPROVER_TYPE_MANUAL_SELECT = "MANUAL_SELECT";
+    private static final String PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER = "DESIGNATED_MEMBER";
+    private static final String PAYMENT_EXECUTOR_TYPE_FINANCE_ROLE = "FINANCE_ROLE";
 
     private static final String DEPT_SOURCE_UNDERTAKE = "UNDERTAKE_DEPT";
     private static final String DEPT_SOURCE_SUBMITTER = "SUBMITTER_DEPT";
     private static final String MISSING_HANDLER_AUTO_SKIP = "AUTO_SKIP";
     private static final String APPROVAL_MODE_OR_SIGN = "OR_SIGN";
     private static final String APPROVAL_MODE_AND_SIGN = "AND_SIGN";
+    private static final String PAYMENT_SPECIAL_ALLOW_RETRY = "ALLOW_RETRY";
+    private static final String PAYMENT_EXECUTE_PERMISSION = "expense:payment:payment_order:execute";
 
     private static final String DOCUMENT_STATUS_PENDING = "PENDING_APPROVAL";
     private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
     private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
     private static final String DOCUMENT_STATUS_DRAFT = "DRAFT";
+    private static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
+    private static final String DOCUMENT_STATUS_PAYING = "PAYING";
+    private static final String DOCUMENT_STATUS_PAYMENT_COMPLETED = "PAYMENT_COMPLETED";
+    private static final String DOCUMENT_STATUS_PAYMENT_FINISHED = "PAYMENT_FINISHED";
+    private static final String DOCUMENT_STATUS_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
+
+    private static final String BANK_PROVIDER_CMB = "CMB";
+    private static final String BANK_CHANNEL_CMB_CLOUD = "CMB_CLOUD";
+    private static final String RECEIPT_STATUS_PENDING = "PENDING";
+    private static final String RECEIPT_STATUS_RECEIVED = "RECEIVED";
+    private static final String RECEIPT_STATUS_FAILED = "FAILED";
+    private static final String SYSTEM_OPERATOR = "SYSTEM";
 
     private static final String TASK_STATUS_PENDING = "PENDING";
     private static final String TASK_STATUS_PAUSED = "PAUSED";
@@ -188,6 +226,10 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private static final String LOG_AUTO_SKIP = "AUTO_SKIP";
     private static final String LOG_CC_REACHED = "CC_REACHED";
     private static final String LOG_PAYMENT_REACHED = "PAYMENT_REACHED";
+    private static final String LOG_PAYMENT_PENDING = "PAYMENT_PENDING";
+    private static final String LOG_PAYMENT_START = "PAYMENT_START";
+    private static final String LOG_PAYMENT_COMPLETE = "PAYMENT_COMPLETE";
+    private static final String LOG_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
     private static final String LOG_FINISH = "FINISH";
     private static final String LOG_EXCEPTION = "EXCEPTION";
     private static final String FLOW_FINISH_COMMENT = "Approval flow finished";
@@ -203,8 +245,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private final ProcessFlowVersionMapper processFlowVersionMapper;
     private final ProcessTemplateScopeMapper processTemplateScopeMapper;
     private final FinanceVendorMapper financeVendorMapper;
+    private final SystemPermissionMapper systemPermissionMapper;
+    private final SystemCompanyBankAccountMapper systemCompanyBankAccountMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
+    private final SystemRolePermissionMapper systemRolePermissionMapper;
+    private final SystemUserRoleMapper systemUserRoleMapper;
     private final UserMapper userMapper;
     private final UserBankAccountMapper userBankAccountMapper;
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
@@ -213,6 +259,8 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private final ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     private final ProcessDocumentRelationMapper processDocumentRelationMapper;
     private final ProcessDocumentWriteOffMapper processDocumentWriteOffMapper;
+    private final PmBankPaymentRecordMapper pmBankPaymentRecordMapper;
+    private final ExpenseAttachmentService expenseAttachmentService;
     private final FinanceVendorService financeVendorService;
     private final ProcessExpenseDetailDesignMapper processExpenseDetailDesignMapper;
     private final ProcessExpenseTypeMapper processExpenseTypeMapper;
@@ -291,15 +339,16 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     @Override
-    public List<ExpenseCreateVendorOptionVO> listVendorOptions(String keyword) {
-        return financeVendorService.listActiveVendorOptions(keyword);
+    public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword) {
+        return financeVendorService.listActiveVendorOptions(requireCurrentUserCompanyId(userId), keyword);
     }
 
     @Override
-    public List<ExpenseCreatePayeeOptionVO> listPayeeOptions(String keyword) {
+    public List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword) {
+        String currentCompanyId = requireCurrentUserCompanyId(userId);
         String normalizedKeyword = trimToNull(keyword);
         List<ExpenseCreatePayeeOptionVO> options = new ArrayList<>();
-        financeVendorService.listActiveVendorOptions(normalizedKeyword).forEach(item -> {
+        financeVendorService.listActiveVendorOptions(currentCompanyId, normalizedKeyword).forEach(item -> {
             ExpenseCreatePayeeOptionVO option = new ExpenseCreatePayeeOptionVO();
             option.setValue("VENDOR:" + item.getCVenCode());
             option.setLabel(item.getCVenName());
@@ -329,15 +378,18 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     @Override
-    public List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(String keyword) {
+    public List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(Long userId, String keyword) {
+        String currentCompanyId = requireCurrentUserCompanyId(userId);
         String normalizedKeyword = trimToNull(keyword);
         List<ExpenseCreatePayeeAccountOptionVO> options = new ArrayList<>();
 
         QueryWrapper<FinanceVendor> vendorQuery = new QueryWrapper<>();
-        vendorQuery.isNull("dEndDate")
+        vendorQuery.eq("company_id", currentCompanyId)
+                .isNull("dEndDate")
                 .isNotNull("cVenAccount")
                 .orderByAsc("cVenName", "cVenCode");
         financeVendorMapper.selectList(vendorQuery).stream()
+                .filter(item -> currentCompanyId.equals(trimToNull(item.getCompanyId())))
                 .filter(item -> trimToNull(item.getCVenAccount()) != null)
                 .filter(item -> matchesKeyword(
                         normalizedKeyword,
@@ -429,6 +481,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             User currentUser = userId == null ? null : userMapper.selectById(userId);
             stage = "build-runtime-context";
             Map<String, Object> runtimeFlowContext = buildRuntimeFlowContext(currentUser, template, formDesign, formData, expenseDetailDesign, expenseDetails);
+            String submitterDisplayName = resolveUserDisplayName(currentUser, username);
 
             ProcessDocumentInstance instance = new ProcessDocumentInstance();
             stage = "persist-document";
@@ -442,7 +495,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             instance.setApprovalFlowCode(template.getApprovalFlow());
             instance.setFlowName(template.getFlowName());
             instance.setSubmitterUserId(userId);
-            instance.setSubmitterName(defaultUsername(username));
+            instance.setSubmitterName(submitterDisplayName);
             instance.setDocumentTitle(resolveDocumentTitle(template, formData, username));
             instance.setDocumentReason(resolveDocumentReason(template, formData));
             instance.setTotalAmount(resolveTotalAmount(formData));
@@ -456,14 +509,14 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             processDocumentInstanceMapper.insert(instance);
 
             stage = "append-submit-log";
-            appendLog(instance.getDocumentCode(), null, null, LOG_SUBMIT, userId, defaultUsername(username), null, buildSubmitPayload(template));
+            appendLog(instance.getDocumentCode(), null, null, LOG_SUBMIT, userId, submitterDisplayName, null, buildSubmitPayload(template));
             stage = "persist-expense-details";
             saveExpenseDetailInstances(instance.getDocumentCode(), template, expenseDetailDesign, expenseDetails);
             stage = "sync-document-relations";
             syncDocumentBusinessRelations(instance.getDocumentCode(), formDesign, formData);
             stage = "initialize-runtime";
             initializeRuntime(instance, runtimeFlowContext);
-            if (Objects.equals(requireDocument(instance.getDocumentCode()).getStatus(), DOCUMENT_STATUS_APPROVED)) {
+            if (isEffectiveApprovedStatus(requireDocument(instance.getDocumentCode()).getStatus())) {
                 finalizeEffectiveWriteOffs(instance.getDocumentCode());
             }
 
@@ -515,11 +568,60 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         return instances.isEmpty() ? Collections.emptyList() : toExpenseSummaries(instances);
     }
 
+    @Override
+    public List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
+        String normalizedKind = normalizeDashboardOutstandingKind(kind);
+        String templateType = Objects.equals(normalizedKind, WRITEOFF_SOURCE_LOAN) ? "loan" : "report";
+        List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
+                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                        .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
+                        .in(ProcessDocumentInstance::getStatus, List.of(
+                                DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                DOCUMENT_STATUS_PAYMENT_FINISHED
+                        ))
+                        .eq(ProcessDocumentInstance::getTemplateType, templateType)
+                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
+        );
+        if (instances.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> documentCodes = instances.stream().map(ProcessDocumentInstance::getDocumentCode).toList();
+        Map<String, BigDecimal> effectiveAmountMap = loadEffectiveWriteOffAmountMap(documentCodes);
+        Map<String, BigDecimal> prepayAmountMap = Objects.equals(normalizedKind, WRITEOFF_SOURCE_PREPAY_REPORT)
+                ? loadPrepayReportAmountMap(documentCodes)
+                : Collections.emptyMap();
+
+        Map<String, BigDecimal> outstandingAmountMap = new LinkedHashMap<>();
+        List<ProcessDocumentInstance> outstandingInstances = instances.stream()
+                .filter(instance -> {
+                    BigDecimal outstandingAmount = resolveOutstandingAmount(instance, normalizedKind, prepayAmountMap, effectiveAmountMap);
+                    if (outstandingAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                        return false;
+                    }
+                    outstandingAmountMap.put(instance.getDocumentCode(), outstandingAmount);
+                    return true;
+                })
+                .toList();
+        if (outstandingInstances.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return toExpenseSummaries(outstandingInstances).stream()
+                .peek(item -> item.setOutstandingAmount(defaultDecimal(outstandingAmountMap.get(item.getDocumentCode()))))
+                .toList();
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public List<String> repairMisapprovedDocumentsByRootContainerBug() {
         List<ProcessDocumentInstance> approvedDocuments = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .eq(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_APPROVED)
+                        .in(ProcessDocumentInstance::getStatus, List.of(
+                                DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                DOCUMENT_STATUS_PAYMENT_FINISHED
+                        ))
                         .orderByAsc(ProcessDocumentInstance::getId)
         );
         if (approvedDocuments.isEmpty()) {
@@ -580,7 +682,11 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
         List<ProcessDocumentInstance> visibleApprovedDocuments = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .eq(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_APPROVED)
+                        .in(ProcessDocumentInstance::getStatus, List.of(
+                                DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                DOCUMENT_STATUS_PAYMENT_FINISHED
+                        ))
                         .in(ProcessDocumentInstance::getTemplateType, normalizedTemplateTypes)
                         .ne(excludedDocumentCode != null, ProcessDocumentInstance::getDocumentCode, excludedDocumentCode)
                         .eq(!allowCrossView, ProcessDocumentInstance::getSubmitterUserId, userId)
@@ -618,13 +724,151 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     @Override
+    public ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
+            Long userId,
+            String targetDocumentCode,
+            String keyword,
+            Integer page,
+            Integer pageSize
+    ) {
+        ProcessDocumentInstance target = requireDocument(targetDocumentCode);
+        requireSubmitter(target, userId);
+        ensureDashboardWriteOffTargetSupported(target);
+
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 50);
+        String normalizedKeyword = trimToNull(keyword);
+
+        List<ProcessDocumentInstance> sourceReports = processDocumentInstanceMapper.selectList(
+                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                        .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
+                        .in(ProcessDocumentInstance::getStatus, List.of(
+                                DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                DOCUMENT_STATUS_PAYMENT_FINISHED
+                        ))
+                        .eq(ProcessDocumentInstance::getTemplateType, "report")
+                        .ne(ProcessDocumentInstance::getDocumentCode, targetDocumentCode)
+                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
+        ).stream()
+                .filter(item -> matchesKeyword(
+                        normalizedKeyword,
+                        item.getDocumentCode(),
+                        item.getDocumentTitle(),
+                        item.getTemplateName(),
+                        item.getDocumentReason()
+                ))
+                .toList();
+
+        ExpenseDocumentPickerVO result = new ExpenseDocumentPickerVO();
+        result.setRelationType(RELATION_TYPE_WRITEOFF);
+        if (sourceReports.isEmpty()) {
+            return result;
+        }
+
+        Map<String, BigDecimal> sourceEffectiveAmountMap = loadEffectiveSourceWriteOffAmountMap(
+                sourceReports.stream().map(ProcessDocumentInstance::getDocumentCode).toList()
+        );
+        Set<String> boundSourceCodes = processDocumentWriteOffMapper.selectList(
+                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
+                        .eq(ProcessDocumentWriteOff::getTargetDocumentCode, targetDocumentCode)
+                        .eq(ProcessDocumentWriteOff::getStatus, WRITEOFF_STATUS_EFFECTIVE)
+        ).stream()
+                .map(ProcessDocumentWriteOff::getSourceDocumentCode)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<ExpenseDocumentPickerItemVO> items = new ArrayList<>();
+        for (ProcessDocumentInstance report : sourceReports) {
+            if (boundSourceCodes.contains(report.getDocumentCode())) {
+                continue;
+            }
+            BigDecimal availableAmount = resolveReportSourceAvailableAmount(report, sourceEffectiveAmountMap);
+            if (availableAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            ExpenseDocumentPickerItemVO item = toPickerItem(report);
+            item.setAvailableWriteOffAmount(availableAmount);
+            items.add(item);
+        }
+        if (items.isEmpty()) {
+            return result;
+        }
+
+        result.getGroups().add(paginatePickerGroup("report", items, safePage, safePageSize));
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean bindDashboardWriteOff(Long userId, String targetDocumentCode, String sourceReportDocumentCode) {
+        ProcessDocumentInstance target = requireDocument(targetDocumentCode);
+        ProcessDocumentInstance sourceReport = requireDocument(sourceReportDocumentCode);
+        requireSubmitter(target, userId);
+        requireSubmitter(sourceReport, userId);
+        ensureDashboardWriteOffTargetSupported(target);
+        ensureApprovedReportSource(sourceReport);
+        if (Objects.equals(target.getDocumentCode(), sourceReport.getDocumentCode())) {
+            throw new IllegalStateException("鏍搁攢鏉ユ簮鎶ラ攢鍗曚笉鑳戒笌鐩爣鍗曟嵁鐩稿悓");
+        }
+
+        long duplicateCount = processDocumentWriteOffMapper.selectCount(
+                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
+                        .eq(ProcessDocumentWriteOff::getSourceDocumentCode, sourceReportDocumentCode)
+                        .eq(ProcessDocumentWriteOff::getTargetDocumentCode, targetDocumentCode)
+                        .eq(ProcessDocumentWriteOff::getStatus, WRITEOFF_STATUS_EFFECTIVE)
+        );
+        if (duplicateCount > 0) {
+            throw new IllegalStateException("璇ユ姤閿€鍗曚笌鐩爣鍗曟嵁宸插瓨鍦ㄦ湁鏁堟牳閿€鍏崇郴");
+        }
+
+        Map<String, BigDecimal> prepayAmountMap = loadPrepayReportAmountMap(List.of(targetDocumentCode));
+        String targetKind = resolveWriteOffSourceKind(target, prepayAmountMap);
+        Map<String, BigDecimal> targetEffectiveAmountMap = loadEffectiveWriteOffAmountMap(List.of(targetDocumentCode));
+        BigDecimal targetRemaining = resolveCurrentAvailableWriteOffAmount(target, targetKind, prepayAmountMap, targetEffectiveAmountMap);
+        if (targetRemaining.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("鐩爣鍗曟嵁宸叉棤鍙牳閿€浣欓");
+        }
+
+        Map<String, BigDecimal> sourceEffectiveAmountMap = loadEffectiveSourceWriteOffAmountMap(List.of(sourceReportDocumentCode));
+        BigDecimal sourceRemaining = resolveReportSourceAvailableAmount(sourceReport, sourceEffectiveAmountMap);
+        if (sourceRemaining.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("鏉ユ簮鎶ラ攢鍗曞凡鏃犲彲鐢ㄦ牳閿€浣欓");
+        }
+
+        BigDecimal effectiveAmount = targetRemaining.min(sourceRemaining);
+        if (effectiveAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("鏈鏍搁攢閲戦蹇呴』澶т簬 0");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        ProcessDocumentWriteOff writeOff = new ProcessDocumentWriteOff();
+        writeOff.setSourceDocumentCode(sourceReportDocumentCode);
+        writeOff.setSourceFieldKey(DASHBOARD_WRITEOFF_SOURCE_FIELD_KEY);
+        writeOff.setTargetDocumentCode(targetDocumentCode);
+        writeOff.setTargetTemplateType(target.getTemplateType());
+        writeOff.setWriteoffSourceKind(targetKind);
+        writeOff.setRequestedAmount(effectiveAmount);
+        writeOff.setEffectiveAmount(effectiveAmount);
+        writeOff.setAvailableSnapshotAmount(targetRemaining);
+        writeOff.setRemainingSnapshotAmount(targetRemaining.subtract(effectiveAmount));
+        writeOff.setSortOrder(1);
+        writeOff.setStatus(WRITEOFF_STATUS_EFFECTIVE);
+        writeOff.setEffectiveAt(now);
+        writeOff.setCreatedAt(now);
+        writeOff.setUpdatedAt(now);
+        processDocumentWriteOffMapper.insert(writeOff);
+        return true;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public ExpenseDocumentDetailVO recallDocument(Long userId, String username, String documentCode) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         requireSubmitter(instance, userId);
         String status = trimToNull(instance.getStatus());
         if (!Objects.equals(status, DOCUMENT_STATUS_PENDING) && !Objects.equals(status, DOCUMENT_STATUS_EXCEPTION)) {
-            throw new IllegalStateException("当前单据不支持召回");
+            throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆敮鎸佸彫鍥?");
         }
         LocalDateTime now = LocalDateTime.now();
         cancelOpenTasks(loadOpenTasks(instance.getDocumentCode()), null, now);
@@ -648,12 +892,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         assertCanViewDocument(instance, userId, allowCrossView);
         if (!isFlowRelatedUser(instance, userId)) {
-            throw new IllegalStateException("只有流程相关人可以评论当前单据");
+            throw new IllegalStateException("鍙湁娴佺▼鐩稿叧浜哄彲浠ヨ瘎璁哄綋鍓嶅崟鎹?");
         }
         String comment = trimToNull(dto == null ? null : dto.getComment());
         List<String> attachmentFileNames = normalizeStringList(dto == null ? Collections.emptyList() : dto.getAttachmentFileNames());
         if (comment == null && attachmentFileNames.isEmpty()) {
-            throw new IllegalArgumentException("评论内容不能为空");
+            throw new IllegalArgumentException("璇勮鍐呭涓嶈兘涓虹┖");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         if (comment != null) {
@@ -681,11 +925,11 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_PENDING)) {
-            throw new IllegalStateException("只有审批中的单据才可以催办");
+            throw new IllegalStateException("鍙湁瀹℃壒涓殑鍗曟嵁鎵嶅彲浠ュ偓鍔?");
         }
         List<ProcessDocumentTask> currentTasks = loadPendingTasks(instance.getDocumentCode());
         if (currentTasks.isEmpty()) {
-            throw new IllegalStateException("当前单据没有待审批人，暂时无法催办");
+            throw new IllegalStateException("褰撳墠鍗曟嵁娌℃湁寰呭鎵逛汉锛屾殏鏃舵棤娉曞偓鍔?");
         }
         ensureReminderThrottle(instance.getDocumentCode(), userId);
         String remark = trimToNull(dto == null ? null : dto.getRemark());
@@ -695,10 +939,10 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                         item -> new ArrayList<>(item.values())
                 ));
         for (ProcessDocumentTask task : distinctTasks) {
-            String title = "审批催办提醒";
-            String content = "单据 " + instance.getDocumentCode() + " 正在等待你的处理";
+            String title = "瀹℃壒鍌姙鎻愰啋";
+            String content = "鍗曟嵁 " + instance.getDocumentCode() + " 姝ｅ湪绛夊緟浣犵殑澶勭悊";
             if (remark != null) {
-                content = content + "，备注：" + remark;
+                content = content + "锛屽娉細" + remark;
             }
             notificationService.sendAsyncNotification(task.getAssigneeUserId(), "EXPENSE_REMINDER", title, content, instance.getDocumentCode());
         }
@@ -735,7 +979,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("当前单据不是可重提草稿状态");
+            throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆槸鍙噸鎻愯崏绋跨姸鎬?");
         }
         return buildEditContext(userId, instance, null, "RESUBMIT");
     }
@@ -746,17 +990,19 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("当前单据不是可重提草稿状态");
+            throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆槸鍙噸鎻愯崏绋跨姸鎬?");
         }
+        String submitterDisplayName = resolveUserDisplayName(userId, username);
         DocumentMutationContext mutation = buildMutationContext(instance, dto, true);
+        instance.setSubmitterName(submitterDisplayName);
         applyDocumentMutation(instance, mutation, true);
-        appendLog(instance.getDocumentCode(), null, null, LOG_RESUBMIT, userId, defaultUsername(username), null, Map.of(
+        appendLog(instance.getDocumentCode(), null, null, LOG_RESUBMIT, userId, submitterDisplayName, null, Map.of(
                 "templateCode", instance.getTemplateCode(),
                 "templateName", instance.getTemplateName()
         ));
         syncDocumentBusinessRelations(instance.getDocumentCode(), mutation.formDesign(), mutation.formData());
         initializeRuntime(instance, mutation.runtimeContext());
-        if (Objects.equals(requireDocument(instance.getDocumentCode()).getStatus(), DOCUMENT_STATUS_APPROVED)) {
+        if (isEffectiveApprovedStatus(requireDocument(instance.getDocumentCode()).getStatus())) {
             finalizeEffectiveWriteOffs(instance.getDocumentCode());
         }
         ExpenseDocumentSubmitResultVO result = new ExpenseDocumentSubmitResultVO();
@@ -771,6 +1017,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
                         .eq(ProcessDocumentTask::getAssigneeUserId, userId)
+                        .eq(ProcessDocumentTask::getNodeType, NODE_TYPE_APPROVAL)
                         .eq(ProcessDocumentTask::getStatus, TASK_STATUS_PENDING)
                         .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
         );
@@ -788,6 +1035,198 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ));
         SummaryEnrichmentData enrichmentData = buildSummaryEnrichment(new ArrayList<>(instanceMap.values()));
         return tasks.stream().map(task -> toPendingItem(task, instanceMap.get(task.getDocumentCode()), enrichmentData)).toList();
+    }
+
+    @Override
+    public List<ExpensePaymentOrderVO> listPaymentOrders(Long userId, String status) {
+        String normalizedStatus = normalizePaymentOrderStatus(status);
+        List<ProcessDocumentTask> tasks = loadVisiblePaymentTasks(userId, normalizedStatus);
+        if (tasks.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> documentCodes = tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList();
+        Map<String, ProcessDocumentInstance> instanceMap = processDocumentInstanceMapper.selectList(
+                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                        .in(ProcessDocumentInstance::getDocumentCode, documentCodes)
+        ).stream().collect(Collectors.toMap(
+                ProcessDocumentInstance::getDocumentCode,
+                item -> item,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+        SummaryEnrichmentData enrichmentData = buildSummaryEnrichment(new ArrayList<>(instanceMap.values()));
+        Map<String, PmBankPaymentRecord> bankRecordMap = loadLatestBankRecordMap(documentCodes);
+        Map<Long, String> companyBankAccountNameMap = loadCompanyBankAccountNameMap(
+                bankRecordMap.values().stream()
+                        .map(PmBankPaymentRecord::getCompanyBankAccountId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet())
+        );
+        return tasks.stream()
+                .map(task -> toPaymentOrder(
+                        task,
+                        instanceMap.get(task.getDocumentCode()),
+                        enrichmentData,
+                        bankRecordMap.get(task.getDocumentCode()),
+                        companyBankAccountNameMap
+                ))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    @Override
+    public List<ExpenseBankLinkSummaryVO> listBankLinks() {
+        List<SystemCompanyBankAccount> accounts = systemCompanyBankAccountMapper.selectList(
+                Wrappers.<SystemCompanyBankAccount>lambdaQuery()
+                        .orderByAsc(SystemCompanyBankAccount::getCompanyId)
+                        .orderByDesc(SystemCompanyBankAccount::getDirectConnectEnabled)
+                        .orderByAsc(SystemCompanyBankAccount::getId)
+        );
+        if (accounts.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, String> companyNameMap = buildCompanyNameMap(
+                accounts.stream()
+                        .map(SystemCompanyBankAccount::getCompanyId)
+                        .filter(StrUtil::isNotBlank)
+                        .collect(Collectors.toSet())
+        );
+        Map<Long, PmBankPaymentRecord> latestRecordByAccountId = loadLatestBankRecordByAccountId(
+                accounts.stream().map(SystemCompanyBankAccount::getId).collect(Collectors.toSet())
+        );
+        return accounts.stream()
+                .map(account -> toBankLinkSummary(account, companyNameMap.get(account.getCompanyId()), latestRecordByAccountId.get(account.getId())))
+                .toList();
+    }
+
+    @Override
+    public ExpenseBankLinkConfigVO getBankLink(Long companyBankAccountId) {
+        SystemCompanyBankAccount account = requireCompanyBankAccount(companyBankAccountId);
+        return toBankLinkConfig(account, findCompanyName(account.getCompanyId()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseBankLinkConfigVO updateBankLink(Long companyBankAccountId, ExpenseBankLinkSaveDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("银企直连配置不能为空");
+        }
+        SystemCompanyBankAccount account = requireCompanyBankAccount(companyBankAccountId);
+        String provider = trimToNull(dto.getDirectConnectProvider());
+        String channel = trimToNull(dto.getDirectConnectChannel());
+        if (!BANK_PROVIDER_CMB.equals(provider) || !BANK_CHANNEL_CMB_CLOUD.equals(channel)) {
+            throw new IllegalArgumentException("首期仅支持招商银行云直连");
+        }
+        boolean enabled = Boolean.TRUE.equals(dto.getEnabled());
+        if (enabled) {
+            requireNotBlank(dto.getOperatorKey(), "招行经办Key不能为空");
+            requireNotBlank(dto.getCallbackSecret(), "银行回调密钥不能为空");
+        }
+
+        account.setDirectConnectEnabled(enabled ? 1 : 0);
+        account.setDirectConnectProvider(provider);
+        account.setDirectConnectChannel(channel);
+        account.setDirectConnectProtocol(trimToNull(dto.getDirectConnectProtocol()));
+        account.setDirectConnectCustomerNo(trimToNull(dto.getDirectConnectCustomerNo()));
+        account.setDirectConnectAppId(trimToNull(dto.getDirectConnectAppId()));
+        account.setDirectConnectAccountAlias(trimToNull(dto.getDirectConnectAccountAlias()));
+        account.setDirectConnectAuthMode(trimToNull(dto.getDirectConnectAuthMode()));
+        account.setDirectConnectApiBaseUrl(trimToNull(dto.getDirectConnectApiBaseUrl()));
+        account.setDirectConnectCertRef(trimToNull(dto.getDirectConnectCertRef()));
+        account.setDirectConnectSecretRef(trimToNull(dto.getDirectConnectSecretRef()));
+        account.setDirectConnectSignType(trimToNull(dto.getDirectConnectSignType()));
+        account.setDirectConnectEncryptType(trimToNull(dto.getDirectConnectEncryptType()));
+        account.setDirectConnectLastSyncAt(LocalDateTime.now());
+        account.setDirectConnectLastSyncStatus(enabled ? "ENABLED" : "DISABLED");
+        account.setDirectConnectLastErrorMsg(null);
+        account.setDirectConnectExtJson(writeJson(Map.of(
+                "operatorKey", defaultText(trimToNull(dto.getOperatorKey()), ""),
+                "callbackSecret", defaultText(trimToNull(dto.getCallbackSecret()), ""),
+                "publicKeyRef", defaultText(trimToNull(dto.getPublicKeyRef()), ""),
+                "receiptQueryEnabled", Boolean.TRUE.equals(dto.getReceiptQueryEnabled())
+        )));
+        systemCompanyBankAccountMapper.updateById(account);
+
+        if (enabled) {
+            disableOtherEnabledBankLinks(account);
+        }
+        return toBankLinkConfig(requireCompanyBankAccount(companyBankAccountId), findCompanyName(account.getCompanyId()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseDocumentDetailVO handleCmbCloudCallback(ExpenseBankCallbackDTO dto) {
+        PmBankPaymentRecord record = requireBankPaymentRecordForCallback(dto);
+        SystemCompanyBankAccount account = record.getCompanyBankAccountId() == null
+                ? null
+                : systemCompanyBankAccountMapper.selectById(record.getCompanyBankAccountId());
+        verifyCmbCallback(dto, account);
+
+        LocalDateTime now = LocalDateTime.now();
+        record.setCallbackPayloadJson(writeJson(dto == null ? Collections.emptyMap() : dto.getRawPayload()));
+        record.setCallbackReceivedAt(now);
+        record.setBankOrderNo(firstNonBlank(trimToNull(dto.getBankOrderNo()), record.getBankOrderNo()));
+        record.setBankFlowNo(firstNonBlank(trimToNull(dto.getBankFlowNo()), record.getBankFlowNo()));
+        record.setPushResultJson(writeJson(Map.of(
+                "resultCode", defaultText(trimToNull(dto.getResultCode()), ""),
+                "resultMessage", defaultText(trimToNull(dto.getResultMessage()), ""),
+                "success", resolveCallbackSuccess(dto)
+        )));
+
+        if (!resolveCallbackSuccess(dto)) {
+            record.setLastErrorMessage(firstNonBlank(trimToNull(dto.getResultMessage()), "银行回调返回失败"));
+            pmBankPaymentRecordMapper.updateById(record);
+            throw new IllegalStateException(record.getLastErrorMessage());
+        }
+
+        ProcessDocumentTask task = processDocumentTaskMapper.selectById(record.getTaskId());
+        if (task == null) {
+            throw new IllegalStateException("付款任务不存在");
+        }
+        ProcessDocumentInstance instance = requireDocument(record.getDocumentCode());
+        LocalDateTime paidAt = parseFlexibleDateTime(dto.getPaidAt(), now);
+        record.setManualPaid(0);
+        record.setPaidAt(paidAt);
+        if (trimToNull(record.getReceiptStatus()) == null) {
+            record.setReceiptStatus(RECEIPT_STATUS_PENDING);
+        }
+        record.setLastErrorMessage(null);
+        pmBankPaymentRecordMapper.updateById(record);
+
+        if (DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(trimToNull(instance.getStatus()))
+                || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(trimToNull(instance.getStatus()))) {
+            return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
+        }
+        return completePaymentTaskInternal(null, SYSTEM_OPERATOR, task, instance, "银行回调确认已支付", false, paidAt);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void runBankReceiptPolling() {
+        List<PmBankPaymentRecord> records = pmBankPaymentRecordMapper.selectList(
+                Wrappers.<PmBankPaymentRecord>lambdaQuery()
+                        .eq(PmBankPaymentRecord::getManualPaid, 0)
+                        .and(wrapper -> wrapper.isNull(PmBankPaymentRecord::getReceiptStatus)
+                                .or()
+                                .ne(PmBankPaymentRecord::getReceiptStatus, RECEIPT_STATUS_RECEIVED))
+                        .orderByAsc(PmBankPaymentRecord::getUpdatedAt, PmBankPaymentRecord::getId)
+        );
+        if (records.isEmpty()) {
+            return;
+        }
+        for (PmBankPaymentRecord record : records) {
+            ProcessDocumentInstance instance = requireDocument(record.getDocumentCode());
+            if (!DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(trimToNull(instance.getStatus()))) {
+                continue;
+            }
+            SystemCompanyBankAccount account = record.getCompanyBankAccountId() == null
+                    ? null
+                    : systemCompanyBankAccountMapper.selectById(record.getCompanyBankAccountId());
+            if (!isReceiptQueryEnabled(account)) {
+                continue;
+            }
+            queryAndAttachBankReceipt(record, instance, account);
+        }
     }
 
     @Override
@@ -827,12 +1266,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         if (nodeCompleted) {
             Map<String, Object> context = buildRuntimeContextForInstance(instance);
             clearCurrentNode(instance);
-            advanceFromPosition(instance, snapshot, context, node.getParentNodeKey(), nextIndex(snapshot, node));
+            advanceFromPosition(instance, snapshot, context, node.getParentNodeKey(), nextIndex(snapshot, node), DOCUMENT_STATUS_APPROVED);
         } else {
             instance.setUpdatedAt(now);
             processDocumentInstanceMapper.updateById(instance);
         }
-        if (Objects.equals(requireDocument(instance.getDocumentCode()).getStatus(), DOCUMENT_STATUS_APPROVED)) {
+        if (isEffectiveApprovedStatus(requireDocument(instance.getDocumentCode()).getStatus())) {
             finalizeEffectiveWriteOffs(instance.getDocumentCode());
         }
         return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
@@ -867,6 +1306,82 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseDocumentDetailVO startPaymentTask(Long userId, String username, Long taskId) {
+        ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
+        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
+        String status = trimToNull(instance.getStatus());
+        boolean retrying = DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status) && paymentTaskAllowsRetry(task);
+        if (DOCUMENT_STATUS_PENDING_PAYMENT.equals(status) || retrying) {
+            return pushPaymentTaskToBank(userId, username, task, instance, retrying);
+        }
+        throw new IllegalStateException("当前付款任务无法发起支付");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseDocumentDetailVO completePaymentTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
+        ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
+        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
+        String status = trimToNull(instance.getStatus());
+        if (!DOCUMENT_STATUS_PAYING.equals(status) && !DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)) {
+            throw new IllegalStateException("当前付款任务不在可完成状态");
+        }
+        PmBankPaymentRecord record = findOrCreateBankPaymentRecord(task, instance, findActiveBankAccountForDocument(instance));
+        record.setManualPaid(1);
+        record.setLastErrorMessage(null);
+        if (trimToNull(record.getReceiptStatus()) == null) {
+            record.setReceiptStatus(RECEIPT_STATUS_PENDING);
+        }
+        saveBankPaymentRecord(record);
+        return completePaymentTaskInternal(
+                userId,
+                username,
+                task,
+                instance,
+                trimToNull(dto == null ? null : dto.getComment()),
+                true,
+                LocalDateTime.now()
+        );
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
+        ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
+        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
+        String status = trimToNull(instance.getStatus());
+        if (!DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)
+                && !DOCUMENT_STATUS_PAYING.equals(status)
+                && !DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status)) {
+            throw new IllegalStateException("当前付款任务不在可标记异常状态");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        persistDocumentRuntimeState(
+                instance,
+                DOCUMENT_STATUS_PAYMENT_EXCEPTION,
+                task.getNodeKey(),
+                task.getNodeName(),
+                NODE_TYPE_PAYMENT,
+                null,
+                now
+        );
+        String comment = trimToNull(dto == null ? null : dto.getComment());
+        PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
+        if (record != null) {
+            record.setLastErrorMessage(firstNonBlank(comment, "付款任务被标记为异常"));
+            record.setReceiptStatus(RECEIPT_STATUS_FAILED);
+            pmBankPaymentRecordMapper.updateById(record);
+        }
+        appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_PAYMENT_EXCEPTION, userId, defaultUsername(username), comment, Map.of(
+                "taskId", task.getId(),
+                "allowRetry", paymentTaskAllowsRetry(task)
+        ));
+        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
+    }
+
+    @Override
     public ExpenseDocumentEditContextVO getTaskModifyContext(Long userId, Long taskId) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
@@ -894,7 +1409,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         User targetUser = requireActiveUser(dto == null ? null : dto.getTargetUserId());
         if (Objects.equals(targetUser.getId(), userId)) {
-            throw new IllegalArgumentException("转交对象不能是当前审批人");
+            throw new IllegalArgumentException("杞氦瀵硅薄涓嶈兘鏄綋鍓嶅鎵逛汉");
         }
         String remark = trimToNull(dto == null ? null : dto.getRemark());
         task.setAssigneeUserId(targetUser.getId());
@@ -914,7 +1429,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         User targetUser = requireActiveUser(dto == null ? null : dto.getTargetUserId());
         if (Objects.equals(targetUser.getId(), userId)) {
-            throw new IllegalArgumentException("加签对象不能是当前审批人");
+            throw new IllegalArgumentException("鍔犵瀵硅薄涓嶈兘鏄綋鍓嶅鎵逛汉");
         }
         ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
         LocalDateTime now = LocalDateTime.now();
@@ -1014,11 +1529,11 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         try {
             FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
             if (snapshot.nodes().isEmpty()) {
-                markDocumentApproved(instance);
+                markDocumentApproved(instance, DOCUMENT_STATUS_APPROVED);
                 appendLog(instance.getDocumentCode(), null, null, LOG_FINISH, null, "SYSTEM", "No approval nodes configured", Collections.emptyMap());
                 return;
             }
-            advanceFromPosition(instance, snapshot, context, null, 0);
+            advanceFromPosition(instance, snapshot, context, null, 0, DOCUMENT_STATUS_APPROVED);
         } catch (RuntimeException ex) {
             log.error(
                     "Expense submit runtime initialization failed documentCode={} approvalFlowCode={} status={}",
@@ -1036,9 +1551,10 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             FlowRuntimeSnapshot snapshot,
             Map<String, Object> context,
             String containerKey,
-            int startIndex
+            int startIndex,
+            String terminalStatus
     ) {
-        FlowAdvanceState state = processContainer(instance, snapshot, context, containerKey, startIndex);
+        FlowAdvanceState state = processContainer(instance, snapshot, context, containerKey, startIndex, terminalStatus);
         if (state == FlowAdvanceState.PAUSED) {
             return state;
         }
@@ -1047,11 +1563,11 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         if (route != null) {
             ProcessFlowNodeDTO branchNode = snapshot.node(route.getSourceNodeKey());
             if (branchNode != null) {
-                return advanceFromPosition(instance, snapshot, context, branchNode.getParentNodeKey(), nextIndex(snapshot, branchNode));
+                return advanceFromPosition(instance, snapshot, context, branchNode.getParentNodeKey(), nextIndex(snapshot, branchNode), terminalStatus);
             }
         }
 
-        markDocumentApproved(instance);
+        markDocumentApproved(instance, terminalStatus);
         appendLog(instance.getDocumentCode(), null, null, LOG_FINISH, null, "SYSTEM", FLOW_FINISH_COMMENT, Collections.emptyMap());
         return FlowAdvanceState.COMPLETED;
     }
@@ -1061,7 +1577,8 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             FlowRuntimeSnapshot snapshot,
             Map<String, Object> context,
             String containerKey,
-            int startIndex
+            int startIndex,
+            String terminalStatus
     ) {
         List<ProcessFlowNodeDTO> nodes = snapshot.children(containerKey);
         for (int index = startIndex; index < nodes.size(); index++) {
@@ -1077,7 +1594,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                             "routeKey", matchedRoute.getRouteKey(),
                             "routeName", defaultText(matchedRoute.getRouteName(), matchedRoute.getRouteKey())
                     ));
-                    return advanceFromPosition(instance, snapshot, context, matchedRoute.getRouteKey(), 0);
+                    return advanceFromPosition(instance, snapshot, context, matchedRoute.getRouteKey(), 0, terminalStatus);
                 }
                 case NODE_TYPE_APPROVAL -> {
                     List<User> approvers = resolveApprovers(node, context);
@@ -1094,7 +1611,21 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                     return FlowAdvanceState.PAUSED;
                 }
                 case NODE_TYPE_CC -> appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_CC_REACHED, null, "SYSTEM", "CC node reached", Collections.emptyMap());
-                case NODE_TYPE_PAYMENT -> appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_PAYMENT_REACHED, null, "SYSTEM", "Payment node reached", Collections.emptyMap());
+                case NODE_TYPE_PAYMENT -> {
+                    appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_PAYMENT_REACHED, null, "SYSTEM", "Payment node reached", Collections.emptyMap());
+                    List<User> executors = resolvePaymentExecutors(node);
+                    if (executors.isEmpty()) {
+                        String missingHandler = resolveMissingHandler(node.getConfig());
+                        if (MISSING_HANDLER_AUTO_SKIP.equals(missingHandler)) {
+                            appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_AUTO_SKIP, null, "SYSTEM", "No payment executor resolved, auto skipped", Collections.emptyMap());
+                            continue;
+                        }
+                        markDocumentException(instance, node, "No payment executor resolved");
+                        return FlowAdvanceState.PAUSED;
+                    }
+                    createPaymentTasks(instance, node, executors);
+                    return FlowAdvanceState.PAUSED;
+                }
                 default -> {
                 }
             }
@@ -1138,6 +1669,45 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                 "approvalMode", approvalMode,
                 "approverUserIds", distinctApprovers.stream().map(User::getId).toList(),
                 "approverNames", distinctApprovers.stream().map(this::normalizeUserName).toList()
+        ));
+    }
+
+    private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, List<User> executors) {
+        LocalDateTime now = LocalDateTime.now();
+        String batchNo = buildTaskBatchNo(instance.getDocumentCode(), node.getNodeKey());
+        List<User> distinctExecutors = executors.stream()
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
+                        item -> new ArrayList<>(item.values())
+                ));
+        for (User executor : distinctExecutors) {
+            ProcessDocumentTask task = new ProcessDocumentTask();
+            task.setDocumentCode(instance.getDocumentCode());
+            task.setNodeKey(node.getNodeKey());
+            task.setNodeName(node.getNodeName());
+            task.setNodeType(node.getNodeType());
+            task.setAssigneeUserId(executor.getId());
+            task.setAssigneeName(normalizeUserName(executor));
+            task.setStatus(TASK_STATUS_PENDING);
+            task.setTaskBatchNo(batchNo);
+            task.setApprovalMode(APPROVAL_MODE_OR_SIGN);
+            task.setTaskKind(TASK_KIND_NORMAL);
+            task.setCreatedAt(now);
+            processDocumentTaskMapper.insert(task);
+        }
+        persistDocumentRuntimeState(
+                instance,
+                DOCUMENT_STATUS_PENDING_PAYMENT,
+                node.getNodeKey(),
+                node.getNodeName(),
+                NODE_TYPE_PAYMENT,
+                null,
+                now
+        );
+        appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_PAYMENT_PENDING, null, "SYSTEM", null, Map.of(
+                "executorUserIds", distinctExecutors.stream().map(User::getId).toList(),
+                "executorNames", distinctExecutors.stream().map(this::normalizeUserName).toList(),
+                "allowRetry", paymentNodeAllowsRetry(node)
         ));
     }
 
@@ -1241,6 +1811,83 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         return loadActiveUsers(toLongList(context.get("manualSelectedUserIds")));
     }
 
+    private List<User> resolvePaymentExecutors(ProcessFlowNodeDTO node) {
+        Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
+        String executorType = defaultText(asText(config.get("executorType")), PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER);
+        List<User> users;
+        if (PAYMENT_EXECUTOR_TYPE_FINANCE_ROLE.equals(executorType)) {
+            users = resolvePaymentFinanceRoleMembers();
+        } else {
+            users = resolvePaymentDesignatedMembers(config);
+        }
+        return users.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
+                        item -> new ArrayList<>(item.values())
+                ));
+    }
+
+    private List<User> resolvePaymentDesignatedMembers(Map<String, Object> config) {
+        return loadActiveUsers(toLongList(config.get("executorUserIds")));
+    }
+
+    private List<User> resolvePaymentFinanceRoleMembers() {
+        SystemPermission permission = systemPermissionMapper.selectOne(
+                Wrappers.<SystemPermission>lambdaQuery()
+                        .eq(SystemPermission::getPermissionCode, PAYMENT_EXECUTE_PERMISSION)
+                        .eq(SystemPermission::getStatus, 1)
+                        .last("limit 1")
+        );
+        if (permission == null || permission.getId() == null) {
+            return Collections.emptyList();
+        }
+        List<Long> roleIds = systemRolePermissionMapper.selectList(
+                Wrappers.<SystemRolePermission>lambdaQuery()
+                        .eq(SystemRolePermission::getPermissionId, permission.getId())
+        ).stream().map(SystemRolePermission::getRoleId).distinct().toList();
+        if (roleIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Long> userIds = systemUserRoleMapper.selectList(
+                Wrappers.<SystemUserRole>lambdaQuery()
+                        .in(SystemUserRole::getRoleId, roleIds)
+        ).stream().map(SystemUserRole::getUserId).distinct().toList();
+        if (userIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return loadActiveUsers(userIds);
+    }
+
+    private boolean paymentNodeAllowsRetry(ProcessFlowNodeDTO node) {
+        return paymentSpecialSettings(node).contains(PAYMENT_SPECIAL_ALLOW_RETRY);
+    }
+
+    private boolean paymentTaskAllowsRetry(ProcessDocumentTask task) {
+        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
+        return paymentTaskAllowsRetry(instance, task);
+    }
+
+    private boolean paymentTaskAllowsRetry(ProcessDocumentInstance instance, ProcessDocumentTask task) {
+        FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
+        ProcessFlowNodeDTO node = snapshot.node(task.getNodeKey());
+        return node != null && paymentNodeAllowsRetry(node);
+    }
+
+    private Set<String> paymentSpecialSettings(ProcessFlowNodeDTO node) {
+        if (node == null || node.getConfig() == null) {
+            return Collections.emptySet();
+        }
+        Object raw = node.getConfig().get("specialSettings");
+        if (!(raw instanceof Collection<?> collection)) {
+            return Collections.emptySet();
+        }
+        return collection.stream()
+                .map(this::asText)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
     private List<Long> resolveStartDeptIds(String deptSource, Map<String, Object> context) {
         if (DEPT_SOURCE_SUBMITTER.equals(deptSource)) {
             Long submitterDeptId = asLong(context.get("submitterDeptId"));
@@ -1309,6 +1956,21 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         List<ExpenseApprovalLogVO> actionLogs = loadActionLogs(documentCode).stream().map(this::toLogVO).toList();
         long actionLogsElapsedAt = elapsedMillis(actionLogsStartedAt);
         detail.setActionLogs(actionLogs);
+
+        PmBankPaymentRecord bankPaymentRecord = findLatestBankPaymentRecord(documentCode);
+        if (bankPaymentRecord != null) {
+            Map<Long, String> companyBankAccountNameMap = loadCompanyBankAccountNameMap(
+                    bankPaymentRecord.getCompanyBankAccountId() == null
+                            ? Collections.emptySet()
+                            : Set.of(bankPaymentRecord.getCompanyBankAccountId())
+            );
+            detail.setBankPayment(toDetailBankPayment(
+                    bankPaymentRecord,
+                    companyBankAccountNameMap.get(bankPaymentRecord.getCompanyBankAccountId()),
+                    instance.getStatus()
+            ));
+            detail.setBankReceipts(toDetailBankReceipts(bankPaymentRecord));
+        }
 
         log.info(
                 "Expense detail built documentCode={} templateType={} totalMs={} snapshotMs={} companyOptionsMs={} departmentOptionsMs={} expenseDetailsMs={} pendingTasksMs={} actionLogsMs={} expenseDetailCount={} pendingTaskCount={} actionLogCount={}",
@@ -1464,6 +2126,73 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         ));
     }
 
+    private Map<String, BigDecimal> loadEffectiveSourceWriteOffAmountMap(List<String> sourceDocumentCodes) {
+        if (sourceDocumentCodes == null || sourceDocumentCodes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return processDocumentWriteOffMapper.selectList(
+                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
+                        .in(ProcessDocumentWriteOff::getSourceDocumentCode, sourceDocumentCodes)
+                        .eq(ProcessDocumentWriteOff::getStatus, WRITEOFF_STATUS_EFFECTIVE)
+        ).stream().collect(Collectors.groupingBy(
+                ProcessDocumentWriteOff::getSourceDocumentCode,
+                LinkedHashMap::new,
+                Collectors.reducing(
+                        BigDecimal.ZERO,
+                        item -> defaultDecimal(item.getEffectiveAmount()),
+                        BigDecimal::add
+                )
+        ));
+    }
+
+    private String normalizeDashboardOutstandingKind(String kind) {
+        String normalizedKind = trimToNull(kind);
+        if (Objects.equals(normalizedKind, WRITEOFF_SOURCE_LOAN) || Objects.equals(normalizedKind, WRITEOFF_SOURCE_PREPAY_REPORT)) {
+            return normalizedKind;
+        }
+        throw new IllegalArgumentException("涓嶆敮鎸佺殑寰呭鐞嗗崟鎹被鍨?");
+    }
+
+    private BigDecimal resolveOutstandingAmount(
+            ProcessDocumentInstance instance,
+            String kind,
+            Map<String, BigDecimal> prepayAmountMap,
+            Map<String, BigDecimal> effectiveAmountMap
+    ) {
+        BigDecimal baseAmount = Objects.equals(kind, WRITEOFF_SOURCE_LOAN)
+                ? defaultDecimal(instance.getTotalAmount())
+                : defaultDecimal(prepayAmountMap.get(instance.getDocumentCode()));
+        BigDecimal effectiveAmount = defaultDecimal(effectiveAmountMap.get(instance.getDocumentCode()));
+        BigDecimal outstandingAmount = baseAmount.subtract(effectiveAmount);
+        return outstandingAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : outstandingAmount;
+    }
+
+    private BigDecimal resolveReportSourceAvailableAmount(
+            ProcessDocumentInstance sourceReport,
+            Map<String, BigDecimal> sourceEffectiveAmountMap
+    ) {
+        BigDecimal availableAmount = defaultDecimal(sourceReport.getTotalAmount())
+                .subtract(defaultDecimal(sourceEffectiveAmountMap.get(sourceReport.getDocumentCode())));
+        return availableAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : availableAmount;
+    }
+
+    private void ensureDashboardWriteOffTargetSupported(ProcessDocumentInstance target) {
+        if (!isEffectiveApprovedStatus(target.getStatus())) {
+            throw new IllegalStateException("浠呭凡閫氳繃鍗曟嵁鏀寔鏍搁攢");
+        }
+        Map<String, BigDecimal> prepayAmountMap = loadPrepayReportAmountMap(List.of(target.getDocumentCode()));
+        resolveWriteOffSourceKind(target, prepayAmountMap);
+    }
+
+    private void ensureApprovedReportSource(ProcessDocumentInstance sourceReport) {
+        if (!isEffectiveApprovedStatus(sourceReport.getStatus())) {
+            throw new IllegalStateException("浠呭凡閫氳繃鎶ラ攢鍗曞彲浣滀负鏍搁攢鏉ユ簮");
+        }
+        if (!Objects.equals(normalizeTemplateType(sourceReport.getTemplateType()), "report")) {
+            throw new IllegalStateException("浠呮姤閿€鍗曞彲浣滀负鏍搁攢鏉ユ簮");
+        }
+    }
+
     private String normalizeRelationType(String relationType) {
         return Objects.equals(trimToNull(relationType), RELATION_TYPE_WRITEOFF) ? RELATION_TYPE_WRITEOFF : RELATION_TYPE_RELATED;
     }
@@ -1535,18 +2264,18 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         String templateType = trimToNull(template.getTemplateType());
         if (!Objects.equals(templateType, "report")) {
             if (!expenseDetails.isEmpty()) {
-                throw new IllegalArgumentException("只有报销单支持费用明细");
+                throw new IllegalArgumentException("鍙湁鎶ラ攢鍗曟敮鎸佽垂鐢ㄦ槑缁?");
             }
             return;
         }
         if (expenseDetailDesign == null) {
-            throw new IllegalStateException("当前报销模板未绑定费用明细表单");
+            throw new IllegalStateException("褰撳墠鎶ラ攢妯℃澘鏈粦瀹氳垂鐢ㄦ槑缁嗚〃鍗?");
         }
         if (expenseDetails.isEmpty()) {
-            throw new IllegalArgumentException("报销单至少需要 1 份费用明细");
+            throw new IllegalArgumentException("鎶ラ攢鍗曡嚦灏戦渶瑕?1 浠借垂鐢ㄦ槑缁?");
         }
         if (expenseDetails.size() > 10) {
-            throw new IllegalArgumentException("报销单最多只能保存 10 份费用明细");
+            throw new IllegalArgumentException("鎶ラ攢鍗曟渶澶氬彧鑳戒繚瀛?10 浠借垂鐢ㄦ槑缁?");
         }
     }
 
@@ -1557,16 +2286,16 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             List<ExpenseDetailInstanceDTO> expenseDetails
     ) {
         if (trimToNull(template.getFormDesignCode()) == null) {
-            throw new IllegalStateException("当前审批模板未绑定主表单，请先修复模板配置");
+            throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘鏈粦瀹氫富琛ㄥ崟锛岃鍏堜慨澶嶆ā鏉块厤缃?");
         }
         if (formDesign == null) {
-            throw new IllegalStateException("当前审批模板绑定的主表单不存在，请先修复模板配置");
+            throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘缁戝畾鐨勪富琛ㄥ崟涓嶅瓨鍦紝璇峰厛淇妯℃澘閰嶇疆");
         }
         validateExpenseDetailSubmission(template, expenseDetailDesign, expenseDetails);
         if (Objects.equals(trimToNull(template.getTemplateType()), "report")
                 && trimToNull(template.getExpenseDetailDesignCode()) != null
                 && expenseDetailDesign == null) {
-            throw new IllegalStateException("当前报销模板绑定的费用明细表单不存在，请先修复模板配置");
+            throw new IllegalStateException("褰撳墠鎶ラ攢妯℃澘缁戝畾鐨勮垂鐢ㄦ槑缁嗚〃鍗曚笉瀛樺湪锛岃鍏堜慨澶嶆ā鏉块厤缃?");
         }
         return validateFlowSnapshotForSubmit(template);
     }
@@ -1622,10 +2351,10 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         LocalDateTime now = LocalDateTime.now();
 
         for (RelatedDocumentSelection selection : relatedSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "关联单据");
+            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "鍏宠仈鍗曟嵁");
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
-                throw new IllegalStateException("关联单据类型不在当前组件允许范围内");
+                throw new IllegalStateException("鍏宠仈鍗曟嵁绫诲瀷涓嶅湪褰撳墠缁勪欢鍏佽鑼冨洿鍐?");
             }
             ProcessDocumentRelation relation = new ProcessDocumentRelation();
             relation.setSourceDocumentCode(documentCode);
@@ -1640,21 +2369,21 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         }
 
         for (WriteOffSelection selection : writeOffSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "核销单据");
+            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "鏍搁攢鍗曟嵁");
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
-                throw new IllegalStateException("核销单据类型不在当前组件允许范围内");
+                throw new IllegalStateException("鏍搁攢鍗曟嵁绫诲瀷涓嶅湪褰撳墠缁勪欢鍏佽鑼冨洿鍐?");
             }
             String writeOffSourceKind = resolveWriteOffSourceKind(target, prepayAmountMap);
             BigDecimal availableAmount = resolveCurrentAvailableWriteOffAmount(target, writeOffSourceKind, prepayAmountMap, effectiveAmountMap);
             if (selection.requestedAmount().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalStateException("核销金额必须大于 0");
+                throw new IllegalStateException("鏍搁攢閲戦蹇呴』澶т簬 0");
             }
             if (availableAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalStateException("当前核销单据已无可核销余额");
+                throw new IllegalStateException("褰撳墠鏍搁攢鍗曟嵁宸叉棤鍙牳閿€浣欓");
             }
             if (selection.requestedAmount().compareTo(availableAmount) > 0) {
-                throw new IllegalStateException("核销金额不能超过当前可核销余额");
+                throw new IllegalStateException("鏍搁攢閲戦涓嶈兘瓒呰繃褰撳墠鍙牳閿€浣欓");
             }
             ProcessDocumentWriteOff writeOff = new ProcessDocumentWriteOff();
             writeOff.setSourceDocumentCode(documentCode);
@@ -1704,15 +2433,15 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         LocalDateTime now = LocalDateTime.now();
 
         for (ProcessDocumentWriteOff writeOff : pendingWriteOffs) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, writeOff.getTargetDocumentCode(), "核销单据");
+            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, writeOff.getTargetDocumentCode(), "鏍搁攢鍗曟嵁");
             String sourceKind = resolveWriteOffSourceKind(target, prepayAmountMap);
             BigDecimal availableAmount = resolveCurrentAvailableWriteOffAmount(target, sourceKind, prepayAmountMap, effectiveAmountMap);
             BigDecimal requestedAmount = defaultDecimal(writeOff.getRequestedAmount());
             if (requestedAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalStateException("核销金额必须大于 0");
+                throw new IllegalStateException("鏍搁攢閲戦蹇呴』澶т簬 0");
             }
             if (requestedAmount.compareTo(availableAmount) > 0) {
-                throw new IllegalStateException("核销单据 " + writeOff.getTargetDocumentCode() + " 的可核销余额不足，请刷新后重试");
+                throw new IllegalStateException("鏍搁攢鍗曟嵁 " + writeOff.getTargetDocumentCode() + " 鐨勫彲鏍搁攢浣欓涓嶈冻锛岃鍒锋柊鍚庨噸璇?");
             }
             writeOff.setWriteoffSourceKind(sourceKind);
             writeOff.setEffectiveAmount(requestedAmount);
@@ -1828,7 +2557,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                 continue;
             }
             if (Objects.equals(targetDocumentCode, documentCode)) {
-                throw new IllegalStateException("当前单据不能关联自己");
+                throw new IllegalStateException("褰撳墠鍗曟嵁涓嶈兘鍏宠仈鑷繁");
             }
             selections.add(new RelatedDocumentSelection(binding.fieldKey(), targetDocumentCode, binding.allowedTemplateTypes(), sortOrder++));
         }
@@ -1851,11 +2580,11 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                 continue;
             }
             if (Objects.equals(targetDocumentCode, documentCode)) {
-                throw new IllegalStateException("当前单据不能核销自己");
+                throw new IllegalStateException("褰撳墠鍗曟嵁涓嶈兘鏍搁攢鑷繁");
             }
             BigDecimal requestedAmount = toBigDecimal(record.get("writeOffAmount"));
             if (requestedAmount == null) {
-                throw new IllegalStateException("核销单据缺少核销金额");
+                throw new IllegalStateException("鏍搁攢鍗曟嵁缂哄皯鏍搁攢閲戦");
             }
             selections.add(new WriteOffSelection(binding.fieldKey(), targetDocumentCode, binding.allowedTemplateTypes(), requestedAmount, sortOrder++));
         }
@@ -1897,8 +2626,8 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             String actionName
     ) {
         ProcessDocumentInstance target = targetDocumentMap.get(documentCode);
-        if (target == null || !Objects.equals(trimToNull(target.getStatus()), DOCUMENT_STATUS_APPROVED)) {
-            throw new IllegalStateException(actionName + "目标不存在或未通过审批");
+        if (target == null || !isEffectiveApprovedStatus(target.getStatus())) {
+            throw new IllegalStateException(actionName + "鐩爣涓嶅瓨鍦ㄦ垨鏈€氳繃瀹℃壒");
         }
         return target;
     }
@@ -1915,7 +2644,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                 && defaultDecimal(prepayAmountMap.get(target.getDocumentCode())).compareTo(BigDecimal.ZERO) > 0) {
             return WRITEOFF_SOURCE_PREPAY_REPORT;
         }
-        throw new IllegalStateException("当前单据不支持作为核销目标");
+        throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆敮鎸佷綔涓烘牳閿€鐩爣");
     }
 
     private BigDecimal resolveCurrentAvailableWriteOffAmount(
@@ -1943,23 +2672,23 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                         .last("limit 1")
         );
         if (flow == null) {
-            throw new IllegalStateException("当前审批模板绑定的流程不存在，请先修复模板配置");
+            throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘缁戝畾鐨勬祦绋嬩笉瀛樺湪锛岃鍏堜慨澶嶆ā鏉块厤缃?");
         }
         Long versionId = flow.getCurrentPublishedVersionId() != null
                 ? flow.getCurrentPublishedVersionId()
                 : flow.getCurrentDraftVersionId();
         if (versionId == null) {
-            throw new IllegalStateException("当前审批模板绑定的流程尚未配置可用版本，请先发布流程");
+            throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘缁戝畾鐨勬祦绋嬪皻鏈厤缃彲鐢ㄧ増鏈紝璇峰厛鍙戝竷娴佺▼");
         }
         ProcessFlowVersion version = processFlowVersionMapper.selectById(versionId);
         String snapshotJson = version == null ? null : trimToNull(version.getSnapshotJson());
         if (snapshotJson == null) {
-            throw new IllegalStateException("当前审批模板绑定的流程快照不存在，请先重新发布流程");
+            throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘缁戝畾鐨勬祦绋嬪揩鐓т笉瀛樺湪锛岃鍏堥噸鏂板彂甯冩祦绋?");
         }
         try {
             readFlowSnapshot(snapshotJson);
         } catch (IllegalStateException ex) {
-            throw new IllegalStateException("当前审批模板绑定的流程快照损坏，请先重新发布流程", ex);
+            throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘缁戝畾鐨勬祦绋嬪揩鐓ф崯鍧忥紝璇峰厛閲嶆柊鍙戝竷娴佺▼", ex);
         }
         return snapshotJson;
     }
@@ -2135,7 +2864,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                         .last("limit 1")
         );
         if (detail == null) {
-            throw new IllegalStateException("费用明细不存在");
+            throw new IllegalStateException("璐圭敤鏄庣粏涓嶅瓨鍦?");
         }
         return detail;
     }
@@ -2345,6 +3074,48 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         return item;
     }
 
+    private ExpensePaymentOrderVO toPaymentOrder(
+            ProcessDocumentTask task,
+            ProcessDocumentInstance instance,
+            SummaryEnrichmentData enrichmentData,
+            PmBankPaymentRecord bankPaymentRecord,
+            Map<Long, String> companyBankAccountNameMap
+    ) {
+        if (instance == null) {
+            return null;
+        }
+        SummaryMetadata metadata = enrichmentData.metadata(task.getDocumentCode());
+        ExpensePaymentOrderVO item = new ExpensePaymentOrderVO();
+        item.setTaskId(task.getId());
+        item.setDocumentCode(task.getDocumentCode());
+        item.setDocumentTitle(instance.getDocumentTitle());
+        item.setTemplateName(instance.getTemplateName());
+        item.setTemplateType(instance.getTemplateType());
+        item.setTemplateTypeLabel(resolveTemplateTypeLabel(instance.getTemplateType(), readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel") == null
+                ? null
+                : String.valueOf(readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel"))));
+        item.setSubmitterName(instance.getSubmitterName());
+        item.setSubmitterDeptName(metadata.submitterDeptName());
+        item.setCurrentNodeName(firstNonBlank(instance.getCurrentNodeName(), task.getNodeName()));
+        item.setDocumentStatus(instance.getStatus());
+        item.setDocumentStatusLabel(resolveStatusLabel(instance.getStatus()));
+        item.setAmount(defaultDecimal(instance.getTotalAmount()));
+        item.setSubmittedAt(formatTime(instance.getCreatedAt()));
+        item.setPaymentDate(metadata.paymentDate());
+        item.setPaymentCompanyName(metadata.paymentCompanyName());
+        item.setPaymentStatusCode(instance.getStatus());
+        item.setPaymentStatusLabel(resolveStatusLabel(instance.getStatus()));
+        item.setManualPaid(bankPaymentRecord != null && isFlagEnabled(bankPaymentRecord.getManualPaid()));
+        item.setPaidAt(bankPaymentRecord == null ? null : formatTime(bankPaymentRecord.getPaidAt()));
+        item.setReceiptStatusLabel(resolveReceiptStatusLabel(bankPaymentRecord));
+        item.setReceiptReceivedAt(bankPaymentRecord == null ? null : formatTime(bankPaymentRecord.getReceiptReceivedAt()));
+        item.setBankFlowNo(bankPaymentRecord == null ? null : bankPaymentRecord.getBankFlowNo());
+        item.setCompanyBankAccountName(bankPaymentRecord == null ? null : companyBankAccountNameMap.get(bankPaymentRecord.getCompanyBankAccountId()));
+        item.setTaskCreatedAt(formatTime(task.getCreatedAt()));
+        item.setAllowRetry(paymentTaskAllowsRetry(instance, task));
+        return item;
+    }
+
     private SummaryEnrichmentData buildSummaryEnrichment(List<ProcessDocumentInstance> instances) {
         if (instances == null || instances.isEmpty()) {
             return SummaryEnrichmentData.empty();
@@ -2482,6 +3253,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             User submitter = instance.getSubmitterUserId() == null ? null : userMap.get(instance.getSubmitterUserId());
             SummaryMetadata metadata = new SummaryMetadata(
                     submitter == null || submitter.getDeptId() == null ? null : departmentNameMap.get(String.valueOf(submitter.getDeptId())),
+                    draft == null ? null : draft.getPaymentCompanyId(),
                     draft == null ? null : resolvePaymentCompanyName(draft.getPaymentCompanyId(), companyMap),
                     draft == null ? null : resolvePartyName(draft.getPayeeValue(), userMap, vendorMap),
                     draft == null ? null : resolveVendorName(draft.getCounterpartyValue(), vendorMap),
@@ -2839,9 +3611,9 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         return vo;
     }
 
-    private void markDocumentApproved(ProcessDocumentInstance instance) {
+    private void markDocumentApproved(ProcessDocumentInstance instance, String terminalStatus) {
         LocalDateTime now = LocalDateTime.now();
-        instance.setStatus(DOCUMENT_STATUS_APPROVED);
+        instance.setStatus(defaultText(trimToNull(terminalStatus), DOCUMENT_STATUS_APPROVED));
         instance.setCurrentNodeKey(null);
         instance.setCurrentNodeName(null);
         instance.setCurrentTaskType(null);
@@ -2929,7 +3701,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
     private void requireSubmitter(ProcessDocumentInstance instance, Long userId) {
         if (!Objects.equals(instance.getSubmitterUserId(), userId)) {
-            throw new IllegalStateException("只有提单人可以执行当前操作");
+            throw new IllegalStateException("鍙湁鎻愬崟浜哄彲浠ユ墽琛屽綋鍓嶆搷浣?");
         }
     }
 
@@ -2965,7 +3737,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         if (latestLog != null
                 && latestLog.getCreatedAt() != null
                 && latestLog.getCreatedAt().isAfter(LocalDateTime.now().minusMinutes(10))) {
-            throw new IllegalStateException("同一单据 10 分钟内只能催办一次");
+            throw new IllegalStateException("鍚屼竴鍗曟嵁 10 鍒嗛挓鍐呭彧鑳藉偓鍔炰竴娆?");
         }
     }
 
@@ -3042,7 +3814,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private ProcessDocumentTemplate requireTemplateForDocument(String templateCode) {
         ProcessDocumentTemplate template = loadTemplateByCode(templateCode, false);
         if (template == null) {
-            throw new IllegalStateException("当前单据绑定的模板不存在，无法继续处理");
+            throw new IllegalStateException("褰撳墠鍗曟嵁缁戝畾鐨勬ā鏉夸笉瀛樺湪锛屾棤娉曠户缁鐞?");
         }
         return template;
     }
@@ -3095,8 +3867,28 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         if (!Objects.equals(task.getAssigneeUserId(), userId)) {
             throw new IllegalStateException("Current user cannot handle this task");
         }
+        if (!NODE_TYPE_APPROVAL.equals(trimToNull(task.getNodeType()))) {
+            throw new IllegalStateException("Current task is not an approval task");
+        }
         if (!TASK_STATUS_PENDING.equals(task.getStatus())) {
             throw new IllegalStateException("Task has already been handled");
+        }
+        return task;
+    }
+
+    private ProcessDocumentTask requireOpenPaymentTask(Long taskId, Long userId) {
+        ProcessDocumentTask task = processDocumentTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new IllegalStateException("Payment task not found");
+        }
+        if (!Objects.equals(task.getAssigneeUserId(), userId)) {
+            throw new IllegalStateException("Current user cannot handle this payment task");
+        }
+        if (!NODE_TYPE_PAYMENT.equals(trimToNull(task.getNodeType()))) {
+            throw new IllegalStateException("Current task is not a payment task");
+        }
+        if (!TASK_STATUS_PENDING.equals(task.getStatus()) && !TASK_STATUS_PAUSED.equals(task.getStatus())) {
+            throw new IllegalStateException("Payment task has already been handled");
         }
         return task;
     }
@@ -3350,7 +4142,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             detail.setArchiveCode(archive.getArchiveCode());
             detail.setArchiveName(archive.getArchiveName());
             detail.setArchiveType(archive.getArchiveType());
-            detail.setArchiveTypeLabel("AUTO_RULE".equals(archive.getArchiveType()) ? "自动划分" : "提供选择");
+            detail.setArchiveTypeLabel("AUTO_RULE".equals(archive.getArchiveType()) ? "鑷姩鍒掑垎" : "鎻愪緵閫夋嫨");
             detail.setArchiveDescription(archive.getArchiveDescription());
             detail.setStatus(archive.getStatus());
             detail.setItems(itemMap.getOrDefault(archive.getId(), Collections.emptyList()).stream().map(item -> {
@@ -3588,6 +4380,30 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         );
     }
 
+    private List<ProcessDocumentTask> loadVisiblePaymentTasks(Long userId, String normalizedStatus) {
+        List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
+                Wrappers.<ProcessDocumentTask>lambdaQuery()
+                        .eq(ProcessDocumentTask::getAssigneeUserId, userId)
+                        .eq(ProcessDocumentTask::getNodeType, NODE_TYPE_PAYMENT)
+                        .orderByDesc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
+        );
+        if (tasks.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, String> statusByDocumentCode = processDocumentInstanceMapper.selectList(
+                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                        .in(ProcessDocumentInstance::getDocumentCode, tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList())
+        ).stream().collect(Collectors.toMap(
+                ProcessDocumentInstance::getDocumentCode,
+                ProcessDocumentInstance::getStatus,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+        return tasks.stream()
+                .filter(task -> normalizedStatus.equals(trimToNull(statusByDocumentCode.get(task.getDocumentCode()))))
+                .toList();
+    }
+
     private List<ProcessDocumentTask> loadNodeBatchTasks(String documentCode, String nodeKey, String batchNo) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -3648,7 +4464,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         }
         for (Map.Entry<String, Object> entry : formData.entrySet()) {
             String key = entry.getKey() == null ? "" : entry.getKey().toLowerCase();
-            if (key.contains("amount") || key.contains("money") || key.contains("金额")) {
+            if (key.contains("amount") || key.contains("money") || key.contains("閲戦")) {
                 BigDecimal amount = toBigDecimal(entry.getValue());
                 if (amount != null) {
                     return amount;
@@ -3792,6 +4608,586 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         return prefix + String.format("%04d", next);
     }
 
+    private ExpenseDocumentDetailVO pushPaymentTaskToBank(
+            Long userId,
+            String username,
+            ProcessDocumentTask task,
+            ProcessDocumentInstance instance,
+            boolean retrying
+    ) {
+        SystemCompanyBankAccount account = findActiveBankAccountForDocument(instance);
+        SummaryMetadata metadata = buildSummaryEnrichment(List.of(instance)).metadata(instance.getDocumentCode());
+        LocalDateTime now = LocalDateTime.now();
+        PmBankPaymentRecord record = findOrCreateBankPaymentRecord(task, instance, account);
+        String pushRequestNo = buildBankPushRequestNo(instance.getDocumentCode());
+        record.setCompanyBankAccountId(account.getId());
+        record.setBankProvider(BANK_PROVIDER_CMB);
+        record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
+        record.setManualPaid(0);
+        record.setPushRequestNo(pushRequestNo);
+        record.setReceiptStatus(RECEIPT_STATUS_PENDING);
+        record.setPushPayloadJson(writeJson(Map.of(
+                "documentCode", defaultText(instance.getDocumentCode(), ""),
+                "documentTitle", defaultText(instance.getDocumentTitle(), ""),
+                "amount", defaultDecimal(instance.getTotalAmount()),
+                "paymentCompanyName", defaultText(metadata.paymentCompanyName(), ""),
+                "operatorKey", defaultText(readBankLinkExt(account).get("operatorKey"), "")
+        )));
+        record.setPushResultJson(writeJson(Map.of(
+                "accepted", true,
+                "retry", retrying,
+                "message", "付款指令已推送到招商银行云直连经办Key"
+        )));
+        record.setLastErrorMessage(null);
+        saveBankPaymentRecord(record);
+
+        persistDocumentRuntimeState(
+                instance,
+                DOCUMENT_STATUS_PAYING,
+                task.getNodeKey(),
+                task.getNodeName(),
+                NODE_TYPE_PAYMENT,
+                null,
+                now
+        );
+        appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_PAYMENT_START, userId, defaultUsername(username), retrying ? "重新发起支付" : null, Map.of(
+                "taskId", task.getId(),
+                "pushRequestNo", pushRequestNo,
+                "companyBankAccountId", account.getId(),
+                "companyBankAccountName", buildCompanyBankAccountName(account),
+                "retry", retrying
+        ));
+
+        account.setDirectConnectLastSyncAt(now);
+        account.setDirectConnectLastSyncStatus("PUSHED");
+        account.setDirectConnectLastErrorMsg(null);
+        systemCompanyBankAccountMapper.updateById(account);
+        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
+    }
+
+    private ExpenseDocumentDetailVO completePaymentTaskInternal(
+            Long userId,
+            String username,
+            ProcessDocumentTask task,
+            ProcessDocumentInstance instance,
+            String comment,
+            boolean manualPaid,
+            LocalDateTime paidAt
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        task.setStatus(TASK_STATUS_APPROVED);
+        task.setHandledAt(now);
+        task.setActionComment(comment);
+        processDocumentTaskMapper.updateById(task);
+        cancelOpenTasks(loadNodeOpenTasks(task.getDocumentCode(), task.getNodeKey()), task.getId(), now);
+
+        PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
+        if (record == null) {
+            SystemCompanyBankAccount account = findActiveBankAccountForDocument(instance, false);
+            record = findOrCreateBankPaymentRecord(task, instance, account);
+            if (account != null) {
+                record.setCompanyBankAccountId(account.getId());
+                record.setBankProvider(BANK_PROVIDER_CMB);
+                record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
+            }
+        }
+        record.setManualPaid(manualPaid ? 1 : 0);
+        record.setPaidAt(paidAt == null ? now : paidAt);
+        if (trimToNull(record.getReceiptStatus()) == null) {
+            record.setReceiptStatus(RECEIPT_STATUS_PENDING);
+        }
+        record.setLastErrorMessage(null);
+        saveBankPaymentRecord(record);
+
+        appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_PAYMENT_COMPLETE, userId, defaultUsername(username), comment, Map.of(
+                "taskId", task.getId(),
+                "manualPaid", manualPaid,
+                "paidAt", formatTime(record.getPaidAt())
+        ));
+
+        Map<String, Object> context = buildRuntimeContextForInstance(instance);
+        persistDocumentRuntimeState(
+                instance,
+                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                task.getNodeKey(),
+                task.getNodeName(),
+                NODE_TYPE_PAYMENT,
+                null,
+                now
+        );
+
+        FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
+        ProcessFlowNodeDTO node = snapshot.node(task.getNodeKey());
+        if (node == null) {
+            throw new IllegalStateException("Flow node not found for current payment task");
+        }
+        clearCurrentNode(instance);
+        advanceFromPosition(instance, snapshot, context, node.getParentNodeKey(), nextIndex(snapshot, node), DOCUMENT_STATUS_PAYMENT_COMPLETED);
+
+        String finalStatus = trimToNull(requireDocument(instance.getDocumentCode()).getStatus());
+        if (DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(finalStatus) || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(finalStatus)) {
+            finalizeEffectiveWriteOffs(instance.getDocumentCode());
+        }
+        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
+    }
+
+    private void queryAndAttachBankReceipt(
+            PmBankPaymentRecord record,
+            ProcessDocumentInstance instance,
+            SystemCompanyBankAccount account
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        record.setLastReceiptQueryAt(now);
+        record.setReceiptQueryCount((record.getReceiptQueryCount() == null ? 0 : record.getReceiptQueryCount()) + 1);
+        if (record.getPaidAt() == null && record.getCallbackReceivedAt() == null) {
+            record.setReceiptResultJson(writeJson(Map.of("found", false, "message", "银行尚未返回支付成功结果")));
+            saveBankPaymentRecord(record);
+            return;
+        }
+
+        String fileName = buildReceiptFileName(instance.getDocumentCode());
+        String receiptBody = buildReceiptContent(instance, record, account);
+        var attachment = expenseAttachmentService.saveGeneratedAttachment(
+                fileName,
+                "text/plain",
+                receiptBody.getBytes(StandardCharsets.UTF_8)
+        );
+        record.setReceiptAttachmentId(attachment.getAttachmentId());
+        record.setReceiptFileName(attachment.getFileName());
+        record.setReceiptStatus(RECEIPT_STATUS_RECEIVED);
+        record.setReceiptReceivedAt(now);
+        record.setReceiptResultJson(writeJson(Map.of(
+                "found", true,
+                "attachmentId", attachment.getAttachmentId(),
+                "fileName", attachment.getFileName()
+        )));
+        record.setLastErrorMessage(null);
+        saveBankPaymentRecord(record);
+
+        instance.setStatus(DOCUMENT_STATUS_PAYMENT_FINISHED);
+        instance.setFinishedAt(now);
+        instance.setUpdatedAt(now);
+        processDocumentInstanceMapper.updateById(instance);
+    }
+
+    private String buildReceiptContent(ProcessDocumentInstance instance, PmBankPaymentRecord record, SystemCompanyBankAccount account) {
+        List<String> lines = new ArrayList<>();
+        lines.add("招商银行云直连回单");
+        lines.add("单据编号: " + defaultText(instance.getDocumentCode(), "-"));
+        lines.add("单据名称: " + defaultText(instance.getDocumentTitle(), "-"));
+        lines.add("付款账号: " + defaultText(buildCompanyBankAccountName(account), "-"));
+        lines.add("银行订单号: " + defaultText(trimToNull(record.getBankOrderNo()), "-"));
+        lines.add("银行流水号: " + defaultText(trimToNull(record.getBankFlowNo()), "-"));
+        lines.add("支付时间: " + defaultText(formatTime(record.getPaidAt()), "-"));
+        lines.add("回单生成时间: " + formatTime(LocalDateTime.now()));
+        return String.join(System.lineSeparator(), lines);
+    }
+
+    private String buildReceiptFileName(String documentCode) {
+        return defaultText(documentCode, "document") + "-银行回单.txt";
+    }
+
+    private Map<String, PmBankPaymentRecord> loadLatestBankRecordMap(List<String> documentCodes) {
+        if (documentCodes == null || documentCodes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return pmBankPaymentRecordMapper.selectList(
+                Wrappers.<PmBankPaymentRecord>lambdaQuery()
+                        .in(PmBankPaymentRecord::getDocumentCode, documentCodes)
+                        .orderByDesc(PmBankPaymentRecord::getId)
+        ).stream().collect(Collectors.toMap(
+                PmBankPaymentRecord::getDocumentCode,
+                item -> item,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    private Map<Long, PmBankPaymentRecord> loadLatestBankRecordByAccountId(Set<Long> companyBankAccountIds) {
+        if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return pmBankPaymentRecordMapper.selectList(
+                Wrappers.<PmBankPaymentRecord>lambdaQuery()
+                        .in(PmBankPaymentRecord::getCompanyBankAccountId, companyBankAccountIds)
+                        .orderByDesc(PmBankPaymentRecord::getId)
+        ).stream().collect(Collectors.toMap(
+                PmBankPaymentRecord::getCompanyBankAccountId,
+                item -> item,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    private Map<Long, String> loadCompanyBankAccountNameMap(Set<Long> companyBankAccountIds) {
+        if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return systemCompanyBankAccountMapper.selectBatchIds(companyBankAccountIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(
+                        SystemCompanyBankAccount::getId,
+                        this::buildCompanyBankAccountName,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private ExpenseBankLinkSummaryVO toBankLinkSummary(
+            SystemCompanyBankAccount account,
+            String companyName,
+            PmBankPaymentRecord latestRecord
+    ) {
+        ExpenseBankLinkSummaryVO item = new ExpenseBankLinkSummaryVO();
+        item.setCompanyBankAccountId(account.getId());
+        item.setCompanyId(account.getCompanyId());
+        item.setCompanyName(companyName);
+        item.setAccountName(account.getAccountName());
+        item.setAccountNo(maskAccountNo(account.getAccountNo()));
+        item.setBankName(account.getBankName());
+        item.setAccountStatus(account.getStatus());
+        item.setDirectConnectEnabled(isFlagEnabled(account.getDirectConnectEnabled()));
+        item.setDirectConnectProvider(account.getDirectConnectProvider());
+        item.setDirectConnectChannel(account.getDirectConnectChannel());
+        item.setDirectConnectStatusLabel(resolveBankLinkStatusLabel(account));
+        item.setLastDirectConnectStatus(resolveBankLinkSyncStatus(account));
+        item.setLastReceiptStatus(resolveReceiptStatusLabel(latestRecord));
+        return item;
+    }
+
+    private ExpenseBankLinkConfigVO toBankLinkConfig(SystemCompanyBankAccount account, String companyName) {
+        Map<String, String> ext = readBankLinkExt(account);
+        ExpenseBankLinkConfigVO item = new ExpenseBankLinkConfigVO();
+        item.setCompanyBankAccountId(account.getId());
+        item.setCompanyId(account.getCompanyId());
+        item.setCompanyName(companyName);
+        item.setAccountName(account.getAccountName());
+        item.setAccountNo(account.getAccountNo());
+        item.setBankName(account.getBankName());
+        item.setAccountStatus(account.getStatus());
+        item.setDirectConnectEnabled(isFlagEnabled(account.getDirectConnectEnabled()));
+        item.setDirectConnectProvider(account.getDirectConnectProvider());
+        item.setDirectConnectChannel(account.getDirectConnectChannel());
+        item.setDirectConnectProtocol(account.getDirectConnectProtocol());
+        item.setDirectConnectCustomerNo(account.getDirectConnectCustomerNo());
+        item.setDirectConnectAppId(account.getDirectConnectAppId());
+        item.setDirectConnectAccountAlias(account.getDirectConnectAccountAlias());
+        item.setDirectConnectAuthMode(account.getDirectConnectAuthMode());
+        item.setDirectConnectApiBaseUrl(account.getDirectConnectApiBaseUrl());
+        item.setDirectConnectCertRef(account.getDirectConnectCertRef());
+        item.setDirectConnectSecretRef(account.getDirectConnectSecretRef());
+        item.setDirectConnectSignType(account.getDirectConnectSignType());
+        item.setDirectConnectEncryptType(account.getDirectConnectEncryptType());
+        item.setOperatorKey(ext.getOrDefault("operatorKey", ""));
+        item.setCallbackSecret(ext.getOrDefault("callbackSecret", ""));
+        item.setPublicKeyRef(ext.getOrDefault("publicKeyRef", ""));
+        item.setReceiptQueryEnabled(Boolean.parseBoolean(ext.getOrDefault("receiptQueryEnabled", "false")));
+        item.setLastDirectConnectStatus(resolveBankLinkSyncStatus(account));
+        item.setLastDirectConnectError(account.getDirectConnectLastErrorMsg());
+        return item;
+    }
+
+    private ExpenseDocumentBankPaymentVO toDetailBankPayment(
+            PmBankPaymentRecord record,
+            String companyBankAccountName,
+            String documentStatus
+    ) {
+        ExpenseDocumentBankPaymentVO item = new ExpenseDocumentBankPaymentVO();
+        item.setBankProvider(record.getBankProvider());
+        item.setBankChannel(record.getBankChannel());
+        item.setCompanyBankAccountName(companyBankAccountName);
+        item.setPaymentStatusCode(documentStatus);
+        item.setPaymentStatusLabel(resolveStatusLabel(documentStatus));
+        item.setManualPaid(isFlagEnabled(record.getManualPaid()));
+        item.setPaidAt(formatTime(record.getPaidAt()));
+        item.setReceiptStatusLabel(resolveReceiptStatusLabel(record));
+        item.setReceiptReceivedAt(formatTime(record.getReceiptReceivedAt()));
+        item.setBankFlowNo(record.getBankFlowNo());
+        item.setBankOrderNo(record.getBankOrderNo());
+        item.setLastErrorMessage(record.getLastErrorMessage());
+        return item;
+    }
+
+    private List<ExpenseDocumentBankReceiptVO> toDetailBankReceipts(PmBankPaymentRecord record) {
+        if (trimToNull(record.getReceiptAttachmentId()) == null) {
+            return Collections.emptyList();
+        }
+        ExpenseAttachmentService.StoredExpenseAttachment attachment = expenseAttachmentService.loadAttachment(record.getReceiptAttachmentId());
+        ExpenseDocumentBankReceiptVO item = new ExpenseDocumentBankReceiptVO();
+        item.setAttachmentId(record.getReceiptAttachmentId());
+        item.setFileName(firstNonBlank(record.getReceiptFileName(), attachment.fileName()));
+        item.setContentType(attachment.contentType());
+        item.setFileSize(attachment.fileSize());
+        item.setPreviewUrl("/api/auth/expenses/attachments/" + record.getReceiptAttachmentId() + "/content");
+        item.setReceivedAt(formatTime(record.getReceiptReceivedAt()));
+        return List.of(item);
+    }
+
+    private PmBankPaymentRecord requireBankPaymentRecordForCallback(ExpenseBankCallbackDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("银行回调参数不能为空");
+        }
+        PmBankPaymentRecord record = null;
+        if (trimToNull(dto.getPushRequestNo()) != null) {
+            record = pmBankPaymentRecordMapper.selectOne(
+                    Wrappers.<PmBankPaymentRecord>lambdaQuery()
+                            .eq(PmBankPaymentRecord::getPushRequestNo, dto.getPushRequestNo())
+                            .orderByDesc(PmBankPaymentRecord::getId)
+                            .last("limit 1")
+            );
+        }
+        if (record == null && dto.getTaskId() != null) {
+            record = pmBankPaymentRecordMapper.selectOne(
+                    Wrappers.<PmBankPaymentRecord>lambdaQuery()
+                            .eq(PmBankPaymentRecord::getTaskId, dto.getTaskId())
+                            .orderByDesc(PmBankPaymentRecord::getId)
+                            .last("limit 1")
+            );
+        }
+        if (record == null && trimToNull(dto.getDocumentCode()) != null) {
+            record = findLatestBankPaymentRecord(dto.getDocumentCode());
+        }
+        if (record == null) {
+            throw new IllegalArgumentException("未匹配到银行付款记录");
+        }
+        return record;
+    }
+
+    private PmBankPaymentRecord findLatestBankPaymentRecord(String documentCode) {
+        if (trimToNull(documentCode) == null) {
+            return null;
+        }
+        return pmBankPaymentRecordMapper.selectOne(
+                Wrappers.<PmBankPaymentRecord>lambdaQuery()
+                        .eq(PmBankPaymentRecord::getDocumentCode, documentCode)
+                        .orderByDesc(PmBankPaymentRecord::getId)
+                        .last("limit 1")
+        );
+    }
+
+    private PmBankPaymentRecord findOrCreateBankPaymentRecord(
+            ProcessDocumentTask task,
+            ProcessDocumentInstance instance,
+            SystemCompanyBankAccount account
+    ) {
+        PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
+        if (record == null) {
+            record = new PmBankPaymentRecord();
+            record.setTaskId(task.getId());
+            record.setDocumentCode(instance.getDocumentCode());
+            record.setReceiptQueryCount(0);
+        }
+        if (account != null) {
+            record.setCompanyBankAccountId(account.getId());
+            record.setBankProvider(BANK_PROVIDER_CMB);
+            record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
+        }
+        return record;
+    }
+
+    private void saveBankPaymentRecord(PmBankPaymentRecord record) {
+        if (record.getId() == null) {
+            pmBankPaymentRecordMapper.insert(record);
+            return;
+        }
+        pmBankPaymentRecordMapper.updateById(record);
+    }
+
+    private SystemCompanyBankAccount findActiveBankAccountForDocument(ProcessDocumentInstance instance) {
+        return findActiveBankAccountForDocument(instance, true);
+    }
+
+    private SystemCompanyBankAccount findActiveBankAccountForDocument(ProcessDocumentInstance instance, boolean required) {
+        SummaryMetadata metadata = buildSummaryEnrichment(List.of(instance)).metadata(instance.getDocumentCode());
+        String paymentCompanyId = trimToNull(metadata.paymentCompanyId());
+        if (paymentCompanyId == null) {
+            if (required) {
+                throw new IllegalStateException("单据未配置付款公司，无法推送银行");
+            }
+            return null;
+        }
+        List<SystemCompanyBankAccount> accounts = systemCompanyBankAccountMapper.selectList(
+                Wrappers.<SystemCompanyBankAccount>lambdaQuery()
+                        .eq(SystemCompanyBankAccount::getCompanyId, paymentCompanyId)
+                        .eq(SystemCompanyBankAccount::getStatus, 1)
+                        .eq(SystemCompanyBankAccount::getDirectConnectEnabled, 1)
+                        .eq(SystemCompanyBankAccount::getDirectConnectProvider, BANK_PROVIDER_CMB)
+                        .eq(SystemCompanyBankAccount::getDirectConnectChannel, BANK_CHANNEL_CMB_CLOUD)
+                        .orderByAsc(SystemCompanyBankAccount::getId)
+        );
+        if (accounts.isEmpty()) {
+            if (required) {
+                throw new IllegalStateException("付款公司未启用招商银行云直连账户");
+            }
+            return null;
+        }
+        if (accounts.size() > 1) {
+            throw new IllegalStateException("同一公司只能启用一个招商银行云直连账户");
+        }
+        return accounts.get(0);
+    }
+
+    private void disableOtherEnabledBankLinks(SystemCompanyBankAccount currentAccount) {
+        List<SystemCompanyBankAccount> companyAccounts = systemCompanyBankAccountMapper.selectList(
+                Wrappers.<SystemCompanyBankAccount>lambdaQuery()
+                        .eq(SystemCompanyBankAccount::getCompanyId, currentAccount.getCompanyId())
+                        .eq(SystemCompanyBankAccount::getDirectConnectEnabled, 1)
+                        .eq(SystemCompanyBankAccount::getDirectConnectProvider, BANK_PROVIDER_CMB)
+                        .eq(SystemCompanyBankAccount::getDirectConnectChannel, BANK_CHANNEL_CMB_CLOUD)
+        );
+        for (SystemCompanyBankAccount account : companyAccounts) {
+            if (Objects.equals(account.getId(), currentAccount.getId())) {
+                continue;
+            }
+            account.setDirectConnectEnabled(0);
+            account.setDirectConnectLastSyncStatus("DISABLED");
+            systemCompanyBankAccountMapper.updateById(account);
+        }
+    }
+
+    private SystemCompanyBankAccount requireCompanyBankAccount(Long companyBankAccountId) {
+        SystemCompanyBankAccount account = systemCompanyBankAccountMapper.selectById(companyBankAccountId);
+        if (account == null) {
+            throw new IllegalArgumentException("公司账户不存在");
+        }
+        return account;
+    }
+
+    private void verifyCmbCallback(ExpenseBankCallbackDTO dto, SystemCompanyBankAccount account) {
+        if (account == null) {
+            throw new IllegalStateException("银行回调未绑定公司账户");
+        }
+        String expectedSecret = trimToNull(readBankLinkExt(account).get("callbackSecret"));
+        if (expectedSecret != null && !Objects.equals(expectedSecret, trimToNull(dto.getCallbackSecret()))) {
+            throw new IllegalArgumentException("银行回调验签失败");
+        }
+    }
+
+    private boolean resolveCallbackSuccess(ExpenseBankCallbackDTO dto) {
+        if (dto == null) {
+            return false;
+        }
+        if (dto.getSuccess() != null) {
+            return dto.getSuccess();
+        }
+        String resultCode = defaultText(trimToNull(dto.getResultCode()), "");
+        return Set.of("SUCCESS", "ACCEPTED", "00", "200").contains(resultCode);
+    }
+
+    private String resolveBankLinkStatusLabel(SystemCompanyBankAccount account) {
+        if (!isFlagEnabled(account.getDirectConnectEnabled())) {
+            return "未启用";
+        }
+        if (!BANK_PROVIDER_CMB.equals(trimToNull(account.getDirectConnectProvider()))
+                || !BANK_CHANNEL_CMB_CLOUD.equals(trimToNull(account.getDirectConnectChannel()))) {
+            return "未配置";
+        }
+        return "已启用";
+    }
+
+    private String resolveBankLinkSyncStatus(SystemCompanyBankAccount account) {
+        String status = trimToNull(account.getDirectConnectLastSyncStatus());
+        return status == null ? "未推送" : status;
+    }
+
+    private String resolveReceiptStatusLabel(PmBankPaymentRecord record) {
+        if (record == null) {
+            return "未生成";
+        }
+        if (isFlagEnabled(record.getManualPaid()) && trimToNull(record.getReceiptAttachmentId()) == null) {
+            return "手动已支付";
+        }
+        return switch (defaultText(trimToNull(record.getReceiptStatus()), RECEIPT_STATUS_PENDING)) {
+            case RECEIPT_STATUS_RECEIVED -> "已获取回单";
+            case RECEIPT_STATUS_FAILED -> "回单查询失败";
+            default -> "待查询回单";
+        };
+    }
+
+    private boolean isReceiptQueryEnabled(SystemCompanyBankAccount account) {
+        if (account == null) {
+            return false;
+        }
+        return Boolean.parseBoolean(readBankLinkExt(account).getOrDefault("receiptQueryEnabled", "false"));
+    }
+
+    private Map<String, String> readBankLinkExt(SystemCompanyBankAccount account) {
+        Map<String, Object> ext = readMap(account == null ? null : account.getDirectConnectExtJson());
+        Map<String, String> result = new LinkedHashMap<>();
+        ext.forEach((key, value) -> result.put(key, value == null ? "" : String.valueOf(value)));
+        return result;
+    }
+
+    private String buildCompanyBankAccountName(SystemCompanyBankAccount account) {
+        if (account == null) {
+            return null;
+        }
+        String tailNo = trimToNull(account.getAccountNo());
+        String suffix = tailNo == null || tailNo.length() <= 4 ? tailNo : tailNo.substring(tailNo.length() - 4);
+        return account.getAccountName() + (suffix == null ? "" : "（尾号" + suffix + "）");
+    }
+
+    private String buildBankPushRequestNo(String documentCode) {
+        return defaultText(documentCode, "DOC") + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private String findCompanyName(String companyId) {
+        if (trimToNull(companyId) == null) {
+            return "";
+        }
+        SystemCompany company = systemCompanyMapper.selectOne(
+                Wrappers.<SystemCompany>lambdaQuery()
+                        .eq(SystemCompany::getCompanyId, companyId)
+                        .last("limit 1")
+        );
+        return company == null ? companyId : defaultText(trimToNull(company.getCompanyName()), companyId);
+    }
+
+    private Map<String, String> buildCompanyNameMap(Set<String> companyIds) {
+        if (companyIds == null || companyIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return systemCompanyMapper.selectList(
+                Wrappers.<SystemCompany>lambdaQuery()
+                        .in(SystemCompany::getCompanyId, companyIds)
+        ).stream().collect(Collectors.toMap(
+                SystemCompany::getCompanyId,
+                item -> defaultText(trimToNull(item.getCompanyName()), item.getCompanyId()),
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    private void requireNotBlank(String value, String message) {
+        if (trimToNull(value) == null) {
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    private boolean isFlagEnabled(Integer value) {
+        return value != null && value == 1;
+    }
+
+    private LocalDateTime parseFlexibleDateTime(String rawValue, LocalDateTime defaultValue) {
+        String normalized = trimToNull(rawValue);
+        if (normalized == null) {
+            return defaultValue;
+        }
+        List<DateTimeFormatter> formatters = List.of(
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+                DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME
+        );
+        for (DateTimeFormatter formatter : formatters) {
+            try {
+                return LocalDateTime.parse(normalized, formatter);
+            } catch (Exception ignored) {
+                // try next formatter
+            }
+        }
+        return defaultValue;
+    }
+
     private String buildExpenseDetailNo(String documentCode, int sortOrder) {
         return documentCode + "-D" + String.format("%02d", sortOrder);
     }
@@ -3805,20 +5201,47 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             return currentLabel;
         }
         return switch (trimToNull(templateType) == null ? "report" : templateType.trim()) {
-            case "application" -> "???";
-            case "loan" -> "???";
-            case "contract" -> "???";
-            default -> "???";
+            case "application" -> "\u7533\u8bf7\u5355";
+            case "loan" -> "\u501f\u6b3e\u5355";
+            case "contract" -> "\u5408\u540c\u5355";
+            default -> "\u62a5\u9500\u5355";
         };
+    }
+
+    private String normalizePaymentOrderStatus(String status) {
+        String normalized = trimToNull(status);
+        if (normalized == null) {
+            return DOCUMENT_STATUS_PENDING_PAYMENT;
+        }
+        return switch (normalized) {
+            case DOCUMENT_STATUS_PENDING_PAYMENT,
+                    DOCUMENT_STATUS_PAYING,
+                    DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                    DOCUMENT_STATUS_PAYMENT_FINISHED,
+                    DOCUMENT_STATUS_PAYMENT_EXCEPTION -> normalized;
+            default -> DOCUMENT_STATUS_PENDING_PAYMENT;
+        };
+    }
+
+    private boolean isEffectiveApprovedStatus(String status) {
+        String normalized = trimToNull(status);
+        return DOCUMENT_STATUS_APPROVED.equals(normalized)
+                || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
+                || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
     }
 
     private String resolveStatusLabel(String status) {
         return switch (trimToNull(status) == null ? "" : status.trim()) {
-            case DOCUMENT_STATUS_APPROVED -> "已通过";
-            case DOCUMENT_STATUS_REJECTED -> "已驳回";
-            case "DRAFT" -> "草稿";
-            case DOCUMENT_STATUS_EXCEPTION -> "流程异常";
-            default -> "审批中";
+            case DOCUMENT_STATUS_PENDING_PAYMENT -> "\u5f85\u652f\u4ed8";
+            case DOCUMENT_STATUS_PAYING -> "\u652f\u4ed8\u4e2d";
+            case DOCUMENT_STATUS_PAYMENT_COMPLETED -> "\u5df2\u652f\u4ed8";
+            case DOCUMENT_STATUS_PAYMENT_FINISHED -> "\u5df2\u5b8c\u6210";
+            case DOCUMENT_STATUS_PAYMENT_EXCEPTION -> "\u652f\u4ed8\u5f02\u5e38";
+            case DOCUMENT_STATUS_APPROVED -> "\u5df2\u901a\u8fc7";
+            case DOCUMENT_STATUS_REJECTED -> "\u5df2\u9a73\u56de";
+            case "DRAFT" -> "\u8349\u7a3f";
+            case DOCUMENT_STATUS_EXCEPTION -> "\u6d41\u7a0b\u5f02\u5e38";
+            default -> "\u5ba1\u6279\u4e2d";
         };
     }
 
@@ -3830,7 +5253,9 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     private String resolveExpenseDetailTypeLabel(String detailType) {
-        return Objects.equals(trimToNull(detailType), DETAIL_TYPE_ENTERPRISE) ? "企业往来" : "普通报销";
+        return Objects.equals(trimToNull(detailType), DETAIL_TYPE_ENTERPRISE)
+                ? "\u4f01\u4e1a\u5f80\u6765"
+                : "\u666e\u901a\u62a5\u9500";
     }
 
     private String resolveEnterpriseModeForInstance(ProcessDocumentTemplate template, ProcessExpenseDetailDesign expenseDetailDesign, String runtimeMode) {
@@ -3850,10 +5275,10 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
     private String resolveEnterpriseModeLabel(String enterpriseMode) {
         if (Objects.equals(trimToNull(enterpriseMode), ENTERPRISE_MODE_PREPAY_UNBILLED)) {
-            return "预付未到票";
+            return "\u9884\u4ed8\u672a\u5230\u7968";
         }
         if (Objects.equals(trimToNull(enterpriseMode), ENTERPRISE_MODE_INVOICE_FULL_PAYMENT)) {
-            return "到票全部支付";
+            return "\u5230\u7968\u5168\u989d\u652f\u4ed8";
         }
         return "";
     }
@@ -3934,7 +5359,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private String buildAccountLabel(String accountName, String bankName) {
         String left = firstNonBlank(accountName, bankName);
         String right = left != null && Objects.equals(left, trimToNull(bankName)) ? null : trimToNull(bankName);
-        return right == null ? (left == null ? "未命名账户" : left) : left + " / " + right;
+        return right == null ? (left == null ? "\u672a\u547d\u540d\u8d26\u6237" : left) : left + " / " + right;
     }
 
     private String buildVendorAccountSecondary(FinanceVendor vendor) {
@@ -3997,12 +5422,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
     private String defaultReason(String value) {
         String normalized = trimToNull(value);
-        return normalized == null ? "审批单提交" : normalized;
+        return normalized == null ? "\u6682\u65e0\u4e8b\u7531" : normalized;
     }
 
     private String defaultUsername(String username) {
         String normalized = trimToNull(username);
-        return normalized == null ? "当前用户" : normalized;
+        return normalized == null ? "褰撳墠鐢ㄦ埛" : normalized;
     }
 
     private String resolveMissingHandler(Map<String, Object> config) {
@@ -4023,9 +5448,18 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private User requireActiveUser(Long userId) {
         User user = loadActiveUser(userId);
         if (user == null) {
-            throw new IllegalStateException("目标审批人不存在或已停用");
+            throw new IllegalStateException("鐩爣瀹℃壒浜轰笉瀛樺湪鎴栧凡鍋滅敤");
         }
         return user;
+    }
+
+    private String requireCurrentUserCompanyId(Long userId) {
+        User user = requireActiveUser(userId);
+        String companyId = trimToNull(user.getCompanyId());
+        if (companyId == null) {
+            throw new IllegalStateException("瑜版挸澧犻悽銊﹀煕閺堫亞绮︾€规艾鍙曢崣闀愬瘜娴?");
+        }
+        return companyId;
     }
 
     private User loadActiveUser(Long userId) {
@@ -4077,7 +5511,18 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
     private String normalizeUserName(User user) {
         String name = trimToNull(user.getName());
-        return name != null ? name : defaultText(asText(user.getUsername()), "未命名用户");
+        return name != null ? name : defaultText(asText(user.getUsername()), "鏈懡鍚嶇敤鎴?");
+    }
+
+    private String resolveUserDisplayName(Long userId, String username) {
+        return resolveUserDisplayName(loadActiveUser(userId), username);
+    }
+
+    private String resolveUserDisplayName(User user, String username) {
+        if (user != null) {
+            return normalizeUserName(user);
+        }
+        return defaultUsername(username);
     }
 
     private Map<String, Object> toObjectMap(Object value) {
@@ -4262,11 +5707,13 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                 null,
                 null,
                 null,
+                null,
                 Collections.emptyList(),
                 Collections.emptyList()
         );
 
         private final String submitterDeptName;
+        private final String paymentCompanyId;
         private final String paymentCompanyName;
         private final String payeeName;
         private final String counterpartyName;
@@ -4276,6 +5723,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
         private SummaryMetadata(
                 String submitterDeptName,
+                String paymentCompanyId,
                 String paymentCompanyName,
                 String payeeName,
                 String counterpartyName,
@@ -4284,6 +5732,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
                 List<String> tagNames
         ) {
             this.submitterDeptName = submitterDeptName;
+            this.paymentCompanyId = paymentCompanyId;
             this.paymentCompanyName = paymentCompanyName;
             this.payeeName = payeeName;
             this.counterpartyName = counterpartyName;
@@ -4298,6 +5747,10 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
         private String submitterDeptName() {
             return submitterDeptName;
+        }
+
+        private String paymentCompanyId() {
+            return paymentCompanyId;
         }
 
         private String paymentCompanyName() {

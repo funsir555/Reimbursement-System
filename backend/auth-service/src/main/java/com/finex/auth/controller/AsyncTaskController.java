@@ -1,19 +1,26 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.AsyncTaskSubmitResultVO;
+import com.finex.auth.dto.ExpenseExportSubmitDTO;
 import com.finex.auth.dto.InvoiceTaskSubmitDTO;
+import com.finex.auth.dto.NotificationItemVO;
 import com.finex.auth.dto.NotificationSummaryVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.AsyncTaskService;
+import com.finex.auth.support.AsyncTaskSupport;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/auth/async-tasks")
@@ -21,6 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class AsyncTaskController {
 
     private static final String INVOICE_EXPORT = "archives:invoices:export";
+    private static final String EXPENSE_LIST_VIEW = "expense:list:view";
+    private static final String EXPENSE_APPROVAL_VIEW = "expense:approval:view";
+    private static final String EXPENSE_DOCUMENTS_VIEW = "expense:documents:view";
+    private static final String DASHBOARD_VIEW = "dashboard:view";
     private static final String INVOICE_VERIFY = "archives:invoices:verify";
     private static final String INVOICE_OCR = "archives:invoices:ocr";
 
@@ -29,10 +40,35 @@ public class AsyncTaskController {
 
     @PostMapping("/exports/invoices")
     public Result<AsyncTaskSubmitResultVO> exportInvoices(HttpServletRequest request) {
-        accessControlService.requirePermission(getCurrentUserId(request), INVOICE_EXPORT);
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, INVOICE_EXPORT);
         return Result.success(
-                "导出任务已提交，请稍后在下载中心查看",
-                asyncTaskService.submitInvoiceExport(getCurrentUserId(request))
+                "导出任务已提交，请到下载中心查看进度",
+                asyncTaskService.submitInvoiceExport(userId)
+        );
+    }
+
+    @PostMapping("/exports/expenses")
+    public Result<AsyncTaskSubmitResultVO> exportExpenses(
+            @Valid @RequestBody ExpenseExportSubmitDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        String scene = dto.getScene() == null ? "" : dto.getScene().trim().toUpperCase(Locale.ROOT);
+        switch (scene) {
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES ->
+                    accessControlService.requirePermission(userId, EXPENSE_LIST_VIEW);
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PENDING_APPROVAL ->
+                    accessControlService.requirePermission(userId, EXPENSE_APPROVAL_VIEW);
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY ->
+                    accessControlService.requirePermission(userId, EXPENSE_DOCUMENTS_VIEW);
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_OUTSTANDING ->
+                    accessControlService.requirePermission(userId, DASHBOARD_VIEW);
+            default -> throw new IllegalArgumentException("不支持的导出场景");
+        }
+        return Result.success(
+                "导出任务已提交，请到下载中心查看进度",
+                asyncTaskService.submitExpenseExport(userId, dto)
         );
     }
 
@@ -41,11 +77,9 @@ public class AsyncTaskController {
             @Valid @RequestBody InvoiceTaskSubmitDTO dto,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), INVOICE_VERIFY);
-        return Result.success(
-                "发票验真任务已提交",
-                asyncTaskService.submitInvoiceVerify(getCurrentUserId(request), dto)
-        );
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, INVOICE_VERIFY);
+        return Result.success("发票验真任务已提交", asyncTaskService.submitInvoiceVerify(userId, dto));
     }
 
     @PostMapping("/invoices/ocr")
@@ -53,16 +87,32 @@ public class AsyncTaskController {
             @Valid @RequestBody InvoiceTaskSubmitDTO dto,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), INVOICE_OCR);
-        return Result.success(
-                "发票 OCR 任务已提交",
-                asyncTaskService.submitInvoiceOcr(getCurrentUserId(request), dto)
-        );
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, INVOICE_OCR);
+        return Result.success("发票 OCR 任务已提交", asyncTaskService.submitInvoiceOcr(userId, dto));
     }
 
     @GetMapping("/notifications/summary")
     public Result<NotificationSummaryVO> notificationSummary(HttpServletRequest request) {
         return Result.success(asyncTaskService.getNotificationSummary(getCurrentUserId(request)));
+    }
+
+    @GetMapping("/notifications")
+    public Result<List<NotificationItemVO>> notifications(HttpServletRequest request) {
+        return Result.success(asyncTaskService.listNotifications(getCurrentUserId(request)));
+    }
+
+    @PostMapping("/notifications/{notificationId}/read")
+    public Result<Boolean> markNotificationRead(
+            @PathVariable Long notificationId,
+            HttpServletRequest request
+    ) {
+        return Result.success(asyncTaskService.markNotificationRead(getCurrentUserId(request), notificationId));
+    }
+
+    @PostMapping("/notifications/read-all")
+    public Result<Boolean> markAllNotificationsRead(HttpServletRequest request) {
+        return Result.success(asyncTaskService.markAllNotificationsRead(getCurrentUserId(request)));
     }
 
     private Long getCurrentUserId(HttpServletRequest request) {

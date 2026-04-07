@@ -32,16 +32,16 @@ public final class MoneySupport {
             return null;
         }
         if (normalized.contains("e") || normalized.contains("E")) {
-            throw new IllegalArgumentException("金额不支持科学计数法");
+            throw new IllegalArgumentException("閲戦涓嶆敮鎸佺瀛﹁鏁版硶");
         }
         try {
             BigDecimal decimal = new BigDecimal(normalized);
             if (decimal.stripTrailingZeros().scale() > SCALE) {
-                throw new IllegalArgumentException("金额最多保留两位小数");
+                throw new IllegalArgumentException("閲戦鏈€澶氫繚鐣欎袱浣嶅皬鏁?");
             }
             return normalize(decimal);
         } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException("金额格式不正确");
+            throw new IllegalArgumentException("閲戦鏍煎紡涓嶆纭?");
         }
     }
 

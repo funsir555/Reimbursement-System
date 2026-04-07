@@ -1,0 +1,67 @@
+package com.finex.auth.service.impl;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.finex.auth.dto.FinanceContextCompanyOptionVO;
+import com.finex.auth.dto.FinanceContextMetaVO;
+import com.finex.auth.entity.SystemCompany;
+import com.finex.auth.entity.User;
+import com.finex.auth.mapper.SystemCompanyMapper;
+import com.finex.auth.service.FinanceContextService;
+import com.finex.auth.service.UserService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class FinanceContextServiceImpl implements FinanceContextService {
+
+    private final SystemCompanyMapper systemCompanyMapper;
+    private final UserService userService;
+
+    @Override
+    public FinanceContextMetaVO getMeta(Long currentUserId) {
+        List<SystemCompany> companies = systemCompanyMapper.selectList(
+                Wrappers.<SystemCompany>lambdaQuery()
+                        .eq(SystemCompany::getStatus, 1)
+                        .orderByAsc(SystemCompany::getCompanyCode, SystemCompany::getCompanyId)
+        );
+
+        FinanceContextMetaVO meta = new FinanceContextMetaVO();
+        meta.setCompanyOptions(companies.stream().map(this::toOption).toList());
+
+        User currentUser = currentUserId == null ? null : userService.getById(currentUserId);
+        String rawCurrentUserCompanyId = normalize(currentUser == null ? null : currentUser.getCompanyId());
+        String resolvedCurrentUserCompanyId = meta.getCompanyOptions().stream()
+                .map(FinanceContextCompanyOptionVO::getCompanyId)
+                .filter(item -> item.equals(rawCurrentUserCompanyId))
+                .findFirst()
+                .orElse(null);
+        meta.setCurrentUserCompanyId(resolvedCurrentUserCompanyId);
+        meta.setDefaultCompanyId(resolvedCurrentUserCompanyId != null
+                ? resolvedCurrentUserCompanyId
+                : (meta.getCompanyOptions().isEmpty() ? null : meta.getCompanyOptions().get(0).getCompanyId()));
+        return meta;
+    }
+
+    private FinanceContextCompanyOptionVO toOption(SystemCompany company) {
+        FinanceContextCompanyOptionVO option = new FinanceContextCompanyOptionVO();
+        option.setCompanyId(company.getCompanyId());
+        option.setCompanyCode(company.getCompanyCode());
+        option.setCompanyName(company.getCompanyName());
+        option.setValue(company.getCompanyId());
+        option.setLabel(normalize(company.getCompanyCode()) == null
+                ? company.getCompanyName()
+                : company.getCompanyCode() + " - " + company.getCompanyName());
+        return option;
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+}

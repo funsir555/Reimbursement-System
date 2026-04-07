@@ -9,11 +9,19 @@ import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/auth/user-center")
@@ -29,14 +37,34 @@ public class UserCenterController {
 
     @GetMapping("/profile")
     public Result<PersonalCenterVO> profile(HttpServletRequest request) {
-        accessControlService.requirePermission(getCurrentUserId(request), PROFILE_VIEW);
-        return Result.success(userCenterService.getPersonalCenter(getCurrentUserId(request)));
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, PROFILE_VIEW);
+        return Result.success(userCenterService.getPersonalCenter(userId));
     }
 
     @GetMapping("/downloads")
     public Result<DownloadCenterVO> downloads(HttpServletRequest request) {
-        accessControlService.requireAnyPermission(getCurrentUserId(request), PROFILE_VIEW, PROFILE_DOWNLOADS_VIEW);
-        return Result.success(userCenterService.getDownloadCenter(getCurrentUserId(request)));
+        Long userId = getCurrentUserId(request);
+        accessControlService.requireAnyPermission(userId, PROFILE_VIEW, PROFILE_DOWNLOADS_VIEW);
+        return Result.success(userCenterService.getDownloadCenter(userId));
+    }
+
+    @GetMapping("/downloads/{downloadId}/content")
+    public ResponseEntity<Resource> downloadContent(
+            @PathVariable Long downloadId,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requireAnyPermission(userId, PROFILE_VIEW, PROFILE_DOWNLOADS_VIEW);
+        UserCenterService.DownloadContent content = userCenterService.loadDownloadContent(userId, downloadId);
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(content.fileName(), StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentLength(content.contentLength())
+                .body(content.resource());
     }
 
     @PostMapping("/password")
@@ -44,8 +72,9 @@ public class UserCenterController {
             @Valid @RequestBody ChangePasswordDTO dto,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), PROFILE_PASSWORD_UPDATE);
-        userCenterService.changePassword(getCurrentUserId(request), dto);
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, PROFILE_PASSWORD_UPDATE);
+        userCenterService.changePassword(userId, dto);
         return Result.success("密码修改成功", Boolean.TRUE);
     }
 

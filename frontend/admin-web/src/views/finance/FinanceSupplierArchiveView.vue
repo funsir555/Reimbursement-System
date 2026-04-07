@@ -1,15 +1,16 @@
 <template>
-  <div class="space-y-6">
-    <section class="rounded-[32px] border border-slate-100 bg-white px-8 py-7 shadow-sm">
-      <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 class="text-3xl font-bold text-slate-800">供应商档案</h1>
-          <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-500">
-            对接总账档案表 <code>gl_Vender</code>，支持供应商主数据维护、状态停用与收款账户信息查看。
-          </p>
+  <div class="space-y-4">
+    <section class="rounded-[26px] border border-slate-100 bg-white px-6 py-4 shadow-sm">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex flex-wrap items-center gap-3">
+          <h1 class="text-2xl font-bold text-slate-800">供应商档案</h1>
+          <div class="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sm text-sky-700">
+            <span class="font-semibold">当前公司</span>
+            <strong>{{ currentCompanyName || '未设置' }}</strong>
+          </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2">
           <el-button :icon="RefreshRight" @click="loadVendors">刷新</el-button>
           <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreateDialog">新增供应商</el-button>
         </div>
@@ -81,6 +82,11 @@
             </template>
 
             <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div v-if="section.key === 'basic'" class="xl:col-span-3">
+                <div class="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-sky-700">
+                  当前维护公司：<strong>{{ currentCompanyName || currentCompanyId || '未设置' }}</strong>
+                </div>
+              </div>
               <template v-for="field in section.fields" :key="field.key">
                 <el-form-item
                   :label="field.label"
@@ -95,7 +101,11 @@
                     :rows="3"
                     :placeholder="`请输入${field.label}`"
                   />
-                  <money-input v-else-if="field.type === 'money'" v-model="vendorForm[field.key]" />
+                  <money-input
+                    v-else-if="field.type === 'money'"
+                    :model-value="toMoneyModelValue(vendorForm[field.key])"
+                    @update:model-value="vendorForm[field.key] = $event"
+                  />
                   <el-input-number v-else-if="field.type === 'number'" v-model="vendorForm[field.key]" :controls="false" class="w-full" />
                   <el-date-picker
                     v-else-if="field.type === 'date'"
@@ -132,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import {
@@ -141,6 +151,7 @@ import {
   type FinanceVendorSummary
 } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
 type VendorFieldType = 'text' | 'textarea' | 'number' | 'money' | 'date' | 'switch'
@@ -161,10 +172,16 @@ const vendors = ref<FinanceVendorSummary[]>([])
 const editingVendorCode = ref('')
 const activeSections = ref(['basic', 'contact', 'bank', 'finance'])
 const vendorForm = reactive<Record<string, string | number | undefined>>({})
+const financeCompany = useFinanceCompanyStore()
+const COMPANY_SWITCH_GUARD_KEY = 'finance-supplier-archive'
+let guardRegistered = false
 
 const canCreate = computed(() => hasPermission('finance:archives:suppliers:create', permissionCodes.value))
 const canEdit = computed(() => hasPermission('finance:archives:suppliers:edit', permissionCodes.value))
 const canDisable = computed(() => hasPermission('finance:archives:suppliers:delete', permissionCodes.value))
+const currentCompanyId = computed(() => financeCompany.currentCompanyId)
+const currentCompanyName = computed(() => financeCompany.currentCompanyName)
+const hasPendingEdit = computed(() => dialogVisible.value)
 
 const vendorSections: Array<{ key: string; label: string; fields: VendorFieldConfig[] }> = [
   {
@@ -176,7 +193,6 @@ const vendorSections: Array<{ key: string; label: string; fields: VendorFieldCon
       { key: 'cVenAbbName', label: '供应商简称', type: 'text' },
       { key: 'cVCCode', label: '分类编码', type: 'text' },
       { key: 'cTrade', label: '行业', type: 'text' },
-      { key: 'companyId', label: '公司主体编码', type: 'text' },
       { key: 'cVenRegCode', label: '工商注册号', type: 'text' },
       { key: 'cBarCode', label: '条形码', type: 'text' },
       { key: 'cMemo', label: '备注', type: 'textarea', span: 3 }
@@ -278,12 +294,47 @@ const defaultSwitchFields = vendorSections
   .map((field) => field.key)
 
 resetVendorForm()
-void loadVendors()
+onMounted(registerCompanySwitchGuard)
+onActivated(registerCompanySwitchGuard)
+onDeactivated(unregisterCompanySwitchGuard)
+
+watch(
+  () => financeCompany.currentCompanyId,
+  async (companyId, previousCompanyId) => {
+    if (!companyId) return
+    if (companyId !== previousCompanyId) {
+      closeDialog()
+    }
+    await loadVendors()
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  unregisterCompanySwitchGuard()
+})
+
+function registerCompanySwitchGuard() {
+  if (guardRegistered) return
+  financeCompany.registerSwitchGuard(COMPANY_SWITCH_GUARD_KEY, confirmCompanySwitch)
+  guardRegistered = true
+}
+
+function unregisterCompanySwitchGuard() {
+  if (!guardRegistered) return
+  financeCompany.unregisterSwitchGuard(COMPANY_SWITCH_GUARD_KEY)
+  guardRegistered = false
+}
 
 async function loadVendors() {
+  if (!currentCompanyId.value) {
+    vendors.value = []
+    return
+  }
   loading.value = true
   try {
     const res = await financeArchiveApi.listSuppliers({
+      companyId: currentCompanyId.value,
       keyword: keyword.value.trim(),
       includeDisabled: includeDisabled.value
     })
@@ -313,6 +364,10 @@ function resetVendorForm() {
 }
 
 function openCreateDialog() {
+  if (!currentCompanyId.value) {
+    ElMessage.warning('当前公司未设置，无法维护供应商')
+    return
+  }
   editingVendorCode.value = ''
   resetVendorForm()
   activeSections.value = ['basic', 'contact', 'bank', 'finance']
@@ -320,12 +375,13 @@ function openCreateDialog() {
 }
 
 async function openEditDialog(vendorCode: string) {
+  if (!currentCompanyId.value) return
   dialogVisible.value = true
   editingVendorCode.value = vendorCode
   resetVendorForm()
   saving.value = false
   try {
-    const res = await financeArchiveApi.getSupplierDetail(vendorCode)
+    const res = await financeArchiveApi.getSupplierDetail(currentCompanyId.value, vendorCode)
     Object.entries(res.data).forEach(([key, value]) => {
       vendorForm[key] = value as string | number | undefined
     })
@@ -348,10 +404,10 @@ async function saveSupplier() {
   try {
     const payload = buildVendorPayload()
     if (editingVendorCode.value) {
-      await financeArchiveApi.updateSupplier(editingVendorCode.value, payload)
+      await financeArchiveApi.updateSupplier(currentCompanyId.value, editingVendorCode.value, payload)
       ElMessage.success('供应商档案已更新')
     } else {
-      await financeArchiveApi.createSupplier(payload)
+      await financeArchiveApi.createSupplier(currentCompanyId.value, payload)
       ElMessage.success('供应商档案已创建')
     }
     dialogVisible.value = false
@@ -364,6 +420,10 @@ async function saveSupplier() {
 }
 
 async function disableSupplier(vendorCode: string) {
+  if (!currentCompanyId.value) {
+    ElMessage.warning('当前公司未设置，无法停用供应商')
+    return
+  }
   try {
     await ElMessageBox.confirm('停用后该供应商将不能在提单页继续被选择，确定继续吗？', '停用供应商', {
       type: 'warning',
@@ -375,7 +435,7 @@ async function disableSupplier(vendorCode: string) {
   }
 
   try {
-    await financeArchiveApi.disableSupplier(vendorCode)
+    await financeArchiveApi.disableSupplier(currentCompanyId.value, vendorCode)
     ElMessage.success('供应商已停用')
     await loadVendors()
   } catch (error: unknown) {
@@ -384,8 +444,13 @@ async function disableSupplier(vendorCode: string) {
 }
 
 function buildVendorPayload(): FinanceVendorSavePayload {
-  const payload: Record<string, unknown> = {}
+  const payload: Record<string, unknown> = {
+    companyId: currentCompanyId.value
+  }
   Object.entries(vendorForm).forEach(([key, value]) => {
+    if (key === 'companyId') {
+      return
+    }
     if (value === undefined || value === null || value === '') {
       return
     }
@@ -409,6 +474,12 @@ function buildVendorPayload(): FinanceVendorSavePayload {
   return payload as FinanceVendorSavePayload
 }
 
+function closeDialog() {
+  dialogVisible.value = false
+  editingVendorCode.value = ''
+  resetVendorForm()
+}
+
 function supplierAccountText(row: FinanceVendorSummary) {
   const parts = [row.cVenBank, maskAccountNo(row.cVenAccount)].filter(Boolean)
   return parts.length ? parts.join(' / ') : '未维护收款账户'
@@ -426,6 +497,29 @@ function maskAccountNo(value?: string) {
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+async function confirmCompanySwitch() {
+  if (!hasPendingEdit.value) {
+    return true
+  }
+  try {
+    await ElMessageBox.confirm('切换公司后将关闭当前供应商编辑窗口，并按新公司重新加载档案列表，是否继续？', '切换公司', {
+      type: 'warning',
+      confirmButtonText: '继续切换',
+      cancelButtonText: '取消'
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function toMoneyModelValue(value: string | number | undefined) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  return typeof value === 'string' ? value : undefined
 }
 </script>
 

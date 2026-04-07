@@ -29,7 +29,7 @@
     </section>
 
     <section class="fa-filter-card">
-      <label><span>公司</span><el-select v-model="filters.companyId" filterable @change="refreshAll"><el-option v-for="item in meta?.companyOptions || []" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+      <label><span>公司</span><div class="fa-static-field">{{ currentCompanyName || '未设置' }}</div></label>
       <label><span>账簿</span><el-select v-model="filters.bookCode" @change="refreshAll"><el-option v-for="item in meta?.bookOptions || []" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
       <label><span>年度</span><el-input-number v-model="filters.fiscalYear" :controls="false" :min="2000" :max="2099" @change="refreshAll" /></label>
       <label><span>期间</span><el-input-number v-model="filters.fiscalPeriod" :controls="false" :min="1" :max="12" @change="refreshAll" /></label>
@@ -261,10 +261,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fixedAssetApi, type FixedAssetCard, type FixedAssetCardPayload, type FixedAssetCategory, type FixedAssetCategoryPayload, type FixedAssetChangeBill, type FixedAssetChangeBillPayload, type FixedAssetChangeLinePayload, type FixedAssetDeprPreviewPayload, type FixedAssetDeprRun, type FixedAssetDisposalBill, type FixedAssetDisposalBillPayload, type FixedAssetDisposalLinePayload, type FixedAssetMeta, type FixedAssetOpeningImportResult, type FixedAssetOpeningImportRow } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
@@ -295,8 +296,13 @@ const cardForm = reactive<FixedAssetCardPayload>(createCardPayload())
 const categoryForm = reactive<FixedAssetCategoryPayload>(createCategoryPayload())
 const changeForm = reactive<FixedAssetChangeBillPayload>(createChangePayload())
 const disposalForm = reactive<FixedAssetDisposalBillPayload>(createDisposalPayload())
+const financeCompany = useFinanceCompanyStore()
+const COMPANY_SWITCH_GUARD_KEY = 'finance-fixed-assets'
+let guardRegistered = false
 const selectedCard = computed(() => cards.value.find((item) => item.id === selectedCardId.value) || null)
 const selectedCategory = computed(() => categories.value.find((item) => item.id === selectedCategoryId.value) || null)
+const currentCompanyName = computed(() => financeCompany.currentCompanyName)
+const hasPendingEdit = computed(() => cardDialogVisible.value || categoryDialogVisible.value || changeDialogVisible.value || disposalDialogVisible.value)
 const canCreate = computed(() => hasPermission('finance:fixed_assets:create', permissionCodes.value))
 const canEdit = computed(() => hasPermission('finance:fixed_assets:edit', permissionCodes.value))
 const canImport = computed(() => hasPermission('finance:fixed_assets:import', permissionCodes.value))
@@ -308,12 +314,50 @@ const canViewVoucherLink = computed(() => hasPermission('finance:fixed_assets:vi
 const changeLine = computed(() => { if (!changeForm.lines[0]) changeForm.lines[0] = { assetCode: '' } as FixedAssetChangeLinePayload; return changeForm.lines[0] as FixedAssetChangeLinePayload })
 const disposalLine = computed(() => { if (!disposalForm.lines[0]) disposalForm.lines[0] = { assetCode: '' } as FixedAssetDisposalLinePayload; return disposalForm.lines[0] as FixedAssetDisposalLinePayload })
 
-onMounted(refreshAll)
+onMounted(registerCompanySwitchGuard)
+onActivated(registerCompanySwitchGuard)
+onDeactivated(unregisterCompanySwitchGuard)
+
+watch(
+  () => financeCompany.currentCompanyId,
+  async (companyId, previousCompanyId) => {
+    if (!companyId) return
+    filters.companyId = companyId
+    if (companyId !== previousCompanyId) {
+      closeDialogs()
+      filters.categoryId = undefined
+      filters.status = ''
+      filters.keyword = ''
+      previewRun.value = null
+      lastImport.value = null
+    }
+    await refreshAll()
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  unregisterCompanySwitchGuard()
+})
+
+function registerCompanySwitchGuard() {
+  if (guardRegistered) return
+  financeCompany.registerSwitchGuard(COMPANY_SWITCH_GUARD_KEY, confirmCompanySwitch)
+  guardRegistered = true
+}
+
+function unregisterCompanySwitchGuard() {
+  if (!guardRegistered) return
+  financeCompany.unregisterSwitchGuard(COMPANY_SWITCH_GUARD_KEY)
+  guardRegistered = false
+}
+
 async function refreshAll() {
+  if (!financeCompany.currentCompanyId) return
   try {
-    const res = await fixedAssetApi.getMeta({ companyId: filters.companyId || undefined, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })
+    const res = await fixedAssetApi.getMeta({ companyId: financeCompany.currentCompanyId, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })
     meta.value = res.data
-    filters.companyId = filters.companyId || res.data.defaultCompanyId || res.data.companyOptions[0]?.value || ''
+    filters.companyId = financeCompany.currentCompanyId
     filters.bookCode = res.data.defaultBookCode || filters.bookCode
     filters.fiscalYear = res.data.defaultFiscalYear || filters.fiscalYear
     filters.fiscalPeriod = res.data.defaultFiscalPeriod || filters.fiscalPeriod
@@ -358,7 +402,7 @@ async function closePeriod() { try { await ElMessageBox.confirm(`确认结账 ${
 async function downloadOpeningTemplate() { try { const res = await fixedAssetApi.getOpeningTemplate(buildPeriodContext()); const blob = new Blob([res.data.templateContent], { type: res.data.contentType || 'text/csv;charset=utf-8' }); const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = res.data.fileName || '固定资产期初导入模板.csv'; link.click(); window.URL.revokeObjectURL(url); ElMessage.success('模板下载完成') } catch (error: unknown) { ElMessage.error(resolveError(error, '模板下载失败')) } }
 function triggerOpeningUpload() { openingFileInput.value?.click() }
 async function onOpeningFilePicked(event: Event) { const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return; try { const rows = parseOpeningCsv(await file.text()); lastImport.value = (await fixedAssetApi.importOpening({ ...buildPeriodContext(), rows })).data; activeTab.value = 'opening'; ElMessage.success(`导入完成：成功 ${lastImport.value.successRows} / 总计 ${lastImport.value.totalRows}`); await Promise.all([loadCards(), refreshMetaOnly()]) } catch (error: unknown) { ElMessage.error(resolveError(error, '期初导入失败')) } finally { input.value = '' } }
-async function refreshMetaOnly() { meta.value = (await fixedAssetApi.getMeta({ companyId: filters.companyId, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })).data }
+async function refreshMetaOnly() { meta.value = (await fixedAssetApi.getMeta({ companyId: financeCompany.currentCompanyId || filters.companyId, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })).data }
 
 function parseOpeningCsv(content: string): FixedAssetOpeningImportRow[] { const lines = content.replace(/\uFEFF/g, '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean); if (lines.length < 2) throw new Error('CSV 文件内容为空'); const headers = parseCsvLine(lines[0] || ''); const required = ['assetCode', 'assetName', 'categoryCode', 'inServiceDate', 'originalAmount', 'accumDeprAmount', 'salvageAmount', 'usefulLifeMonths', 'depreciatedMonths', 'remainingMonths']; const indexMap = new Map(headers.map((item, index) => [item, index])); const missing = required.filter((item) => !indexMap.has(item)); if (missing.length) throw new Error(`导入模板缺少字段：${missing.join(', ')}`); return lines.slice(1).map((line, index) => { const cells = parseCsvLine(line); const read = (name: string) => cells[indexMap.get(name) ?? -1] || ''; return { rowNo: index + 1, assetCode: read('assetCode'), assetName: read('assetName'), categoryCode: read('categoryCode'), acquireDate: read('acquireDate') || undefined, inServiceDate: read('inServiceDate'), originalAmount: normalizeRequiredMoney(read('originalAmount')), accumDeprAmount: normalizeRequiredMoney(read('accumDeprAmount')), salvageAmount: normalizeRequiredMoney(read('salvageAmount')), usefulLifeMonths: toInteger(read('usefulLifeMonths')), depreciatedMonths: toInteger(read('depreciatedMonths')), remainingMonths: toInteger(read('remainingMonths')), useDeptId: toOptionalInteger(read('useDeptId')), keeperUserId: toOptionalInteger(read('keeperUserId')), status: read('status') || 'IN_USE', workTotal: toOptionalNumber(read('workTotal')), workUsed: toOptionalNumber(read('workUsed')), remark: read('remark') || undefined } }) }
 function parseCsvLine(line: string) { const result: string[] = []; let current = ''; let inQuotes = false; for (let i = 0; i < line.length; i += 1) { const char = line[i]; const next = line[i + 1]; if (char === '"') { if (inQuotes && next === '"') { current += '"'; i += 1 } else { inQuotes = !inQuotes } } else if (char === ',' && !inQuotes) { result.push(current.trim()); current = '' } else { current += char } } result.push(current.trim()); return result }
@@ -378,6 +422,7 @@ function cardStatusLabel(value?: string) { return optionLabel(meta.value?.cardSt
 function billStatusLabel(value?: string) { return ({ DRAFT: '草稿', POSTED: '已过账', VOID: '已作废', CLOSED: '已结账', OPEN: '开放中' } as Record<string, string>)[value || ''] || value || '-' }
 function resolveError(error: unknown, fallback: string) { return error instanceof Error && error.message ? error.message : fallback }
 function isCancel(error: unknown) { return error === 'cancel' || error === 'close' }
+function closeDialogs() { cardDialogVisible.value = false; categoryDialogVisible.value = false; changeDialogVisible.value = false; disposalDialogVisible.value = false; editingCardId.value = null; editingCategoryId.value = null; syncForms() }
 function trimText(value?: string) { return String(value || '').trim() }
 function todayText() { const date = new Date(); const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}` }
 function moneyText(value: number | string | null | undefined) { return formatMoney(value || '0.00') }
@@ -387,6 +432,22 @@ function toNumber(value: string) { const n = Number(value); return Number.isFini
 function toInteger(value: string) { const n = Number.parseInt(value, 10); return Number.isFinite(n) ? n : 0 }
 function toOptionalNumber(value: string) { return value ? toNumber(value) : undefined }
 function toOptionalInteger(value: string) { return value ? toInteger(value) : undefined }
+
+async function confirmCompanySwitch() {
+  if (!hasPendingEdit.value) {
+    return true
+  }
+  try {
+    await ElMessageBox.confirm('切换公司后将关闭当前固定资产编辑窗口，并按新公司重新加载台账，是否继续？', '切换公司', {
+      type: 'warning',
+      confirmButtonText: '继续切换',
+      cancelButtonText: '取消'
+    })
+    return true
+  } catch {
+    return false
+  }
+}
 </script>
 
 <style scoped>
@@ -405,6 +466,7 @@ function toOptionalInteger(value: string) { return value ? toInteger(value) : un
 .fa-filter-card { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; padding: 16px; }
 .fa-filter-card label, .form-grid label { display: flex; min-width: 0; flex-direction: column; gap: 8px; }
 .fa-filter-card span, .form-grid span { color: #6a8094; font-size: 12px; }
+.fa-static-field { display: flex; min-height: 40px; align-items: center; border: 1px solid #d8e2ee; border-radius: 14px; background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%); padding: 0 12px; color: #173454; font-weight: 600; }
 .fa-filter-card .search { grid-column: span 2; }
 .fa-grid { display: grid; gap: 16px; }
 .fa-grid.two-col { grid-template-columns: minmax(0, 1fr) 320px; }

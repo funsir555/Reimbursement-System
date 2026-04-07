@@ -10,6 +10,8 @@ public interface ExpenseAttachmentService {
 
     StoredExpenseAttachment loadAttachment(String attachmentId);
 
+    ExpenseAttachmentVO saveGeneratedAttachment(String fileName, String contentType, byte[] content);
+
     record StoredExpenseAttachment(Resource resource, String fileName, String contentType, long fileSize) {
     }
 }

@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.dto.CompanyBankAccountSaveDTO;
+import com.finex.auth.dto.CompanyBankAccountVO;
 import com.finex.auth.dto.CompanySaveDTO;
 import com.finex.auth.dto.CompanyVO;
 import com.finex.auth.dto.DepartmentSaveDTO;
@@ -24,6 +26,7 @@ import com.finex.auth.dto.SyncRunDTO;
 import com.finex.auth.dto.SystemSettingsBootstrapVO;
 import com.finex.auth.dto.UserProfileVO;
 import com.finex.auth.dto.UserRoleAssignDTO;
+import com.finex.auth.entity.SystemCompanyBankAccount;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.SystemPermission;
@@ -34,6 +37,7 @@ import com.finex.auth.entity.SystemSyncJob;
 import com.finex.auth.entity.SystemSyncJobDetail;
 import com.finex.auth.entity.SystemUserRole;
 import com.finex.auth.entity.User;
+import com.finex.auth.mapper.SystemCompanyBankAccountMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.SystemPermissionMapper;
@@ -103,6 +107,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     private final AccessControlService accessControlService;
     private final UserMapper userMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
+    private final SystemCompanyBankAccountMapper systemCompanyBankAccountMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final SystemRoleMapper systemRoleMapper;
     private final SystemPermissionMapper systemPermissionMapper;
@@ -123,6 +128,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         bootstrap.setRoles(listRoles());
         bootstrap.setPermissions(getPermissionTree());
         bootstrap.setCompanies(listCompanies());
+        bootstrap.setCompanyBankAccounts(listCompanyBankAccounts());
         bootstrap.setConnectors(listSyncConnectors());
         bootstrap.setJobs(listSyncJobs());
         return bootstrap;
@@ -155,7 +161,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         department.setSyncEnabled(dto.getSyncEnabled() != null && dto.getSyncEnabled() == 0 ? 0 : 1);
         department.setSyncManaged(0);
         department.setSyncStatus("MANUAL");
-        department.setSyncRemark("手工维护");
+        department.setSyncRemark("\u624b\u5de5\u7ef4\u62a4");
+        applyDepartmentStatBelong(department, dto);
         department.setStatus(normalizeStatus(dto.getStatus()));
         department.setSortOrder(dto.getSortOrder() == null ? nextDepartmentSortOrder() : dto.getSortOrder());
         systemDepartmentMapper.insert(department);
@@ -166,28 +173,27 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Transactional(rollbackFor = Exception.class)
     public DepartmentTreeNodeVO updateDepartment(Long id, DepartmentSaveDTO dto) {
         SystemDepartment department = requireDepartment(id);
-        if (dto.getParentId() != null && Objects.equals(dto.getParentId(), id)) {
-            throw new IllegalArgumentException("上级部门不能选择自己");
-        }
-        if (dto.getParentId() != null) {
-            requireDepartment(dto.getParentId());
-        }
-        validateDepartmentLeader(dto.getLeaderUserId());
-
         boolean manualDepartment = SOURCE_MANUAL.equalsIgnoreCase(department.getSyncSource()) || !isSyncManaged(department.getSyncManaged());
-        if (!manualDepartment) {
-            throw new IllegalArgumentException("同步部门暂不支持手工编辑");
-        }
+        if (manualDepartment) {
+            if (dto.getParentId() != null && Objects.equals(dto.getParentId(), id)) {
+                throw new IllegalArgumentException("\u4e0a\u7ea7\u90e8\u95e8\u4e0d\u80fd\u9009\u62e9\u81ea\u5df1");
+            }
+            if (dto.getParentId() != null) {
+                requireDepartment(dto.getParentId());
+            }
+            validateDepartmentLeader(dto.getLeaderUserId());
 
-        department.setDeptName(dto.getDeptName().trim());
-        department.setParentId(dto.getParentId());
-        department.setCompanyId(trimToNull(dto.getCompanyId()));
-        department.setLeaderUserId(dto.getLeaderUserId());
-        department.setSyncEnabled(dto.getSyncEnabled() != null && dto.getSyncEnabled() == 0 ? 0 : 1);
-        department.setStatus(normalizeStatus(dto.getStatus()));
-        department.setSortOrder(dto.getSortOrder() == null ? department.getSortOrder() : dto.getSortOrder());
-        department.setSyncRemark("手工维护");
-        department.setSyncStatus("MANUAL");
+            department.setDeptName(dto.getDeptName().trim());
+            department.setParentId(dto.getParentId());
+            department.setCompanyId(trimToNull(dto.getCompanyId()));
+            department.setLeaderUserId(dto.getLeaderUserId());
+            department.setSyncEnabled(dto.getSyncEnabled() != null && dto.getSyncEnabled() == 0 ? 0 : 1);
+            department.setStatus(normalizeStatus(dto.getStatus()));
+            department.setSortOrder(dto.getSortOrder() == null ? department.getSortOrder() : dto.getSortOrder());
+            department.setSyncRemark("\u624b\u5de5\u7ef4\u62a4");
+            department.setSyncStatus("MANUAL");
+        }
+        applyDepartmentStatBelong(department, dto);
         systemDepartmentMapper.updateById(department);
         return findDepartmentNode(id);
     }
@@ -197,19 +203,19 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     public Boolean deleteDepartment(Long id) {
         SystemDepartment department = requireDepartment(id);
         if (!SOURCE_MANUAL.equalsIgnoreCase(department.getSyncSource())) {
-            throw new IllegalArgumentException("同步部门不能直接删除，请通过同步清理");
+            throw new IllegalArgumentException("\u540c\u6b65\u90e8\u95e8\u4e0d\u80fd\u76f4\u63a5\u5220\u9664\uff0c\u8bf7\u901a\u8fc7\u540c\u6b65\u6e05\u7406");
         }
         long childCount = systemDepartmentMapper.selectCount(
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getParentId, id)
         );
         if (childCount > 0) {
-            throw new IllegalArgumentException("请先删除下级部门");
+            throw new IllegalArgumentException("\u8bf7\u5148\u5220\u9664\u4e0b\u7ea7\u90e8\u95e8");
         }
         long employeeCount = userMapper.selectCount(
                 Wrappers.<User>lambdaQuery().eq(User::getDeptId, id)
         );
         if (employeeCount > 0) {
-            throw new IllegalArgumentException("请先迁移该部门下员工");
+            throw new IllegalArgumentException("\u8bf7\u5148\u8fc1\u79fb\u8be5\u90e8\u95e8\u4e0b\u5458\u5de5");
         }
         systemDepartmentMapper.deleteById(id);
         return Boolean.TRUE;
@@ -279,6 +285,9 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             vo.setDeptName(resolveMapValue(departmentNameMap, user.getDeptId(), ""));
             vo.setPosition(StrUtil.blankToDefault(user.getPosition(), ""));
             vo.setLaborRelationBelong(StrUtil.blankToDefault(user.getLaborRelationBelong(), ""));
+            vo.setStatDepartmentBelong(StrUtil.blankToDefault(user.getStatDepartmentBelong(), ""));
+            vo.setStatRegionBelong(StrUtil.blankToDefault(user.getStatRegionBelong(), ""));
+            vo.setStatAreaBelong(StrUtil.blankToDefault(user.getStatAreaBelong(), ""));
             vo.setStatus(user.getStatus());
             vo.setSourceType(StrUtil.blankToDefault(user.getSourceType(), SOURCE_MANUAL));
             vo.setSyncManaged(isSyncManaged(user.getSyncManaged()));
@@ -303,6 +312,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         user.setDeptId(dto.getDeptId());
         user.setPosition(trimToNull(dto.getPosition()));
         user.setLaborRelationBelong(trimToNull(dto.getLaborRelationBelong()));
+        applyEmployeeStatBelong(user, dto);
         user.setStatus(normalizeStatus(dto.getStatus()));
         user.setSourceType(SOURCE_MANUAL);
         user.setSyncManaged(0);
@@ -314,16 +324,19 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Transactional(rollbackFor = Exception.class)
     public EmployeeVO updateEmployee(Long id, EmployeeSaveDTO dto) {
         User user = requireUser(id);
-        ensureUsernameUnique(dto.getUsername(), id);
-        user.setUsername(dto.getUsername().trim());
-        user.setName(dto.getName().trim());
-        user.setPhone(trimToNull(dto.getPhone()));
-        user.setEmail(normalizeEmail(dto.getEmail()));
-        user.setCompanyId(trimToNull(dto.getCompanyId()));
-        user.setDeptId(dto.getDeptId());
-        user.setPosition(trimToNull(dto.getPosition()));
-        user.setLaborRelationBelong(trimToNull(dto.getLaborRelationBelong()));
-        user.setStatus(normalizeStatus(dto.getStatus()));
+        if (isManualEmployee(user)) {
+            ensureUsernameUnique(dto.getUsername(), id);
+            user.setUsername(dto.getUsername().trim());
+            user.setName(dto.getName().trim());
+            user.setPhone(trimToNull(dto.getPhone()));
+            user.setEmail(normalizeEmail(dto.getEmail()));
+            user.setCompanyId(trimToNull(dto.getCompanyId()));
+            user.setDeptId(dto.getDeptId());
+            user.setPosition(trimToNull(dto.getPosition()));
+            user.setLaborRelationBelong(trimToNull(dto.getLaborRelationBelong()));
+            user.setStatus(normalizeStatus(dto.getStatus()));
+        }
+        applyEmployeeStatBelong(user, dto);
         userMapper.updateById(user);
         return findEmployee(id);
     }
@@ -331,12 +344,15 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteEmployee(Long id) {
-        requireUser(id);
+        User user = requireUser(id);
+        if (!isManualEmployee(user)) {
+            throw new IllegalArgumentException("\u540c\u6b65\u5458\u5de5\u4e0d\u80fd\u76f4\u63a5\u5220\u9664\uff0c\u8bf7\u901a\u8fc7\u540c\u6b65\u6e05\u7406");
+        }
         long departmentLeaderCount = systemDepartmentMapper.selectCount(
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getLeaderUserId, id)
         );
         if (departmentLeaderCount > 0) {
-            throw new IllegalArgumentException("请先调整该员工负责的部门负责人");
+            throw new IllegalArgumentException("\u8bf7\u5148\u8c03\u6574\u8be5\u5458\u5de5\u8d1f\u8d23\u7684\u90e8\u95e8\u8d1f\u8d23\u4eba");
         }
         systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getUserId, id));
         userMapper.deleteById(id);
@@ -375,7 +391,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             vo.setPermissionCodes(permissionCodesByRoleId.getOrDefault(role.getId(), List.of()));
             List<Long> userIds = userIdsByRoleId.getOrDefault(role.getId(), List.of());
             vo.setUserIds(userIds);
-            vo.setUserNames(userIds.stream().map(userId -> userNameMap.getOrDefault(userId, "用户#" + userId)).toList());
+            vo.setUserNames(userIds.stream().map(userId -> userNameMap.getOrDefault(userId, "\u7528\u6237#" + userId)).toList());
             return vo;
         }).toList();
     }
@@ -397,7 +413,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     public RoleVO updateRole(Long id, RoleSaveDTO dto) {
         SystemRole role = requireRole(id);
         if (isSuperAdminRole(role)) {
-            throw new IllegalArgumentException("超级管理员角色为系统保留角色，不能通过前端修改");
+            throw new IllegalArgumentException("\u8d85\u7ea7\u7ba1\u7406\u5458\u89d2\u8272\u4ec5\u5141\u8bb8\u901a\u8fc7\u6570\u636e\u5e93\u76f4\u63a5\u7ef4\u62a4\uff0c\u4e0d\u80fd\u5728\u6b64\u4fee\u6539\u3002");
         }
         role.setRoleName(dto.getRoleName().trim());
         role.setRoleDescription(trimToNull(dto.getRoleDescription()));
@@ -411,7 +427,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     public Boolean deleteRole(Long id) {
         SystemRole role = requireRole(id);
         if (isSuperAdminRole(role)) {
-            throw new IllegalArgumentException("超级管理员角色为系统保留角色，不能删除");
+            throw new IllegalArgumentException("\u8d85\u7ea7\u7ba1\u7406\u5458\u89d2\u8272\u4ec5\u5141\u8bb8\u901a\u8fc7\u6570\u636e\u5e93\u76f4\u63a5\u7ef4\u62a4\uff0c\u4e0d\u80fd\u5728\u6b64\u5220\u9664\u3002");
         }
         systemRolePermissionMapper.delete(Wrappers.<SystemRolePermission>lambdaQuery().eq(SystemRolePermission::getRoleId, id));
         systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getRoleId, id));
@@ -424,7 +440,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     public Boolean assignRolePermissions(Long roleId, RolePermissionAssignDTO dto, Long currentUserId) {
         SystemRole role = requireRole(roleId);
         if (isSuperAdminRole(role) && !currentUserIsSuperAdmin(currentUserId)) {
-            throw new IllegalArgumentException("超级管理员权限仅可由超级管理员修改");
+            throw new IllegalArgumentException("\u8d85\u7ea7\u7ba1\u7406\u5458\u89d2\u8272\u6743\u9650\u4ec5\u5141\u8bb8\u8d85\u7ea7\u7ba1\u7406\u5458\u8c03\u6574\u3002");
         }
         systemRolePermissionMapper.delete(Wrappers.<SystemRolePermission>lambdaQuery().eq(SystemRolePermission::getRoleId, roleId));
         List<String> permissionCodes = dto == null || dto.getPermissionCodes() == null ? List.of() : dto.getPermissionCodes();
@@ -456,7 +472,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 ? List.of()
                 : dto.getRoleIds().stream().filter(Objects::nonNull).distinct().toList();
         if (superAdminRoleId != null && roleIds.contains(superAdminRoleId)) {
-            throw new IllegalArgumentException("超级管理员只能通过数据库维护");
+            throw new IllegalArgumentException("\u8d85\u7ea7\u7ba1\u7406\u5458\u89d2\u8272\u4ec5\u5141\u8bb8\u901a\u8fc7\u6570\u636e\u5e93\u76f4\u63a5\u7ef4\u62a4\uff0c\u4e0d\u80fd\u5728\u6b64\u5206\u914d\u3002");
         }
         if (superAdminRoleId != null) {
             systemUserRoleMapper.delete(
@@ -470,7 +486,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         for (Long roleId : roleIds) {
             SystemRole role = requireRole(roleId);
             if (isSuperAdminRole(role)) {
-                throw new IllegalArgumentException("超级管理员只能通过数据库维护");
+                throw new IllegalArgumentException("\u8d85\u7ea7\u7ba1\u7406\u5458\u89d2\u8272\u4ec5\u5141\u8bb8\u901a\u8fc7\u6570\u636e\u5e93\u76f4\u63a5\u7ef4\u62a4\uff0c\u4e0d\u80fd\u5728\u6b64\u5206\u914d\u3002");
             }
             SystemUserRole userRole = new SystemUserRole();
             userRole.setUserId(userId);
@@ -553,15 +569,75 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getCompanyId, companyId)
         );
         if (departmentCount > 0) {
-            throw new IllegalArgumentException("请先解除部门公司归属");
+            throw new IllegalArgumentException("\u8bf7\u5148\u5220\u9664\u8be5\u516c\u53f8\u4e0b\u90e8\u95e8");
         }
         long userCount = userMapper.selectCount(
                 Wrappers.<User>lambdaQuery().eq(User::getCompanyId, companyId)
         );
         if (userCount > 0) {
-            throw new IllegalArgumentException("请先解除员工公司归属");
+            throw new IllegalArgumentException("\u8bf7\u5148\u8fc1\u79fb\u8be5\u516c\u53f8\u4e0b\u5458\u5de5");
+        }
+        long companyBankAccountCount = systemCompanyBankAccountMapper.selectCount(
+                Wrappers.<SystemCompanyBankAccount>lambdaQuery().eq(SystemCompanyBankAccount::getCompanyId, companyId)
+        );
+        if (companyBankAccountCount > 0) {
+            throw new IllegalArgumentException("\u8bf7\u5148\u5220\u9664\u8be5\u516c\u53f8\u4e0b\u94f6\u884c\u8d26\u6237");
         }
         systemCompanyMapper.deleteById(companyId);
+        return Boolean.TRUE;
+    }
+
+    @Override
+    public List<CompanyBankAccountVO> listCompanyBankAccounts() {
+        List<SystemCompanyBankAccount> accounts = systemCompanyBankAccountMapper.selectList(
+                Wrappers.<SystemCompanyBankAccount>lambdaQuery()
+                        .orderByAsc(SystemCompanyBankAccount::getCompanyId)
+                        .orderByDesc(SystemCompanyBankAccount::getDefaultAccount)
+                        .orderByAsc(SystemCompanyBankAccount::getId)
+        );
+        if (accounts.isEmpty()) {
+            return List.of();
+        }
+        Map<String, String> companyNameMap = buildCompanyNameMap(accounts.stream()
+                .map(SystemCompanyBankAccount::getCompanyId)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toSet()));
+        return accounts.stream()
+                .map(account -> toCompanyBankAccountVo(account, companyNameMap))
+                .toList();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CompanyBankAccountVO createCompanyBankAccount(CompanyBankAccountSaveDTO dto) {
+        SystemCompanyBankAccount account = new SystemCompanyBankAccount();
+        applyCompanyBankAccount(account, dto);
+        ensureCompanyBankAccountUnique(account.getCompanyId(), account.getAccountNo(), null);
+        systemCompanyBankAccountMapper.insert(account);
+        if (isDefaultAccount(account)) {
+            clearOtherDefaultCompanyBankAccounts(account.getCompanyId(), account.getId());
+        }
+        return findCompanyBankAccount(account.getId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CompanyBankAccountVO updateCompanyBankAccount(Long id, CompanyBankAccountSaveDTO dto) {
+        SystemCompanyBankAccount account = requireCompanyBankAccount(id);
+        applyCompanyBankAccount(account, dto);
+        ensureCompanyBankAccountUnique(account.getCompanyId(), account.getAccountNo(), id);
+        systemCompanyBankAccountMapper.updateById(account);
+        if (isDefaultAccount(account)) {
+            clearOtherDefaultCompanyBankAccounts(account.getCompanyId(), account.getId());
+        }
+        return findCompanyBankAccount(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean deleteCompanyBankAccount(Long id) {
+        requireCompanyBankAccount(id);
+        systemCompanyBankAccountMapper.deleteById(id);
         return Boolean.TRUE;
     }
 
@@ -624,7 +700,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             lastJob = executeSync(requireConnector(platformCode), normalizeTriggerType(dto == null ? null : dto.getTriggerType()), operator);
         }
         if (lastJob == null) {
-            throw new IllegalArgumentException("未找到可执行的同步平台");
+            throw new IllegalArgumentException("\u672a\u627e\u5230\u53ef\u6267\u884c\u7684\u540c\u6b65\u5e73\u53f0");
         }
         return lastJob;
     }
@@ -651,7 +727,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
 
     private SyncJobVO executeSync(SystemSyncConnector connector, String triggerType, String operator) {
         if (connector.getEnabled() == null || connector.getEnabled() != 1) {
-            throw new IllegalArgumentException(resolvePlatformName(connector.getPlatformCode()) + " 同步未启用");
+            throw new IllegalArgumentException(resolvePlatformName(connector.getPlatformCode()) + " \u540c\u6b65\u672a\u542f\u7528");
         }
 
         SystemSyncJob job = new SystemSyncJob();
@@ -664,7 +740,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         job.setSkippedCount(0);
         job.setFailedCount(0);
         job.setDeletedCount(0);
-        job.setSummary("同步执行中");
+        job.setSummary("\u540c\u6b65\u6267\u884c\u4e2d");
         systemSyncJobMapper.insert(job);
 
         SyncStats stats = new SyncStats();
@@ -703,7 +779,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             job.setSkippedCount(stats.skippedCount.get());
             job.setFailedCount(stats.failedCount.get() + 1);
             job.setDeletedCount(stats.deletedCount.get());
-            job.setSummary(StrUtil.blankToDefault(ex.getMessage(), "同步执行失败"));
+            job.setSummary(StrUtil.blankToDefault(ex.getMessage(), "\u540c\u6b65\u6267\u884c\u5931\u8d25"));
             systemSyncJobMapper.updateById(job);
             appendJobDetail(job.getId(), "JOB", "FAIL", connector.getPlatformCode(), DETAIL_STATUS_FAILED, ex.getMessage());
             return toSyncJobVo(job);
@@ -723,13 +799,13 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         for (ExternalDepartmentData externalDepartment : externalDepartments) {
             if (StrUtil.isBlank(externalDepartment.getDeptCode())) {
                 stats.failedCount.incrementAndGet();
-                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "UPSERT", "", DETAIL_STATUS_FAILED, "部门编码为空，已跳过");
+                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "UPSERT", "", DETAIL_STATUS_FAILED, "\u90e8\u95e8\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a\uff0c\u5df2\u6807\u8bb0\u4e3a\u5931\u8d25");
                 continue;
             }
             SystemDepartment existing = workingMap.get(externalDepartment.getDeptCode());
             if (existing != null && SOURCE_MANUAL.equalsIgnoreCase(existing.getSyncSource()) && !isSyncManaged(existing.getSyncManaged())) {
                 stats.skippedCount.incrementAndGet();
-                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "UPSERT", externalDepartment.getDeptCode(), DETAIL_STATUS_SKIPPED, "手工部门受保护，未覆盖");
+                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "UPSERT", externalDepartment.getDeptCode(), DETAIL_STATUS_SKIPPED, "\u624b\u5de5\u7ef4\u62a4\u90e8\u95e8\u5df2\u5b58\u5728\uff0c\u5df2\u8df3\u8fc7\u81ea\u52a8\u540c\u6b65\u8986\u76d6");
                 continue;
             }
 
@@ -740,7 +816,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             target.setSyncEnabled(1);
             target.setSyncManaged(1);
             target.setSyncStatus(JOB_STATUS_SUCCESS);
-            target.setSyncRemark("来源于 " + resolvePlatformName(platformCode) + " 自动同步");
+            target.setSyncRemark("\u6765\u6e90\u4e8e " + resolvePlatformName(platformCode) + " \u81ea\u52a8\u540c\u6b65");
             target.setLastSyncAt(LocalDateTime.now());
             target.setStatus(normalizeStatus(externalDepartment.getStatus()));
             target.setSortOrder(target.getSortOrder() == null ? nextDepartmentSortOrder() : target.getSortOrder());
@@ -753,7 +829,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 systemDepartmentMapper.updateById(target);
             }
             stats.successCount.incrementAndGet();
-            appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "UPSERT", target.getDeptCode(), DETAIL_STATUS_SUCCESS, "部门同步成功");
+            appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "UPSERT", target.getDeptCode(), DETAIL_STATUS_SUCCESS, "\u90e8\u95e8\u540c\u6b65\u6210\u529f");
         }
 
         Map<String, SystemDepartment> latestByCode = systemDepartmentMapper.selectList(
@@ -805,7 +881,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             User matchedUser = matchResult.user;
             if (matchedUser != null && SOURCE_MANUAL.equalsIgnoreCase(matchedUser.getSourceType()) && !isSyncManaged(matchedUser.getSyncManaged())) {
                 stats.skippedCount.incrementAndGet();
-                appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_SKIPPED, "手工员工受保护，未覆盖");
+                appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_SKIPPED, "\u624b\u5de5\u7ef4\u62a4\u5458\u5de5\u5df2\u5b58\u5728\uff0c\u5df2\u8df3\u8fc7\u81ea\u52a8\u540c\u6b65\u8986\u76d6");
                 continue;
             }
 
@@ -839,7 +915,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 userMapper.updateById(target);
             }
             stats.successCount.incrementAndGet();
-            appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_SUCCESS, "员工同步成功");
+            appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_SUCCESS, "\u5458\u5de5\u540c\u6b65\u6210\u529f");
         }
     }
 
@@ -861,7 +937,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getUserId, user.getId()));
             userMapper.deleteById(user.getId());
             stats.deletedCount.incrementAndGet();
-            appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "DELETE", String.valueOf(user.getId()), DETAIL_STATUS_DELETED, "来源缺失，已删除同步员工");
+            appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "DELETE", String.valueOf(user.getId()), DETAIL_STATUS_DELETED, "\u6765\u6e90\u4e8e " + resolvePlatformName(platformCode) + " \u81ea\u52a8\u540c\u6b65\u7684\u5458\u5de5\u4e0d\u5b58\u5728\u4e8e\u4e0a\u6e38\uff0c\u5df2\u81ea\u52a8\u5220\u9664");
         }
     }
 
@@ -893,7 +969,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         );
         for (SystemDepartment child : children) {
             if (SOURCE_MANUAL.equalsIgnoreCase(child.getSyncSource()) && !isSyncManaged(child.getSyncManaged())) {
-                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "DELETE", department.getDeptCode(), DETAIL_STATUS_SKIPPED, "存在手工子部门，跳过删除");
+                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "DELETE", department.getDeptCode(), DETAIL_STATUS_SKIPPED, "\u90e8\u95e8\u4e0b\u5b58\u5728\u624b\u5de5\u7ef4\u62a4\u7684\u4e0b\u7ea7\u90e8\u95e8\uff0c\u5df2\u8df3\u8fc7\u5220\u9664");
                 return false;
             }
             if (!deleteManagedDepartmentRecursively(jobId, child, stats)) {
@@ -906,7 +982,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         );
         for (User user : users) {
             if (SOURCE_MANUAL.equalsIgnoreCase(user.getSourceType()) && !isSyncManaged(user.getSyncManaged())) {
-                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "DELETE", department.getDeptCode(), DETAIL_STATUS_SKIPPED, "存在手工员工，跳过删除");
+                appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "DELETE", department.getDeptCode(), DETAIL_STATUS_SKIPPED, "\u90e8\u95e8\u4e0b\u5b58\u5728\u624b\u5de5\u7ef4\u62a4\u5458\u5de5\uff0c\u5df2\u8df3\u8fc7\u5220\u9664");
                 return false;
             }
         }
@@ -914,12 +990,12 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getUserId, user.getId()));
             userMapper.deleteById(user.getId());
             stats.deletedCount.incrementAndGet();
-            appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "DELETE", String.valueOf(user.getId()), DETAIL_STATUS_DELETED, "部门来源缺失，联动删除同步员工");
+            appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "DELETE", String.valueOf(user.getId()), DETAIL_STATUS_DELETED, "\u5220\u9664\u90e8\u95e8\u65f6\u5df2\u540c\u6b65\u5220\u9664\u6240\u5c5e\u5458\u5de5");
         }
 
         systemDepartmentMapper.deleteById(department.getId());
         stats.deletedCount.incrementAndGet();
-        appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "DELETE", department.getDeptCode(), DETAIL_STATUS_DELETED, "来源缺失，已删除同步部门");
+        appendJobDetail(jobId, DETAIL_TYPE_DEPARTMENT, "DELETE", department.getDeptCode(), DETAIL_STATUS_DELETED, "\u6765\u6e90\u4e8e " + resolvePlatformName(department.getSyncSource()) + " \u81ea\u52a8\u540c\u6b65\u7684\u90e8\u95e8\u4e0d\u5b58\u5728\u4e8e\u4e0a\u6e38\uff0c\u5df2\u81ea\u52a8\u5220\u9664");
         return true;
     }
 
@@ -931,7 +1007,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         currentUser.setName(StrUtil.blankToDefault(user.getName(), user.getUsername()));
         currentUser.setPhone(user.getPhone());
         currentUser.setEmail(user.getEmail());
-        currentUser.setPosition(StrUtil.blankToDefault(user.getPosition(), "员工"));
+        currentUser.setPosition(StrUtil.blankToDefault(user.getPosition(), "\u672a\u8bbe\u7f6e\u5c97\u4f4d"));
         currentUser.setLaborRelationBelong(StrUtil.blankToDefault(user.getLaborRelationBelong(), ""));
         currentUser.setCompanyId(user.getCompanyId());
         currentUser.setRoles(accessControlService.getRoleCodes(userId));
@@ -977,14 +1053,65 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             vo.setCompanyName(company.getCompanyName());
             vo.setInvoiceTitle(company.getInvoiceTitle());
             vo.setTaxNo(company.getTaxNo());
-            vo.setBankName(company.getBankName());
-            vo.setBankAccountName(company.getBankAccountName());
-            vo.setBankAccountNo(company.getBankAccountNo());
             vo.setStatus(company.getStatus());
             vo.setChildren(new ArrayList<>());
             result.add(vo);
         }
         return result;
+    }
+
+    private Map<String, String> buildCompanyNameMap(Set<String> companyIds) {
+        if (companyIds == null || companyIds.isEmpty()) {
+            return Map.of();
+        }
+        return systemCompanyMapper.selectList(
+                Wrappers.<SystemCompany>lambdaQuery().in(SystemCompany::getCompanyId, companyIds)
+        ).stream().collect(Collectors.toMap(
+                SystemCompany::getCompanyId,
+                SystemCompany::getCompanyName,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    private CompanyBankAccountVO toCompanyBankAccountVo(SystemCompanyBankAccount account, Map<String, String> companyNameMap) {
+        CompanyBankAccountVO vo = new CompanyBankAccountVO();
+        vo.setId(account.getId());
+        vo.setCompanyId(account.getCompanyId());
+        vo.setCompanyName(resolveMapValue(companyNameMap, account.getCompanyId(), ""));
+        vo.setBankName(account.getBankName());
+        vo.setBranchName(account.getBranchName());
+        vo.setBankCode(account.getBankCode());
+        vo.setBranchCode(account.getBranchCode());
+        vo.setCnapsCode(account.getCnapsCode());
+        vo.setAccountName(account.getAccountName());
+        vo.setAccountNo(account.getAccountNo());
+        vo.setAccountType(account.getAccountType());
+        vo.setAccountUsage(account.getAccountUsage());
+        vo.setCurrencyCode(account.getCurrencyCode());
+        vo.setDefaultAccount(account.getDefaultAccount());
+        vo.setStatus(account.getStatus());
+        vo.setRemark(account.getRemark());
+        vo.setDirectConnectEnabled(account.getDirectConnectEnabled());
+        vo.setDirectConnectProvider(account.getDirectConnectProvider());
+        vo.setDirectConnectChannel(account.getDirectConnectChannel());
+        vo.setDirectConnectProtocol(account.getDirectConnectProtocol());
+        vo.setDirectConnectCustomerNo(account.getDirectConnectCustomerNo());
+        vo.setDirectConnectAppId(account.getDirectConnectAppId());
+        vo.setDirectConnectAccountAlias(account.getDirectConnectAccountAlias());
+        vo.setDirectConnectAuthMode(account.getDirectConnectAuthMode());
+        vo.setDirectConnectApiBaseUrl(account.getDirectConnectApiBaseUrl());
+        vo.setDirectConnectCertRef(account.getDirectConnectCertRef());
+        vo.setDirectConnectSecretRef(account.getDirectConnectSecretRef());
+        vo.setDirectConnectSignType(account.getDirectConnectSignType());
+        vo.setDirectConnectEncryptType(account.getDirectConnectEncryptType());
+        vo.setDirectConnectLastSyncAt(account.getDirectConnectLastSyncAt());
+        vo.setDirectConnectLastSyncStatus(account.getDirectConnectLastSyncStatus());
+        vo.setDirectConnectLastErrorMsg(account.getDirectConnectLastErrorMsg());
+        vo.setDirectConnectExtJson(account.getDirectConnectExtJson());
+        vo.setCreatedAt(account.getCreatedAt());
+        vo.setUpdatedAt(account.getUpdatedAt());
+        return vo;
     }
 
     private DepartmentTreeNodeVO toDepartmentNode(SystemDepartment department, Map<Long, String> leaderNameMap) {
@@ -1001,6 +1128,9 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         node.setSyncEnabled(department.getSyncEnabled() == null || department.getSyncEnabled() == 1);
         node.setSyncStatus(department.getSyncStatus());
         node.setSyncRemark(department.getSyncRemark());
+        node.setStatDepartmentBelong(StrUtil.blankToDefault(department.getStatDepartmentBelong(), ""));
+        node.setStatRegionBelong(StrUtil.blankToDefault(department.getStatRegionBelong(), ""));
+        node.setStatAreaBelong(StrUtil.blankToDefault(department.getStatAreaBelong(), ""));
         node.setStatus(department.getStatus());
         node.setSortOrder(department.getSortOrder());
         node.setLastSyncAt(department.getLastSyncAt());
@@ -1075,7 +1205,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         try {
             return objectMapper.writeValueAsString(config);
         } catch (Exception ex) {
-            throw new IllegalArgumentException("同步连接配置序列化失败");
+            throw new IllegalArgumentException("\u540c\u6b65\u8fde\u63a5\u914d\u7f6e\u5e8f\u5217\u5316\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u8f93\u5165\u5185\u5bb9");
         }
     }
 
@@ -1095,21 +1225,21 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         if (!PLATFORM_WECOM.equals(platformCode)) {
             return;
         }
-        requireConnectorField(dto.getCorpId(), "企微企业 ID");
-        requireConnectorField(dto.getAppSecret(), "企微通讯录 Secret");
+        requireConnectorField(dto.getCorpId(), "\u4f01\u5fae\u4f01\u4e1a ID");
+        requireConnectorField(dto.getAppSecret(), "\u4f01\u5fae\u901a\u8baf\u5f55 Secret");
     }
 
     private void validateConnectorRunConfig(String platformCode, Map<String, String> config) {
         if (!PLATFORM_WECOM.equals(platformCode)) {
             return;
         }
-        requireConnectorField(config.get("corpId"), "企微企业 ID");
-        requireConnectorField(config.get("appSecret"), "企微通讯录 Secret");
+        requireConnectorField(config.get("corpId"), "\u4f01\u5fae\u4f01\u4e1a ID");
+        requireConnectorField(config.get("appSecret"), "\u4f01\u5fae\u901a\u8baf\u5f55 Secret");
     }
 
     private void requireConnectorField(String value, String fieldName) {
         if (StrUtil.isBlank(value)) {
-            throw new IllegalArgumentException(fieldName + "不能为空");
+            throw new IllegalArgumentException(fieldName + "\u4e0d\u80fd\u4e3a\u7a7a");
         }
     }
 
@@ -1117,7 +1247,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         return syncAdapters.stream()
                 .filter(adapter -> platformCode.equalsIgnoreCase(adapter.getPlatformCode()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("未找到 " + resolvePlatformName(platformCode) + " 同步适配器"));
+                .orElseThrow(() -> new IllegalArgumentException("\u672a\u627e\u5230 " + resolvePlatformName(platformCode) + " \u540c\u6b65\u9002\u914d\u5668"));
     }
 
     private MatchResult matchEmployee(Map<String, List<User>> phoneMap, Map<String, List<User>> emailMap, ExternalEmployeeData externalEmployee) {
@@ -1126,15 +1256,15 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         List<User> phoneMatches = StrUtil.isBlank(phoneKey) ? List.of() : phoneMap.getOrDefault(phoneKey, List.of());
         List<User> emailMatches = StrUtil.isBlank(emailKey) ? List.of() : emailMap.getOrDefault(emailKey, List.of());
         if (phoneMatches.size() > 1) {
-            return MatchResult.conflict("手机号命中多条员工记录，已跳过");
+            return MatchResult.conflict("\u624b\u673a\u53f7\u5339\u914d\u5230\u591a\u540d\u5458\u5de5\uff0c\u8bf7\u5148\u6e05\u7406\u91cd\u590d\u624b\u673a\u53f7\u540e\u518d\u540c\u6b65");
         }
         if (emailMatches.size() > 1) {
-            return MatchResult.conflict("邮箱命中多条员工记录，已跳过");
+            return MatchResult.conflict("\u90ae\u7bb1\u5339\u914d\u5230\u591a\u540d\u5458\u5de5\uff0c\u8bf7\u5148\u6e05\u7406\u91cd\u590d\u90ae\u7bb1\u540e\u518d\u540c\u6b65");
         }
         User phoneUser = phoneMatches.isEmpty() ? null : phoneMatches.get(0);
         User emailUser = emailMatches.isEmpty() ? null : emailMatches.get(0);
         if (phoneUser != null && emailUser != null && !Objects.equals(phoneUser.getId(), emailUser.getId())) {
-            return MatchResult.conflict("手机号与邮箱命中不同员工，已跳过");
+            return MatchResult.conflict("\u624b\u673a\u53f7\u4e0e\u90ae\u7bb1\u5339\u914d\u5230\u4e0d\u540c\u5458\u5de5\uff0c\u8bf7\u5148\u5904\u7406\u5458\u5de5\u552f\u4e00\u6027\u540e\u518d\u540c\u6b65");
         }
         return MatchResult.success(phoneUser != null ? phoneUser : emailUser);
     }
@@ -1164,10 +1294,10 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     }
 
     private String buildJobSummary(SyncStats stats) {
-        return "成功 " + stats.successCount.get()
-                + "，跳过 " + stats.skippedCount.get()
-                + "，失败 " + stats.failedCount.get()
-                + "，删除 " + stats.deletedCount.get();
+        return "\u6210\u529f " + stats.successCount.get()
+                + "\uff0c\u8df3\u8fc7 " + stats.skippedCount.get()
+                + "\uff0c\u5931\u8d25 " + stats.failedCount.get()
+                + "\uff0c\u5220\u9664 " + stats.deletedCount.get();
     }
 
     private void appendJobDetail(Long jobId, String detailType, String actionType, String businessKey, String status, String message) {
@@ -1197,7 +1327,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             connector.setSyncIntervalMinutes(60);
             connector.setConfigJson("{}");
             connector.setLastSyncStatus("IDLE");
-            connector.setLastSyncMessage("尚未执行同步");
+            connector.setLastSyncMessage("\u5c1a\u672a\u6267\u884c\u540c\u6b65");
             systemSyncConnectorMapper.insert(connector);
         }
     }
@@ -1348,6 +1478,22 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         return StrUtil.isBlank(value) ? null : value.trim();
     }
 
+    private void applyEmployeeStatBelong(User user, EmployeeSaveDTO dto) {
+        user.setStatDepartmentBelong(trimToNull(dto.getStatDepartmentBelong()));
+        user.setStatRegionBelong(trimToNull(dto.getStatRegionBelong()));
+        user.setStatAreaBelong(trimToNull(dto.getStatAreaBelong()));
+    }
+
+    private void applyDepartmentStatBelong(SystemDepartment department, DepartmentSaveDTO dto) {
+        department.setStatDepartmentBelong(trimToNull(dto.getStatDepartmentBelong()));
+        department.setStatRegionBelong(trimToNull(dto.getStatRegionBelong()));
+        department.setStatAreaBelong(trimToNull(dto.getStatAreaBelong()));
+    }
+
+    private boolean isManualEmployee(User user) {
+        return SOURCE_MANUAL.equalsIgnoreCase(user.getSourceType()) || !isSyncManaged(user.getSyncManaged());
+    }
+
     private boolean isSyncManaged(Integer syncManaged) {
         return syncManaged != null && syncManaged == 1;
     }
@@ -1356,11 +1502,15 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         return status != null && status == 0 ? 0 : 1;
     }
 
+    private Integer normalizeFlag(Integer value) {
+        return value != null && value == 1 ? 1 : 0;
+    }
+
     private String resolvePlatformName(String platformCode) {
         return switch (platformCode) {
-            case PLATFORM_DINGTALK -> "钉钉";
-            case PLATFORM_WECOM -> "企微";
-            case PLATFORM_FEISHU -> "飞书";
+            case PLATFORM_DINGTALK -> "\u9489\u9489";
+            case PLATFORM_WECOM -> "\u4f01\u5fae";
+            case PLATFORM_FEISHU -> "\u98de\u4e66";
             default -> platformCode;
         };
     }
@@ -1369,31 +1519,110 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
         company.setCompanyName(dto.getCompanyName().trim());
         company.setInvoiceTitle(trimToNull(dto.getInvoiceTitle()));
         company.setTaxNo(trimToNull(dto.getTaxNo()));
-        company.setBankName(trimToNull(dto.getBankName()));
-        company.setBankAccountName(trimToNull(dto.getBankAccountName()));
-        company.setBankAccountNo(trimToNull(dto.getBankAccountNo()));
         company.setStatus(normalizeStatus(dto.getStatus()));
+    }
+
+    private void applyCompanyBankAccount(SystemCompanyBankAccount account, CompanyBankAccountSaveDTO dto) {
+        String companyId = trimToNull(dto.getCompanyId());
+        String bankName = trimToNull(dto.getBankName());
+        String accountName = trimToNull(dto.getAccountName());
+        String accountNo = trimToNull(dto.getAccountNo());
+        if (companyId == null) {
+            throw new IllegalArgumentException("\u516c\u53f8\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (bankName == null) {
+            throw new IllegalArgumentException("\u5f00\u6237\u94f6\u884c\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (accountName == null) {
+            throw new IllegalArgumentException("\u8d26\u6237\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (accountNo == null) {
+            throw new IllegalArgumentException("\u94f6\u884c\u8d26\u53f7\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        requireCompany(companyId);
+        account.setCompanyId(companyId);
+        account.setBankName(bankName);
+        account.setBranchName(trimToNull(dto.getBranchName()));
+        account.setBankCode(trimToNull(dto.getBankCode()));
+        account.setBranchCode(trimToNull(dto.getBranchCode()));
+        account.setCnapsCode(trimToNull(dto.getCnapsCode()));
+        account.setAccountName(accountName);
+        account.setAccountNo(accountNo);
+        account.setAccountType(trimToNull(dto.getAccountType()));
+        account.setAccountUsage(trimToNull(dto.getAccountUsage()));
+        account.setCurrencyCode(trimToNull(dto.getCurrencyCode()));
+        account.setStatus(normalizeStatus(dto.getStatus()));
+        account.setDefaultAccount(account.getStatus() != null && account.getStatus() == 0 ? 0 : normalizeFlag(dto.getDefaultAccount()));
+        account.setRemark(trimToNull(dto.getRemark()));
+        account.setDirectConnectEnabled(normalizeFlag(dto.getDirectConnectEnabled()));
+        account.setDirectConnectProvider(trimToNull(dto.getDirectConnectProvider()));
+        account.setDirectConnectChannel(trimToNull(dto.getDirectConnectChannel()));
+        account.setDirectConnectProtocol(trimToNull(dto.getDirectConnectProtocol()));
+        account.setDirectConnectCustomerNo(trimToNull(dto.getDirectConnectCustomerNo()));
+        account.setDirectConnectAppId(trimToNull(dto.getDirectConnectAppId()));
+        account.setDirectConnectAccountAlias(trimToNull(dto.getDirectConnectAccountAlias()));
+        account.setDirectConnectAuthMode(trimToNull(dto.getDirectConnectAuthMode()));
+        account.setDirectConnectApiBaseUrl(trimToNull(dto.getDirectConnectApiBaseUrl()));
+        account.setDirectConnectCertRef(trimToNull(dto.getDirectConnectCertRef()));
+        account.setDirectConnectSecretRef(trimToNull(dto.getDirectConnectSecretRef()));
+        account.setDirectConnectSignType(trimToNull(dto.getDirectConnectSignType()));
+        account.setDirectConnectEncryptType(trimToNull(dto.getDirectConnectEncryptType()));
+        account.setDirectConnectLastSyncAt(dto.getDirectConnectLastSyncAt());
+        account.setDirectConnectLastSyncStatus(trimToNull(dto.getDirectConnectLastSyncStatus()));
+        account.setDirectConnectLastErrorMsg(trimToNull(dto.getDirectConnectLastErrorMsg()));
+        account.setDirectConnectExtJson(trimToNull(dto.getDirectConnectExtJson()));
+    }
+
+    private void ensureCompanyBankAccountUnique(String companyId, String accountNo, Long excludeId) {
+        LambdaQueryWrapper<SystemCompanyBankAccount> wrapper = Wrappers.<SystemCompanyBankAccount>lambdaQuery()
+                .eq(SystemCompanyBankAccount::getCompanyId, companyId)
+                .eq(SystemCompanyBankAccount::getAccountNo, accountNo);
+        if (excludeId != null) {
+            wrapper.ne(SystemCompanyBankAccount::getId, excludeId);
+        }
+        if (systemCompanyBankAccountMapper.selectCount(wrapper) > 0) {
+            throw new IllegalArgumentException("\u540c\u4e00\u516c\u53f8\u4e0b\u94f6\u884c\u8d26\u53f7\u5df2\u5b58\u5728");
+        }
+    }
+
+    private void clearOtherDefaultCompanyBankAccounts(String companyId, Long currentId) {
+        List<SystemCompanyBankAccount> companyAccounts = systemCompanyBankAccountMapper.selectList(
+                Wrappers.<SystemCompanyBankAccount>lambdaQuery()
+                        .eq(SystemCompanyBankAccount::getCompanyId, companyId)
+                        .eq(SystemCompanyBankAccount::getDefaultAccount, 1)
+        );
+        for (SystemCompanyBankAccount companyAccount : companyAccounts) {
+            if (Objects.equals(companyAccount.getId(), currentId)) {
+                continue;
+            }
+            companyAccount.setDefaultAccount(0);
+            systemCompanyBankAccountMapper.updateById(companyAccount);
+        }
+    }
+
+    private boolean isDefaultAccount(SystemCompanyBankAccount account) {
+        return account.getDefaultAccount() != null && account.getDefaultAccount() == 1;
     }
 
     private EmployeeVO findEmployee(Long userId) {
         return listEmployees(new EmployeeQueryDTO()).stream()
                 .filter(item -> Objects.equals(item.getUserId(), userId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("员工不存在"));
+                .orElseThrow(() -> new IllegalArgumentException("\u5458\u5de5\u4e0d\u5b58\u5728"));
     }
 
     private DepartmentTreeNodeVO findDepartmentNode(Long departmentId) {
         return flattenDepartmentNodes(listDepartments()).stream()
                 .filter(item -> Objects.equals(item.getId(), departmentId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("部门不存在"));
+                .orElseThrow(() -> new IllegalArgumentException("\u90e8\u95e8\u4e0d\u5b58\u5728"));
     }
 
     private RoleVO findRole(Long roleId) {
         return listRoles().stream()
                 .filter(item -> Objects.equals(item.getId(), roleId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("角色不存在"));
+                .orElseThrow(() -> new IllegalArgumentException("\u89d2\u8272\u4e0d\u5b58\u5728"));
     }
 
     private CompanyVO findCompany(String companyId) {
@@ -1405,13 +1634,18 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             }
             queue.addAll(current.getChildren());
         }
-        throw new IllegalArgumentException("公司不存在");
+        throw new IllegalArgumentException("\u516c\u53f8\u4e0d\u5b58\u5728");
+    }
+
+    private CompanyBankAccountVO findCompanyBankAccount(Long id) {
+        SystemCompanyBankAccount account = requireCompanyBankAccount(id);
+        return toCompanyBankAccountVo(account, buildCompanyNameMap(Set.of(account.getCompanyId())));
     }
 
     private SystemDepartment requireDepartment(Long id) {
         SystemDepartment department = systemDepartmentMapper.selectById(id);
         if (department == null) {
-            throw new IllegalArgumentException("部门不存在");
+            throw new IllegalArgumentException("\u90e8\u95e8\u4e0d\u5b58\u5728");
         }
         return department;
     }
@@ -1419,7 +1653,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     private User requireUser(Long id) {
         User user = userMapper.selectById(id);
         if (user == null) {
-            throw new IllegalArgumentException("员工不存在");
+            throw new IllegalArgumentException("\u5458\u5de5\u4e0d\u5b58\u5728");
         }
         return user;
     }
@@ -1427,7 +1661,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     private SystemRole requireRole(Long id) {
         SystemRole role = systemRoleMapper.selectById(id);
         if (role == null) {
-            throw new IllegalArgumentException("角色不存在");
+            throw new IllegalArgumentException("\u89d2\u8272\u4e0d\u5b58\u5728");
         }
         return role;
     }
@@ -1435,9 +1669,17 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     private SystemCompany requireCompany(String companyId) {
         SystemCompany company = systemCompanyMapper.selectById(companyId);
         if (company == null) {
-            throw new IllegalArgumentException("公司不存在");
+            throw new IllegalArgumentException("\u516c\u53f8\u4e0d\u5b58\u5728");
         }
         return company;
+    }
+
+    private SystemCompanyBankAccount requireCompanyBankAccount(Long id) {
+        SystemCompanyBankAccount account = systemCompanyBankAccountMapper.selectById(id);
+        if (account == null) {
+            throw new IllegalArgumentException("\u516c\u53f8\u94f6\u884c\u8d26\u6237\u4e0d\u5b58\u5728");
+        }
+        return account;
     }
 
     private SystemSyncConnector requireConnector(String platformCode) {
@@ -1447,7 +1689,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                         .last("limit 1")
         );
         if (connector == null) {
-            throw new IllegalArgumentException("同步连接器不存在");
+            throw new IllegalArgumentException("\u540c\u6b65\u8fde\u63a5\u5668\u4e0d\u5b58\u5728");
         }
         return connector;
     }
@@ -1477,7 +1719,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             wrapper.ne(SystemDepartment::getId, excludeId);
         }
         if (systemDepartmentMapper.selectCount(wrapper) > 0) {
-            throw new IllegalArgumentException("部门编码已存在");
+            throw new IllegalArgumentException("\u90e8\u95e8\u7f16\u7801\u5df2\u5b58\u5728");
         }
     }
 
@@ -1488,13 +1730,13 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             wrapper.ne(User::getId, excludeId);
         }
         if (userMapper.selectCount(wrapper) > 0) {
-            throw new IllegalArgumentException("用户名已存在");
+            throw new IllegalArgumentException("\u7528\u6237\u540d\u5df2\u5b58\u5728");
         }
     }
 
     private void ensureRoleCodeUnique(String roleCode, Long excludeId) {
         if (StrUtil.isBlank(roleCode)) {
-            throw new IllegalArgumentException("角色编码不能为空");
+            throw new IllegalArgumentException("\u89d2\u8272\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
         }
         LambdaQueryWrapper<SystemRole> wrapper = Wrappers.<SystemRole>lambdaQuery()
                 .eq(SystemRole::getRoleCode, roleCode.trim());
@@ -1502,7 +1744,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             wrapper.ne(SystemRole::getId, excludeId);
         }
         if (systemRoleMapper.selectCount(wrapper) > 0) {
-            throw new IllegalArgumentException("角色编码已存在");
+            throw new IllegalArgumentException("\u89d2\u8272\u7f16\u7801\u5df2\u5b58\u5728");
         }
     }
 
@@ -1513,7 +1755,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             wrapper.ne(SystemCompany::getCompanyId, excludeCompanyId);
         }
         if (systemCompanyMapper.selectCount(wrapper) > 0) {
-            throw new IllegalArgumentException("公司主体编码已存在");
+            throw new IllegalArgumentException("\u516c\u53f8ID\u5df2\u5b58\u5728");
         }
     }
 
@@ -1524,7 +1766,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             wrapper.ne(SystemCompany::getCompanyId, excludeCompanyId);
         }
         if (systemCompanyMapper.selectCount(wrapper) > 0) {
-            throw new IllegalArgumentException("公司编号已存在");
+            throw new IllegalArgumentException("\u516c\u53f8\u7f16\u7801\u5df2\u5b58\u5728");
         }
     }
 
@@ -1543,7 +1785,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 return deptCode;
             }
         }
-        throw new IllegalStateException("部门编码自动生成失败");
+        throw new IllegalStateException("\u90e8\u95e8\u7f16\u7801\u81ea\u52a8\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5");
     }
 
     private String generateRoleCode() {
@@ -1564,7 +1806,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 return roleCode;
             }
         }
-        throw new IllegalStateException("角色编码自动生成失败");
+        throw new IllegalStateException("\u89d2\u8272\u7f16\u7801\u81ea\u52a8\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5");
     }
 
     private int parseRoleSequence(String roleCode) {
@@ -1619,7 +1861,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 return new CompanyCodeBundle(companyId, companyCode);
             }
         }
-        throw new IllegalStateException("公司编码自动生成失败");
+        throw new IllegalStateException("\u516c\u53f8ID\u548c\u7f16\u7801\u81ea\u52a8\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5");
     }
 
     private record CompanyCodeBundle(String companyId, String companyCode) {

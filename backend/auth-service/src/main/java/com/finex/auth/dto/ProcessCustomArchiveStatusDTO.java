@@ -6,6 +6,6 @@ import lombok.Data;
 @Data
 public class ProcessCustomArchiveStatusDTO {
 
-    @NotNull(message = "状态不能为空")
+    @NotNull(message = "鐘舵€佷笉鑳戒负绌?")
     private Integer status;
 }

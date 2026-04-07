@@ -12,11 +12,15 @@ public class FinanceVoucherDetailVO {
 
     private String voucherNo;
 
+    private String displayVoucherNo;
+
     private String companyId;
 
     private Integer iperiod;
 
     private String csign;
+
+    private String voucherTypeLabel;
 
     private Integer inoId;
 
@@ -31,6 +35,10 @@ public class FinanceVoucherDetailVO {
     private String ctext2;
 
     private String status;
+
+    private String statusLabel;
+
+    private Boolean editable;
 
     @MoneyValue
     private BigDecimal totalDebit;

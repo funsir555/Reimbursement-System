@@ -15,8 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 认证控制器
- */
+ * 璁よ瘉鎺у埗鍣? */
 @Slf4j
 @RestController
 @RequestMapping("/auth")
@@ -27,13 +26,13 @@ public class AuthController {
     private final UserService userService;
 
     /**
-     * 用户登录
+     * 鐢ㄦ埛鐧诲綍
      */
     @PostMapping("/login")
     public Result<LoginVO> login(@Validated @RequestBody LoginDTO loginDTO) {
         try {
             LoginVO loginVO = userService.login(loginDTO);
-            return Result.success("登录成功", loginVO);
+            return Result.success("鐧诲綍鎴愬姛", loginVO);
         } catch (RuntimeException ex) {
             log.error("Login failed for username={}", loginDTO.getUsername(), ex);
             return Result.error(resolveLoginErrorMessage(ex));
@@ -41,11 +40,11 @@ public class AuthController {
     }
 
     /**
-     * 测试接口
+     * 娴嬭瘯鎺ュ彛
      */
     @GetMapping("/test")
     public Result<String> test() {
-        return Result.success("服务运行正常");
+        return Result.success("鏈嶅姟杩愯姝ｅ父");
     }
 
     private String resolveLoginErrorMessage(RuntimeException ex) {
@@ -62,18 +61,18 @@ public class AuthController {
         if (rootMessage != null) {
             String lowerCaseMessage = rootMessage.toLowerCase();
             if (lowerCaseMessage.contains("access denied")) {
-                return "数据库连接失败，请检查 FINEX_DB_USERNAME 和 FINEX_DB_PASSWORD 配置";
+                return "鏁版嵁搴撹繛鎺ュけ璐ワ紝璇锋鏌?FINEX_DB_USERNAME 鍜?FINEX_DB_PASSWORD 閰嶇疆";
             }
             if (lowerCaseMessage.contains("communications link failure")
                     || lowerCaseMessage.contains("connection refused")
                     || lowerCaseMessage.contains("the driver has not received any packets")) {
-                return "数据库未连接，请确认 MySQL 已启动且 FINEX_DB_URL 配置正确";
+                return "鏁版嵁搴撴湭杩炴帴锛岃纭 MySQL 宸插惎鍔ㄤ笖 FINEX_DB_URL 閰嶇疆姝ｇ‘";
             }
             if (lowerCaseMessage.contains("unknown database")) {
-                return "数据库 finex_db 不存在，请先执行初始化 SQL";
+                return "鏁版嵁搴?finex_db 涓嶅瓨鍦紝璇峰厛鎵ц鍒濆鍖?SQL";
             }
         }
 
-        return "登录失败，请检查数据库配置和初始化状态";
+        return "鐧诲綍澶辫触锛岃妫€鏌ユ暟鎹簱閰嶇疆鍜屽垵濮嬪寲鐘舵€?";
     }
 }

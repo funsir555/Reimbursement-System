@@ -36,6 +36,11 @@ finex:
   expense:
     attachments:
       storage-path: ${FINEX_EXPENSE_ATTACHMENT_STORAGE_PATH:${user.dir}/storage/expense-attachments}
+    payment:
+      receipt-query-cron: ${FINEX_EXPENSE_PAYMENT_RECEIPT_QUERY_CRON:0 0 9 * * *}
+      receipt-query-zone: ${FINEX_EXPENSE_PAYMENT_RECEIPT_QUERY_ZONE:Asia/Shanghai}
+  downloads:
+    storage-path: ${FINEX_DOWNLOAD_STORAGE_PATH:${user.dir}/storage/downloads}
 
 logging:
   level:

@@ -6,6 +6,6 @@ import lombok.Data;
 @Data
 public class ProcessFlowStatusDTO {
 
-    @NotBlank(message = "流程状态不能为空")
+    @NotBlank(message = "娴佺▼鐘舵€佷笉鑳戒负绌?")
     private String status;
 }

@@ -23,23 +23,62 @@ SET NAMES utf8mb4;
 /* ========================================================================== */
 
 CREATE TABLE IF NOT EXISTS sys_company (
-    company_id VARCHAR(64) NOT NULL COMMENT '公司主体编码',
-    company_code VARCHAR(64) NOT NULL COMMENT '公司主体编号',
-    company_name VARCHAR(128) NOT NULL COMMENT '公司主体名称',
-    invoice_title VARCHAR(200) NULL COMMENT '公司抬头',
-    tax_no VARCHAR(100) NULL COMMENT '税号',
-    bank_name VARCHAR(200) NULL COMMENT '开户行',
-    bank_account_name VARCHAR(200) NULL COMMENT '账户名',
-    bank_account_no VARCHAR(100) NULL COMMENT '银行账号',
-    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    company_id VARCHAR(64) NOT NULL COMMENT 'company id',
+    company_code VARCHAR(64) NOT NULL COMMENT 'company code',
+    company_name VARCHAR(128) NOT NULL COMMENT 'company name',
+    invoice_title VARCHAR(200) NULL COMMENT 'invoice title',
+    tax_no VARCHAR(100) NULL COMMENT 'tax number',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
     PRIMARY KEY (company_id),
     CONSTRAINT uk_sys_company_company_code UNIQUE (company_code),
     KEY idx_sys_company_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公司主体主数据表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='company master data';
+
+CREATE TABLE IF NOT EXISTS sys_company_bank_account (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'company bank account id',
+    company_id VARCHAR(64) NOT NULL COMMENT 'company id',
+    bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
+    branch_name VARCHAR(200) NULL COMMENT 'branch name',
+    bank_code VARCHAR(64) NULL COMMENT 'bank code',
+    branch_code VARCHAR(64) NULL COMMENT 'branch code',
+    cnaps_code VARCHAR(64) NULL COMMENT 'cnaps code',
+    account_name VARCHAR(200) NOT NULL COMMENT 'account name',
+    account_no VARCHAR(100) NOT NULL COMMENT 'account number',
+    account_type VARCHAR(64) NULL COMMENT 'account type',
+    account_usage VARCHAR(100) NULL COMMENT 'account usage',
+    currency_code VARCHAR(32) NULL COMMENT 'currency code',
+    default_account TINYINT NOT NULL DEFAULT 0 COMMENT 'default account',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
+    remark VARCHAR(500) NULL COMMENT 'remark',
+    direct_connect_enabled TINYINT NOT NULL DEFAULT 0 COMMENT 'direct connect enabled',
+    direct_connect_provider VARCHAR(100) NULL COMMENT 'direct connect provider',
+    direct_connect_channel VARCHAR(100) NULL COMMENT 'direct connect channel',
+    direct_connect_protocol VARCHAR(100) NULL COMMENT 'direct connect protocol',
+    direct_connect_customer_no VARCHAR(100) NULL COMMENT 'direct connect customer no',
+    direct_connect_app_id VARCHAR(100) NULL COMMENT 'direct connect app id',
+    direct_connect_account_alias VARCHAR(100) NULL COMMENT 'direct connect account alias',
+    direct_connect_auth_mode VARCHAR(100) NULL COMMENT 'direct connect auth mode',
+    direct_connect_api_base_url VARCHAR(500) NULL COMMENT 'direct connect api base url',
+    direct_connect_cert_ref VARCHAR(200) NULL COMMENT 'direct connect cert ref',
+    direct_connect_secret_ref VARCHAR(200) NULL COMMENT 'direct connect secret ref',
+    direct_connect_sign_type VARCHAR(100) NULL COMMENT 'direct connect sign type',
+    direct_connect_encrypt_type VARCHAR(100) NULL COMMENT 'direct connect encrypt type',
+    direct_connect_last_sync_at DATETIME NULL COMMENT 'direct connect last sync at',
+    direct_connect_last_sync_status VARCHAR(64) NULL COMMENT 'direct connect last sync status',
+    direct_connect_last_error_msg VARCHAR(1000) NULL COMMENT 'direct connect last error message',
+    direct_connect_ext_json JSON NULL COMMENT 'direct connect ext json',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
+    CONSTRAINT fk_sys_company_bank_account_company_id FOREIGN KEY (company_id) REFERENCES sys_company(company_id),
+    CONSTRAINT uk_sys_company_bank_account_company_no UNIQUE (company_id, account_no),
+    KEY idx_sys_company_bank_account_company_status (company_id, status),
+    KEY idx_sys_company_bank_account_company_default (company_id, default_account)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='company bank account';
 
 SET @schema_name = DATABASE();
+
 
 SET @sql = (
     SELECT IF(
@@ -119,9 +158,9 @@ DEALLOCATE PREPARE stmt;
 
 SET @sql = (
     SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE sys_company ADD COLUMN bank_name VARCHAR(200) NULL COMMENT ''开户行'' AFTER tax_no',
-        'SELECT ''sys_company.bank_name exists'''
+        COUNT(*) = 1,
+        'ALTER TABLE sys_company DROP COLUMN bank_name',
+        'SELECT ''sys_company.bank_name not exists'''
     )
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = @schema_name
@@ -134,9 +173,9 @@ DEALLOCATE PREPARE stmt;
 
 SET @sql = (
     SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE sys_company ADD COLUMN bank_account_name VARCHAR(200) NULL COMMENT ''账户名'' AFTER bank_name',
-        'SELECT ''sys_company.bank_account_name exists'''
+        COUNT(*) = 1,
+        'ALTER TABLE sys_company DROP COLUMN bank_account_name',
+        'SELECT ''sys_company.bank_account_name not exists'''
     )
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = @schema_name
@@ -149,9 +188,9 @@ DEALLOCATE PREPARE stmt;
 
 SET @sql = (
     SELECT IF(
-        COUNT(*) = 0,
-        'ALTER TABLE sys_company ADD COLUMN bank_account_no VARCHAR(100) NULL COMMENT ''银行账号'' AFTER bank_account_name',
-        'SELECT ''sys_company.bank_account_no exists'''
+        COUNT(*) = 1,
+        'ALTER TABLE sys_company DROP COLUMN bank_account_no',
+        'SELECT ''sys_company.bank_account_no not exists'''
     )
     FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = @schema_name

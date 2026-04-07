@@ -1,224 +1,167 @@
 <template>
-  <div class="space-y-6" v-loading="loading">
-    <!-- 页面标题 -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-800">首页</h1>
-        <p class="text-gray-500 mt-1">欢迎回来，{{ dashboard?.user.name || dashboard?.user.username || '同事' }}！今日待处理事项概览</p>
-      </div>
-      <div class="text-right">
-        <p class="text-sm text-gray-500">{{ currentDate }}</p>
-      </div>
-    </div>
-    
-    <!-- 统计卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <!-- 待我审批 -->
-      <el-card class="hover:shadow-lg transition-shadow cursor-pointer">
-        <div class="flex items-center justify-between">
+  <div class="expense-wb-page dashboard-workbench space-y-6" v-loading="loading">
+    <section class="expense-wb-hero dashboard-workbench__hero">
+      <div class="expense-wb-hero__content dashboard-workbench__hero-content">
+        <div class="dashboard-workbench__hero-head">
           <div>
-            <p class="text-sm text-gray-500 mb-1">待我审批</p>
-            <p class="text-3xl font-bold text-blue-600">{{ dashboard?.pendingApprovalCount || 0 }}</p>
-            <p class="text-xs text-gray-400 mt-2">较昨日 +{{ dashboard?.pendingApprovalDelta || 0 }}</p>
+            <p class="dashboard-workbench__eyebrow">Expense Center</p>
+            <h1 class="expense-wb-hero__title">首页工作台</h1>
+            <p class="dashboard-workbench__hero-subtitle">
+              {{ dashboard?.user.name || dashboard?.user.username || '同事' }}，以下是你当前最需要处理的事项。
+            </p>
           </div>
-          <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
-            <el-icon :size="24" class="text-blue-600"><Timer /></el-icon>
-          </div>
+          <div class="dashboard-workbench__hero-date">{{ currentDate }}</div>
         </div>
-      </el-card>
-      
-      <!-- 本月报销 -->
-      <el-card class="hover:shadow-lg transition-shadow cursor-pointer">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-500 mb-1">本月报销</p>
-            <p class="text-3xl font-bold text-green-600">¥{{ formatCurrency(dashboard?.monthlyExpenseAmount) }}</p>
-            <p class="text-xs text-gray-400 mt-2">共 {{ dashboard?.monthlyExpenseCount || 0 }} 笔</p>
-          </div>
-          <div class="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
-            <el-icon :size="24" class="text-green-600"><Money /></el-icon>
-          </div>
-        </div>
-      </el-card>
-      
-      <!-- 发票数量 -->
-      <el-card class="hover:shadow-lg transition-shadow cursor-pointer">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-500 mb-1">发票数量</p>
-            <p class="text-3xl font-bold text-purple-600">{{ dashboard?.invoiceCount || 0 }}</p>
-            <p class="text-xs text-gray-400 mt-2">本月新增 {{ dashboard?.monthlyInvoiceCount || 0 }} 张</p>
-          </div>
-          <div class="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
-            <el-icon :size="24" class="text-purple-600"><Ticket /></el-icon>
-          </div>
-        </div>
-      </el-card>
-      
-      <!-- 预算剩余 -->
-      <el-card class="hover:shadow-lg transition-shadow cursor-pointer">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm text-gray-500 mb-1">预算剩余</p>
-            <p class="text-3xl font-bold text-orange-600">¥{{ formatCurrency(dashboard?.budgetRemaining) }}</p>
-            <p class="text-xs text-gray-400 mt-2">本月预算使用率 {{ dashboard?.budgetUsageRate || 0 }}%</p>
-          </div>
-          <div class="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center">
-            <el-icon :size="24" class="text-orange-600"><Wallet /></el-icon>
-          </div>
-        </div>
-      </el-card>
-    </div>
-    
-    <!-- 快捷操作 & 最近报销 -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- 快捷操作 -->
-      <el-card class="lg:col-span-1">
-        <template #header>
-          <div class="flex items-center justify-between">
-            <span class="font-semibold">快捷操作</span>
-          </div>
-        </template>
-        
-        <div class="grid grid-cols-2 gap-4">
-          <div 
-            v-for="action in quickActions" 
-            :key="action.name"
-            class="flex flex-col items-center justify-center p-4 rounded-xl bg-gray-50 hover:bg-blue-50 cursor-pointer transition-colors group"
-            @click="action.handler"
+
+        <div class="dashboard-workbench__hero-stats" data-testid="dashboard-stat-grid">
+          <button
+            v-for="stat in statCards"
+            :key="stat.key"
+            :data-testid="`dashboard-stat-card-${stat.key}`"
+            type="button"
+            class="expense-wb-stat-card expense-wb-stat-card--compact dashboard-workbench__hero-stat"
+            :class="{ 'is-placeholder': stat.placeholder }"
+            @click="handleStatClick(stat)"
           >
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-2 transition-colors"
-                 :class="action.bgClass">
-              <component :is="action.icon" :size="24" :class="action.iconClass" />
-            </div>
-            <span class="text-sm text-gray-700 group-hover:text-blue-600">{{ action.name }}</span>
-          </div>
-        </div>
-      </el-card>
-      
-      <!-- 最近报销单 -->
-      <el-card class="lg:col-span-2">
-        <template #header>
-          <div class="flex items-center justify-between">
-            <span class="font-semibold">最近报销单</span>
-            <el-button text type="primary" @click="$router.push('/expense/list')">
-              查看全部 <el-icon><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </template>
-        
-        <el-table :data="dashboard?.recentExpenses || []" style="width: 100%">
-          <el-table-column prop="no" label="单号" width="140">
-            <template #default="{ row }">
-              <span class="text-blue-600 cursor-pointer hover:underline">{{ row.no }}</span>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="type" label="类型" width="100" />
-          
-          <el-table-column prop="amount" label="金额" width="120">
-            <template #default="{ row }">
-              <span class="font-medium">¥{{ formatCurrency(row.amount) }}</span>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="date" label="日期" width="120" />
-          
-          <el-table-column prop="status" label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="getStatusType(row.status)" size="small">
-                {{ row.status }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          
-          <el-table-column label="操作" width="100">
-            <template #default="{ row }">
-              <el-button link type="primary" size="small">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-    </div>
-    
-    <!-- 待审批 & 发票提醒 -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- 待我审批 -->
-      <el-card>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <span class="font-semibold">待我审批</span>
-            <el-tag type="danger" size="small">{{ dashboard?.pendingApprovalCount || 0 }} 待处理</el-tag>
-          </div>
-        </template>
-        
-        <div class="space-y-4">
-          <div 
-            v-for="item in dashboard?.pendingApprovals || []" 
-            :key="item.id"
-            class="flex items-center justify-between p-4 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors cursor-pointer"
-          >
-            <div class="flex items-center gap-4">
-              <el-avatar :size="40" :src="item.avatar" />
-              <div>
-                <p class="font-medium text-gray-800">{{ item.title }}</p>
-                <p class="text-sm text-gray-500">{{ item.submitter }} · {{ item.time }}</p>
+            <div class="expense-wb-stat-card__top">
+              <div class="dashboard-workbench__hero-stat-content">
+                <p class="expense-wb-stat-card__label">{{ stat.label }}</p>
+                <p class="expense-wb-stat-card__value">{{ stat.value }}</p>
+                <p class="dashboard-workbench__hero-stat-tip">{{ stat.tip }}</p>
               </div>
+              <span class="expense-wb-stat-card__icon" :class="`expense-wb-stat-card__icon--${stat.tone}`">
+                <el-icon :size="20">
+                  <component :is="stat.icon" />
+                </el-icon>
+              </span>
             </div>
-            <div class="text-right">
-              <p class="font-bold text-gray-800">¥{{ formatCurrency(item.amount) }}</p>
-              <el-button size="small" type="primary">审批</el-button>
-            </div>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <el-card class="expense-wb-panel dashboard-workbench__section">
+      <template #header>
+        <div class="expense-wb-table-shell__header !p-0 !border-0">
+          <div>
+            <p class="expense-wb-table-shell__title">最近常用模块</p>
+            <p class="expense-wb-table-shell__desc">自动记录最近访问的业务模块，方便快速回到常用入口。</p>
           </div>
         </div>
-      </el-card>
-      
-      <!-- 发票异常提醒 -->
-      <el-card>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <span class="font-semibold">发票异常提醒</span>
-            <el-tag type="warning" size="small">{{ (dashboard?.invoiceAlerts || []).length }} 待处理</el-tag>
-          </div>
-        </template>
-        
-        
-        <div class="space-y-4">
-          <div 
-            v-for="item in dashboard?.invoiceAlerts || []" 
-            :key="item.id"
-            class="flex items-start gap-4 p-4 rounded-lg bg-gray-50 hover:bg-orange-50 transition-colors"
-          >
-            <div class="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-              <el-icon :size="20" class="text-orange-600"><Warning /></el-icon>
+      </template>
+
+      <div class="dashboard-workbench__module-grid">
+        <button
+          v-for="module in recentModules"
+          :key="module.path"
+          type="button"
+          class="expense-wb-choice-card dashboard-workbench__module-card"
+          @click="openPath(module.path)"
+        >
+          <div class="expense-wb-choice-card__header">
+            <div>
+              <p class="expense-wb-choice-card__title">{{ module.label }}</p>
+              <p class="expense-wb-choice-card__subtitle">{{ module.description }}</p>
             </div>
-            
-            <div class="flex-1">
-              <p class="font-medium text-gray-800">{{ item.title }}</p>
-              <p class="text-sm text-gray-500 mt-1">{{ item.desc }}</p>
-              <p class="text-xs text-gray-400 mt-2">{{ item.time }}</p>
-            </div>
-            
-            <el-button size="small" type="primary" text>处理</el-button>
+            <span class="expense-wb-stat-card__icon expense-wb-stat-card__icon--blue dashboard-workbench__module-icon">
+              <el-icon :size="20">
+                <component :is="moduleIconMap[module.iconKey] || Grid" />
+              </el-icon>
+            </span>
           </div>
+          <div class="expense-wb-choice-card__footer">
+            <span>点击进入模块</span>
+            <span>&rarr;</span>
+          </div>
+        </button>
+      </div>
+    </el-card>
+
+    <el-card class="expense-wb-panel expense-wb-table-shell dashboard-workbench__section">
+      <template #header>
+        <div class="expense-wb-table-shell__header !p-0 !border-0">
+          <div>
+            <p class="expense-wb-table-shell__title">最近报销单</p>
+            <p class="expense-wb-table-shell__desc">优先展示你最近提交或更新的报销单，方便继续追踪进度。</p>
+          </div>
+          <el-button text type="primary" @click="openPath('/expense/list')">
+            查看全部 <el-icon><ArrowRight /></el-icon>
+          </el-button>
         </div>
-      </el-card>
-    </div>
+      </template>
+
+      <el-table :data="dashboard?.recentExpenses || []" style="width: 100%">
+        <el-table-column prop="documentCode" label="单据编号" width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <button class="cursor-pointer font-medium text-blue-600 hover:underline" type="button" @click="openExpenseDetail(row.documentCode || row.no)">
+              {{ row.documentCode || row.no }}
+            </button>
+          </template>
+        </el-table-column>
+        <el-table-column prop="documentTitle" label="单据标题" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="templateName" label="模板名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="documentStatusLabel" label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="statusTagType(row.documentStatusLabel || row.status)">{{ row.documentStatusLabel || row.status || '-' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="submittedAt" label="提交日期" width="168" show-overflow-tooltip />
+        <el-table-column prop="amount" label="金额" width="140">
+          <template #default="{ row }">
+            <span class="font-semibold text-slate-800">¥ {{ formatAmount(row.amount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openExpenseDetail(row.documentCode || row.no)">查看</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, type Component } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { dashboardApi, type DashboardData } from '@/api'
 import {
-  Money, Ticket, Document, Plus, ArrowRight,
-  Timer, Wallet, Warning
+  ArrowRight,
+  Coin,
+  Connection,
+  DocumentChecked,
+  Grid,
+  Plus,
+  Search,
+  Select,
+  Tickets,
+  Wallet
 } from '@element-plus/icons-vue'
+import { dashboardApi, type DashboardData } from '@/api'
 import { formatMoney } from '@/utils/money'
+import { hasAnyPermission } from '@/utils/permissions'
+import {
+  DASHBOARD_DATA_CHANGED_EVENT,
+  resolveRecentModules,
+  type DashboardRecentModuleItem
+} from './dashboard/dashboardRecentModules'
 
+const router = useRouter()
 const loading = ref(false)
 const dashboard = ref<DashboardData | null>(null)
+const recentModules = ref<DashboardRecentModuleItem[]>([])
+
+const moduleIconMap: Record<string, Component> = {
+  Plus,
+  Tickets,
+  Select,
+  Search,
+  Wallet,
+  Coin,
+  DocumentChecked,
+  Connection,
+  Grid
+}
 
 const currentDate = computed(() => {
   const date = new Date()
@@ -226,62 +169,120 @@ const currentDate = computed(() => {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekDays[date.getDay()]}`
 })
 
-const quickActions = [
+const statCards = computed(() => [
   {
-    name: '新建报销',
-    icon: 'Plus',
-    bgClass: 'bg-blue-100',
-    iconClass: 'text-blue-600',
-    handler: () => {}
+    key: 'approval',
+    label: '待我审批',
+    value: dashboard.value?.pendingApprovalCount || 0,
+    tip: '进入审批工作台处理待办任务',
+    icon: Select,
+    tone: 'blue',
+    path: '/expense/approval'
   },
   {
-    name: '发票录入',
-    icon: 'Ticket',
-    bgClass: 'bg-purple-100',
-    iconClass: 'text-purple-600',
-    handler: () => {}
+    key: 'repayment',
+    label: '待还款',
+    value: dashboard.value?.pendingRepaymentCount || 0,
+    tip: '查看借款单待核销余额并发起欠款核销',
+    icon: Wallet,
+    tone: 'amber',
+    path: '/dashboard/pending-repayments'
   },
   {
-    name: '审批中心',
-    icon: 'Document',
-    bgClass: 'bg-green-100',
-    iconClass: 'text-green-600',
-    handler: () => {}
+    key: 'prepay',
+    label: '待核销',
+    value: dashboard.value?.pendingPrepayWriteOffCount || 0,
+    tip: '查看预付未到票报销单并核销预付款',
+    icon: Coin,
+    tone: 'green',
+    path: '/dashboard/pending-prepay-writeoffs'
   },
   {
-    name: '我的报销',
-    icon: 'Money',
-    bgClass: 'bg-orange-100',
-    iconClass: 'text-orange-600',
-    handler: () => {}
+    key: 'application',
+    label: '未使用申请',
+    value: dashboard.value?.unusedApplicationCount || 0,
+    tip: '入口先保留占位，后续接入真实业务',
+    icon: Tickets,
+    tone: 'rose',
+    placeholder: true
+  },
+  {
+    key: 'contract',
+    label: '未付款合同单',
+    value: dashboard.value?.unpaidContractCount || 0,
+    tip: '入口先保留占位，后续接入真实业务',
+    icon: DocumentChecked,
+    tone: 'blue',
+    placeholder: true
   }
-]
+])
 
-onMounted(async () => {
+onMounted(() => {
+  void loadDashboard()
+  window.addEventListener(DASHBOARD_DATA_CHANGED_EVENT, loadDashboard)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(DASHBOARD_DATA_CHANGED_EVENT, loadDashboard)
+})
+
+async function loadDashboard() {
   loading.value = true
   try {
     const res = await dashboardApi.getOverview()
-    if (res.code === 200) {
-      dashboard.value = res.data
-      return
-    }
-    ElMessage.error(res.message || '加载首页数据失败')
+    dashboard.value = res.data
+    recentModules.value = resolveRecentModules(res.data.user)
   } catch (error: any) {
     ElMessage.error(error.message || '加载首页数据失败')
   } finally {
     loading.value = false
   }
-})
+}
 
-const formatCurrency = (amount?: string) => formatMoney(amount || '0.00')
+function formatAmount(value?: string) {
+  return formatMoney(value || '0.00')
+}
 
-const getStatusType = (status: string) => {
+function statusTagType(status?: string) {
   const map: Record<string, string> = {
-    '审批中': 'warning',
-    '已通过': 'success',
-    '已驳回': 'danger',
-    '草稿': 'info'
+    审批中: 'warning',
+    已通过: 'success',
+    已驳回: 'danger',
+    草稿: 'info',
+    流程异常: 'info'
   }
-  return map[status] || 'info'
+  return map[status || ''] || 'info'
+}
+
+function handleStatClick(stat: { path?: string; placeholder?: boolean }) {
+  if (stat.placeholder) {
+    ElMessage.info('该模块暂未接入真实业务')
+    return
+  }
+  if (stat.path) {
+    openPath(stat.path)
+  }
+}
+
+function openPath(path: string) {
+  const permissionMap: Record<string, string[]> = {
+    '/expense/approval': ['expense:approval:view'],
+    '/dashboard/pending-repayments': ['dashboard:view'],
+    '/dashboard/pending-prepay-writeoffs': ['dashboard:view'],
+    '/expense/list': ['expense:list:view']
+  }
+  const requiredPermissions = permissionMap[path]
+  if (requiredPermissions && !hasAnyPermission(requiredPermissions, dashboard.value?.user)) {
+    ElMessage.warning('当前没有该模块访问权限')
+    return
+  }
+  void router.push(path)
+}
+
+function openExpenseDetail(documentCode?: string) {
+  if (!documentCode) {
+    return
+  }
+  void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
 }
 </script>

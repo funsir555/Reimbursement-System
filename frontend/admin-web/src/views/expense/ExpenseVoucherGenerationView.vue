@@ -1,73 +1,6 @@
 ﻿<template>
   <div class="voucher-generation-page space-y-5">
-    <section class="rounded-[30px] bg-gradient-to-r from-slate-900 via-sky-900 to-cyan-700 px-8 py-7 text-white shadow-lg">
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p class="text-sm uppercase tracking-[0.28em] text-cyan-100/80">Expense Voucher Center</p>
-          <h1 class="mt-3 text-3xl font-bold">凭证生成</h1>
-          <p class="mt-3 max-w-3xl text-sm leading-7 text-sky-50/90">
-            统一维护报销单凭证科目映射，按公司和模板批量推送已审批单据到总账，并支持回查推送结果与凭证快照。
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <el-button type="primary" :icon="RefreshRight" @click="refreshAll">刷新工作台</el-button>
-          <el-button v-if="canPushExecute" :icon="Promotion" @click="pushSelected">批量推送</el-button>
-          <el-button :icon="RefreshLeft" @click="resetGlobalFilters">重置条件</el-button>
-        </div>
-      </div>
-    </section>
-
-    <el-card class="!rounded-3xl !shadow-sm">
-      <div class="grid gap-4 xl:grid-cols-[1.2fr,1fr,1fr,1fr,1fr,1fr]">
-        <el-select v-model="filters.companyId" clearable filterable placeholder="公司">
-          <el-option v-for="item in meta.companyOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.templateCode" clearable filterable placeholder="报销模板">
-          <el-option v-for="item in meta.templateOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-select v-model="filters.pushStatus" clearable placeholder="推送状态">
-          <el-option v-for="item in meta.pushStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
-        <el-date-picker
-          v-model="filters.dateRange"
-          type="daterange"
-          value-format="YYYY-MM-DD"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-        />
-        <el-input v-model="filters.keyword" clearable placeholder="单据号 / 模板 / 申请人" @keyup.enter="loadCurrentTab" />
-        <div class="flex justify-end gap-3">
-          <el-button type="primary" :icon="Search" @click="loadCurrentTab">查询</el-button>
-          <el-button @click="resetGlobalFilters">重置</el-button>
-        </div>
-      </div>
-    </el-card>
-
-    <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <article class="stat-card">
-        <span class="stat-card__label">待推送单据</span>
-        <strong class="stat-card__value">{{ meta.pendingPushCount || 0 }}</strong>
-        <p class="stat-card__tip">待推送金额 {{ moneyText(meta.pendingPushAmount) }}</p>
-      </article>
-      <article class="stat-card">
-        <span class="stat-card__label">已推送凭证</span>
-        <strong class="stat-card__value">{{ meta.pushedVoucherCount || 0 }}</strong>
-        <p class="stat-card__tip">仅统计本模块推送成功记录</p>
-      </article>
-      <article class="stat-card stat-card--warn">
-        <span class="stat-card__label">推送失败</span>
-        <strong class="stat-card__value">{{ meta.pushFailureCount || 0 }}</strong>
-        <p class="stat-card__tip">修正映射后可重新推送</p>
-      </article>
-      <article class="stat-card stat-card--dark">
-        <span class="stat-card__label">最近批次</span>
-        <strong class="stat-card__value stat-card__value--small">{{ meta.latestBatchNo || '暂无批次' }}</strong>
-        <p class="stat-card__tip">批量推送会自动生成批次号</p>
-      </article>
-    </section>
-
-    <el-tabs v-model="activeTab" class="voucher-tabs" @tab-change="handleTabChange">
+    <el-tabs v-model="activeTab" class="voucher-tabs" data-testid="voucher-generation-tabs" @tab-change="handleTabChange">
       <el-tab-pane v-if="canMappingView" label="凭证科目映射" name="mapping">
         <div class="space-y-5">
           <el-card class="!rounded-3xl !shadow-sm">
@@ -76,7 +9,7 @@
                 <h2 class="text-lg font-semibold text-slate-800">模板级统一贷方策略</h2>
                 <p class="mt-1 text-sm text-slate-400">按“公司 + 报销模板”维护统一贷方科目、凭证类别与摘要规则。</p>
               </div>
-              <el-button v-if="canMappingEdit" type="primary" :icon="Plus" @click="openTemplatePolicyDialog()">新增模板策略</el-button>
+              <el-button v-if="canMappingEdit" data-testid="voucher-mapping-add-policy" type="primary" :icon="Plus" @click="openTemplatePolicyDialog()">新增模板策略</el-button>
             </div>
             <el-table :data="templatePolicyPage.items" style="width: 100%" v-loading="loading.templatePolicies">
               <el-table-column prop="companyName" label="公司" min-width="180" show-overflow-tooltip />
@@ -107,7 +40,7 @@
                 <h2 class="text-lg font-semibold text-slate-800">费用类型借方映射</h2>
                 <p class="mt-1 text-sm text-slate-400">按“公司 + 报销模板 + 费用类型”维护借方科目，缺失映射时推送会被阻断。</p>
               </div>
-              <el-button v-if="canMappingEdit" type="primary" plain :icon="Plus" @click="openSubjectMappingDialog()">新增费用映射</el-button>
+              <el-button v-if="canMappingEdit" data-testid="voucher-mapping-add-subject" type="primary" plain :icon="Plus" @click="openSubjectMappingDialog()">新增费用映射</el-button>
             </div>
             <el-table :data="subjectMappingPage.items" style="width: 100%" v-loading="loading.subjectMappings">
               <el-table-column prop="companyName" label="公司" min-width="160" show-overflow-tooltip />
@@ -141,8 +74,8 @@
               <p class="mt-1 text-sm text-slate-400">仅展示已审批且未推送成功的报销单，据此生成总账凭证。</p>
             </div>
             <div class="flex gap-3">
-              <el-button :icon="RefreshRight" @click="loadPushDocuments">刷新</el-button>
-              <el-button v-if="canPushExecute" type="primary" :icon="Promotion" @click="pushSelected">批量推送</el-button>
+              <el-button data-testid="voucher-push-refresh" :icon="RefreshRight" @click="loadPushDocuments">刷新</el-button>
+              <el-button v-if="canPushExecute" data-testid="voucher-push-batch" type="primary" :icon="Promotion" @click="pushSelected">批量推送</el-button>
             </div>
           </div>
           <el-table :data="pushDocumentPage.items" style="width: 100%" v-loading="loading.pushDocuments" @selection-change="handlePushSelectionChange">
@@ -181,7 +114,7 @@
               <h2 class="text-lg font-semibold text-slate-800">推送结果查询</h2>
               <p class="mt-1 text-sm text-slate-400">默认仅查询本模块推送记录，可下钻查看来源单据、分录快照和总账凭证详情。</p>
             </div>
-            <el-button :icon="RefreshRight" @click="loadGeneratedRecords">刷新</el-button>
+            <el-button data-testid="voucher-query-refresh" :icon="RefreshRight" @click="loadGeneratedRecords">刷新</el-button>
           </div>
           <el-table :data="generatedRecordPage.items" style="width: 100%" v-loading="loading.generatedRecords">
             <el-table-column prop="documentCode" label="单据号" min-width="150" show-overflow-tooltip />
@@ -288,7 +221,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Promotion, RefreshLeft, RefreshRight, Search } from '@element-plus/icons-vue'
+import { Plus, Promotion, RefreshRight } from '@element-plus/icons-vue'
 import {
   expenseVoucherGenerationApi,
   type PageResult,
@@ -330,7 +263,6 @@ const meta = reactive<VoucherGenerationMeta>({
   pushFailureCount: 0,
   pendingPushAmount: '0.00'
 })
-const filters = reactive({ companyId: '', templateCode: '', pushStatus: '', keyword: '', dateRange: [] as string[] })
 const loading = reactive({
   templatePolicies: false,
   subjectMappings: false,
@@ -379,26 +311,16 @@ function syncPageState<T>(target: PageResult<T>, source: PageResult<T>) {
   target.items = source.items
 }
 
-function currentDateRangeParams() {
-  return {
-    dateFrom: filters.dateRange[0] || undefined,
-    dateTo: filters.dateRange[1] || undefined
-  }
-}
-
 async function loadMeta() {
   const response = await expenseVoucherGenerationApi.getMeta()
   Object.assign(meta, response.data)
-  if (!filters.companyId && meta.defaultCompanyId) {
-    filters.companyId = meta.defaultCompanyId
-  }
 }
 
 async function loadTemplatePolicies() {
   if (!canMappingView.value) return
   loading.templatePolicies = true
   try {
-    const response = await expenseVoucherGenerationApi.getTemplatePolicies({ companyId: filters.companyId || undefined, templateCode: filters.templateCode || undefined, page: templatePolicyQuery.page, pageSize: templatePolicyQuery.pageSize })
+    const response = await expenseVoucherGenerationApi.getTemplatePolicies({ page: templatePolicyQuery.page, pageSize: templatePolicyQuery.pageSize })
     syncPageState(templatePolicyPage, response.data)
   } finally {
     loading.templatePolicies = false
@@ -409,7 +331,7 @@ async function loadSubjectMappings() {
   if (!canMappingView.value) return
   loading.subjectMappings = true
   try {
-    const response = await expenseVoucherGenerationApi.getSubjectMappings({ companyId: filters.companyId || undefined, templateCode: filters.templateCode || undefined, page: subjectMappingQuery.page, pageSize: subjectMappingQuery.pageSize })
+    const response = await expenseVoucherGenerationApi.getSubjectMappings({ page: subjectMappingQuery.page, pageSize: subjectMappingQuery.pageSize })
     syncPageState(subjectMappingPage, response.data)
   } finally {
     loading.subjectMappings = false
@@ -420,7 +342,7 @@ async function loadPushDocuments() {
   if (!canPushView.value) return
   loading.pushDocuments = true
   try {
-    const response = await expenseVoucherGenerationApi.getPushDocuments({ companyId: filters.companyId || undefined, templateCode: filters.templateCode || undefined, keyword: filters.keyword || undefined, pushStatus: filters.pushStatus || undefined, page: pushDocumentQuery.page, pageSize: pushDocumentQuery.pageSize, ...currentDateRangeParams() })
+    const response = await expenseVoucherGenerationApi.getPushDocuments({ page: pushDocumentQuery.page, pageSize: pushDocumentQuery.pageSize })
     syncPageState(pushDocumentPage, response.data)
   } finally {
     loading.pushDocuments = false
@@ -431,7 +353,7 @@ async function loadGeneratedRecords() {
   if (!canQueryView.value) return
   loading.generatedRecords = true
   try {
-    const response = await expenseVoucherGenerationApi.getGeneratedVouchers({ companyId: filters.companyId || undefined, templateCode: filters.templateCode || undefined, documentCode: filters.keyword || undefined, pushStatus: filters.pushStatus || undefined, page: generatedRecordQuery.page, pageSize: generatedRecordQuery.pageSize, ...currentDateRangeParams() })
+    const response = await expenseVoucherGenerationApi.getGeneratedVouchers({ page: generatedRecordQuery.page, pageSize: generatedRecordQuery.pageSize })
     syncPageState(generatedRecordPage, response.data)
   } finally {
     loading.generatedRecords = false
@@ -448,24 +370,6 @@ async function loadCurrentTab() {
     return
   }
   await loadGeneratedRecords()
-}
-
-async function refreshAll() {
-  await loadMeta()
-  await loadCurrentTab()
-}
-
-function resetGlobalFilters() {
-  filters.companyId = meta.defaultCompanyId || ''
-  filters.templateCode = ''
-  filters.pushStatus = ''
-  filters.keyword = ''
-  filters.dateRange = []
-  templatePolicyQuery.page = 1
-  subjectMappingQuery.page = 1
-  pushDocumentQuery.page = 1
-  generatedRecordQuery.page = 1
-  loadCurrentTab()
 }
 
 function handleTabChange() {
@@ -492,8 +396,8 @@ function openTemplatePolicyDialog(row?: VoucherTemplatePolicy) {
   templatePolicyDialog.visible = true
   templatePolicyDialog.editingId = row?.id || 0
   templatePolicyDialog.form = {
-    companyId: row?.companyId || filters.companyId || meta.defaultCompanyId || '',
-    templateCode: row?.templateCode || filters.templateCode || '',
+    companyId: row?.companyId || meta.defaultCompanyId || '',
+    templateCode: row?.templateCode || '',
     creditAccountCode: row?.creditAccountCode || '',
     voucherType: row?.voucherType || meta.voucherTypeOptions[0]?.value || '记',
     summaryRule: row?.summaryRule || '报销单${documentCode}-${expenseTypeName}',
@@ -505,8 +409,8 @@ function openSubjectMappingDialog(row?: VoucherSubjectMapping) {
   subjectMappingDialog.visible = true
   subjectMappingDialog.editingId = row?.id || 0
   subjectMappingDialog.form = {
-    companyId: row?.companyId || filters.companyId || meta.defaultCompanyId || '',
-    templateCode: row?.templateCode || filters.templateCode || '',
+    companyId: row?.companyId || meta.defaultCompanyId || '',
+    templateCode: row?.templateCode || '',
     expenseTypeCode: row?.expenseTypeCode || '',
     debitAccountCode: row?.debitAccountCode || '',
     enabled: row?.enabled ? 1 : 0
@@ -602,46 +506,8 @@ async function openGeneratedDetail(row: VoucherGeneratedRecord) {
   display: none;
 }
 
-.stat-card {
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(241,245,249,0.92));
-  padding: 22px 24px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
-}
-
-.stat-card--warn {
-  background: linear-gradient(180deg, rgba(255,251,235,0.98), rgba(254,243,199,0.92));
-}
-
-.stat-card--dark {
-  background: linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95));
-  color: #fff;
-}
-
-.stat-card__label {
-  display: block;
-  font-size: 13px;
-  color: inherit;
-  opacity: 0.8;
-}
-
-.stat-card__value {
-  display: block;
-  margin-top: 10px;
-  font-size: 30px;
-  font-weight: 700;
-  color: inherit;
-}
-
-.stat-card__value--small {
-  font-size: 20px;
-}
-
-.stat-card__tip {
-  margin-top: 10px;
-  font-size: 12px;
-  opacity: 0.75;
+.voucher-generation-page :deep(.el-tabs__header) {
+  margin-bottom: 18px;
 }
 
 .table-pagination {

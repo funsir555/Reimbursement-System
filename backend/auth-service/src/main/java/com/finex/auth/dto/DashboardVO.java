@@ -19,6 +19,14 @@ public class DashboardVO {
 
     private Integer pendingApprovalDelta;
 
+    private Integer pendingRepaymentCount;
+
+    private Integer pendingPrepayWriteOffCount;
+
+    private Integer unusedApplicationCount;
+
+    private Integer unpaidContractCount;
+
     @MoneyValue
     private BigDecimal monthlyExpenseAmount;
 

@@ -16,10 +16,15 @@ import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.service.UserCenterService;
 import com.finex.auth.service.UserService;
+import com.finex.auth.support.AsyncTaskSupport;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -32,6 +37,7 @@ public class UserCenterServiceImpl implements UserCenterService {
     private final UserService userService;
     private final UserBankAccountMapper userBankAccountMapper;
     private final DownloadRecordMapper downloadRecordMapper;
+    private final DownloadStorageService downloadStorageService;
 
     @Override
     public PersonalCenterVO getPersonalCenter(Long userId) {
@@ -54,14 +60,32 @@ public class UserCenterServiceImpl implements UserCenterService {
 
         DownloadCenterVO center = new DownloadCenterVO();
         center.setInProgress(records.stream()
-                .filter(item -> "DOWNLOADING".equalsIgnoreCase(item.getStatus()))
+                .filter(this::isDownloading)
                 .map(this::toDownloadRecord)
                 .toList());
         center.setHistory(records.stream()
-                .filter(item -> !"DOWNLOADING".equalsIgnoreCase(item.getStatus()))
+                .filter(record -> !isDownloading(record))
                 .map(this::toDownloadRecord)
                 .toList());
         return center;
+    }
+
+    @Override
+    public DownloadContent loadDownloadContent(Long userId, Long downloadId) {
+        DownloadRecord record = requireDownloadRecord(userId, downloadId);
+        if (!AsyncTaskSupport.DOWNLOAD_STATUS_COMPLETED.equalsIgnoreCase(record.getStatus())) {
+            throw new IllegalStateException("文件尚未生成完成");
+        }
+        Path path = downloadStorageService.resolvePath(record.getId());
+        if (!Files.exists(path)) {
+            throw new IllegalStateException("下载文件不存在或已失效");
+        }
+        Resource resource = new FileSystemResource(path);
+        try {
+            return new DownloadContent(resource, record.getFileName(), Files.size(path));
+        } catch (Exception ex) {
+            throw new IllegalStateException("读取下载文件失败", ex);
+        }
     }
 
     @Override
@@ -102,6 +126,19 @@ public class UserCenterServiceImpl implements UserCenterService {
         return user;
     }
 
+    private DownloadRecord requireDownloadRecord(Long userId, Long downloadId) {
+        DownloadRecord record = downloadRecordMapper.selectOne(
+                Wrappers.<DownloadRecord>lambdaQuery()
+                        .eq(DownloadRecord::getId, downloadId)
+                        .eq(DownloadRecord::getUserId, userId)
+                        .last("limit 1")
+        );
+        if (record == null) {
+            throw new IllegalArgumentException("下载记录不存在");
+        }
+        return record;
+    }
+
     private UserProfileVO toUserProfile(User user) {
         UserProfileVO profile = new UserProfileVO();
         profile.setUserId(user.getId());
@@ -131,6 +168,7 @@ public class UserCenterServiceImpl implements UserCenterService {
     }
 
     private DownloadRecordVO toDownloadRecord(DownloadRecord record) {
+        boolean downloadable = isDownloadable(record);
         DownloadRecordVO vo = new DownloadRecordVO();
         vo.setId(record.getId());
         vo.setFileName(record.getFileName());
@@ -140,15 +178,26 @@ public class UserCenterServiceImpl implements UserCenterService {
         vo.setFileSize(StrUtil.blankToDefault(record.getFileSize(), "-"));
         vo.setCreatedAt(record.getCreatedAt() == null ? "" : record.getCreatedAt().format(DATE_TIME_FORMATTER));
         vo.setFinishedAt(record.getFinishedAt() == null ? "" : record.getFinishedAt().format(DATE_TIME_FORMATTER));
+        vo.setDownloadable(downloadable);
+        vo.setDownloadUrl(downloadable ? "/auth/user-center/downloads/" + record.getId() + "/content" : null);
         return vo;
     }
 
+    private boolean isDownloading(DownloadRecord record) {
+        return AsyncTaskSupport.DOWNLOAD_STATUS_DOWNLOADING.equalsIgnoreCase(record.getStatus());
+    }
+
+    private boolean isDownloadable(DownloadRecord record) {
+        return AsyncTaskSupport.DOWNLOAD_STATUS_COMPLETED.equalsIgnoreCase(record.getStatus())
+                && downloadStorageService.exists(record.getId());
+    }
+
     private String resolveDownloadStatus(String status) {
-        if ("DOWNLOADING".equalsIgnoreCase(status)) {
+        if (AsyncTaskSupport.DOWNLOAD_STATUS_DOWNLOADING.equalsIgnoreCase(status)) {
             return "下载中";
         }
-        if ("FAILED".equalsIgnoreCase(status)) {
-            return "失败";
+        if (AsyncTaskSupport.DOWNLOAD_STATUS_FAILED.equalsIgnoreCase(status)) {
+            return "下载失败";
         }
         return "已完成";
     }

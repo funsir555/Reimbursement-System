@@ -1381,7 +1381,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                     templateCode
             );
         }
-        throw new IllegalArgumentException("模板编码生成冲突，请重试");
+        throw new IllegalArgumentException("妯℃澘缂栫爜鐢熸垚鍐茬獊锛岃閲嶈瘯");
     }
 
     private long nextTemplateCodeSequenceValue(String bizDate, String prefix) {
@@ -1391,11 +1391,11 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             updatedRows = codeSequenceMapper.allocateNextTemplateCodeValue(TEMPLATE_CODE_SEQUENCE_KEY, bizDate);
         }
         if (updatedRows == 0) {
-            throw new IllegalStateException("模板编码序列生成失败");
+            throw new IllegalStateException("妯℃澘缂栫爜搴忓垪鐢熸垚澶辫触");
         }
         Long currentValue = codeSequenceMapper.currentAllocatedValue();
         if (currentValue == null || currentValue < 1L) {
-            throw new IllegalStateException("模板编码序列生成失败");
+            throw new IllegalStateException("妯℃澘缂栫爜搴忓垪鐢熸垚澶辫触");
         }
         return currentValue;
     }
@@ -1431,7 +1431,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                     throw ex;
                 }
                 if (attempt >= TEMPLATE_CODE_RETRY_LIMIT) {
-                    throw new IllegalArgumentException("模板编码生成冲突，请重试", ex);
+                    throw new IllegalArgumentException("妯℃澘缂栫爜鐢熸垚鍐茬獊锛岃閲嶈瘯", ex);
                 }
                 log.warn(
                         "[TemplateSaveTrace][{}][service] saveTemplate insertTemplate duplicate templateCode={} attempt={} - regenerating",
@@ -1549,7 +1549,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private ProcessDocumentTemplate requireTemplate(Long id) {
         ProcessDocumentTemplate template = templateMapper.selectById(id);
         if (template == null) {
-            throw new IllegalStateException("模板不存在");
+            throw new IllegalStateException("妯℃澘涓嶅瓨鍦?");
         }
         return template;
     }
@@ -1557,7 +1557,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private ProcessDocumentTemplate requireActiveTemplate(Long id) {
         ProcessDocumentTemplate template = requireTemplate(id);
         if (!Objects.equals(template.getEnabled(), 1)) {
-            throw new IllegalStateException("模板不存在或已停用");
+            throw new IllegalStateException("妯℃澘涓嶅瓨鍦ㄦ垨宸插仠鐢?");
         }
         return template;
     }
@@ -1650,7 +1650,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
 
     private void validateCustomArchive(ProcessCustomArchiveSaveDTO dto) {
         if (!Set.of(ARCHIVE_TYPE_SELECT, ARCHIVE_TYPE_AUTO_RULE).contains(trimToEmpty(dto.getArchiveType()))) {
-            throw new IllegalArgumentException("闂傚倸鍊烽懗鍫曞储瑜旈妴鍐╂償閵忋埄娲稿┑鐘诧工閻楀﹪宕戦埡鍛厽闁逛即娼ф晶浼存煃缂佹ɑ绀€妞ゎ叀娉曢幑鍕瑹椤栨艾澹勯梻渚€鈧偛鑻晶顕€鏌涙繝鍐╁€愰柕鍡楁噺缁虹晫绮欓崸妤€鏁归梻渚€娼ф蹇曠礊閸℃鐒介柛顐ｆ礃閳锋垿鏌熼懖鈺佷粶濠碘€冲悑閵囧嫰骞嬪┑鍡╀紑闂佸憡甯楃敮妤呭箚閺冨牆惟闁靛／鍐╂啟濠碉紕鍋戦崐鏍偋濡ゅ啰鐭欓柟杈鹃檮閸?SELECT 闂?AUTO_RULE");
+            throw new IllegalArgumentException("闂傚倸鍊搁崐鐑芥嚄閸洖鍌ㄧ憸鏃堝Υ閸愨晜鍎熼柕蹇嬪焺濞茬鈹戦悩璇у伐闁绘锕畷鎴﹀煛閸涱喚鍘介梺閫涘嵆濞佳勬櫠娴煎瓨鐓冪紓浣股戠粈鈧銈庡弨濞夋洟骞戦崟顒傜懝妞ゆ牗鑹炬竟鍕⒒娓氣偓閳ь剛鍋涢懟顖涙櫠椤曗偓閺屾稒绻濋崘鈺佲偓鎰版煏閸℃鍣虹紒铏规櫕缁瑩宕稿Δ鈧弫褰掓⒒娓氣偓濞佳勵殽韫囨洜绀婇柛鈩冾殢閻掍粙鏌涢锝嗙闁抽攱鍨块弻鐔兼嚃閳轰椒绮舵繝纰樷偓鍐叉倯闁靛洤瀚伴獮瀣攽閸♀晙绱戦梻浣告啞鐢鏁Δ鍛畾闁哄啫鐗嗘儫闂侀潧锛忛崘鈺傚暉婵犵绱曢崑鎴﹀磹閺嶎厽鍋嬫俊銈呭暟閻瑩鏌熸潏楣冩闁?SELECT 闂?AUTO_RULE");
         }
         if (dto.getItems() == null || dto.getItems().isEmpty()) {
             throw new IllegalArgumentException("\u8bf7\u81f3\u5c11\u6dfb\u52a0\u4e00\u4e2a\u7ed3\u679c\u9879");

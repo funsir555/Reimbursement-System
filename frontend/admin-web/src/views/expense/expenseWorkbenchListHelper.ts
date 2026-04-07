@@ -1,6 +1,6 @@
-﻿import type { ExpenseApprovalPendingItem, ExpenseSummary } from '@/api'
+﻿import type { ExpenseApprovalPendingItem, ExpensePaymentOrder, ExpenseSummary } from '@/api'
 
-export type ExpenseWorkbenchRow = ExpenseSummary | ExpenseApprovalPendingItem
+export type ExpenseWorkbenchRow = ExpenseSummary | ExpenseApprovalPendingItem | ExpensePaymentOrder
 
 export type ExpenseWorkbenchColumnKey =
   | 'documentCode'
@@ -44,7 +44,7 @@ export interface ExpenseWorkbenchFilters {
   tagName: string
 }
 
-export type ExpenseWorkbenchPageKey = 'list' | 'approval' | 'documents'
+export type ExpenseWorkbenchPageKey = 'list' | 'approval' | 'documents' | 'paymentOrders'
 
 export type ExpenseWorkbenchColumnWidthMap = Partial<Record<ExpenseWorkbenchColumnKey, number>>
 
@@ -69,24 +69,27 @@ export const EXPENSE_WORKBENCH_COLUMNS: ExpenseWorkbenchColumnDefinition[] = [
   { key: 'taskCreatedAt', label: '待办到达时间', width: 168 }
 ]
 
-export const EXPENSE_WORKBENCH_STATUS_OPTIONS = ['草稿', '审批中', '已通过', '已驳回', '流程异常']
+export const EXPENSE_WORKBENCH_STATUS_OPTIONS = ['草稿', '审批中', '已通过', '已驳回', '流程异常', '待支付', '支付中', '支付完成', '支付异常']
 
 export const EXPENSE_WORKBENCH_DEFAULT_COLUMNS: Record<ExpenseWorkbenchPageKey, ExpenseWorkbenchColumnKey[]> = {
   list: ['documentCode', 'documentTitle', 'templateName', 'documentStatusLabel', 'currentNodeName', 'submittedAt', 'amount'],
   approval: ['documentCode', 'documentTitle', 'submitterName', 'templateName', 'currentNodeName', 'documentStatusLabel', 'submittedAt', 'amount'],
-  documents: ['documentCode', 'documentTitle', 'submitterName', 'templateName', 'documentStatusLabel', 'currentNodeName', 'submittedAt', 'amount']
+  documents: ['documentCode', 'documentTitle', 'submitterName', 'templateName', 'documentStatusLabel', 'currentNodeName', 'submittedAt', 'amount'],
+  paymentOrders: ['documentCode', 'documentTitle', 'submitterName', 'templateName', 'documentStatusLabel', 'currentNodeName', 'taskCreatedAt', 'amount']
 }
 
 export const EXPENSE_WORKBENCH_STORAGE_KEYS: Record<ExpenseWorkbenchPageKey, string> = {
   list: 'expense:list:visible-columns',
   approval: 'expense:approval:visible-columns',
-  documents: 'expense:documents:visible-columns'
+  documents: 'expense:documents:visible-columns',
+  paymentOrders: 'expense:payment:orders:visible-columns'
 }
 
 export const EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS: Record<ExpenseWorkbenchPageKey, string> = {
   list: 'expense:list:column-order',
   approval: 'expense:approval:column-order',
-  documents: 'expense:documents:column-order'
+  documents: 'expense:documents:column-order',
+  paymentOrders: 'expense:payment:orders:column-order'
 }
 
 export const EXPENSE_WORKBENCH_COLUMN_WIDTHS_STORAGE_KEY = 'expense:workbench:column-widths'
@@ -366,6 +369,33 @@ export function resolveCurrentNodeName(row: ExpenseWorkbenchRow) {
 
 export function resolveDocumentStatusLabel(row: ExpenseWorkbenchRow) {
   return row.documentStatusLabel || row.status || ''
+}
+
+export function getExpenseWorkbenchStatusType(status: string) {
+  const map: Record<string, string> = {
+    审批中: 'warning',
+    待支付: 'warning',
+    支付中: 'warning',
+    已通过: 'success',
+    支付完成: 'success',
+    已驳回: 'danger',
+    支付异常: 'danger',
+    流程异常: 'info',
+    草稿: 'info'
+  }
+  return map[status] || 'info'
+}
+
+export function isExpenseWorkbenchPendingLikeStatus(status: string) {
+  return ['审批中', '待支付', '支付中'].includes(status)
+}
+
+export function isExpenseWorkbenchCompletedLikeStatus(status: string) {
+  return ['已通过', '支付完成'].includes(status)
+}
+
+export function isExpenseWorkbenchExceptionLikeStatus(status: string) {
+  return ['流程异常', '支付异常'].includes(status)
 }
 
 export function resolveSubmittedDate(row: ExpenseWorkbenchRow) {

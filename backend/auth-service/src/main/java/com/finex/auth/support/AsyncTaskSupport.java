@@ -16,13 +16,20 @@ public final class AsyncTaskSupport {
     public static final String TASK_STATUS_FAILED = "FAILED";
 
     public static final String BUSINESS_TYPE_INVOICE_EXPORT = "INVOICE_EXPORT";
+    public static final String BUSINESS_TYPE_EXPENSE_EXPORT = "EXPENSE_EXPORT";
     public static final String BUSINESS_TYPE_INVOICE = "INVOICE";
+
+    public static final String EXPENSE_EXPORT_SCENE_MY_EXPENSES = "MY_EXPENSES";
+    public static final String EXPENSE_EXPORT_SCENE_PENDING_APPROVAL = "PENDING_APPROVAL";
+    public static final String EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY = "DOCUMENT_QUERY";
+    public static final String EXPENSE_EXPORT_SCENE_OUTSTANDING = "OUTSTANDING";
 
     public static final String DOWNLOAD_STATUS_DOWNLOADING = "DOWNLOADING";
     public static final String DOWNLOAD_STATUS_COMPLETED = "COMPLETED";
     public static final String DOWNLOAD_STATUS_FAILED = "FAILED";
 
     public static final String NOTIFICATION_STATUS_UNREAD = "UNREAD";
+    public static final String NOTIFICATION_STATUS_READ = "READ";
     public static final String NOTIFICATION_TYPE_TASK = "TASK";
 
     private static final DateTimeFormatter TASK_NO_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
