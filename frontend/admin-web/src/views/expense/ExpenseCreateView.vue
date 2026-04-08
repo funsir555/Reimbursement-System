@@ -49,7 +49,7 @@
               placeholder="搜索模板名称"
               class="w-full lg:max-w-[320px]"
             />
-            <el-button @click="goBack">{{ backButtonLabel }}</el-button>
+            <el-button @click="goBackToList">{{ backButtonLabel }}</el-button>
           </div>
         </div>
       </el-card>
@@ -168,6 +168,15 @@
           <div class="space-y-5">
             <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
               <div>
+                <button
+                  v-if="isCreateMode"
+                  type="button"
+                  class="mb-4 text-sm font-medium text-blue-600 transition hover:text-blue-500"
+                  data-testid="expense-create-back-to-chooser"
+                  @click="goBack"
+                >
+                  返回上一层
+                </button>
                 <div class="flex flex-wrap items-center gap-3">
                   <h2 class="text-2xl font-semibold text-slate-800">{{ templateDetail?.templateName }}</h2>
                   <el-tag effect="plain">{{ templateDetail?.templateTypeLabel }}</el-tag>
@@ -176,7 +185,7 @@
                     明细：{{ templateDetail?.expenseDetailDesignName }}
                   </el-tag>
                 </div>
-                <p class="mt-3 text-sm leading-7 text-slate-500">
+                <p v-if="!isCreateMode" class="mt-3 text-sm leading-7 text-slate-500">
                   {{ templateDetail?.templateDescription || defaultTemplateDescription }}
                 </p>
               </div>
@@ -303,16 +312,15 @@
       data-testid="expense-create-floating-bar"
       :style="floatingBarStyle"
     >
-      <div class="expense-create-floating-bar__inner">
-        <div class="expense-create-floating-bar__summary" data-testid="expense-create-floating-amount">
-          金额：{{ totalAmountText }}
-        </div>
-        <div class="expense-create-floating-bar__actions">
-          <el-button class="expense-create-floating-bar__button" @click="goBack">{{ backButtonLabel }}</el-button>
-          <el-button
-            class="expense-create-floating-bar__button"
-            :disabled="loading || !templateDetail"
-            @click="saveDraftManually"
+        <div class="expense-create-floating-bar__inner">
+          <div class="expense-create-floating-bar__summary" data-testid="expense-create-floating-amount">
+            金额：{{ totalAmountText }}
+          </div>
+          <div class="expense-create-floating-bar__actions">
+            <el-button
+              class="expense-create-floating-bar__button"
+              :disabled="loading || !templateDetail"
+              @click="saveDraftManually"
           >
             保存草稿
           </el-button>
@@ -1132,16 +1140,7 @@ function reselectTemplate() {
 
 function goBack() {
   if (pageMode.value === 'create') {
-    if (hasPermission('expense:list:view', permissionCodes.value)) {
-      void router.push('/expense/list')
-      return
-    }
-    const fallbackPath = resolveFirstAccessiblePath(permissionCodes.value)
-    if (fallbackPath && fallbackPath !== '/expense/create') {
-      void router.push(fallbackPath)
-      return
-    }
-    void router.push('/dashboard')
+    reselectTemplate()
     return
   }
   if (editingDocumentCode.value) {
@@ -1149,6 +1148,19 @@ function goBack() {
     return
   }
   void router.back()
+}
+
+function goBackToList() {
+  if (hasPermission('expense:list:view', permissionCodes.value)) {
+    void router.push('/expense/list')
+    return
+  }
+  const fallbackPath = resolveFirstAccessiblePath(permissionCodes.value)
+  if (fallbackPath && fallbackPath !== '/expense/create') {
+    void router.push(fallbackPath)
+    return
+  }
+  void router.push('/dashboard')
 }
 
 function saveDraftManually() {

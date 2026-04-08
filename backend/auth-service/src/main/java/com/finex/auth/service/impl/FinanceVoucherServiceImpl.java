@@ -12,11 +12,15 @@ import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
+import com.finex.auth.entity.FinanceProjectArchive;
+import com.finex.auth.entity.FinanceProjectClass;
 import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceProjectArchiveMapper;
+import com.finex.auth.mapper.FinanceProjectClassMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
@@ -114,6 +118,8 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
 
     private final GlAccvouchMapper glAccvouchMapper;
     private final FinanceAccountSubjectMapper financeAccountSubjectMapper;
+    private final FinanceProjectClassMapper financeProjectClassMapper;
+    private final FinanceProjectArchiveMapper financeProjectArchiveMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
@@ -146,8 +152,8 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         meta.setAccountOptions(loadAccountOptions(effectiveCompanyId));
         meta.setCustomerOptions(toOptions(CUSTOMER_SEEDS));
         meta.setSupplierOptions(toOptions(SUPPLIER_SEEDS));
-        meta.setProjectClassOptions(toOptions(PROJECT_CLASS_SEEDS));
-        meta.setProjectOptions(toOptions(PROJECT_SEEDS));
+        meta.setProjectClassOptions(loadProjectClassOptions(effectiveCompanyId));
+        meta.setProjectOptions(loadProjectOptions(effectiveCompanyId));
         meta.setDefaultCompanyId(effectiveCompanyId);
         meta.setDefaultBillDate(effectiveBillDate.format(DATE_FORMATTER));
         meta.setDefaultPeriod(effectiveBillDate.getMonthValue());
@@ -426,6 +432,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                         Wrappers.<FinanceAccountSubject>lambdaQuery()
                                 .eq(FinanceAccountSubject::getCompanyId, normalizedCompanyId)
                                 .eq(FinanceAccountSubject::getStatus, 1)
+                                .eq(FinanceAccountSubject::getBclose, 0)
                                 .orderByAsc(FinanceAccountSubject::getSubjectCode, FinanceAccountSubject::getId)
                 ).stream()
                 .map(item -> option(item.getSubjectCode(), item.getSubjectCode() + " " + item.getSubjectName()))
@@ -437,10 +444,75 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                         Wrappers.<FinanceAccountSubject>lambdaQuery()
                                 .eq(FinanceAccountSubject::getCompanyId, companyId)
                                 .eq(FinanceAccountSubject::getStatus, 1)
+                                .eq(FinanceAccountSubject::getBclose, 0)
                 ).stream()
                 .map(FinanceAccountSubject::getSubjectCode)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private List<FinanceVoucherOptionVO> loadProjectClassOptions(String companyId) {
+        String normalizedCompanyId = trimToNull(companyId);
+        if (normalizedCompanyId == null) {
+            return List.of();
+        }
+        return financeProjectClassMapper.selectList(
+                        Wrappers.<FinanceProjectClass>lambdaQuery()
+                                .eq(FinanceProjectClass::getCompanyId, normalizedCompanyId)
+                                .eq(FinanceProjectClass::getStatus, 1)
+                                .orderByAsc(FinanceProjectClass::getSortOrder, FinanceProjectClass::getProjectClassCode, FinanceProjectClass::getId)
+                ).stream()
+                .map(item -> option(item.getProjectClassCode(), item.getProjectClassCode() + " " + item.getProjectClassName()))
+                .toList();
+    }
+
+    private Map<String, FinanceProjectClass> loadEnabledProjectClassMap(String companyId) {
+        String normalizedCompanyId = trimToNull(companyId);
+        if (normalizedCompanyId == null) {
+            return Map.of();
+        }
+        return financeProjectClassMapper.selectList(
+                        Wrappers.<FinanceProjectClass>lambdaQuery()
+                                .eq(FinanceProjectClass::getCompanyId, normalizedCompanyId)
+                                .eq(FinanceProjectClass::getStatus, 1)
+                ).stream()
+                .collect(Collectors.toMap(
+                        FinanceProjectClass::getProjectClassCode,
+                        item -> item,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private List<FinanceVoucherOptionVO> loadProjectOptions(String companyId) {
+        Map<String, FinanceProjectClass> classMap = loadEnabledProjectClassMap(companyId);
+        if (classMap.isEmpty()) {
+            return List.of();
+        }
+        return loadSelectableProjects(companyId).values().stream()
+                .filter(item -> classMap.containsKey(item.getCitemccode()))
+                .map(item -> option(item.getCitemcode(), item.getCitemcode() + " " + item.getCitemname(), item.getCitemccode()))
+                .toList();
+    }
+
+    private Map<String, FinanceProjectArchive> loadSelectableProjects(String companyId) {
+        String normalizedCompanyId = trimToNull(companyId);
+        if (normalizedCompanyId == null) {
+            return Map.of();
+        }
+        return financeProjectArchiveMapper.selectList(
+                        Wrappers.<FinanceProjectArchive>lambdaQuery()
+                                .eq(FinanceProjectArchive::getCompanyId, normalizedCompanyId)
+                                .eq(FinanceProjectArchive::getStatus, 1)
+                                .eq(FinanceProjectArchive::getBclose, 0)
+                                .orderByAsc(FinanceProjectArchive::getSortOrder, FinanceProjectArchive::getCitemcode, FinanceProjectArchive::getId)
+                ).stream()
+                .collect(Collectors.toMap(
+                        FinanceProjectArchive::getCitemcode,
+                        item -> item,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
     }
 
     private List<SystemDepartment> loadEnabledDepartments() {
@@ -552,9 +624,14 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
     }
 
     private FinanceVoucherOptionVO option(String value, String label) {
+        return option(value, label, null);
+    }
+
+    private FinanceVoucherOptionVO option(String value, String label, String parentValue) {
         FinanceVoucherOptionVO option = new FinanceVoucherOptionVO();
         option.setValue(value);
         option.setLabel(label);
+        option.setParentValue(parentValue);
         return option;
     }
 
@@ -851,8 +928,8 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         Set<String> accounts = loadAccountCodeSet(companyId);
         Set<String> customers = CUSTOMER_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
         Set<String> suppliers = SUPPLIER_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
-        Set<String> projectClasses = PROJECT_CLASS_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
-        Set<String> projects = PROJECT_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<String, FinanceProjectClass> projectClasses = loadEnabledProjectClassMap(companyId);
+        Map<String, FinanceProjectArchive> projects = loadSelectableProjects(companyId);
         Set<String> currencies = CURRENCY_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
 
         BigDecimal totalDebit = ZERO;
@@ -866,12 +943,13 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
             if (trimToNull(entry.getCcode()) == null || !accounts.contains(entry.getCcode())) {
                 throw new IllegalArgumentException("第 " + rowNo + " 行科目不存在");
             }
-            validateSelectable(entry.getCdeptId(), departments.keySet(), "部门", rowNo);
-            validateSelectable(entry.getCpersonId(), employees.keySet(), "职员", rowNo);
-            validateSelectable(entry.getCcusId(), customers, "客户", rowNo);
-            validateSelectable(entry.getCsupId(), suppliers, "供应商", rowNo);
-            validateSelectable(entry.getCitemClass(), projectClasses, "项目大类", rowNo);
-            validateSelectable(entry.getCitemId(), projects, "项目", rowNo);
+            validateSelectable(entry.getCdeptId(), departments.keySet(), "??", rowNo);
+            validateSelectable(entry.getCpersonId(), employees.keySet(), "??", rowNo);
+            validateSelectable(entry.getCcusId(), customers, "??", rowNo);
+            validateSelectable(entry.getCsupId(), suppliers, "???", rowNo);
+            validateSelectable(entry.getCitemClass(), projectClasses.keySet(), "????", rowNo);
+            validateSelectable(entry.getCitemId(), projects.keySet(), "??", rowNo);
+            validateProjectSelection(entry, projectClasses, projects, rowNo);
 
             if (!currencies.contains(normalize(entry.getCexchName(), DEFAULT_CURRENCY))) {
                 throw new IllegalArgumentException("第 " + rowNo + " 行币种不合法");
@@ -916,7 +994,33 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
             return;
         }
         if (!validValues.contains(normalizedValue)) {
-            throw new IllegalArgumentException("第 " + rowNo + " 行" + fieldName + "不存在");
+            throw new IllegalArgumentException("? " + rowNo + " ?" + fieldName + "???");
+        }
+    }
+
+    private void validateProjectSelection(
+            FinanceVoucherEntryDTO entry,
+            Map<String, FinanceProjectClass> projectClasses,
+            Map<String, FinanceProjectArchive> projects,
+            int rowNo
+    ) {
+        String projectClassCode = trimToNull(entry.getCitemClass());
+        String projectCode = trimToNull(entry.getCitemId());
+        if (projectCode == null) {
+            return;
+        }
+        if (projectClassCode == null) {
+            throw new IllegalArgumentException("? " + rowNo + " ?????????????????");
+        }
+        FinanceProjectArchive project = projects.get(projectCode);
+        if (project == null) {
+            throw new IllegalArgumentException("? " + rowNo + " ??????");
+        }
+        if (!projectClasses.containsKey(projectClassCode)) {
+            throw new IllegalArgumentException("? " + rowNo + " ????????");
+        }
+        if (!Objects.equals(trimToNull(project.getCitemccode()), projectClassCode)) {
+            throw new IllegalArgumentException("? " + rowNo + " ?????????????");
         }
     }
 

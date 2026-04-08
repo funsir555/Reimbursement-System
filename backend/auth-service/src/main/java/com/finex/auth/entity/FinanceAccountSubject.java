@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -36,8 +37,111 @@ public class FinanceAccountSubject {
     @TableField("subject_category")
     private String subjectCategory;
 
+    @TableField("cclassany")
+    private String cclassany;
+
+    @TableField("bproperty")
+    private Integer bproperty;
+
+    @TableField("cbook_type")
+    private String cbookType;
+
+    private String chelp;
+
+    @TableField("cexch_name")
+    private String cexchName;
+
+    private String cmeasure;
+
+    private Integer bperson;
+
+    private Integer bcus;
+
+    private Integer bsup;
+
+    private Integer bdept;
+
+    private Integer bitem;
+
+    @TableField("cass_item")
+    private String cassItem;
+
+    private Integer br;
+
+    private Integer be;
+
+    private String cgather;
+
     @TableField("leaf_flag")
     private Integer leafFlag;
+
+    private Integer bexchange;
+
+    private Integer bcash;
+
+    private Integer bbank;
+
+    private Integer bused;
+
+    @TableField("bd_c")
+    @JsonProperty("bd_c")
+    private Integer bdC;
+
+    private LocalDateTime dbegin;
+
+    private LocalDateTime dend;
+
+    private Integer itrans;
+
+    private Integer bclose;
+
+    private String cother;
+
+    private Integer iotherused;
+
+    @JsonProperty("bReport")
+    private Integer bReport;
+
+    @JsonProperty("bGCJS")
+    private Integer bGCJS;
+
+    @JsonProperty("bCashItem")
+    private Integer bCashItem;
+
+    @JsonProperty("iViewItem")
+    private Integer iViewItem;
+
+    private Integer bcDefine1;
+
+    private Integer bcDefine2;
+
+    private Integer bcDefine3;
+
+    private Integer bcDefine4;
+
+    private Integer bcDefine5;
+
+    private Integer bcDefine6;
+
+    private Integer bcDefine7;
+
+    private Integer bcDefine8;
+
+    private Integer bcDefine9;
+
+    private Integer bcDefine10;
+
+    private Integer bcDefine11;
+
+    private Integer bcDefine12;
+
+    private Integer bcDefine13;
+
+    private Integer bcDefine14;
+
+    private Integer bcDefine15;
+
+    private Integer bcDefine16;
 
     private Integer status;
 

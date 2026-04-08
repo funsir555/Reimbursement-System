@@ -164,7 +164,11 @@ describe('ExpenseDetailDesignManagementPanel', () => {
 
   it('navigates to create mode with copyFromId when copying a detail design', async () => {
     const wrapper = await mountView()
+    const footer = wrapper.findAll('[data-testid="expense-detail-card-footer"]')[0]
     const copyButton = wrapper.findAll('[data-testid="expense-detail-copy-button"]')[0]
+
+    expect(footer.classes()).toContain('expense-detail-design-card__footer')
+    expect(copyButton.classes()).toContain('expense-detail-design-card__copy-button')
 
     await copyButton.trigger('click')
 

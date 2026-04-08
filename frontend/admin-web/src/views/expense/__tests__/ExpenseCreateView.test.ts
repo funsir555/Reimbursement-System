@@ -351,12 +351,38 @@ describe('ExpenseCreateView', () => {
     expect(floatingBar.attributes('style')).toContain('width: 1200px')
     expect(wrapper.find('.expense-create-floating-bar__inner').exists()).toBe(true)
     expect(wrapper.get('[data-testid="expense-create-floating-amount"]').text()).toContain('金额：¥ 0.00')
-    expect(floatingBar.text()).toContain('返回我的报销')
+    expect(wrapper.get('[data-testid="expense-create-back-to-chooser"]').text()).toContain('返回上一层')
+    expect(floatingBar.text()).not.toContain('返回我的报销')
     expect(floatingBar.text()).toContain('保存草稿')
     expect(floatingBar.text()).toContain('提交审批单')
+    expect(wrapper.text()).not.toContain('template description')
     expect(submitButtons).toHaveLength(1)
     expect(submitButtons[0]!.classes()).toContain('expense-create-floating-bar__button')
     expect(submitButtons[0]!.classes()).toContain('expense-create-floating-bar__button--primary')
+  })
+
+  it('returns to the template chooser from the new top back action in create mode', async () => {
+    mocks.route.query = { templateCode: 'TPL-001', draftKey: 'draft-001' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-001&draftKey=draft-001'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: buildTemplateDetail()
+    })
+    writeDraft('draft-001', 'TPL-001', {
+      formValues: {
+        amountField: '12.34'
+      }
+    })
+
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-create-back-to-chooser"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.router.replace).toHaveBeenCalledWith({
+      name: 'expense-create',
+      query: {}
+    })
+    expect(window.sessionStorage.getItem('expense-create-draft:draft-001')).toBeNull()
   })
 
   it('manually saves draft from the floating action bar without triggering submit', async () => {

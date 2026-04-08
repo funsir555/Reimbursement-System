@@ -7,6 +7,13 @@
         v-for="stat in listStats"
         :key="stat.label"
         class="expense-wb-stat-card expense-wb-stat-card--compact expense-wb-stat-card--dense"
+        :class="{ 'expense-wb-stat-card--active': activeStatFilter === stat.filterValue }"
+        :data-testid="`expense-list-stat-${stat.filterKey}`"
+        role="button"
+        tabindex="0"
+        @click="applyStatFilter(stat.filterValue)"
+        @keydown.enter.prevent="applyStatFilter(stat.filterValue)"
+        @keydown.space.prevent="applyStatFilter(stat.filterValue)"
       >
         <div class="expense-wb-stat-card__top">
           <div>
@@ -298,6 +305,7 @@ onMounted(async () => {
 })
 
 const filteredExpenseList = computed(() => filterExpenseWorkbenchRows(expenseList.value, filters.value))
+const activeStatFilter = computed(() => filters.value.documentStatusLabel || '')
 
 const pagedExpenseList = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -309,25 +317,33 @@ const listStats = computed(() => [
     label: '全部单据',
     value: expenseList.value.length,
     icon: Tickets,
-    tone: 'blue'
+    tone: 'blue',
+    filterKey: 'all',
+    filterValue: ''
   },
   {
     label: '审批中',
     value: expenseList.value.filter((item) => isExpenseWorkbenchPendingLikeStatus(resolveDocumentStatusLabel(item))).length,
     icon: Clock,
-    tone: 'amber'
+    tone: 'amber',
+    filterKey: 'pending',
+    filterValue: '审批中'
   },
   {
     label: '已通过',
     value: expenseList.value.filter((item) => isExpenseWorkbenchCompletedLikeStatus(resolveDocumentStatusLabel(item))).length,
     icon: CircleCheckFilled,
-    tone: 'green'
+    tone: 'green',
+    filterKey: 'approved',
+    filterValue: '已通过'
   },
   {
     label: '草稿中',
     value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '草稿').length,
     icon: EditPen,
-    tone: 'rose'
+    tone: 'rose',
+    filterKey: 'draft',
+    filterValue: '草稿'
   }
 ])
 
@@ -348,6 +364,11 @@ function getStatusType(status: string) {
 
 function resetFilters() {
   filters.value = createExpenseWorkbenchFilters()
+  currentPage.value = 1
+}
+
+function applyStatFilter(status: string) {
+  filters.value.documentStatusLabel = status
   currentPage.value = 1
 }
 

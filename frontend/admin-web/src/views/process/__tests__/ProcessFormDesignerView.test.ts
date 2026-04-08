@@ -314,6 +314,54 @@ describe('ProcessFormDesignerView', () => {
     expect(mocks.elMessage.success).toHaveBeenCalledWith('费用明细表单已更新')
   })
 
+  it('returns expense detail create mode to the expense detail card section', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-create'
+    mocks.route.params = {}
+    mocks.route.query = {}
+
+    const wrapper = await mountView()
+
+    await wrapper.findAll('button').find((item) => item.text().includes('返回上一层'))!.trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/workbench/process-management?section=expense-detail-form')
+  })
+
+  it('returns expense detail edit mode to the expense detail card section', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+    mocks.route.query = {}
+
+    const wrapper = await mountView()
+
+    await wrapper.findAll('button').find((item) => item.text().includes('返回上一层'))!.trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/workbench/process-management?section=expense-detail-form')
+  })
+
+  it('keeps returnTo as the highest-priority back target', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+    mocks.route.query = { returnTo: '/expense/workbench/process-management?section=expense-detail-form&focus=copy' }
+
+    const wrapper = await mountView()
+
+    await wrapper.findAll('button').find((item) => item.text().includes('返回上一层'))!.trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/workbench/process-management?section=expense-detail-form&focus=copy')
+  })
+
+  it('keeps normal form designers returning to the default process workbench page', async () => {
+    mocks.route.name = 'expense-workbench-process-form-create'
+    mocks.route.params = {}
+    mocks.route.query = { templateType: 'report' }
+
+    const wrapper = await mountView()
+
+    await wrapper.findAll('button').find((item) => item.text().includes('返回上一层'))!.trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/workbench/process-management')
+  })
+
   it('prefills copied expense detail designs in create mode and still creates a new record', async () => {
     mocks.route.name = 'expense-workbench-process-expense-detail-create'
     mocks.route.params = {}

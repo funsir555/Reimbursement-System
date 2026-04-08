@@ -182,7 +182,7 @@
               <label class="assist-field">
                 <span>项目</span>
                 <el-select v-model="selectedRow.citemId" filterable clearable placeholder="请选择项目" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.projectOptions || []" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
               </label>
             </div>
@@ -359,6 +359,12 @@ const currentRowLabel = computed(() => (selectedRow.value?.ccode ? resolveAccoun
 const currentCompanyName = computed(() => financeCompany.currentCompanyName || resolveCompanyName(form.companyId))
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
 const statusChipText = computed(() => (isDetailRoute.value ? voucherDetail.value?.statusLabel || '未记账' : hasDraft.value ? '已暂存' : '未暂存'))
+const filteredProjectOptions = computed(() => {
+  const projectClassCode = selectedRow.value?.citemClass
+  const options = voucherMeta.value?.projectOptions || []
+  if (!projectClassCode) return options
+  return options.filter((item) => item.parentValue === projectClassCode)
+})
 const remarkText = computed({
   get: () => form.ctext2 || form.ctext1 || '',
   set: (value: string) => {
@@ -385,6 +391,22 @@ watch(() => [form.dbillDate, form.csign] as const, async () => {
   if (initializing.value || loading.value || !voucherMeta.value || voucherHeaderLocked.value) return
   await refreshSuggestedVoucherNo()
 })
+
+watch(
+  () => [selectedRowIndex.value, selectedRow.value?.citemClass, voucherMeta.value?.projectOptions] as const,
+  () => {
+    const row = selectedRow.value
+    if (!row?.citemId) return
+    const project = (voucherMeta.value?.projectOptions || []).find((item) => item.value === row.citemId)
+    if (!project) {
+      row.citemId = ''
+      return
+    }
+    if (row.citemClass && project.parentValue && project.parentValue !== row.citemClass) {
+      row.citemId = ''
+    }
+  }
+)
 
 watch(() => form.entries.length, () => {
   if (selectedRowIndex.value >= form.entries.length) {
@@ -939,6 +961,13 @@ function resolveErrorMessage(error: unknown, fallback: string) {
 function moneyText(value: string) {
   return formatMoney(value)
 }
+
+defineExpose({
+  filteredProjectOptions,
+  form,
+  selectedRow,
+  getFilteredProjectOptions: () => filteredProjectOptions.value
+})
 </script>
 <style scoped>
 .voucher-page { height: 100%; display: flex; min-height: 0; flex-direction: column; gap: 12px; overflow: hidden; }

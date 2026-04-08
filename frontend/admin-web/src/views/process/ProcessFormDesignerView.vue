@@ -1369,7 +1369,15 @@ function appendQueryParam(path: string, key: string, value: string) {
 
 function goBack() {
   const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
-  router.push(returnTo || '/expense/workbench/process-management')
+  if (returnTo) {
+    router.push(returnTo)
+    return
+  }
+  if (isExpenseDetailDesigner.value) {
+    router.push('/expense/workbench/process-management?section=expense-detail-form')
+    return
+  }
+  router.push('/expense/workbench/process-management')
 }
 </script>
 

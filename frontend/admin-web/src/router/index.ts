@@ -421,20 +421,24 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        ...placeholderRoute('finance/archives/account-subjects', 'finance-archives-account-subjects', '会计科目', '功能建设中', 'finance:archives:account_subjects:view'),
+        path: 'finance/archives/account-subjects',
+        name: 'finance-archives-account-subjects',
+        component: () => import('../views/finance/FinanceAccountSubjectArchiveView.vue'),
         meta: {
           title: '会计科目',
           tabTitle: '会计科目',
-          description: '功能建设中',
+          description: '会计科目主数据维护',
           permissionCode: 'finance:archives:account_subjects:view'
         }
       },
       {
-        ...placeholderRoute('finance/archives/projects', 'finance-archives-projects', '项目档案', '功能建设中', 'finance:archives:projects:view'),
+        path: 'finance/archives/projects',
+        name: 'finance-archives-projects',
+        component: () => import('../views/finance/FinanceProjectArchiveView.vue'),
         meta: {
           title: '项目档案',
           tabTitle: '项目档案',
-          description: '功能建设中',
+          description: '项目分类与项目主目录维护',
           permissionCode: 'finance:archives:projects:view'
         }
       },

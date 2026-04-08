@@ -2,6 +2,7 @@ package com.finex.auth.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ProcessCenterOverviewVO;
+import com.finex.auth.dto.ProcessExpenseDetailDesignSummaryVO;
 import com.finex.auth.dto.ProcessFormDesignSummaryVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.entity.ProcessDocumentTemplate;
@@ -105,7 +106,10 @@ class ProcessManagementServiceImplTest {
                 () -> (List<String>) ReflectionTestUtils.invokeMethod(service, "buildHighlights", dto, Map.of())
         );
 
-        assertEquals(List.of("移动端提单", "暂无亮点", "暂无亮点"), highlights);
+        assertEquals(
+                List.of("\u79fb\u52a8\u7aef\u63d0\u5355", "\u6682\u65e0\u4eae\u70b9", "\u6682\u65e0\u4eae\u70b9"),
+                highlights
+        );
     }
 
     @Test
@@ -142,37 +146,44 @@ class ProcessManagementServiceImplTest {
     }
 
     @Test
-    void getOverviewIncludesBoundFlowAndFormMetadata() {
+    void getOverviewIncludesBoundFlowFormAndExpenseDetailMetadata() {
         ProcessTemplateCategory category = new ProcessTemplateCategory();
         category.setCategoryCode("employee-expense");
-        category.setCategoryName("员工报销");
-        category.setCategoryDescription("差旅与报销模板");
+        category.setCategoryName("\u5458\u5de5\u62a5\u9500");
+        category.setCategoryDescription("\u5dee\u65c5\u4e0e\u62a5\u9500\u6a21\u677f");
         category.setStatus(1);
 
         ProcessDocumentTemplate template = new ProcessDocumentTemplate();
         template.setId(12L);
         template.setTemplateCode("FX202604020001");
-        template.setTemplateName("差旅报销单");
+        template.setTemplateName("\u5dee\u65c5\u62a5\u9500\u5355");
         template.setTemplateType("report");
-        template.setTemplateTypeLabel("报销单");
+        template.setTemplateTypeLabel("\u62a5\u9500\u5355");
         template.setCategoryCode("employee-expense");
-        template.setTemplateDescription("差旅费用报销");
-        template.setHighlights("移动端提单|AI审单");
+        template.setTemplateDescription("\u5dee\u65c5\u8d39\u7528\u62a5\u9500");
+        template.setHighlights("\u79fb\u52a8\u7aef\u63d0\u5355|AI\u5ba1\u5355");
         template.setApprovalFlow("FLOW-001");
-        template.setFlowName("差旅审批流程");
+        template.setFlowName("\u5dee\u65c5\u5ba1\u6279\u6d41\u7a0b");
         template.setFormDesignCode("FD-001");
-        template.setOwnerName("流程管理员");
+        template.setExpenseDetailDesignCode("EDD-001");
+        template.setOwnerName("\u6d41\u7a0b\u7ba1\u7406\u5458");
         template.setEnabled(1);
         template.setUpdatedAt(LocalDateTime.of(2026, 4, 2, 9, 30));
 
         ProcessFormDesignSummaryVO formDesign = new ProcessFormDesignSummaryVO();
         formDesign.setId(7L);
         formDesign.setFormCode("FD-001");
-        formDesign.setFormName("差旅报销表单");
+        formDesign.setFormName("\u5dee\u65c5\u62a5\u9500\u8868\u5355");
+
+        ProcessExpenseDetailDesignSummaryVO expenseDetailDesign = new ProcessExpenseDetailDesignSummaryVO();
+        expenseDetailDesign.setId(9L);
+        expenseDetailDesign.setDetailCode("EDD-001");
+        expenseDetailDesign.setDetailName("\u8d39\u7528\u660e\u7ec6\u8868\u5355");
 
         when(categoryMapper.selectList(any())).thenReturn(List.of(category));
         when(templateMapper.selectList(any())).thenReturn(List.of(template));
         when(processFormDesignService.listFormDesigns(null)).thenReturn(List.of(formDesign));
+        when(processExpenseDetailDesignService.listExpenseDetailDesigns()).thenReturn(List.of(expenseDetailDesign));
 
         ProcessCenterOverviewVO overview = service.getOverview();
 
@@ -180,10 +191,13 @@ class ProcessManagementServiceImplTest {
         assertEquals(1, overview.getCategories().size());
         assertEquals(1, overview.getCategories().get(0).getTemplates().size());
         assertEquals("FLOW-001", overview.getCategories().get(0).getTemplates().get(0).getFlowCode());
-        assertEquals("差旅审批流程", overview.getCategories().get(0).getTemplates().get(0).getFlowName());
+        assertEquals("\u5dee\u65c5\u5ba1\u6279\u6d41\u7a0b", overview.getCategories().get(0).getTemplates().get(0).getFlowName());
         assertEquals("FD-001", overview.getCategories().get(0).getTemplates().get(0).getFormCode());
-        assertEquals("差旅报销表单", overview.getCategories().get(0).getTemplates().get(0).getFormName());
+        assertEquals("\u5dee\u65c5\u62a5\u9500\u8868\u5355", overview.getCategories().get(0).getTemplates().get(0).getFormName());
+        assertEquals("EDD-001", overview.getCategories().get(0).getTemplates().get(0).getExpenseDetailDesignCode());
+        assertEquals("\u8d39\u7528\u660e\u7ec6\u8868\u5355", overview.getCategories().get(0).getTemplates().get(0).getExpenseDetailDesignName());
     }
+
     @Test
     void getTemplateTypesIncludesContractType() {
         assertTrue(
@@ -194,5 +208,4 @@ class ProcessManagementServiceImplTest {
                 )
         );
     }
-
 }

@@ -290,6 +290,220 @@ export interface FinanceAccountSetTaskStatus {
   finishedAt?: string
 }
 
+export interface FinanceAccountSubjectOption {
+  value: string
+  label: string
+}
+
+export interface FinanceAccountSubjectMeta {
+  subjectCategoryOptions: FinanceAccountSubjectOption[]
+  statusOptions: FinanceAccountSubjectOption[]
+  closeStatusOptions: FinanceAccountSubjectOption[]
+  yesNoOptions: FinanceAccountSubjectOption[]
+}
+
+export interface FinanceAccountSubjectSummary {
+  subject_code: string
+  subject_name: string
+  parent_subject_code?: string
+  subject_level: number
+  balance_direction?: string
+  subject_category?: string
+  chelp?: string
+  leaf_flag: number
+  status: number
+  bclose: number
+  bperson?: number
+  bcus?: number
+  bsup?: number
+  bdept?: number
+  bitem?: number
+  bcash?: number
+  bbank?: number
+  br?: number
+  be?: number
+  auxiliary_summary?: string
+  cash_bank_summary?: string
+  has_children?: boolean
+  template_code?: string
+  sort_order?: number
+  updated_at?: string
+  bd_c?: number
+  children: FinanceAccountSubjectSummary[]
+}
+
+export interface FinanceAccountSubjectDetail {
+  id?: number
+  company_id?: string
+  subject_code: string
+  subject_name: string
+  parent_subject_code?: string
+  subject_level: number
+  balance_direction?: string
+  subject_category?: string
+  cclassany?: string
+  bproperty?: number
+  cbook_type?: string
+  chelp?: string
+  cexch_name?: string
+  cmeasure?: string
+  bperson?: number
+  bcus?: number
+  bsup?: number
+  bdept?: number
+  bitem?: number
+  cass_item?: string
+  br?: number
+  be?: number
+  cgather?: string
+  leaf_flag?: number
+  bexchange?: number
+  bcash?: number
+  bbank?: number
+  bused?: number
+  bd_c?: number
+  dbegin?: string
+  dend?: string
+  itrans?: number
+  bclose?: number
+  cother?: string
+  iotherused?: number
+  bReport?: number
+  bGCJS?: number
+  bCashItem?: number
+  iViewItem?: number
+  bcDefine1?: number
+  bcDefine2?: number
+  bcDefine3?: number
+  bcDefine4?: number
+  bcDefine5?: number
+  bcDefine6?: number
+  bcDefine7?: number
+  bcDefine8?: number
+  bcDefine9?: number
+  bcDefine10?: number
+  bcDefine11?: number
+  bcDefine12?: number
+  bcDefine13?: number
+  bcDefine14?: number
+  bcDefine15?: number
+  bcDefine16?: number
+  status?: number
+  template_code?: string
+  sort_order?: number
+  has_children?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface FinanceAccountSubjectSavePayload {
+  subject_code: string
+  subject_name: string
+  parent_subject_code?: string
+  subject_level?: number
+  subject_category?: string
+  cclassany?: string
+  bproperty?: number
+  cbook_type?: string
+  chelp?: string
+  cexch_name?: string
+  cmeasure?: string
+  bperson?: number
+  bcus?: number
+  bsup?: number
+  bdept?: number
+  bitem?: number
+  cass_item?: string
+  br?: number
+  be?: number
+  cgather?: string
+  leaf_flag?: number
+  bexchange?: number
+  bcash?: number
+  bbank?: number
+  bused?: number
+  bd_c?: number
+  dbegin?: string
+  dend?: string
+  itrans?: number
+  bclose?: number
+  cother?: string
+  iotherused?: number
+  bReport?: number
+  bGCJS?: number
+  bCashItem?: number
+  iViewItem?: number
+}
+
+export interface FinanceAccountSubjectStatusPayload {
+  status?: number
+  bclose?: number
+}
+
+export interface FinanceProjectArchiveOption {
+  value: string
+  label: string
+}
+
+export interface FinanceProjectArchiveMeta {
+  statusOptions: FinanceProjectArchiveOption[]
+  closeStatusOptions: FinanceProjectArchiveOption[]
+  projectClassOptions: FinanceProjectArchiveOption[]
+}
+
+export interface FinanceProjectClassSummary {
+  id?: number
+  company_id?: string
+  project_class_code: string
+  project_class_name: string
+  status: number
+  sort_order?: number
+  has_projects?: boolean
+  created_by?: string
+  updated_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface FinanceProjectClassSavePayload {
+  project_class_code: string
+  project_class_name: string
+}
+
+export interface FinanceProjectSummary {
+  id?: number
+  company_id?: string
+  citemcode: string
+  citemname: string
+  bclose: number
+  citemccode: string
+  project_class_name?: string
+  iotherused?: number
+  d_end_date?: string
+  status: number
+  sort_order?: number
+  created_by?: string
+  updated_by?: string
+  created_at?: string
+  updated_at?: string
+  referenced_by_voucher?: boolean
+}
+
+export interface FinanceProjectDetail extends FinanceProjectSummary {}
+
+export interface FinanceProjectSavePayload {
+  citemcode: string
+  citemname: string
+  citemccode: string
+  iotherused?: number
+  d_end_date?: string
+}
+
+export interface FinanceProjectStatusPayload {
+  status?: number
+  bclose?: number
+}
+
 export interface CompanySavePayload {
   companyId?: string
   companyCode?: string
@@ -1227,6 +1441,7 @@ export interface InvoiceSummary {
 export interface FinanceVoucherOption {
   value: string
   label: string
+  parentValue?: string
 }
 
 export interface FinanceVoucherEntry {
@@ -1741,6 +1956,8 @@ export interface ProcessTemplateCard {
   flowName: string
   formCode?: string
   formName?: string
+  expenseDetailDesignCode?: string
+  expenseDetailDesignName?: string
   updatedAt: string
   owner: string
   color: string
@@ -2885,6 +3102,114 @@ export const financeSystemManagementApi = {
 }
 
 export const financeArchiveApi = {
+  getAccountSubjectMeta: () =>
+    request<FinanceAccountSubjectMeta>('/auth/finance/archives/account-subjects/meta'),
+  listAccountSubjects: (params: {
+    companyId: string
+    keyword?: string
+    subjectCategory?: string
+    status?: number
+    bclose?: number
+  }) =>
+    request<FinanceAccountSubjectSummary[]>(`/auth/finance/archives/account-subjects${buildQueryString(params)}`),
+  getAccountSubjectDetail: (companyId: string, subjectCode: string) =>
+    request<FinanceAccountSubjectDetail>(
+      `/auth/finance/archives/account-subjects/${encodeURIComponent(subjectCode)}${buildQueryString({ companyId })}`
+    ),
+  createAccountSubject: (companyId: string, payload: FinanceAccountSubjectSavePayload) =>
+    request<FinanceAccountSubjectDetail>(`/auth/finance/archives/account-subjects${buildQueryString({ companyId })}`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateAccountSubject: (companyId: string, subjectCode: string, payload: FinanceAccountSubjectSavePayload) =>
+    request<FinanceAccountSubjectDetail>(
+      `/auth/finance/archives/account-subjects/${encodeURIComponent(subjectCode)}${buildQueryString({ companyId })}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      }
+    ),
+  updateAccountSubjectStatus: (companyId: string, subjectCode: string, status: number) =>
+    request<boolean>(
+      `/auth/finance/archives/account-subjects/${encodeURIComponent(subjectCode)}/status${buildQueryString({ companyId })}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ status })
+      }
+    ),
+  updateAccountSubjectClose: (companyId: string, subjectCode: string, bclose: number) =>
+    request<boolean>(
+      `/auth/finance/archives/account-subjects/${encodeURIComponent(subjectCode)}/close${buildQueryString({ companyId })}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ bclose })
+      }
+    ),
+  getProjectArchiveMeta: (companyId: string) =>
+    request<FinanceProjectArchiveMeta>(`/auth/finance/archives/projects/meta${buildQueryString({ companyId })}`),
+  listProjectClasses: (params: { companyId: string; keyword?: string; status?: number }) =>
+    request<FinanceProjectClassSummary[]>(`/auth/finance/archives/projects/classes${buildQueryString(params)}`),
+  createProjectClass: (companyId: string, payload: FinanceProjectClassSavePayload) =>
+    request<FinanceProjectClassSummary>(`/auth/finance/archives/projects/classes${buildQueryString({ companyId })}`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateProjectClass: (companyId: string, projectClassCode: string, payload: FinanceProjectClassSavePayload) =>
+    request<FinanceProjectClassSummary>(
+      `/auth/finance/archives/projects/classes/${encodeURIComponent(projectClassCode)}${buildQueryString({ companyId })}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      }
+    ),
+  updateProjectClassStatus: (companyId: string, projectClassCode: string, status: number) =>
+    request<boolean>(
+      `/auth/finance/archives/projects/classes/${encodeURIComponent(projectClassCode)}/status${buildQueryString({ companyId })}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ status })
+      }
+    ),
+  listProjects: (params: {
+    companyId: string
+    keyword?: string
+    projectClassCode?: string
+    status?: number
+    bclose?: number
+  }) => request<FinanceProjectSummary[]>(`/auth/finance/archives/projects${buildQueryString(params)}`),
+  getProjectDetail: (companyId: string, projectCode: string) =>
+    request<FinanceProjectDetail>(
+      `/auth/finance/archives/projects/${encodeURIComponent(projectCode)}${buildQueryString({ companyId })}`
+    ),
+  createProject: (companyId: string, payload: FinanceProjectSavePayload) =>
+    request<FinanceProjectDetail>(`/auth/finance/archives/projects${buildQueryString({ companyId })}`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateProject: (companyId: string, projectCode: string, payload: FinanceProjectSavePayload) =>
+    request<FinanceProjectDetail>(
+      `/auth/finance/archives/projects/${encodeURIComponent(projectCode)}${buildQueryString({ companyId })}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      }
+    ),
+  updateProjectStatus: (companyId: string, projectCode: string, status: number) =>
+    request<boolean>(
+      `/auth/finance/archives/projects/${encodeURIComponent(projectCode)}/status${buildQueryString({ companyId })}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ status })
+      }
+    ),
+  updateProjectClose: (companyId: string, projectCode: string, bclose: number) =>
+    request<boolean>(
+      `/auth/finance/archives/projects/${encodeURIComponent(projectCode)}/close${buildQueryString({ companyId })}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ bclose })
+      }
+    ),
   listCustomers: (params: { companyId: string; keyword?: string; includeDisabled?: boolean }) =>
     request<FinanceCustomerSummary[]>(`/auth/finance/archives/customers${buildQueryString(params)}`),
   getCustomerDetail: (companyId: string, customerCode: string) =>

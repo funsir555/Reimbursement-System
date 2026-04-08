@@ -72,10 +72,17 @@
           <span class="expense-wb-soft-badge expense-wb-soft-badge--success">可绑定模板</span>
         </div>
 
-        <div class="expense-wb-choice-card__footer">
+        <div class="expense-wb-choice-card__footer expense-detail-design-card__footer" data-testid="expense-detail-card-footer">
           <el-button text type="danger" @click="removeItem(item)">删除</el-button>
           <el-button type="primary" text @click="goEdit(item.id)">编辑</el-button>
-          <el-button text data-testid="expense-detail-copy-button" @click="goCopy(item.id)">复制模板</el-button>
+          <el-button
+            text
+            class="expense-detail-design-card__copy-button"
+            data-testid="expense-detail-copy-button"
+            @click="goCopy(item.id)"
+          >
+            复制模板
+          </el-button>
         </div>
       </article>
     </div>
@@ -216,3 +223,19 @@ function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 </script>
+
+<style scoped>
+.expense-detail-design-card__footer {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+:deep(.expense-detail-design-card__copy-button.el-button) {
+  color: #1f2937;
+}
+
+:deep(.expense-detail-design-card__copy-button.el-button:hover),
+:deep(.expense-detail-design-card__copy-button.el-button:focus-visible) {
+  color: #111827;
+}
+</style>

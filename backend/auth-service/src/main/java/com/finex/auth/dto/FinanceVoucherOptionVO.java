@@ -8,4 +8,6 @@ public class FinanceVoucherOptionVO {
     private String value;
 
     private String label;
+
+    private String parentValue;
 }

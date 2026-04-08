@@ -6,6 +6,8 @@ import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceProjectArchiveMapper;
+import com.finex.auth.mapper.FinanceProjectClassMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
@@ -36,6 +38,12 @@ class FinanceVoucherServiceImplTest {
     private FinanceAccountSubjectMapper financeAccountSubjectMapper;
 
     @Mock
+    private FinanceProjectClassMapper financeProjectClassMapper;
+
+    @Mock
+    private FinanceProjectArchiveMapper financeProjectArchiveMapper;
+
+    @Mock
     private SystemCompanyMapper systemCompanyMapper;
 
     @Mock
@@ -51,6 +59,8 @@ class FinanceVoucherServiceImplTest {
         service = new FinanceVoucherServiceImpl(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
+                financeProjectClassMapper,
+                financeProjectArchiveMapper,
                 systemCompanyMapper,
                 systemDepartmentMapper,
                 userMapper
@@ -58,6 +68,8 @@ class FinanceVoucherServiceImplTest {
 
         lenient().when(systemDepartmentMapper.selectList(any())).thenReturn(List.of());
         lenient().when(userMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(financeProjectClassMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("5601"), buildSubject("1002")));
     }
 
@@ -65,8 +77,8 @@ class FinanceVoucherServiceImplTest {
     void queryVouchersBuildsVoucherHeadSummary() {
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
-                buildRow(1, "COMP-001", 3, "记", 8, 1, "2026-03-28", "办公费用", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
-                buildRow(2, "COMP-001", 3, "记", 8, 2, "2026-03-28", "支付办公费用", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
+                buildRow(1, "COMP-001", 3, "记", 8, 1, "2026-03-28", "办公费", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "记", 8, 2, "2026-03-28", "支付办公费", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
         ));
 
         FinanceVoucherQueryDTO dto = new FinanceVoucherQueryDTO();
@@ -104,6 +116,7 @@ class FinanceVoucherServiceImplTest {
         subject.setSubjectCode(code);
         subject.setSubjectName(code);
         subject.setStatus(1);
+        subject.setBclose(0);
         return subject;
     }
 
@@ -128,7 +141,7 @@ class FinanceVoucherServiceImplTest {
     }
 
     private GlAccvouch buildReviewedRow() {
-        GlAccvouch row = buildRow(1, "COMP-001", 3, "记", 8, 1, "2026-03-28", "办公费用", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO);
+        GlAccvouch row = buildRow(1, "COMP-001", 3, "记", 8, 1, "2026-03-28", "办公费", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO);
         row.setCcheck("checker");
         return row;
     }

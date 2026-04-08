@@ -91,16 +91,6 @@
 
                 <p class="mt-3 min-h-[40px] text-sm leading-5 text-slate-500">{{ template.description }}</p>
 
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <span
-                    v-for="highlight in template.highlights"
-                    :key="highlight"
-                    class="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600"
-                  >
-                    {{ highlight }}
-                  </span>
-                </div>
-
                 <div class="mt-4 space-y-2 rounded-2xl bg-slate-50 px-3.5 py-3">
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-slate-400">绑定流程</span>
@@ -125,6 +115,18 @@
                       {{ template.formName || '未绑定表单' }}
                     </button>
                     <span v-else class="text-slate-700">{{ template.formName || '未绑定表单' }}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-slate-400">绑定明细表单</span>
+                    <button
+                      v-if="hasEditableExpenseDetailDesign(template)"
+                      type="button"
+                      class="process-link-button"
+                      @click="openBoundExpenseDetailDesign(template)"
+                    >
+                      {{ template.expenseDetailDesignName }}
+                    </button>
+                    <span v-else class="text-slate-700">{{ template.expenseDetailDesignName || '未绑定明细表单' }}</span>
                   </div>
                   <div class="flex items-center justify-between text-sm">
                     <span class="text-slate-400">更新时间</span>
@@ -199,6 +201,7 @@ import {
 import {
   processApi,
   type ProcessCenterOverview,
+  type ProcessExpenseDetailDesignSummary,
   type ProcessFlowSummary,
   type ProcessFormDesignSummary,
   type ProcessTemplateCard,
@@ -217,6 +220,7 @@ const router = useRouter()
 const overview = ref<ProcessCenterOverview | null>(null)
 const flowSummaries = ref<ProcessFlowSummary[]>([])
 const formDesignSummaries = ref<ProcessFormDesignSummary[]>([])
+const expenseDetailDesignSummaries = ref<ProcessExpenseDetailDesignSummary[]>([])
 const templateTypes = ref<ProcessTemplateTypeOption[]>([])
 const templateDialogVisible = ref(false)
 const searchKeyword = ref('')
@@ -239,6 +243,9 @@ const currentNavLabel = computed(() => currentNav.value?.label || '\u6d41\u7a0b\
 const currentNavTip = computed(() => currentNav.value?.tip || '\u8fd9\u4e2a\u914d\u7f6e\u6a21\u5757\u6b63\u5728\u5efa\u8bbe\u4e2d\uff0c\u540e\u7eed\u4f1a\u7ee7\u7eed\u8865\u9f50\u771f\u5b9e\u80fd\u529b\u3002')
 const flowIdMap = computed(() => new Map(flowSummaries.value.map((item) => [item.flowCode, item.id])))
 const formIdMap = computed(() => new Map(formDesignSummaries.value.map((item) => [item.formCode, item.id])))
+const expenseDetailDesignIdMap = computed(() =>
+  new Map(expenseDetailDesignSummaries.value.map((item) => [item.detailCode, item.id]))
+)
 const summaryCards = computed(() => {
   if (!overview.value) {
     return []
@@ -309,16 +316,18 @@ onMounted(async () => {
 })
 async function loadOverview() {
   try {
-    const [overviewRes, typeRes, flowRes, formRes] = await Promise.all([
+    const [overviewRes, typeRes, flowRes, formRes, expenseDetailRes] = await Promise.all([
       processApi.getOverview(),
       processApi.getTemplateTypes(),
       processApi.listFlows(),
-      processApi.listFormDesigns()
+      processApi.listFormDesigns(),
+      processApi.listExpenseDetailDesigns()
     ])
     overview.value = overviewRes.data
     templateTypes.value = typeRes.data
     flowSummaries.value = flowRes.data
     formDesignSummaries.value = formRes.data
+    expenseDetailDesignSummaries.value = expenseDetailRes.data
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '\u52a0\u8f7d\u6d41\u7a0b\u7ba1\u7406\u9875\u9762\u5931\u8d25'))
   }
@@ -372,6 +381,11 @@ const hasEditableForm = (template: ProcessTemplateCard) => {
   return Boolean(formCode && formIdMap.value.has(formCode))
 }
 
+const hasEditableExpenseDetailDesign = (template: ProcessTemplateCard) => {
+  const detailCode = template.expenseDetailDesignCode?.trim()
+  return Boolean(detailCode && expenseDetailDesignIdMap.value.has(detailCode))
+}
+
 const openBoundFlow = (template: ProcessTemplateCard) => {
   const flowCode = template.flowCode?.trim()
   const flowId = flowCode ? flowIdMap.value.get(flowCode) : undefined
@@ -395,6 +409,19 @@ const openBoundForm = (template: ProcessTemplateCard) => {
   router.push({
     name: 'expense-workbench-process-form-edit',
     params: { id: formId }
+  })
+}
+
+const openBoundExpenseDetailDesign = (template: ProcessTemplateCard) => {
+  const detailCode = template.expenseDetailDesignCode?.trim()
+  const detailId = detailCode ? expenseDetailDesignIdMap.value.get(detailCode) : undefined
+  if (!detailCode || !detailId) {
+    ElMessage.warning('当前明细表单缺少可编辑详情，请刷新后重试')
+    return
+  }
+  router.push({
+    name: 'expense-workbench-process-expense-detail-edit',
+    params: { id: detailId }
   })
 }
 

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     getTemplateTypes: vi.fn(),
     listFlows: vi.fn(),
     listFormDesigns: vi.fn(),
+    listExpenseDetailDesigns: vi.fn(),
     deleteTemplate: vi.fn()
   },
   elMessage: {
@@ -79,7 +80,7 @@ const SimpleContainer = defineComponent({
 
 const ButtonStub = defineComponent({
   emits: ['click'],
-  template: `<button type="button" @click="$emit('click', $event)"><slot /></button>`
+  template: '<button type="button" @click="$emit(\'click\', $event)"><slot /></button>'
 })
 
 const InputStub = defineComponent({
@@ -90,7 +91,7 @@ const InputStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: `<input :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`
+  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
 const SelectStub = defineComponent({
@@ -101,7 +102,7 @@ const SelectStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: `<select :value="modelValue" @change="$emit('update:modelValue', $event.target.value)"><slot /></select>`
+  template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
 })
 
 const OptionStub = defineComponent({
@@ -145,8 +146,8 @@ function buildOverview(templates: Array<Record<string, unknown>>) {
     categories: [
       {
         code: 'employee-expense',
-        name: 'Category A',
-        description: 'Category description',
+        name: '员工报销',
+        description: '差旅与报销模板',
         templateCount: templates.length,
         templates
       }
@@ -154,14 +155,19 @@ function buildOverview(templates: Array<Record<string, unknown>>) {
   }
 }
 
-async function mountView(templates: Array<Record<string, unknown>>, options?: {
-  flows?: Array<Record<string, unknown>>
-  forms?: Array<Record<string, unknown>>
-}) {
+async function mountView(
+  templates: Array<Record<string, unknown>>,
+  options?: {
+    flows?: Array<Record<string, unknown>>
+    forms?: Array<Record<string, unknown>>
+    expenseDetails?: Array<Record<string, unknown>>
+  }
+) {
   mocks.processApi.getOverview.mockResolvedValue({ data: buildOverview(templates) })
   mocks.processApi.getTemplateTypes.mockResolvedValue({ data: [] })
   mocks.processApi.listFlows.mockResolvedValue({ data: options?.flows || [] })
   mocks.processApi.listFormDesigns.mockResolvedValue({ data: options?.forms || [] })
+  mocks.processApi.listExpenseDetailDesigns.mockResolvedValue({ data: options?.expenseDetails || [] })
 
   const wrapper = mount(ProcessManagementView, {
     global: {
@@ -172,6 +178,29 @@ async function mountView(templates: Array<Record<string, unknown>>, options?: {
   return wrapper
 }
 
+function buildTemplate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    templateCode: 'FX202604020001',
+    name: '差旅报销单',
+    templateTypeCode: 'report',
+    templateType: '报销单',
+    businessDomain: '员工报销',
+    description: '差旅费用报销',
+    highlights: ['移动端提单', '暂无亮点', '暂无亮点'],
+    flowCode: 'FLOW-001',
+    flowName: '差旅审批流程',
+    formCode: 'FD-001',
+    formName: '差旅报销表单',
+    expenseDetailDesignCode: 'EDD-001',
+    expenseDetailDesignName: '差旅费用明细表单',
+    updatedAt: '2026-04-02 10:00',
+    owner: '流程管理员',
+    color: '#2563eb',
+    ...overrides
+  }
+}
+
 describe('ProcessManagementView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -180,30 +209,12 @@ describe('ProcessManagementView', () => {
     mocks.router.replace.mockResolvedValue(undefined)
   })
 
-  it('removes the hero banner and keeps compact summary and 4-column desktop template grid', async () => {
-    const wrapper = await mountView([
-      {
-        id: 1,
-        templateCode: 'FX202604020001',
-        name: 'Template A',
-        templateTypeCode: 'report',
-        templateType: 'Report',
-        businessDomain: 'Domain A',
-        description: 'Template description',
-        highlights: ['mobile'],
-        flowCode: 'FLOW-001',
-        flowName: 'Flow Alpha',
-        formCode: 'FD-001',
-        formName: 'Form Alpha',
-        updatedAt: '2026-04-02 10:00',
-        owner: 'Owner A',
-        color: '#2563eb'
-      }
-    ])
+  it('keeps the compact template grid and removes highlight pills', async () => {
+    const wrapper = await mountView([buildTemplate()])
 
     expect(wrapper.text()).not.toContain('Flow Studio')
-    expect(wrapper.text()).not.toContain('单据与流程')
-    expect(wrapper.text()).not.toContain('已纳入流程中心维护的全部单据模板')
+    expect(wrapper.text()).not.toContain('移动端提单')
+    expect(wrapper.text()).not.toContain('暂无亮点')
 
     const summaryGrid = wrapper.get('[data-testid="process-summary-grid"]')
     expect(summaryGrid.classes()).toContain('xl:grid-cols-4')
@@ -211,69 +222,43 @@ describe('ProcessManagementView', () => {
 
     const templateGrid = wrapper.get('[data-testid="process-template-grid"]')
     expect(templateGrid.classes()).toContain('xl:grid-cols-4')
-    expect(templateGrid.text()).toContain('Template A')
-    expect(templateGrid.text()).toContain('Template description')
+    expect(templateGrid.text()).toContain('差旅报销单')
+    expect(templateGrid.text()).toContain('差旅费用报销')
   })
 
-  it('renders bound form instead of template owner', async () => {
-    const wrapper = await mountView([
-      {
-        id: 1,
-        templateCode: 'FX202604020001',
-        name: 'Template A',
-        templateTypeCode: 'report',
-        templateType: 'Report',
-        businessDomain: 'Domain A',
-        description: 'Template description',
-        highlights: ['mobile'],
-        flowCode: 'FLOW-001',
-        flowName: 'Flow Alpha',
-        formCode: 'FD-001',
-        formName: 'Form Alpha',
-        updatedAt: '2026-04-02 10:00',
-        owner: 'Owner A',
-        color: '#2563eb'
-      }
-    ])
+  it('renders bound flow, form, and expense detail form metadata', async () => {
+    const wrapper = await mountView([buildTemplate()])
 
+    expect(wrapper.text()).toContain('绑定流程')
+    expect(wrapper.text()).toContain('差旅审批流程')
     expect(wrapper.text()).toContain('绑定表单')
-    expect(wrapper.text()).toContain('Form Alpha')
-    expect(wrapper.text()).not.toContain('模板负责人')
+    expect(wrapper.text()).toContain('差旅报销表单')
+    expect(wrapper.text()).toContain('绑定明细表单')
+    expect(wrapper.text()).toContain('差旅费用明细表单')
   })
 
-  it('opens flow and form editors from bound names', async () => {
-    const wrapper = await mountView([
+  it('opens bound flow, form, and expense detail editors from clickable names', async () => {
+    const wrapper = await mountView(
+      [buildTemplate()],
       {
-        id: 1,
-        templateCode: 'FX202604020001',
-        name: 'Template A',
-        templateTypeCode: 'report',
-        templateType: 'Report',
-        businessDomain: 'Domain A',
-        description: 'Template description',
-        highlights: ['mobile'],
-        flowCode: 'FLOW-001',
-        flowName: 'Flow Alpha',
-        formCode: 'FD-001',
-        formName: 'Form Alpha',
-        updatedAt: '2026-04-02 10:00',
-        owner: 'Owner A',
-        color: '#2563eb'
+        flows: [{ id: 88, flowCode: 'FLOW-001', flowName: '差旅审批流程' }],
+        forms: [{ id: 66, formCode: 'FD-001', formName: '差旅报销表单' }],
+        expenseDetails: [{ id: 55, detailCode: 'EDD-001', detailName: '差旅费用明细表单' }]
       }
-    ], {
-      flows: [{ id: 88, flowCode: 'FLOW-001', flowName: 'Flow Alpha' }],
-      forms: [{ id: 66, formCode: 'FD-001', formName: 'Form Alpha' }]
-    })
+    )
 
     const buttons = wrapper.findAll('button')
-    const flowButton = buttons.find((item) => item.text() === 'Flow Alpha')
-    const formButton = buttons.find((item) => item.text() === 'Form Alpha')
+    const flowButton = buttons.find((item) => item.text() === '差旅审批流程')
+    const formButton = buttons.find((item) => item.text() === '差旅报销表单')
+    const expenseDetailButton = buttons.find((item) => item.text() === '差旅费用明细表单')
 
     expect(flowButton).toBeTruthy()
     expect(formButton).toBeTruthy()
+    expect(expenseDetailButton).toBeTruthy()
 
     await flowButton!.trigger('click')
     await formButton!.trigger('click')
+    await expenseDetailButton!.trigger('click')
 
     expect(mocks.router.push).toHaveBeenNthCalledWith(1, {
       name: 'expense-workbench-process-flow-edit',
@@ -283,38 +268,47 @@ describe('ProcessManagementView', () => {
       name: 'expense-workbench-process-form-edit',
       params: { id: 66 }
     })
+    expect(mocks.router.push).toHaveBeenNthCalledWith(3, {
+      name: 'expense-workbench-process-expense-detail-edit',
+      params: { id: 55 }
+    })
   })
 
-  it('keeps bound names non-clickable when editable mapping is missing', async () => {
-    const wrapper = await mountView([
+  it('keeps missing bound resources non-clickable and falls back to static text', async () => {
+    const wrapper = await mountView(
+      [
+        buildTemplate({
+          flowCode: 'FLOW-404',
+          flowName: '缺失流程',
+          formCode: 'FD-404',
+          formName: '缺失表单',
+          expenseDetailDesignCode: 'EDD-404',
+          expenseDetailDesignName: '缺失明细表单'
+        }),
+        buildTemplate({
+          id: 2,
+          templateCode: 'FX202604020002',
+          name: '日常报销单',
+          expenseDetailDesignCode: undefined,
+          expenseDetailDesignName: undefined
+        })
+      ],
       {
-        id: 1,
-        templateCode: 'FX202604020001',
-        name: 'Template A',
-        templateTypeCode: 'report',
-        templateType: 'Report',
-        businessDomain: 'Domain A',
-        description: 'Template description',
-        highlights: ['mobile'],
-        flowCode: 'FLOW-404',
-        flowName: 'Missing Flow',
-        formCode: 'FD-404',
-        formName: 'Missing Form',
-        updatedAt: '2026-04-02 10:00',
-        owner: 'Owner A',
-        color: '#2563eb'
+        flows: [{ id: 88, flowCode: 'FLOW-001', flowName: '差旅审批流程' }],
+        forms: [{ id: 66, formCode: 'FD-001', formName: '差旅报销表单' }],
+        expenseDetails: [{ id: 55, detailCode: 'EDD-001', detailName: '差旅费用明细表单' }]
       }
-    ], {
-      flows: [{ id: 88, flowCode: 'FLOW-001', flowName: 'Flow Alpha' }],
-      forms: [{ id: 66, formCode: 'FD-001', formName: 'Form Alpha' }]
-    })
+    )
 
     const clickableTexts = wrapper.findAll('button').map((item) => item.text())
 
-    expect(wrapper.text()).toContain('Missing Flow')
-    expect(wrapper.text()).toContain('Missing Form')
-    expect(clickableTexts).not.toContain('Missing Flow')
-    expect(clickableTexts).not.toContain('Missing Form')
+    expect(wrapper.text()).toContain('缺失流程')
+    expect(wrapper.text()).toContain('缺失表单')
+    expect(wrapper.text()).toContain('缺失明细表单')
+    expect(wrapper.text()).toContain('未绑定明细表单')
+    expect(clickableTexts).not.toContain('缺失流程')
+    expect(clickableTexts).not.toContain('缺失表单')
+    expect(clickableTexts).not.toContain('缺失明细表单')
     expect(mocks.router.push).not.toHaveBeenCalled()
   })
 })

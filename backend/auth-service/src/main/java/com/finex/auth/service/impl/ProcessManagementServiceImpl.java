@@ -234,11 +234,18 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
+        Map<String, String> expenseDetailDesignNameMap = processExpenseDetailDesignService.listExpenseDetailDesigns().stream()
+                .collect(Collectors.toMap(
+                        ProcessExpenseDetailDesignSummaryVO::getDetailCode,
+                        ProcessExpenseDetailDesignSummaryVO::getDetailName,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
 
         ProcessCenterOverviewVO overview = new ProcessCenterOverviewVO();
         overview.setNavItems(buildNavItems());
         overview.setSummary(buildSummary(templates));
-        overview.setCategories(buildCategoryCards(categories, templates, categoryMap, formNameMap));
+        overview.setCategories(buildCategoryCards(categories, templates, categoryMap, formNameMap, expenseDetailDesignNameMap));
         return overview;
     }
 
@@ -963,7 +970,8 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             List<ProcessTemplateCategory> categories,
             List<ProcessDocumentTemplate> templates,
             Map<String, ProcessTemplateCategory> categoryMap,
-            Map<String, String> formNameMap
+            Map<String, String> formNameMap,
+            Map<String, String> expenseDetailDesignNameMap
     ) {
         Map<String, List<ProcessDocumentTemplate>> groupedTemplates = templates.stream()
                 .collect(Collectors.groupingBy(
@@ -980,7 +988,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             card.setName(category.getCategoryName());
             card.setDescription(normalize(category.getCategoryDescription(), "\u7ef4\u62a4\u8be5\u5206\u7c7b\u4e0b\u7684\u6d41\u7a0b\u6a21\u677f"));
             card.setTemplateCount(categoryTemplates.size());
-            card.setTemplates(buildTemplateCards(categoryTemplates, category.getCategoryName(), formNameMap));
+            card.setTemplates(buildTemplateCards(categoryTemplates, category.getCategoryName(), formNameMap, expenseDetailDesignNameMap));
             result.add(card);
         }
 
@@ -993,7 +1001,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             card.setName(entry.getKey());
             card.setDescription("\u672a\u5f52\u7c7b\u6a21\u677f");
             card.setTemplateCount(entry.getValue().size());
-            card.setTemplates(buildTemplateCards(entry.getValue(), entry.getKey(), formNameMap));
+            card.setTemplates(buildTemplateCards(entry.getValue(), entry.getKey(), formNameMap, expenseDetailDesignNameMap));
             result.add(card);
         }
         return result;
@@ -1002,11 +1010,13 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private List<ProcessTemplateCardVO> buildTemplateCards(
             List<ProcessDocumentTemplate> templates,
             String categoryName,
-            Map<String, String> formNameMap
+            Map<String, String> formNameMap,
+            Map<String, String> expenseDetailDesignNameMap
     ) {
         return templates.stream().map(template -> {
             String flowCode = trimToNull(template.getApprovalFlow());
             String formCode = trimToNull(template.getFormDesignCode());
+            String expenseDetailDesignCode = trimToNull(template.getExpenseDetailDesignCode());
             ProcessTemplateCardVO card = new ProcessTemplateCardVO();
             card.setId(template.getId());
             card.setTemplateCode(template.getTemplateCode());
@@ -1020,6 +1030,8 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             card.setFlowName(normalize(template.getFlowName(), "\u672a\u8bbe\u7f6e\u5ba1\u6279\u6d41\u7a0b"));
             card.setFormCode(formCode);
             card.setFormName(normalize(formNameMap.get(formCode), "\u672a\u7ed1\u5b9a\u8868\u5355"));
+            card.setExpenseDetailDesignCode(expenseDetailDesignCode);
+            card.setExpenseDetailDesignName(normalize(expenseDetailDesignNameMap.get(expenseDetailDesignCode), "\u672a\u7ed1\u5b9a\u660e\u7ec6\u8868\u5355"));
             card.setUpdatedAt(formatDateTime(template.getUpdatedAt()));
             card.setOwner(normalize(template.getOwnerName(), "\u6d41\u7a0b\u7ba1\u7406\u5458"));
             card.setColor(resolveColor(template.getIconColor()));

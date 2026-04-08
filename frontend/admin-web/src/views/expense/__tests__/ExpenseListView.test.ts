@@ -245,6 +245,37 @@ describe('ExpenseListView', () => {
     expect(wrapper.text()).not.toContain('金额筛选')
   })
 
+  it('filters rows by clicked stat cards and keeps the active state synced with the status filter', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filters: { documentStatusLabel: string }
+      filteredExpenseList: Array<{ documentCode: string }>
+      currentPage: number
+    }
+
+    await wrapper.get('[data-testid="expense-list-stat-draft"]').trigger('click')
+    await flushPromises()
+    expect(vm.filters.documentStatusLabel).toBe('草稿')
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-002'])
+    expect(wrapper.get('[data-testid="expense-list-stat-draft"]').classes()).toContain('expense-wb-stat-card--active')
+
+    await wrapper.get('[data-testid="expense-list-stat-pending"]').trigger('click')
+    await flushPromises()
+    expect(vm.filters.documentStatusLabel).toBe('审批中')
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001'])
+
+    vm.filters.documentStatusLabel = '已通过'
+    vm.currentPage = 2
+    await flushPromises()
+    expect(wrapper.get('[data-testid="expense-list-stat-approved"]').classes()).toContain('expense-wb-stat-card--active')
+
+    await wrapper.get('[data-testid="expense-list-stat-all"]').trigger('click')
+    await flushPromises()
+    expect(vm.filters.documentStatusLabel).toBe('')
+    expect(vm.currentPage).toBe(1)
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001', 'DOC-002'])
+  })
+
   it('persists visible columns, column order, and shared column widths', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {

@@ -350,4 +350,38 @@ describe('FinanceNewVoucherView', () => {
 
     expect(mocks.elMessage.error).not.toHaveBeenCalled()
   })
+
+
+  it('filters project options by selected project class and clears mismatched project', async () => {
+    mocks.financeApi.getVoucherMeta.mockResolvedValue({
+      data: {
+        ...buildMeta(),
+        projectClassOptions: [
+          { value: 'CLASS001', label: '???' },
+          { value: 'CLASS002', label: '???' }
+        ],
+        projectOptions: [
+          { value: 'PROJ001', label: '???', parentValue: 'CLASS001' },
+          { value: 'PROJ002', label: '???', parentValue: 'CLASS002' }
+        ]
+      }
+    })
+
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { entries: Array<{ citemClass?: string; citemId?: string }> }
+      selectedRow: { citemClass?: string; citemId?: string }
+      getFilteredProjectOptions: () => Array<{ value: string }>
+    }
+
+    vm.form.entries[0].citemClass = 'CLASS001'
+    vm.form.entries[0].citemId = 'PROJ001'
+    await nextTick()
+    expect(vm.getFilteredProjectOptions().map((item) => item.value)).toEqual(['PROJ001'])
+
+    vm.form.entries[0].citemClass = 'CLASS002'
+    await nextTick()
+    expect(vm.selectedRow.citemId).toBe('')
+    expect(vm.getFilteredProjectOptions().map((item) => item.value)).toEqual(['PROJ002'])
+  })
 })

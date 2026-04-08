@@ -217,7 +217,53 @@ public class FinanceAccountSetTaskWorker {
             target.setSubjectLevel(source.getSubjectLevel());
             target.setBalanceDirection(source.getBalanceDirection());
             target.setSubjectCategory(source.getSubjectCategory());
+            target.setCclassany(source.getCclassany());
+            target.setBproperty(source.getBproperty());
+            target.setCbookType(source.getCbookType());
+            target.setChelp(source.getChelp());
+            target.setCexchName(source.getCexchName());
+            target.setCmeasure(source.getCmeasure());
+            target.setBperson(source.getBperson());
+            target.setBcus(source.getBcus());
+            target.setBsup(source.getBsup());
+            target.setBdept(source.getBdept());
+            target.setBitem(source.getBitem());
+            target.setCassItem(source.getCassItem());
+            target.setBr(source.getBr());
+            target.setBe(source.getBe());
+            target.setCgather(source.getCgather());
             target.setLeafFlag(source.getLeafFlag());
+            target.setBexchange(source.getBexchange());
+            target.setBcash(source.getBcash());
+            target.setBbank(source.getBbank());
+            target.setBused(source.getBused());
+            target.setBdC(source.getBdC());
+            target.setDbegin(source.getDbegin());
+            target.setDend(source.getDend());
+            target.setItrans(source.getItrans());
+            target.setBclose(source.getBclose());
+            target.setCother(source.getCother());
+            target.setIotherused(source.getIotherused());
+            target.setBReport(source.getBReport());
+            target.setBGCJS(source.getBGCJS());
+            target.setBCashItem(source.getBCashItem());
+            target.setIViewItem(source.getIViewItem());
+            target.setBcDefine1(source.getBcDefine1());
+            target.setBcDefine2(source.getBcDefine2());
+            target.setBcDefine3(source.getBcDefine3());
+            target.setBcDefine4(source.getBcDefine4());
+            target.setBcDefine5(source.getBcDefine5());
+            target.setBcDefine6(source.getBcDefine6());
+            target.setBcDefine7(source.getBcDefine7());
+            target.setBcDefine8(source.getBcDefine8());
+            target.setBcDefine9(source.getBcDefine9());
+            target.setBcDefine10(source.getBcDefine10());
+            target.setBcDefine11(source.getBcDefine11());
+            target.setBcDefine12(source.getBcDefine12());
+            target.setBcDefine13(source.getBcDefine13());
+            target.setBcDefine14(source.getBcDefine14());
+            target.setBcDefine15(source.getBcDefine15());
+            target.setBcDefine16(source.getBcDefine16());
             target.setStatus(source.getStatus() == null ? 1 : source.getStatus());
             target.setTemplateCode(templateCode);
             target.setSortOrder(source.getSortOrder());
@@ -240,7 +286,55 @@ public class FinanceAccountSetTaskWorker {
         subject.setSubjectLevel(templateSubject.getSubjectLevel());
         subject.setBalanceDirection(templateSubject.getBalanceDirection());
         subject.setSubjectCategory(templateSubject.getSubjectCategory());
+        subject.setCclassany(firstNonBlank(templateSubject.getCclassany(), templateSubject.getSubjectCategory()));
+        subject.setBproperty(templateSubject.getBproperty() == null
+                ? ("DEBIT".equalsIgnoreCase(templateSubject.getBalanceDirection()) ? 1 : 0)
+                : templateSubject.getBproperty());
+        subject.setCbookType(firstNonBlank(templateSubject.getCbookType(), defaultBookType(subjectCode)));
+        subject.setChelp(firstNonBlank(templateSubject.getChelp(), subjectCode));
+        subject.setCexchName(firstNonBlank(templateSubject.getCexchName(), "CNY"));
+        subject.setCmeasure(templateSubject.getCmeasure());
+        subject.setBperson(defaultFlag(templateSubject.getBperson(), 0));
+        subject.setBcus(defaultFlag(templateSubject.getBcus(), 0));
+        subject.setBsup(defaultFlag(templateSubject.getBsup(), 0));
+        subject.setBdept(defaultFlag(templateSubject.getBdept(), 0));
+        subject.setBitem(defaultFlag(templateSubject.getBitem(), 0));
+        subject.setCassItem(templateSubject.getCassItem());
+        subject.setBr(defaultFlag(templateSubject.getBr(), defaultJournalFlag(subjectCode)));
+        subject.setBe(defaultFlag(templateSubject.getBe(), defaultBankBookFlag(subjectCode)));
+        subject.setCgather(firstNonBlank(templateSubject.getCgather(), "0"));
         subject.setLeafFlag(templateSubject.getLeafFlag());
+        subject.setBexchange(defaultFlag(templateSubject.getBexchange(), 0));
+        subject.setBcash(defaultFlag(templateSubject.getBcash(), subjectCode.startsWith("1001") ? 1 : 0));
+        subject.setBbank(defaultFlag(templateSubject.getBbank(), subjectCode.startsWith("1002") ? 1 : 0));
+        subject.setBused(defaultFlag(templateSubject.getBused(), subjectCode.startsWith("1002") ? 1 : 0));
+        subject.setBdC(defaultFlag(templateSubject.getBdC(), subjectCode.startsWith("1002") ? 1 : 0));
+        subject.setDbegin(templateSubject.getDbegin());
+        subject.setDend(templateSubject.getDend());
+        subject.setItrans(templateSubject.getItrans() == null ? 0 : templateSubject.getItrans());
+        subject.setBclose(defaultFlag(templateSubject.getBclose(), 0));
+        subject.setCother(templateSubject.getCother());
+        subject.setIotherused(templateSubject.getIotherused() == null ? 0 : templateSubject.getIotherused());
+        subject.setBReport(defaultFlag(templateSubject.getBReport(), 0));
+        subject.setBGCJS(defaultFlag(templateSubject.getBGCJS(), 0));
+        subject.setBCashItem(defaultFlag(templateSubject.getBCashItem(), 0));
+        subject.setIViewItem(templateSubject.getIViewItem() == null ? 0 : templateSubject.getIViewItem());
+        subject.setBcDefine1(defaultFlag(templateSubject.getBcDefine1(), 0));
+        subject.setBcDefine2(defaultFlag(templateSubject.getBcDefine2(), 0));
+        subject.setBcDefine3(defaultFlag(templateSubject.getBcDefine3(), 0));
+        subject.setBcDefine4(defaultFlag(templateSubject.getBcDefine4(), 0));
+        subject.setBcDefine5(defaultFlag(templateSubject.getBcDefine5(), 0));
+        subject.setBcDefine6(defaultFlag(templateSubject.getBcDefine6(), 0));
+        subject.setBcDefine7(defaultFlag(templateSubject.getBcDefine7(), 0));
+        subject.setBcDefine8(defaultFlag(templateSubject.getBcDefine8(), 0));
+        subject.setBcDefine9(defaultFlag(templateSubject.getBcDefine9(), 0));
+        subject.setBcDefine10(defaultFlag(templateSubject.getBcDefine10(), 0));
+        subject.setBcDefine11(defaultFlag(templateSubject.getBcDefine11(), 0));
+        subject.setBcDefine12(defaultFlag(templateSubject.getBcDefine12(), 0));
+        subject.setBcDefine13(defaultFlag(templateSubject.getBcDefine13(), 0));
+        subject.setBcDefine14(defaultFlag(templateSubject.getBcDefine14(), 0));
+        subject.setBcDefine15(defaultFlag(templateSubject.getBcDefine15(), 0));
+        subject.setBcDefine16(defaultFlag(templateSubject.getBcDefine16(), 0));
         subject.setStatus(templateSubject.getStatus() == null ? 1 : templateSubject.getStatus());
         subject.setTemplateCode(templateCode);
         subject.setSortOrder(templateSubject.getSortOrder());
@@ -368,6 +462,28 @@ public class FinanceAccountSetTaskWorker {
             return value;
         }
         return "0".repeat(length - value.length()) + value;
+    }
+
+    private Integer defaultFlag(Integer value, int defaultValue) {
+        return value == null ? defaultValue : value;
+    }
+
+    private String defaultBookType(String subjectCode) {
+        if (subjectCode.startsWith("1001")) {
+            return "CASH";
+        }
+        if (subjectCode.startsWith("1002")) {
+            return "BANK";
+        }
+        return "GENERAL";
+    }
+
+    private int defaultJournalFlag(String subjectCode) {
+        return subjectCode.startsWith("1001") || subjectCode.startsWith("1002") ? 1 : 0;
+    }
+
+    private int defaultBankBookFlag(String subjectCode) {
+        return subjectCode.startsWith("1002") ? 1 : 0;
     }
 
     private String firstNonBlank(String... values) {

@@ -251,6 +251,103 @@ describe('ExpenseDocumentsView', () => {
     ])
   })
 
+  it('filters query rows by clicked stat cards while keeping draft rows excluded', async () => {
+    mocks.expenseApi.queryDocuments.mockResolvedValue({
+      data: [
+        {
+          documentCode: 'DOC-001',
+          no: 'DOC-001',
+          documentTitle: '差旅审批单',
+          reason: '上海出差',
+          submitterName: '张三',
+          templateName: '差旅报销模板',
+          currentNodeName: '财务审批',
+          amount: 1880.5,
+          date: '2026-04-01',
+          status: '审批中',
+          documentStatusLabel: '审批中',
+          submittedAt: '2026-04-01 10:00',
+          payeeName: '李四'
+        },
+        {
+          documentCode: 'DOC-003',
+          no: 'DOC-003',
+          documentTitle: '差旅完成单',
+          reason: '深圳出差',
+          submitterName: '王五',
+          templateName: '差旅报销模板',
+          currentNodeName: '',
+          amount: 980,
+          date: '2026-04-03',
+          status: '已通过',
+          documentStatusLabel: '已通过',
+          submittedAt: '2026-04-03 10:00',
+          payeeName: '赵六'
+        },
+        {
+          documentCode: 'DOC-004',
+          no: 'DOC-004',
+          documentTitle: '异常单据',
+          reason: '系统异常',
+          submitterName: '钱七',
+          templateName: '通用模板',
+          currentNodeName: '系统节点',
+          amount: 200,
+          date: '2026-04-04',
+          status: '流程异常',
+          documentStatusLabel: '流程异常',
+          submittedAt: '2026-04-04 11:00',
+          payeeName: '孙八'
+        },
+        {
+          documentCode: 'DOC-002',
+          no: 'DOC-002',
+          documentTitle: '借款申请单',
+          reason: '项目借款',
+          submitterName: '李四',
+          templateName: '借款模板',
+          currentNodeName: '',
+          amount: 5000,
+          date: '2026-04-02',
+          status: '草稿',
+          documentStatusLabel: '草稿',
+          submittedAt: '2026-04-02 09:00',
+          payeeName: '王五'
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filters: { documentStatusLabel: string }
+      filteredExpenseList: Array<{ documentCode: string; documentStatusLabel: string }>
+      currentPage: number
+    }
+
+    await wrapper.get('[data-testid="expense-documents-stat-pending"]').trigger('click')
+    await flushPromises()
+    expect(vm.filters.documentStatusLabel).toBe('审批中')
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001'])
+
+    await wrapper.get('[data-testid="expense-documents-stat-approved"]').trigger('click')
+    await flushPromises()
+    expect(vm.filters.documentStatusLabel).toBe('已通过')
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-003'])
+
+    await wrapper.get('[data-testid="expense-documents-stat-exception"]').trigger('click')
+    await flushPromises()
+    expect(vm.filters.documentStatusLabel).toBe('流程异常')
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-004'])
+    expect(vm.filteredExpenseList.some((item) => item.documentStatusLabel === '草稿')).toBe(false)
+
+    vm.currentPage = 3
+    await wrapper.get('[data-testid="expense-documents-stat-all"]').trigger('click')
+    await flushPromises()
+    expect(vm.filters.documentStatusLabel).toBe('')
+    expect(vm.currentPage).toBe(1)
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001', 'DOC-003', 'DOC-004'])
+  })
+
   it('opens the existing document detail page when clicking a document number', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {

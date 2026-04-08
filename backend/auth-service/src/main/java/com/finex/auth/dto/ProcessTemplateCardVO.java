@@ -34,6 +34,10 @@ public class ProcessTemplateCardVO {
 
     private String formName;
 
+    private String expenseDetailDesignCode;
+
+    private String expenseDetailDesignName;
+
     private String updatedAt;
 
     private String owner;
