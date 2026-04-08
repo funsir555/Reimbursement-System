@@ -75,7 +75,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
                         .eq(ProcessDocumentTemplate::getExpenseDetailDesignCode, detailDesign.getDetailCode())
         );
         if (referencedCount != null && referencedCount > 0) {
-            throw new IllegalStateException("褰撳墠璐圭敤鏄庣粏琛ㄥ崟宸茶妯℃澘寮曠敤锛屼笉鑳藉垹闄?");
+            throw new IllegalStateException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
         }
         processExpenseDetailDesignMapper.deleteById(id);
         return Boolean.TRUE;
@@ -94,7 +94,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
     public String resolveExpenseDetailDesignCode(String detailCode) {
         String normalizedCode = trimToNull(detailCode);
         if (normalizedCode == null) {
-            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u8bbe\u8ba1\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
         }
 
         ProcessExpenseDetailDesign detailDesign = processExpenseDetailDesignMapper.selectOne(
@@ -103,7 +103,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
                         .last("limit 1")
         );
         if (detailDesign == null) {
-            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟涓嶅瓨鍦?");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u4e0d\u5b58\u5728");
         }
         return detailDesign.getDetailCode();
     }
@@ -160,19 +160,19 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
 
     private void validateSave(ProcessExpenseDetailDesignSaveDTO dto, ProcessExpenseDetailDesign existing) {
         if (trimToNull(dto.getDetailName()) == null) {
-            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟鍚嶇О涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
         }
         if (trimToNull(dto.getDetailType()) == null) {
-            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟绫诲瀷涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u7c7b\u578b\u4e0d\u80fd\u4e3a\u7a7a");
         }
         String normalizedType = normalizeDetailType(dto.getDetailType());
         if (!Objects.equals(normalizedType, ExpenseDetailSystemFieldSupport.DETAIL_TYPE_NORMAL)
                 && !Objects.equals(normalizedType, ExpenseDetailSystemFieldSupport.DETAIL_TYPE_ENTERPRISE)) {
-            throw new IllegalArgumentException("璐圭敤鏄庣粏琛ㄥ崟绫诲瀷涓嶅悎娉?");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u7c7b\u578b\u4e0d\u652f\u6301");
         }
         if (existing != null && isDetailDesignReferenced(existing.getDetailCode())
                 && !Objects.equals(normalizeDetailType(existing.getDetailType()), normalizedType)) {
-            throw new IllegalStateException("褰撳墠璐圭敤鏄庣粏琛ㄥ崟宸茶妯℃澘寮曠敤锛屼笉鑳戒慨鏀圭被鍨?");
+            throw new IllegalStateException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u4fee\u6539\u660e\u7ec6\u7c7b\u578b");
         }
     }
 
@@ -187,7 +187,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
     private ProcessExpenseDetailDesign requireExpenseDetailDesign(Long id) {
         ProcessExpenseDetailDesign detailDesign = processExpenseDetailDesignMapper.selectById(id);
         if (detailDesign == null) {
-            throw new IllegalStateException("璐圭敤鏄庣粏琛ㄥ崟涓嶅瓨鍦?");
+            throw new IllegalStateException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u4e0d\u5b58\u5728");
         }
         return detailDesign;
     }
@@ -208,8 +208,8 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
 
     private String resolveDetailTypeLabel(String detailType) {
         return Objects.equals(normalizeDetailType(detailType), ExpenseDetailSystemFieldSupport.DETAIL_TYPE_ENTERPRISE)
-                ? "浼佷笟寰€鏉?"
-                : "鏅€氭姤閿€";
+                ? "\u4f01\u4e1a\u5f80\u6765"
+                : "\u666e\u901a\u62a5\u9500";
     }
 
     private String formatTime(LocalDateTime value) {

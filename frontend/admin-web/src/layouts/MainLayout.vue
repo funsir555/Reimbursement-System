@@ -298,7 +298,8 @@
                 'finance:archives:suppliers:view',
                 'finance:archives:employees:view',
                 'finance:archives:departments:view',
-                'finance:archives:account_subjects:view'
+                'finance:archives:account_subjects:view',
+                'finance:archives:projects:view'
               ])"
               index="/finance/archives"
               class="menu-level-2"
@@ -340,6 +341,13 @@
                 class="menu-level-3"
               >
                 会计科目
+              </el-menu-item>
+              <el-menu-item
+                v-if="canAny(['finance:archives:projects:view'])"
+                index="/finance/archives/projects"
+                class="menu-level-3"
+              >
+                项目档案
               </el-menu-item>
             </el-sub-menu>
 
@@ -536,6 +544,7 @@ const canShowFinance = computed(() =>
     'finance:archives:employees:view',
     'finance:archives:departments:view',
     'finance:archives:account_subjects:view',
+    'finance:archives:projects:view',
     'finance:system_management:view'
   ])
 )

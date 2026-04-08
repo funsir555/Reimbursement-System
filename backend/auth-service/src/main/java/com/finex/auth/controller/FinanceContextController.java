@@ -37,6 +37,7 @@ public class FinanceContextController {
             "finance:archives:employees:view",
             "finance:archives:departments:view",
             "finance:archives:account_subjects:view",
+            "finance:archives:projects:view",
             "finance:system_management:view"
     };
 

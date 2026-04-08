@@ -10,11 +10,13 @@
         <div class="pt-1">
           <div class="flex flex-wrap items-center gap-3">
             <h1 class="text-3xl font-bold text-slate-800">{{ detail?.detailTitle || detailNo }}</h1>
-            <el-tag effect="plain">{{ detail?.detailTypeLabel || '费用明细' }}</el-tag>
+            <el-tag effect="plain">
+              {{ resolveExpenseDetailTypeLabel(detail?.detailType, detail?.detailTypeLabel) }}
+            </el-tag>
             <el-tag v-if="detail?.enterpriseModeLabel" type="warning" effect="plain">{{ detail.enterpriseModeLabel }}</el-tag>
           </div>
           <p class="mt-3 text-sm leading-7 text-slate-500">
-            单据号：{{ documentCode }} · 明细编号：{{ detailNo }} · 更新时间：{{ detail?.updatedAt || detail?.createdAt || '-' }}
+            单据编号：{{ documentCode }} ｜ 明细编号：{{ detailNo }} ｜ 更新时间：{{ detail?.updatedAt || detail?.createdAt || '-' }}
           </p>
         </div>
       </div>
@@ -118,5 +120,11 @@ function goBack() {
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
+  if (detailType === 'ENTERPRISE_TRANSACTION') return '企业往来'
+  if (detailType === 'NORMAL_REIMBURSEMENT') return '普通报销'
+  return fallback || '费用明细'
 }
 </script>

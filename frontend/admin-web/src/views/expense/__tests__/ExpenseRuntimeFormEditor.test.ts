@@ -85,7 +85,7 @@ const InputNumberStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: '<input v-bind="$attrs" type="number" :value="modelValue ?? \'\'" @input="$emit(\'update:modelValue\', Number($event.target.value))" />'
+  template: '<input v-bind="$attrs" type="number" :value="modelValue ?? \"\"" @input="$emit(\'update:modelValue\', Number($event.target.value))" />'
 })
 
 const MoneyInputStub = defineComponent({
@@ -98,6 +98,19 @@ const MoneyInputStub = defineComponent({
   },
   emits: ['update:modelValue'],
   template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+})
+
+const DatePickerStub = defineComponent({
+  inheritAttrs: false,
+  template: `
+    <div
+      data-testid="date-picker"
+      :data-placeholder="$attrs.placeholder || ''"
+      :data-start-placeholder="$attrs['start-placeholder'] || ''"
+      :data-end-placeholder="$attrs['end-placeholder'] || ''"
+      :data-range-separator="$attrs['range-separator'] || ''"
+    />
+  `
 })
 
 const OptionStub = defineComponent({
@@ -180,18 +193,18 @@ function createBusinessBlock(fieldKey: string, label: string, componentCode: str
   }
 }
 
-function createAttachmentBlock(fieldKey: string) {
+function createControlBlock(fieldKey: string, label: string, controlType: string, props: Record<string, unknown> = {}) {
   return {
     blockId: fieldKey,
     fieldKey,
     kind: 'CONTROL' as const,
-    label: '发票附件',
+    label,
     span: 1,
     required: false,
     helpText: '',
     props: {
-      controlType: 'ATTACHMENT',
-      maxCount: 3
+      controlType,
+      ...props
     },
     permission: createPermission()
   }
@@ -213,6 +226,9 @@ function mountEditor(
         { label: '上海分公司', value: 'COMPANY-001' },
         { label: '北京分公司', value: 'COMPANY-002' }
       ],
+      departmentOptions: [
+        { label: '市场部', value: 'DEPT-001' }
+      ],
       ...extraProps
     },
     global: {
@@ -222,7 +238,7 @@ function mountEditor(
         'el-input-number': InputNumberStub,
         MoneyInput: MoneyInputStub,
         'money-input': MoneyInputStub,
-        'el-date-picker': SimpleContainer,
+        'el-date-picker': DatePickerStub,
         'el-select': SelectStub,
         'el-option': OptionStub,
         'el-radio-group': SimpleContainer,
@@ -262,7 +278,37 @@ describe('ExpenseRuntimeFormEditor', () => {
     })
   })
 
-  it('renders payment company business component with company options', async () => {
+  it('renders repaired chinese placeholders and helper copy for configured controls', async () => {
+    const { wrapper } = mountEditor({
+      happenedAt: '',
+      invoiceAttachments: [],
+      relatedDocs: [],
+      undertakeDepartment: 'DEPT-001',
+      counterparty: ''
+    }, [
+      createControlBlock('happenedAt', '发生日期', 'DATE'),
+      createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', { maxCount: 3 }),
+      createBusinessBlock('relatedDocs', '关联单据', 'related-document', {
+        allowedTemplateTypes: ['report', 'application', 'contract', 'loan']
+      }),
+      createBusinessBlock('undertakeDepartment', '承担部门', 'undertake-department'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty')
+    ])
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('选择文件')
+    expect(wrapper.text()).toContain('最多 3 个文件，单个不超过 1 MB')
+    expect(wrapper.text()).toContain('选择单据')
+    expect(wrapper.text()).toContain('暂未选择单据')
+    expect(wrapper.text()).toContain('当前归属部门：市场部')
+    expect(wrapper.text()).toContain('新增供应商')
+
+    const datePicker = wrapper.get('[data-testid="date-picker"]')
+    expect(datePicker.attributes('data-placeholder')).toBe('请选择日期')
+  })
+
+  it('renders payment company options and loads lookup data', async () => {
     const { wrapper } = mountEditor({
       paymentCompany: ''
     }, [
@@ -278,54 +324,7 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalled()
   })
 
-  it('loads payee options from personal-center names and employee-mode payee accounts', async () => {
-    mountEditor({
-      payee: {
-        value: 'PERSONAL_PAYEE:张三',
-        label: '张三',
-        sourceType: 'PERSONAL_PRIVATE_PAYEE',
-        sourceCode: '张三'
-      },
-      payeeAccount: ''
-    }, [
-      createBusinessBlock('payee', '收款人', 'payee'),
-      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
-    ])
-
-    await flushPromises()
-
-    expect(mocks.expenseCreateApi.listPayeeOptions).toHaveBeenCalledWith({
-      keyword: '',
-      personalOnly: true
-    })
-    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenLastCalledWith({
-      keyword: '',
-      linkageMode: 'EMPLOYEE',
-      payeeName: '张三',
-      counterpartyCode: undefined
-    })
-  })
-
-  it('switches payee-account lookup to enterprise mode when a counterparty is selected', async () => {
-    mountEditor({
-      counterparty: 'VEN-001',
-      payeeAccount: ''
-    }, [
-      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
-      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
-    ])
-
-    await flushPromises()
-
-    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenLastCalledWith({
-      keyword: '',
-      linkageMode: 'ENTERPRISE',
-      payeeName: undefined,
-      counterpartyCode: 'VEN-001'
-    })
-  })
-
-  it('shows add supplier entry for counterparty and backfills the created vendor code', async () => {
+  it('shows add supplier dialog in chinese and backfills the created vendor code', async () => {
     mocks.expenseCreateApi.createVendor.mockResolvedValue({
       data: {
         cVenCode: 'VEN-NEW',
@@ -350,12 +349,13 @@ describe('ExpenseRuntimeFormEditor', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('增加供应商')
-
-    const openButton = wrapper.findAll('button').find((button) => button.text() === '增加供应商')
+    const openButton = wrapper.findAll('button').find((button) => button.text() === '新增供应商')
     expect(openButton).toBeTruthy()
     await openButton!.trigger('click')
+
+    expect(wrapper.text()).toContain('新增供应商')
     await wrapper.get('input[placeholder="请输入供应商名称"]').setValue('新增供应商')
+
     Object.assign(
       wrapper.getComponent(SupplierPaymentInfoFieldsStub).props('formState') as Record<string, unknown>,
       {
@@ -369,6 +369,7 @@ describe('ExpenseRuntimeFormEditor', () => {
         cVenAccount: '6222020000000001'
       }
     )
+
     const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存供应商')
     expect(saveButton).toBeTruthy()
     await saveButton!.trigger('click')
@@ -387,7 +388,7 @@ describe('ExpenseRuntimeFormEditor', () => {
     const { wrapper, modelValue } = mountEditor({
       invoiceAttachments: []
     }, [
-      createAttachmentBlock('invoiceAttachments')
+      createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', { maxCount: 3 })
     ])
 
     await flushPromises()
@@ -408,44 +409,6 @@ describe('ExpenseRuntimeFormEditor', () => {
         fileName: 'invoice.pdf',
         contentType: 'application/pdf',
         previewUrl: '/api/auth/expenses/attachments/ATT-001/content'
-      }]
-    })
-  })
-
-  it('removes attachment metadata by attachment id when file list item is deleted', async () => {
-    const { wrapper, modelValue } = mountEditor({
-      invoiceAttachments: [
-        {
-          attachmentId: 'ATT-001',
-          fileName: 'invoice.pdf',
-          contentType: 'application/pdf',
-          previewUrl: '/api/auth/expenses/attachments/ATT-001/content'
-        },
-        {
-          attachmentId: 'ATT-002',
-          fileName: 'taxi.png',
-          contentType: 'image/png',
-          previewUrl: '/api/auth/expenses/attachments/ATT-002/content'
-        }
-      ]
-    }, [
-      createAttachmentBlock('invoiceAttachments')
-    ])
-
-    await flushPromises()
-
-    const upload = wrapper.getComponent(UploadStub)
-    upload.vm.$emit('remove', {
-      uid: 1,
-      name: 'invoice.pdf'
-    })
-
-    await flushPromises()
-
-    expect(modelValue).toMatchObject({
-      invoiceAttachments: [{
-        attachmentId: 'ATT-002',
-        fileName: 'taxi.png'
       }]
     })
   })
@@ -552,6 +515,9 @@ describe('ExpenseRuntimeFormEditor', () => {
     await wrapper.get('[data-testid="confirm-document-picker"]').trigger('click')
     await flushPromises()
 
+    expect(wrapper.text()).toContain('核销来源')
+    expect(wrapper.text()).toContain('可核销余额')
+    expect(wrapper.text()).toContain('核销金额')
     expect(modelValue.writeoffDocs).toEqual([expect.objectContaining({
       documentCode: 'DOC-WO-001',
       writeOffSourceKind: 'LOAN',

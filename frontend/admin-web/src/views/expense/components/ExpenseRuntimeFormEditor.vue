@@ -194,7 +194,7 @@
                   class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
                   @click.stop="openVendorDialog(block.fieldKey)"
                 >
-                  增加供应商
+                  新增供应商
                 </button>
               </template>
             </el-select>

@@ -178,11 +178,20 @@ function buildExpenseDetailDesignDetail(overrides: Record<string, unknown> = {})
   }
 }
 
-async function mountView() {
+async function mountView(options?: {
+  expenseDetailDesignDetail?: Record<string, unknown>
+  expenseDetailDesignError?: Error
+}) {
   mocks.processApi.getFlowMeta.mockResolvedValue({ data: buildFlowMeta() })
   mocks.processApi.listCustomArchives.mockResolvedValue({ data: [] })
   mocks.processApi.getFormDesignDetail.mockResolvedValue({ data: buildFormDesignDetail() })
-  mocks.processApi.getExpenseDetailDesignDetail.mockResolvedValue({ data: buildExpenseDetailDesignDetail() })
+  if (options?.expenseDetailDesignError) {
+    mocks.processApi.getExpenseDetailDesignDetail.mockRejectedValue(options.expenseDetailDesignError)
+  } else {
+    mocks.processApi.getExpenseDetailDesignDetail.mockResolvedValue({
+      data: buildExpenseDetailDesignDetail(options?.expenseDetailDesignDetail)
+    })
+  }
 
   const wrapper = mount(ProcessFormDesignerView, {
     global: {
@@ -303,5 +312,44 @@ describe('ProcessFormDesignerView', () => {
       detailType: 'NORMAL_REIMBURSEMENT'
     }))
     expect(mocks.elMessage.success).toHaveBeenCalledWith('费用明细表单已更新')
+  })
+
+  it('prefills copied expense detail designs in create mode and still creates a new record', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-create'
+    mocks.route.params = {}
+    mocks.route.query = { copyFromId: '9' }
+    mocks.processApi.createExpenseDetailDesign.mockResolvedValue({
+      data: buildExpenseDetailDesignDetail({ id: 18, detailCode: 'DETAIL-018', detailName: '交通明细表单-副本' })
+    })
+
+    const wrapper = await mountView()
+
+    expect(mocks.processApi.getExpenseDetailDesignDetail).toHaveBeenCalledWith(9)
+    expect(wrapper.text()).toContain('保存后自动生成')
+    expect(wrapper.find('input').element.value).toBe('交通明细表单-副本')
+
+    await wrapper.findAll('button').find((item) => item.text().includes('保存费用明细表单'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.createExpenseDetailDesign).toHaveBeenCalledWith(expect.objectContaining({
+      detailName: '交通明细表单-副本',
+      detailDescription: 'detail description',
+      detailType: 'NORMAL_REIMBURSEMENT'
+    }))
+    expect(mocks.processApi.updateExpenseDetailDesign).not.toHaveBeenCalled()
+  })
+
+  it('shows a stable error and keeps blank create mode when copy source loading fails', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-create'
+    mocks.route.params = {}
+    mocks.route.query = { copyFromId: '9' }
+
+    const wrapper = await mountView({
+      expenseDetailDesignError: new Error('源设计不存在')
+    })
+
+    expect(mocks.elMessage.error).toHaveBeenCalledWith('源设计不存在')
+    expect(wrapper.text()).toContain('保存后自动生成')
+    expect(wrapper.find('input').element.value).toBe('')
   })
 })

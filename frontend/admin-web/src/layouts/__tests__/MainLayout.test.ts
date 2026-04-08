@@ -256,6 +256,15 @@ describe('MainLayout', () => {
     expect(wrapper.text()).toContain('财务系统管理')
   })
 
+  it('shows project archive when the user has the project archive permission', async () => {
+    const wrapper = await mountView(['finance:archives:projects:view'])
+
+    expect(wrapper.find('[data-submenu="/finance"]').exists()).toBe(true)
+    expect(wrapper.find('[data-submenu="/finance/archives"]').exists()).toBe(true)
+    expect(wrapper.find('[data-index="/finance/archives/projects"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('项目档案')
+  })
+
   it('shows the agent entry when the user has agent permission', async () => {
     const wrapper = await mountView(['agents:view'])
 

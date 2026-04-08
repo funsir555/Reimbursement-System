@@ -142,6 +142,7 @@ INSERT INTO tmp_permission_seed (
     ('finance:archives:departments:import', '导入部门档案', 'BUTTON', 'finance:archives:departments:view', 'finance', NULL, 40444, 1),
     ('finance:archives:departments:export', '导出部门档案', 'BUTTON', 'finance:archives:departments:view', 'finance', NULL, 40445, 1),
     ('finance:archives:account_subjects:view', '会计科目', 'MENU', 'finance:archives:menu', 'finance', '/finance/archives/account-subjects', 4045, 1),
+    ('finance:archives:projects:view', '项目档案', 'MENU', 'finance:archives:menu', 'finance', '/finance/archives/projects', 4046, 1),
     ('finance:system_management:view', '??????', 'MENU', 'finance:menu', 'finance', '/finance/system-management', 405, 1),
     ('finance:system_management:create', '????', 'BUTTON', 'finance:system_management:view', 'finance', NULL, 4051, 1),
     ('finance:system_management:task:view', '??????', 'BUTTON', 'finance:system_management:view', 'finance', NULL, 4052, 1),

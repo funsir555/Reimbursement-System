@@ -103,7 +103,7 @@ export const BUSINESS_COMPONENT_DEFINITIONS: BusinessComponentDefinition[] = [
   {
     code: 'payee',
     label: '收款人',
-    description: '从个人中心维护的对私收款姓名中选择，作为员工费用类单据的收款人。',
+    description: '从个人中心维护的对私收款名单中选择，作为员工费用类单据的收款人。',
     previewFields: ['收款人姓名', '来源类型']
   },
   {

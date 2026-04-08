@@ -633,6 +633,13 @@ const formId = computed(() => {
   const raw = Number(route.params.id)
   return Number.isFinite(raw) && raw > 0 ? raw : null
 })
+const copyFromId = computed(() => {
+  if (!isExpenseDetailDesigner.value || formId.value !== null) {
+    return null
+  }
+  const raw = Number(route.query.copyFromId)
+  return Number.isFinite(raw) && raw > 0 ? raw : null
+})
 const isCreateMode = computed(() => formId.value === null)
 const canEdit = computed(() => isCreateMode.value ? hasPermission('expense:process_management:create', permissionCodes.value) : hasPermission('expense:process_management:edit', permissionCodes.value))
 const templateTypeLabel = computed(() => isExpenseDetailDesigner.value ? (working.detailTypeLabel || resolveExpenseDetailTypeLabel(working.detailType)) : (working.templateTypeLabel || resolveTemplateTypeLabel(working.templateType)))
@@ -666,7 +673,7 @@ const permissionValueOptions = FORM_PERMISSION_VALUE_OPTIONS
 const canAddSceneOverride = computed(() => Boolean(selectedBlock.value) && sceneOptions.value.some((scene) => !selectedBlock.value?.permission.sceneOverrides.some((override) => override.sceneId === scene.id)))
 const sharedArchiveMap = computed(() => new Map(sharedArchiveOptions.value.map((item) => [item.archiveCode, item])))
 
-watch(() => [route.params.id, route.query.templateType], () => { void loadPage() }, { immediate: true })
+watch(() => [route.params.id, route.query.templateType, route.query.copyFromId], () => { void loadPage() }, { immediate: true })
 watch(activePaletteTab, (nextTab) => {
   if (nextTab === 'shared') {
     void ensureSharedArchiveDetailsByCodes(sharedArchiveOptions.value.map((item) => item.archiveCode))
@@ -755,6 +762,18 @@ function assignDetail(detail: ProcessFormDesignDetail | ProcessExpenseDetailDesi
   })
 }
 
+function assignCopiedExpenseDetail(detail: ProcessExpenseDetailDesignDetail) {
+  const sourceName = (detail.detailName || '').trim()
+  Object.assign(working, {
+    ...createEmptyDetail('report'),
+    formName: sourceName ? `${sourceName}-副本` : '费用明细表单-副本',
+    formDescription: detail.detailDescription || '',
+    schema: normalizeFormSchema(detail.schema),
+    detailType: detail.detailType || 'NORMAL_REIMBURSEMENT',
+    detailTypeLabel: detail.detailTypeLabel || resolveExpenseDetailTypeLabel(detail.detailType || 'NORMAL_REIMBURSEMENT')
+  })
+}
+
 function referencedSharedArchiveCodes() {
   return Array.from(new Set(
     working.schema.blocks
@@ -813,17 +832,25 @@ async function ensureSharedArchiveDetailsByCodes(archiveCodes: string[]) {
 async function loadPage() {
   loading.value = true
   try {
-    const detailRequest = formId.value !== null
-      ? (isExpenseDetailDesigner.value ? processApi.getExpenseDetailDesignDetail(formId.value) : processApi.getFormDesignDetail(formId.value))
-      : Promise.resolve(null)
-    const [flowMetaRes, archiveRes, detailRes] = await Promise.all([processApi.getFlowMeta(), processApi.listCustomArchives(), detailRequest])
+    const [flowMetaRes, archiveRes] = await Promise.all([processApi.getFlowMeta(), processApi.listCustomArchives()])
     sceneOptions.value = flowMetaRes.data.sceneOptions || []
     departmentOptions.value = flowMetaRes.data.departmentOptions || []
     customArchives.value = archiveRes.data || []
     customArchiveDetailMap.value = {}
     customArchiveDetailLoadingCodes.value = []
     customArchiveDetailErrorCodes.value = []
-    assignDetail(detailRes?.data || createEmptyDetail(resolveRouteTemplateType(), formId.value === null))
+    assignDetail(createEmptyDetail(resolveRouteTemplateType(), formId.value === null))
+    if (formId.value !== null) {
+      const detailRes = await (isExpenseDetailDesigner.value ? processApi.getExpenseDetailDesignDetail(formId.value) : processApi.getFormDesignDetail(formId.value))
+      assignDetail(detailRes.data)
+    } else if (copyFromId.value !== null) {
+      try {
+        const detailRes = await processApi.getExpenseDetailDesignDetail(copyFromId.value)
+        assignCopiedExpenseDetail(detailRes.data)
+      } catch (error: unknown) {
+        ElMessage.error(resolveErrorMessage(error, '复制源费用明细表单加载失败，已为你打开空白新建页'))
+      }
+    }
     await ensureSharedArchiveDetailsByCodes(referencedSharedArchiveCodes())
     selectedBlockId.value = working.schema.blocks[0]?.blockId || ''
     insertCursorIndex.value = null

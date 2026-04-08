@@ -17,7 +17,7 @@ public class FinanceAccountSetCreateDTO {
     private String targetCompanyId;
 
     @NotBlank
-    @Pattern(regexp = "^\\\\d{4}-\\\\d{2}$", message = "启用年月格式必须为 YYYY-MM")
+    @Pattern(regexp = "^\\d{4}-\\d{2}$", message = "启用年月格式必须为 YYYY-MM")
     private String enabledYearMonth;
 
     private String templateCode;

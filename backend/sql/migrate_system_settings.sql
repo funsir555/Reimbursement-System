@@ -485,7 +485,8 @@ FROM (
     UNION ALL SELECT 'finance:archives:employees:view', 'Finance Employee Archive', 'MENU', p.id, 'finance', '/finance/archives/employees', 411, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:archives:departments:view', 'Finance Department Archive', 'MENU', p.id, 'finance', '/finance/archives/departments', 412, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:archives:account_subjects:view', 'Finance Account Subjects', 'MENU', p.id, 'finance', '/finance/archives/account-subjects', 413, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
-    UNION ALL SELECT 'finance:system_management:view', 'Finance System Management', 'MENU', p.id, 'finance', '/finance/system-management', 414, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
+    UNION ALL SELECT 'finance:archives:projects:view', 'Finance Project Archive', 'MENU', p.id, 'finance', '/finance/archives/projects', 414, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
+    UNION ALL SELECT 'finance:system_management:view', 'Finance System Management', 'MENU', p.id, 'finance', '/finance/system-management', 415, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'archives:invoices:view', 'Invoice Archive', 'MENU', p.id, 'archives', '/archives/invoices', 501, 1 FROM sys_permission p WHERE p.permission_code = 'archives:menu'
     UNION ALL SELECT 'archives:account_books:view', 'Account Books', 'MENU', p.id, 'archives', '/archives/account-books', 502, 1 FROM sys_permission p WHERE p.permission_code = 'archives:menu'
     UNION ALL SELECT 'agents:view', 'Agent Workbench', 'MENU', p.id, 'agents', '/archives/agents', 551, 1 FROM sys_permission p WHERE p.permission_code = 'agents:menu'
@@ -748,6 +749,7 @@ INSERT INTO tmp_permission_seed (
     ('finance:archives:departments:import', '导入部门档案', 'BUTTON', 'finance:archives:departments:view', 'finance', NULL, 40444, 1),
     ('finance:archives:departments:export', '导出部门档案', 'BUTTON', 'finance:archives:departments:view', 'finance', NULL, 40445, 1),
     ('finance:archives:account_subjects:view', '会计科目', 'MENU', 'finance:archives:menu', 'finance', '/finance/archives/account-subjects', 4045, 1),
+    ('finance:archives:projects:view', '项目档案', 'MENU', 'finance:archives:menu', 'finance', '/finance/archives/projects', 4046, 1),
     ('finance:system_management:view', '财务系统管理', 'MENU', 'finance:menu', 'finance', '/finance/system-management', 405, 1),
 
     ('archives:menu', '电子档案', 'MENU', NULL, 'archives', '/archives', 50, 1),

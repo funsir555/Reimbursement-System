@@ -102,12 +102,21 @@ async function mountView() {
     data: [
       {
         id: 1,
-        detailName: '交通明细',
+        detailName: '交通费明细',
         detailCode: 'ED-001',
-        detailDescription: '交通费用明细',
+        detailDescription: '用于差旅交通报销',
         detailType: 'NORMAL_REIMBURSEMENT',
-        detailTypeLabel: '普通报销',
+        detailTypeLabel: '乱码占位',
         updatedAt: '2026-04-05 10:00'
+      },
+      {
+        id: 2,
+        detailName: '企业往来付款',
+        detailCode: 'ED-002',
+        detailDescription: '用于对公付款与预付场景',
+        detailType: 'ENTERPRISE_TRANSACTION',
+        detailTypeLabel: '乱码占位',
+        updatedAt: '2026-04-05 11:00'
       }
     ]
   })
@@ -127,25 +136,41 @@ describe('ExpenseDetailDesignManagementPanel', () => {
     mocks.router.push.mockResolvedValue(undefined)
   })
 
-  it('removes the hero area, keeps compact summary cards, and moves create into the toolbar', async () => {
+  it('renders compact toolbar copy and prefers local detail type labels on cards', async () => {
     const wrapper = await mountView()
 
-    expect(wrapper.text()).not.toContain('Detail Form Studio')
-    expect(wrapper.text()).not.toContain('为报销模板维护独立的费用明细子表单。普通报销与企业往来共用同一套设计能力，但可以分别配置不同结构。')
-    expect(wrapper.text()).not.toContain('当前可用于模板绑定的费用明细设计总数')
+    expect(wrapper.text()).toContain('筛选与搜索')
+    expect(wrapper.text()).toContain('新建费用明细表单')
+    expect(wrapper.text()).toContain('全部设计')
+    expect(wrapper.text()).toContain('普通报销')
+    expect(wrapper.text()).toContain('企业往来')
+    expect(wrapper.text()).not.toContain('乱码占位')
 
     const summaryGrid = wrapper.get('[data-testid="expense-detail-summary-grid"]')
     expect(summaryGrid.classes()).toContain('expense-wb-stat-grid--compact')
-    expect(summaryGrid.text()).toContain('全部设计')
-    expect(summaryGrid.text()).toContain('1')
+    expect(summaryGrid.text()).toContain('2')
+  })
 
+  it('keeps create action in the toolbar', async () => {
+    const wrapper = await mountView()
     const createButton = wrapper.get('[data-testid="expense-detail-toolbar-create"]')
-    expect(createButton.text()).toContain('新建费用明细表单')
 
     await createButton.trigger('click')
 
     expect(mocks.router.push).toHaveBeenCalledWith({
       name: 'expense-workbench-process-expense-detail-create'
+    })
+  })
+
+  it('navigates to create mode with copyFromId when copying a detail design', async () => {
+    const wrapper = await mountView()
+    const copyButton = wrapper.findAll('[data-testid="expense-detail-copy-button"]')[0]
+
+    await copyButton.trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-workbench-process-expense-detail-create',
+      query: { copyFromId: '1' }
     })
   })
 })

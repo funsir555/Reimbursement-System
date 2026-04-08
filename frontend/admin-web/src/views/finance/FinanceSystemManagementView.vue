@@ -326,7 +326,7 @@ const progressStatus = computed(() => {
 const confirmItems = computed(() => [
   { label: '创建方式', value: isReferenceMode.value ? '参照已有账套' : '新建空白账套' },
   { label: '目标公司', value: resolveCompanyName(wizardForm.targetCompanyId) },
-  { label: '启用会计期间', value: wizardForm.enabledYearMonth || '--' },
+  { label: '启用会计期间', value: normalizeEnabledYearMonth(wizardForm.enabledYearMonth) || '--' },
   { label: '账套模板', value: selectedReferenceOption.value?.templateName || selectedTemplate.value?.templateName || '--' },
   { label: '账套主管', value: resolveSupervisorName(wizardForm.supervisorUserId) },
   { label: '科目编码规则', value: effectiveSubjectScheme.value },
@@ -475,11 +475,44 @@ function buildPayload(): FinanceAccountSetCreatePayload {
     createMode: wizardForm.createMode,
     referenceCompanyId: isReferenceMode.value ? wizardForm.referenceCompanyId || undefined : undefined,
     targetCompanyId: wizardForm.targetCompanyId,
-    enabledYearMonth: wizardForm.enabledYearMonth,
+    enabledYearMonth: normalizeEnabledYearMonth(wizardForm.enabledYearMonth),
     templateCode: isReferenceMode.value ? undefined : wizardForm.templateCode || undefined,
     supervisorUserId: Number(wizardForm.supervisorUserId),
     subjectCodeScheme: isReferenceMode.value ? undefined : wizardForm.subjectCodeScheme || undefined
   }
+}
+
+function normalizeEnabledYearMonth(value: unknown) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatDateToYearMonth(value)
+  }
+  if (value && typeof value === 'object') {
+    const candidate = value as {
+      format?: (pattern: string) => string
+      toDate?: () => Date
+      $d?: unknown
+    }
+    if (typeof candidate.format === 'function') {
+      const formatted = candidate.format('YYYY-MM')
+      return typeof formatted === 'string' ? formatted.trim() : ''
+    }
+    if (typeof candidate.toDate === 'function') {
+      return normalizeEnabledYearMonth(candidate.toDate())
+    }
+    if (candidate.$d instanceof Date) {
+      return formatDateToYearMonth(candidate.$d)
+    }
+  }
+  return ''
+}
+
+function formatDateToYearMonth(value: Date) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  return `${year}-${month}`
 }
 
 function startTaskPolling(taskNo: string) {

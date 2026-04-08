@@ -430,6 +430,15 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        ...placeholderRoute('finance/archives/projects', 'finance-archives-projects', '项目档案', '功能建设中', 'finance:archives:projects:view'),
+        meta: {
+          title: '项目档案',
+          tabTitle: '项目档案',
+          description: '功能建设中',
+          permissionCode: 'finance:archives:projects:view'
+        }
+      },
+      {
         path: 'archives/invoices',
         name: 'archives-invoices',
         component: () => import('../views/invoice/InvoiceListView.vue'),

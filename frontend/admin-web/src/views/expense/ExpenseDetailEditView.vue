@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div ref="pageRootRef" class="expense-detail-edit-page space-y-6">
     <section class="rounded-[32px] border border-slate-100 bg-white px-8 py-7 shadow-sm">
       <div class="space-y-5">
@@ -10,7 +10,9 @@
         <div>
           <div class="flex flex-wrap items-center gap-3">
             <h1 class="text-3xl font-bold text-slate-800">{{ detailTitle || detailNo }}</h1>
-            <el-tag effect="plain">{{ templateDetail?.expenseDetailTypeLabel || '费用明细' }}</el-tag>
+            <el-tag effect="plain">
+              {{ resolveExpenseDetailTypeLabel(templateDetail?.expenseDetailType, templateDetail?.expenseDetailTypeLabel) }}
+            </el-tag>
             <el-tag v-if="templateDetail?.expenseDetailDesignName" type="warning" effect="plain">
               {{ templateDetail.expenseDetailDesignName }}
             </el-tag>
@@ -327,6 +329,12 @@ function cloneValue<T>(value: T): T {
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
+  if (detailType === 'ENTERPRISE_TRANSACTION') return '企业往来'
+  if (detailType === 'NORMAL_REIMBURSEMENT') return '普通报销'
+  return fallback || '费用明细'
 }
 </script>
 

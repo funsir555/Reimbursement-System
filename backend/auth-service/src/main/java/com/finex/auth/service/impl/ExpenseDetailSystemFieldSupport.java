@@ -46,6 +46,14 @@ public class ExpenseDetailSystemFieldSupport {
     private static final String CONTROL_TYPE_SELECT = "SELECT";
     private static final String CONTROL_TYPE_AMOUNT = "AMOUNT";
     private static final String CONTROL_TYPE_ATTACHMENT = "ATTACHMENT";
+    private static final String MESSAGE_READ_SCHEMA_FAILED = "\u8bfb\u53d6\u8d39\u7528\u660e\u7ec6 schema \u5931\u8d25";
+    private static final String MESSAGE_WRITE_SCHEMA_FAILED = "\u4fdd\u5b58\u8d39\u7528\u660e\u7ec6 schema \u5931\u8d25";
+    private static final String PLACEHOLDER_EXPENSE_TYPE = "\u8bf7\u9009\u62e9\u8d39\u7528\u7c7b\u578b";
+    private static final String PLACEHOLDER_BUSINESS_SCENARIO = "\u8bf7\u9009\u62e9\u4e1a\u52a1\u573a\u666f";
+    private static final String PLACEHOLDER_AMOUNT = "\u8bf7\u8f93\u5165\u91d1\u989d";
+    private static final String LABEL_FULL_PAYMENT = "\u5168\u989d\u4ed8\u6b3e";
+    private static final String LABEL_PREPAY_UNBILLED = "\u9884\u4ed8\u672a\u5230\u7968";
+
     private static final Map<String, String> SYSTEM_FIELD_KEYS = Map.of(
             SYSTEM_EXPENSE_TYPE, FIELD_EXPENSE_TYPE_CODE,
             SYSTEM_BUSINESS_SCENARIO, FIELD_BUSINESS_SCENARIO,
@@ -81,7 +89,7 @@ public class ExpenseDetailSystemFieldSupport {
             Map<String, Object> raw = objectMapper.readValue(schemaJson, new TypeReference<LinkedHashMap<String, Object>>() {});
             return normalizeSchema(raw, detailType);
         } catch (Exception ex) {
-            throw new IllegalStateException("璐圭敤鏄庣粏琛ㄥ崟 schema 瑙ｆ瀽澶辫触", ex);
+            throw new IllegalStateException(MESSAGE_READ_SCHEMA_FAILED, ex);
         }
     }
 
@@ -89,7 +97,7 @@ public class ExpenseDetailSystemFieldSupport {
         try {
             return objectMapper.writeValueAsString(normalizeSchema(schema, detailType));
         } catch (Exception ex) {
-            throw new IllegalStateException("璐圭敤鏄庣粏琛ㄥ崟 schema 搴忓垪鍖栧け璐?", ex);
+            throw new IllegalStateException(MESSAGE_WRITE_SCHEMA_FAILED, ex);
         }
     }
 
@@ -224,23 +232,23 @@ public class ExpenseDetailSystemFieldSupport {
 
         if (Objects.equals(systemFieldCode, SYSTEM_EXPENSE_TYPE)) {
             props.put("controlType", CONTROL_TYPE_SELECT);
-            props.put("placeholder", "璇烽€夋嫨璐圭敤绫诲瀷");
+            props.put("placeholder", PLACEHOLDER_EXPENSE_TYPE);
             props.put("options", loadExpenseTypeOptionMaps());
             return props;
         }
         if (Objects.equals(systemFieldCode, SYSTEM_BUSINESS_SCENARIO)) {
             props.put("controlType", CONTROL_TYPE_SELECT);
-            props.put("placeholder", "璇烽€夋嫨涓氬姟鍦烘櫙");
+            props.put("placeholder", PLACEHOLDER_BUSINESS_SCENARIO);
             props.put("options", Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)
-                    ? List.of(option("鍒扮エ鍏ㄩ儴鏀粯", MODE_INVOICE_FULL_PAYMENT), option("棰勪粯鏈埌绁?", MODE_PREPAY_UNBILLED))
-                    : List.of(option("鍒扮エ鍏ㄩ儴鏀粯", MODE_INVOICE_FULL_PAYMENT)));
+                    ? List.of(option(LABEL_FULL_PAYMENT, MODE_INVOICE_FULL_PAYMENT), option(LABEL_PREPAY_UNBILLED, MODE_PREPAY_UNBILLED))
+                    : List.of(option(LABEL_FULL_PAYMENT, MODE_INVOICE_FULL_PAYMENT)));
             return props;
         }
         if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)
                 || Objects.equals(systemFieldCode, SYSTEM_ACTUAL_PAYMENT_AMOUNT)
                 || Objects.equals(systemFieldCode, SYSTEM_PENDING_WRITE_OFF_AMOUNT)) {
             props.put("controlType", CONTROL_TYPE_AMOUNT);
-            props.put("placeholder", "璇疯緭鍏ラ噾棰?");
+            props.put("placeholder", PLACEHOLDER_AMOUNT);
             props.put("precision", 2);
             if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
                 if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)) {
@@ -299,13 +307,13 @@ public class ExpenseDetailSystemFieldSupport {
 
     private String systemFieldLabel(String systemFieldCode) {
         return switch (systemFieldCode) {
-            case SYSTEM_EXPENSE_TYPE -> "璐圭敤绫诲瀷";
-            case SYSTEM_BUSINESS_SCENARIO -> "涓氬姟鍦烘櫙";
-            case SYSTEM_INVOICE_AMOUNT -> "鍒扮エ閲戦";
-            case SYSTEM_ACTUAL_PAYMENT_AMOUNT -> "浠樻閲戦";
-            case SYSTEM_INVOICE_ATTACHMENTS -> "涓婁紶鍙戠エ";
-            case SYSTEM_PENDING_WRITE_OFF_AMOUNT -> "鏈埌绁ㄩ噾棰?";
-            default -> "绯荤粺瀛楁";
+            case SYSTEM_EXPENSE_TYPE -> "\u8d39\u7528\u7c7b\u578b";
+            case SYSTEM_BUSINESS_SCENARIO -> "\u4e1a\u52a1\u573a\u666f";
+            case SYSTEM_INVOICE_AMOUNT -> "\u53d1\u7968\u91d1\u989d";
+            case SYSTEM_ACTUAL_PAYMENT_AMOUNT -> "\u5b9e\u9645\u652f\u4ed8\u91d1\u989d";
+            case SYSTEM_INVOICE_ATTACHMENTS -> "\u53d1\u7968\u9644\u4ef6";
+            case SYSTEM_PENDING_WRITE_OFF_AMOUNT -> "\u5f85\u6838\u9500\u91d1\u989d";
+            default -> "\u672a\u547d\u540d\u5b57\u6bb5";
         };
     }
 

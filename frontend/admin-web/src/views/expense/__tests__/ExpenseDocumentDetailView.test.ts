@@ -201,16 +201,16 @@ function buildDocumentDetail(
     expenseDetails: [
       {
         detailNo: 'D001',
-        detailType: 'COMMON',
-        detailTypeLabel: '普通报销',
+        detailType: 'NORMAL_REIMBURSEMENT',
+        detailTypeLabel: '乱码标签',
         detailTitle: '住宿费',
         sortOrder: 1,
         createdAt: '2026-04-01 10:10:00'
       },
       {
         detailNo: 'D002',
-        detailType: 'COMMON',
-        detailTypeLabel: '普通报销',
+        detailType: 'NORMAL_REIMBURSEMENT',
+        detailTypeLabel: '乱码标签',
         detailTitle: '交通费',
         sortOrder: 2,
         createdAt: '2026-04-01 10:20:00'
@@ -297,6 +297,8 @@ describe('ExpenseDocumentDetailView', () => {
     const detailCards = wrapper.findAll('[data-testid="expense-detail-card"]')
 
     expect(detailCards).toHaveLength(2)
+    expect(wrapper.text()).toContain('普通报销')
+    expect(wrapper.text()).not.toContain('乱码标签')
 
     await detailCards[0]!.trigger('click')
     await flushPromises()

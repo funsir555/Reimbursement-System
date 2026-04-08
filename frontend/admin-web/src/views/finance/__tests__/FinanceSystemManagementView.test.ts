@@ -236,4 +236,46 @@ describe('FinanceSystemManagementView', () => {
 
     wrapper.unmount()
   })
+
+  it('normalizes enabledYearMonth before submitting create task', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      wizardForm: {
+        createMode: 'BLANK' | 'REFERENCE'
+        targetCompanyId: string
+        enabledYearMonth: string
+        templateCode?: string
+        supervisorUserId: number
+        subjectCodeScheme?: string
+      }
+      buildPayload: () => {
+        enabledYearMonth: string
+      }
+      submitCreateTask: () => Promise<void>
+    }
+
+    vm.wizardForm.createMode = 'BLANK'
+    vm.wizardForm.targetCompanyId = 'COMPANY_B'
+    vm.wizardForm.enabledYearMonth = ' 2022-11 '
+    vm.wizardForm.templateCode = 'AS_2007_ENTERPRISE'
+    vm.wizardForm.supervisorUserId = 2
+    vm.wizardForm.subjectCodeScheme = '4-2-2-2'
+
+    expect(vm.buildPayload().enabledYearMonth).toBe('2022-11')
+
+    await vm.submitCreateTask()
+    await flushPromises()
+
+    expect(mocks.financeSystemManagementApi.createAccountSet).toHaveBeenCalledWith({
+      createMode: 'BLANK',
+      referenceCompanyId: undefined,
+      targetCompanyId: 'COMPANY_B',
+      enabledYearMonth: '2022-11',
+      templateCode: 'AS_2007_ENTERPRISE',
+      supervisorUserId: 2,
+      subjectCodeScheme: '4-2-2-2'
+    })
+
+    wrapper.unmount()
+  })
 })

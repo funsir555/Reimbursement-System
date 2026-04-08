@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="expense-wb-page expense-wb-page--detail detail-page space-y-6">
     <section class="expense-wb-hero detail-hero" data-testid="detail-hero">
       <div class="expense-wb-hero__content detail-hero__content">
@@ -68,7 +68,9 @@
                   <div>
                     <div class="flex flex-wrap items-center gap-2">
                       <p class="text-base font-semibold text-slate-800">{{ item.detailTitle || item.detailNo }}</p>
-                      <el-tag effect="plain">{{ item.detailTypeLabel }}</el-tag>
+                      <el-tag effect="plain">
+                        {{ resolveExpenseDetailTypeLabel(item.detailType, item.detailTypeLabel) }}
+                      </el-tag>
                       <el-tag v-if="item.enterpriseModeLabel" type="warning" effect="plain">{{ item.enterpriseModeLabel }}</el-tag>
                       <el-tag v-if="activeExpenseDetailNo === item.detailNo" type="primary" effect="plain">发票工作区已展开</el-tag>
                     </div>
@@ -1096,6 +1098,12 @@ function formatAttachmentSize(value?: number) {
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
+}
+
+function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
+  if (detailType === 'ENTERPRISE_TRANSACTION') return '企业往来'
+  if (detailType === 'NORMAL_REIMBURSEMENT') return '普通报销'
+  return fallback || '费用明细'
 }
 </script>
 

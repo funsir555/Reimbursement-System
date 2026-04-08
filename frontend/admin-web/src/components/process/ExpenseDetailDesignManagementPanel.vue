@@ -60,7 +60,7 @@
             <p class="expense-wb-choice-card__title">{{ item.detailName }}</p>
             <p class="expense-wb-choice-card__subtitle">{{ item.detailCode }}</p>
           </div>
-          <el-tag effect="plain">{{ item.detailTypeLabel }}</el-tag>
+          <el-tag effect="plain">{{ resolveDetailTypeLabel(item.detailType, item.detailTypeLabel) }}</el-tag>
         </div>
 
         <div class="expense-wb-choice-card__body">
@@ -75,6 +75,7 @@
         <div class="expense-wb-choice-card__footer">
           <el-button text type="danger" @click="removeItem(item)">删除</el-button>
           <el-button type="primary" text @click="goEdit(item.id)">编辑</el-button>
+          <el-button text data-testid="expense-detail-copy-button" @click="goCopy(item.id)">复制模板</el-button>
         </div>
       </article>
     </div>
@@ -146,7 +147,7 @@ const detailDesignStats = computed(() => [
   {
     label: '当前筛选',
     value: filteredItems.value.length,
-    hint: '经过关键词和类型过滤后的结果数量',
+    hint: '经过关键字和类型过滤后的结果数量',
     icon: Search,
     tone: 'rose'
   }
@@ -168,12 +169,25 @@ async function loadItems() {
   }
 }
 
+function resolveDetailTypeLabel(detailType?: string, fallback?: string) {
+  if (detailType === 'ENTERPRISE_TRANSACTION') return '企业往来'
+  if (detailType === 'NORMAL_REIMBURSEMENT') return '普通报销'
+  return fallback || '费用明细'
+}
+
 function goCreate() {
   void router.push({ name: 'expense-workbench-process-expense-detail-create' })
 }
 
 function goEdit(id: number) {
   void router.push({ name: 'expense-workbench-process-expense-detail-edit', params: { id } })
+}
+
+function goCopy(id: number) {
+  void router.push({
+    name: 'expense-workbench-process-expense-detail-create',
+    query: { copyFromId: String(id) }
+  })
 }
 
 async function removeItem(item: ProcessExpenseDetailDesignSummary) {
