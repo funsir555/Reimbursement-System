@@ -18,6 +18,8 @@ public class AsyncTaskRecord {
 
     private Long userId;
 
+    private String companyId;
+
     private String taskType;
 
     private String businessType;

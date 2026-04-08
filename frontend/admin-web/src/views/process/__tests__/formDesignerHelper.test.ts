@@ -48,6 +48,7 @@ describe('formDesignerHelper', () => {
     expect(block.kind).toBe('BUSINESS_COMPONENT')
     expect(block.props.componentCode).toBe(BUSINESS_COMPONENT_DEFINITIONS[0].code)
     expect(block.span).toBe(1)
+    expect(paletteItem.label).toBe('收款单位')
   })
 
   it('includes payment company in business component palette', () => {

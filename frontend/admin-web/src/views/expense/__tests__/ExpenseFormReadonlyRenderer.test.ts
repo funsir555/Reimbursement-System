@@ -30,6 +30,41 @@ function createBusinessBlock(fieldKey: string, label: string, componentCode: str
 }
 
 describe('ExpenseFormReadonlyRenderer', () => {
+  it('renders counterparty label instead of raw supplier code', () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createBusinessBlock('counterparty', '收款单位', 'counterparty')
+          ]
+        },
+        formData: {
+          counterparty: 'VEN-001'
+        },
+        vendorOptionMap: {
+          'VEN-001': {
+            value: 'VEN-001',
+            label: '上海供应商',
+            secondaryLabel: 'VEN-001 / SH',
+            cVenCode: 'VEN-001',
+            cVenName: '上海供应商'
+          }
+        }
+      },
+      global: {
+        stubs: {
+          'el-tag': {
+            template: '<span><slot /></span>'
+          }
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('上海供应商')
+    expect(wrapper.text()).not.toContain('VEN-001')
+  })
+
   it('renders payee label instead of raw encoded value', () => {
     const wrapper = mount(ExpenseFormReadonlyRenderer, {
       props: {
@@ -62,6 +97,50 @@ describe('ExpenseFormReadonlyRenderer', () => {
 
     expect(wrapper.text()).toContain('张三')
     expect(wrapper.text()).not.toContain('USER:2')
+  })
+
+  it('renders snapshot payee and payee-account values without relying on lookup maps', () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createBusinessBlock('payee', '收款人', 'payee'),
+            createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+          ]
+        },
+        formData: {
+          payee: {
+            value: 'PERSONAL_PAYEE:张三',
+            label: '张三',
+            sourceType: 'PERSONAL_PRIVATE_PAYEE',
+            sourceCode: '张三'
+          },
+          payeeAccount: {
+            value: 'USER_ACCOUNT:8',
+            label: '张三 / 招商银行',
+            sourceType: 'USER',
+            ownerName: '张三',
+            accountName: '张三',
+            accountNoMasked: '6222 **** 8888',
+            bankName: '招商银行上海分行'
+          }
+        }
+      },
+      global: {
+        stubs: {
+          'el-tag': {
+            template: '<span><slot /></span>'
+          }
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('张三')
+    expect(wrapper.text()).toContain('6222 **** 8888')
+    expect(wrapper.text()).toContain('招商银行上海分行')
+    expect(wrapper.text()).not.toContain('PERSONAL_PAYEE:张三')
+    expect(wrapper.text()).not.toContain('USER_ACCOUNT:8')
   })
 
   it('renders payee account as a card with owner, masked account and bank', () => {

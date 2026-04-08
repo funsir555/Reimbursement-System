@@ -139,6 +139,8 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private static final String PAYMENT_COMPANY_COMPONENT_CODE = "payment-company";
     private static final String PAYEE_COMPONENT_CODE = "payee";
     private static final String COUNTERPARTY_COMPONENT_CODE = "counterparty";
+    private static final String PERSONAL_PAYEE_VALUE_PREFIX = "PERSONAL_PAYEE:";
+    private static final String PAYEE_SOURCE_PERSONAL = "PERSONAL_PRIVATE_PAYEE";
     private static final String CONTROL_TYPE_DATE = "DATE";
     private static final Set<String> PAYMENT_DATE_LABELS = Set.of("鏀粯鏃ユ湡", "浠樻鏃ユ湡");
     private static final String TEMPLATE_SCOPE_TYPE_TAG_ARCHIVE = "TAG_ARCHIVE";
@@ -339,16 +341,20 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     @Override
-    public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword) {
-        return financeVendorService.listActiveVendorOptions(requireCurrentUserCompanyId(userId), keyword);
+    public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
+        return financeVendorService.listActiveVendorOptions(requireCurrentUserCompanyId(userId), keyword, includeDisabled);
     }
 
     @Override
-    public List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword) {
-        String currentCompanyId = requireCurrentUserCompanyId(userId);
+    public List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly) {
         String normalizedKeyword = trimToNull(keyword);
+        if (Boolean.TRUE.equals(personalOnly)) {
+            return listPersonalPayeeOptions(userId, normalizedKeyword);
+        }
+
+        String currentCompanyId = requireCurrentUserCompanyId(userId);
         List<ExpenseCreatePayeeOptionVO> options = new ArrayList<>();
-        financeVendorService.listActiveVendorOptions(currentCompanyId, normalizedKeyword).forEach(item -> {
+        financeVendorService.listActiveVendorOptions(currentCompanyId, normalizedKeyword, false).forEach(item -> {
             ExpenseCreatePayeeOptionVO option = new ExpenseCreatePayeeOptionVO();
             option.setValue("VENDOR:" + item.getCVenCode());
             option.setLabel(item.getCVenName());
@@ -378,9 +384,23 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     @Override
-    public List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(Long userId, String keyword) {
-        String currentCompanyId = requireCurrentUserCompanyId(userId);
+    public List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
+            Long userId,
+            String keyword,
+            String linkageMode,
+            String payeeName,
+            String counterpartyCode
+    ) {
         String normalizedKeyword = trimToNull(keyword);
+        String normalizedLinkageMode = trimToNull(linkageMode);
+        if ("EMPLOYEE".equalsIgnoreCase(normalizedLinkageMode)) {
+            return listPersonalPayeeAccountOptions(userId, normalizedKeyword, trimToNull(payeeName));
+        }
+        if ("ENTERPRISE".equalsIgnoreCase(normalizedLinkageMode)) {
+            return listCounterpartyPayeeAccountOptions(userId, normalizedKeyword, trimToNull(counterpartyCode));
+        }
+
+        String currentCompanyId = requireCurrentUserCompanyId(userId);
         List<ExpenseCreatePayeeAccountOptionVO> options = new ArrayList<>();
 
         QueryWrapper<FinanceVendor> vendorQuery = new QueryWrapper<>();
@@ -456,6 +476,116 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         }
 
         return options;
+    }
+
+    private List<ExpenseCreatePayeeOptionVO> listPersonalPayeeOptions(Long userId, String normalizedKeyword) {
+        List<UserBankAccount> accounts = userBankAccountMapper.selectList(
+                Wrappers.<UserBankAccount>lambdaQuery()
+                        .eq(UserBankAccount::getUserId, userId)
+                        .eq(UserBankAccount::getStatus, 1)
+                        .orderByDesc(UserBankAccount::getDefaultAccount)
+                        .orderByAsc(UserBankAccount::getId)
+        );
+        LinkedHashMap<String, ExpenseCreatePayeeOptionVO> options = new LinkedHashMap<>();
+        for (UserBankAccount account : accounts) {
+            String accountName = trimToNull(account.getAccountName());
+            if (accountName == null) {
+                continue;
+            }
+            if (!matchesKeyword(normalizedKeyword, accountName, account.getAccountNo(), account.getBankName(), account.getBranchName())) {
+                continue;
+            }
+            options.computeIfAbsent(accountName, key -> {
+                ExpenseCreatePayeeOptionVO option = new ExpenseCreatePayeeOptionVO();
+                option.setValue(PERSONAL_PAYEE_VALUE_PREFIX + key);
+                option.setLabel(key);
+                option.setSourceType(PAYEE_SOURCE_PERSONAL);
+                option.setSourceCode(key);
+                option.setSecondaryLabel("个人中心对私账户");
+                return option;
+            });
+        }
+        return new ArrayList<>(options.values());
+    }
+
+    private List<ExpenseCreatePayeeAccountOptionVO> listPersonalPayeeAccountOptions(
+            Long userId,
+            String normalizedKeyword,
+            String payeeName
+    ) {
+        String normalizedPayeeName = normalizePayeeName(payeeName);
+        List<UserBankAccount> accounts = userBankAccountMapper.selectList(
+                Wrappers.<UserBankAccount>lambdaQuery()
+                        .eq(UserBankAccount::getUserId, userId)
+                        .eq(UserBankAccount::getStatus, 1)
+                        .orderByDesc(UserBankAccount::getDefaultAccount)
+                        .orderByAsc(UserBankAccount::getId)
+        );
+        return accounts.stream()
+                .filter(account -> normalizedPayeeName == null || Objects.equals(trimToNull(account.getAccountName()), normalizedPayeeName))
+                .filter(account -> matchesKeyword(
+                        normalizedKeyword,
+                        account.getAccountName(),
+                        account.getAccountNo(),
+                        account.getBankName(),
+                        account.getBranchName()
+                ))
+                .map(account -> {
+                    ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
+                    option.setValue("USER_ACCOUNT:" + account.getId());
+                    option.setLabel(buildAccountLabel(account.getAccountName(), account.getBankName()));
+                    option.setSourceType("USER");
+                    option.setOwnerCode(String.valueOf(userId));
+                    option.setOwnerName(account.getAccountName());
+                    option.setBankName(account.getBankName());
+                    option.setAccountName(account.getAccountName());
+                    option.setAccountNoMasked(maskAccountNo(account.getAccountNo()));
+                    option.setSecondaryLabel(trimToNull(account.getBranchName()) != null ? account.getBranchName() : "个人中心对私账户");
+                    return option;
+                })
+                .toList();
+    }
+
+    private List<ExpenseCreatePayeeAccountOptionVO> listCounterpartyPayeeAccountOptions(
+            Long userId,
+            String normalizedKeyword,
+            String counterpartyCode
+    ) {
+        String normalizedVendorCode = trimToNull(counterpartyCode);
+        if (normalizedVendorCode == null) {
+            return Collections.emptyList();
+        }
+        String currentCompanyId = requireCurrentUserCompanyId(userId);
+        FinanceVendor vendor = financeVendorMapper.selectOne(
+                Wrappers.<FinanceVendor>lambdaQuery()
+                        .eq(FinanceVendor::getCompanyId, currentCompanyId)
+                        .eq(FinanceVendor::getCVenCode, normalizedVendorCode)
+                        .last("limit 1")
+        );
+        if (vendor == null || trimToNull(vendor.getCVenAccount()) == null) {
+            return Collections.emptyList();
+        }
+        if (!matchesKeyword(
+                normalizedKeyword,
+                vendor.getCVenName(),
+                vendor.getCVenAbbName(),
+                vendor.getCVenBank(),
+                vendor.getCVenAccount(),
+                vendor.getCVenBankNub()
+        )) {
+            return Collections.emptyList();
+        }
+        ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
+        option.setValue("VENDOR:" + vendor.getCVenCode());
+        option.setLabel(buildAccountLabel(vendor.getCVenName(), vendor.getCVenBank()));
+        option.setSourceType("VENDOR");
+        option.setOwnerCode(vendor.getCVenCode());
+        option.setOwnerName(vendor.getCVenName());
+        option.setBankName(vendor.getCVenBank());
+        option.setAccountName(firstNonBlank(vendor.getReceiptAccountName(), vendor.getCVenName()));
+        option.setAccountNoMasked(maskAccountNo(vendor.getCVenAccount()));
+        option.setSecondaryLabel(buildVendorAccountSecondary(vendor));
+        return List.of(option);
     }
 
     @Override
@@ -3361,7 +3491,7 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             if (fieldKey == null) {
                 continue;
             }
-            String value = firstStringValue(formData.get(fieldKey));
+            String value = firstLookupValue(formData.get(fieldKey));
             if (value != null) {
                 return value;
             }
@@ -3438,6 +3568,9 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         if (normalized == null) {
             return;
         }
+        if (normalized.startsWith(PERSONAL_PAYEE_VALUE_PREFIX)) {
+            return;
+        }
         if (normalized.startsWith("USER:")) {
             Long userId = toLong(normalized.substring("USER:".length()));
             if (userId != null) {
@@ -3474,6 +3607,9 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         String normalized = trimToNull(value);
         if (normalized == null) {
             return null;
+        }
+        if (normalized.startsWith(PERSONAL_PAYEE_VALUE_PREFIX)) {
+            return trimToNull(normalized.substring(PERSONAL_PAYEE_VALUE_PREFIX.length()));
         }
         if (normalized.startsWith("USER:")) {
             Long userId = toLong(normalized.substring("USER:".length()));
@@ -3538,14 +3674,14 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     private void collectStringValues(Set<String> result, Object value) {
         if (value instanceof List<?> items) {
             for (Object item : items) {
-                String normalized = trimToNull(item == null ? null : String.valueOf(item));
+                String normalized = firstLookupValue(item);
                 if (normalized != null) {
                     result.add(normalized);
                 }
             }
             return;
         }
-        String normalized = trimToNull(value == null ? null : String.valueOf(value));
+        String normalized = firstLookupValue(value);
         if (normalized != null) {
             result.add(normalized);
         }
@@ -3561,6 +3697,50 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             }
             return null;
         }
+        return trimToNull(value == null ? null : String.valueOf(value));
+    }
+
+    private String firstLookupValue(Object value) {
+        if (value instanceof List<?> items) {
+            for (Object item : items) {
+                String normalized = extractLookupValue(item);
+                if (normalized != null) {
+                    return normalized;
+                }
+            }
+            return null;
+        }
+        return extractLookupValue(value);
+    }
+
+    private String extractLookupValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            String normalized = firstNonBlank(
+                    trimObjectToNull(map.get("value")),
+                    trimObjectToNull(map.get("code")),
+                    trimObjectToNull(map.get("id")),
+                    trimObjectToNull(map.get("sourceCode"))
+            );
+            if (normalized != null) {
+                return normalized;
+            }
+            return trimObjectToNull(map.get("label"));
+        }
+        return trimToNull(value == null ? null : String.valueOf(value));
+    }
+
+    private String normalizePayeeName(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return null;
+        }
+        if (normalized.startsWith(PERSONAL_PAYEE_VALUE_PREFIX)) {
+            return trimToNull(normalized.substring(PERSONAL_PAYEE_VALUE_PREFIX.length()));
+        }
+        return normalized;
+    }
+
+    private String trimObjectToNull(Object value) {
         return trimToNull(value == null ? null : String.valueOf(value));
     }
 

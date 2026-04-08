@@ -13,13 +13,13 @@ public interface FinanceVendorService {
 
     FinanceVendorDetailVO getVendorDetail(String companyId, String vendorCode);
 
-    FinanceVendorDetailVO createVendor(String companyId, FinanceVendorSaveDTO dto, String operatorName);
+    FinanceVendorDetailVO createVendor(String companyId, FinanceVendorSaveDTO dto, String operatorName, boolean paymentInfoRequired);
 
-    FinanceVendorDetailVO createVendor(Long currentUserId, FinanceVendorSaveDTO dto, String operatorName);
+    FinanceVendorDetailVO createVendor(Long currentUserId, FinanceVendorSaveDTO dto, String operatorName, boolean paymentInfoRequired);
 
-    FinanceVendorDetailVO updateVendor(String companyId, String vendorCode, FinanceVendorSaveDTO dto, String operatorName);
+    FinanceVendorDetailVO updateVendor(String companyId, String vendorCode, FinanceVendorSaveDTO dto, String operatorName, boolean paymentInfoRequired);
 
     Boolean disableVendor(String companyId, String vendorCode, String operatorName);
 
-    List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String companyId, String keyword);
+    List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String companyId, String keyword, Boolean includeDisabled);
 }

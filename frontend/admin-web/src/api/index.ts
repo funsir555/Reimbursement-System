@@ -213,6 +213,83 @@ export interface FinanceContextMeta {
   defaultCompanyId?: string
 }
 
+export interface FinanceAccountSetTemplateSummary {
+  templateCode: string
+  templateName: string
+  accountingStandard?: string
+  level1SubjectCount: number
+  commonSubjectCount: number
+}
+
+export interface FinanceAccountSetReferenceOption {
+  companyId: string
+  companyName: string
+  templateCode: string
+  templateName: string
+  enabledYearMonth?: string
+  subjectCodeScheme?: string
+  label: string
+}
+
+export interface FinanceAccountSetOption {
+  value: string
+  label: string
+}
+
+export interface FinanceAccountSetMeta {
+  companyOptions: FinanceCompanyOption[]
+  supervisorOptions: FinanceAccountSetOption[]
+  templateOptions: FinanceAccountSetTemplateSummary[]
+  referenceOptions: FinanceAccountSetReferenceOption[]
+  defaultSubjectCodeScheme: string
+}
+
+export interface FinanceAccountSetSummary {
+  companyId: string
+  companyName: string
+  status: string
+  statusLabel: string
+  enabledYearMonth?: string
+  templateCode?: string
+  templateName?: string
+  supervisorUserId?: number
+  supervisorName?: string
+  createMode?: string
+  referenceCompanyId?: string
+  referenceCompanyName?: string
+  subjectCodeScheme?: string
+  subjectCount?: number
+  lastTaskNo?: string
+  lastTaskStatus?: string
+  lastTaskProgress?: number
+  lastTaskMessage?: string
+  updatedAt?: string
+}
+
+export interface FinanceAccountSetCreatePayload {
+  createMode: 'BLANK' | 'REFERENCE'
+  referenceCompanyId?: string
+  targetCompanyId: string
+  enabledYearMonth: string
+  templateCode?: string
+  supervisorUserId: number
+  subjectCodeScheme?: string
+}
+
+export interface FinanceAccountSetTaskStatus {
+  taskNo: string
+  companyId?: string
+  taskType?: string
+  status: string
+  progress: number
+  resultMessage?: string
+  accountSetStatus?: string
+  finished: boolean
+  createdAt?: string
+  updatedAt?: string
+  finishedAt?: string
+}
+
 export interface CompanySavePayload {
   companyId?: string
   companyCode?: string
@@ -791,6 +868,11 @@ export interface FinanceVendorDetail extends FinanceVendorSummary {
   cVenAddress?: string
   cVenRegCode?: string
   cVenBankNub?: string
+  receiptAccountName?: string
+  receiptBankProvince?: string
+  receiptBankCity?: string
+  receiptBranchCode?: string
+  receiptBranchName?: string
   cVenHand?: string
   cVenEmail?: string
   cMemo?: string
@@ -866,6 +948,26 @@ export interface FinanceVendorDetail extends FinanceVendorSummary {
 export type FinanceVendorSavePayload = Partial<FinanceVendorDetail> & {
   cVenCode?: string
   cVenName: string
+}
+
+export interface FinanceBankOption {
+  bankCode: string
+  bankName: string
+  value: string
+  label: string
+}
+
+export interface FinanceBankBranchOption {
+  id: number
+  bankCode: string
+  bankName: string
+  province: string
+  city: string
+  branchCode: string
+  branchName: string
+  cnapsCode?: string
+  value: string
+  label: string
 }
 
 export interface FinanceCustomerSummary {
@@ -975,6 +1077,20 @@ export interface ExpenseCreatePayeeAccountOption {
   accountName?: string
   accountNoMasked?: string
   secondaryLabel?: string
+}
+
+export interface ExpenseCreatePayeeOptionsParams {
+  keyword?: string
+  personalOnly?: boolean
+}
+
+export type ExpenseCreatePayeeAccountLinkageMode = 'EMPLOYEE' | 'ENTERPRISE'
+
+export interface ExpenseCreatePayeeAccountOptionsParams {
+  keyword?: string
+  linkageMode?: ExpenseCreatePayeeAccountLinkageMode
+  payeeName?: string
+  counterpartyCode?: string
 }
 
 export interface ExpenseCreateTemplateDetail {
@@ -2120,20 +2236,44 @@ export interface ProcessExpenseTypeStatusPayload {
   status: number
 }
 
-export interface BankAccount {
+export interface UserBankAccountRecord {
   id: number
+  bankCode?: string
   bankName: string
+  province?: string
+  city?: string
+  branchCode?: string
   branchName?: string
+  cnapsCode?: string
   accountName: string
+  accountNo: string
   accountNoMasked: string
   accountType: string
   defaultAccount: boolean
-  status: string
+  status: number
+  statusLabel: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface UserBankAccountSavePayload {
+  accountName: string
+  accountNo: string
+  accountType?: string
+  bankName: string
+  bankCode?: string
+  province: string
+  city: string
+  branchName: string
+  branchCode?: string
+  cnapsCode?: string
+  defaultAccount?: number
+  status?: number
 }
 
 export interface PersonalCenterData {
   user: UserProfile
-  bankAccounts: BankAccount[]
+  bankAccounts: UserBankAccountRecord[]
 }
 
 export interface ChangePasswordPayload {
@@ -2732,6 +2872,18 @@ export const financeApi = {
     downloadBinaryFile(`/auth/finance/vouchers/export${buildQueryString(params)}`, '凭证查询.csv')
 }
 
+export const financeSystemManagementApi = {
+  getMeta: () => request<FinanceAccountSetMeta>('/auth/finance/system-management/meta'),
+  listAccountSets: () => request<FinanceAccountSetSummary[]>('/auth/finance/system-management/account-sets'),
+  createAccountSet: (payload: FinanceAccountSetCreatePayload) =>
+    request<FinanceAccountSetTaskStatus>('/auth/finance/system-management/account-sets/create', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  getTaskStatus: (taskNo: string) =>
+    request<FinanceAccountSetTaskStatus>(`/auth/finance/system-management/tasks/${encodeURIComponent(taskNo)}`)
+}
+
 export const financeArchiveApi = {
   listCustomers: (params: { companyId: string; keyword?: string; includeDisabled?: boolean }) =>
     request<FinanceCustomerSummary[]>(`/auth/finance/archives/customers${buildQueryString(params)}`),
@@ -2780,6 +2932,20 @@ export const financeArchiveApi = {
 
 export const financeContextApi = {
   getMeta: () => request<FinanceContextMeta>('/auth/finance/context/meta')
+}
+
+export const financeBankApi = {
+  listBanks: (keyword?: string) =>
+    request<FinanceBankOption[]>(`/auth/finance/banks${buildQueryString({ keyword })}`),
+  listBankBranches: (params: {
+    bankCode?: string
+    province?: string
+    city?: string
+    keyword?: string
+  }) =>
+    request<FinanceBankBranchOption[]>(`/auth/finance/bank-branches${buildQueryString(params)}`),
+  lookupBranchByCnaps: (cnapsCode: string) =>
+    request<FinanceBankBranchOption | null>(`/auth/finance/bank-branches/lookup-by-cnaps${buildQueryString({ cnapsCode })}`)
 }
 
 export const fixedAssetApi = {
@@ -2882,17 +3048,17 @@ export const expenseCreateApi = {
       timeoutMs: 10000,
       timeoutMessage: '加载模板详情超时，请稍后重试'
     }),
-  listVendorOptions: (keyword?: string) =>
-    request<ExpenseCreateVendorOption[]>(`/auth/expenses/create/vendors/options${buildQueryString({ keyword })}`),
+  listVendorOptions: (keyword?: string, includeDisabled?: boolean) =>
+    request<ExpenseCreateVendorOption[]>(`/auth/expenses/create/vendors/options${buildQueryString({ keyword, includeDisabled })}`),
   createVendor: (payload: FinanceVendorSavePayload) =>
     request<FinanceVendorDetail>('/auth/expenses/create/vendors', {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
-  listPayeeOptions: (keyword?: string) =>
-    request<ExpenseCreatePayeeOption[]>(`/auth/expenses/create/payees/options${buildQueryString({ keyword })}`),
-  listPayeeAccountOptions: (keyword?: string) =>
-    request<ExpenseCreatePayeeAccountOption[]>(`/auth/expenses/create/payee-accounts/options${buildQueryString({ keyword })}`),
+  listPayeeOptions: (params: ExpenseCreatePayeeOptionsParams = {}) =>
+    request<ExpenseCreatePayeeOption[]>(`/auth/expenses/create/payees/options${buildQueryString(params)}`),
+  listPayeeAccountOptions: (params: ExpenseCreatePayeeAccountOptionsParams = {}) =>
+    request<ExpenseCreatePayeeAccountOption[]>(`/auth/expenses/create/payee-accounts/options${buildQueryString(params)}`),
   uploadAttachment: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -3100,6 +3266,26 @@ export const archiveAgentApi = {
 
 export const profileApi = {
   getOverview: () => request<PersonalCenterData>('/auth/user-center/profile'),
+  listBankAccounts: () => request<UserBankAccountRecord[]>('/auth/user-center/bank-accounts'),
+  createBankAccount: (payload: UserBankAccountSavePayload) =>
+    request<UserBankAccountRecord>('/auth/user-center/bank-accounts', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateBankAccount: (id: number, payload: UserBankAccountSavePayload) =>
+    request<UserBankAccountRecord>(`/auth/user-center/bank-accounts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  updateBankAccountStatus: (id: number, status: number) =>
+    request<boolean>(`/auth/user-center/bank-accounts/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status })
+    }),
+  setDefaultBankAccount: (id: number) =>
+    request<boolean>(`/auth/user-center/bank-accounts/${id}/default`, {
+      method: 'POST'
+    }),
   changePassword: (payload: ChangePasswordPayload) =>
     request<boolean>('/auth/user-center/password', {
       method: 'POST',

@@ -146,6 +146,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type {
+  ExpenseCreateVendorOption,
   ExpenseRelatedDocumentValue,
   ExpenseCreatePayeeAccountOption,
   ExpenseCreatePayeeOption,
@@ -175,6 +176,7 @@ const props = withDefaults(defineProps<{
   departmentOptions?: ProcessFormOption[]
   detailType?: string
   defaultBusinessScenario?: string
+  vendorOptionMap?: Record<string, ExpenseCreateVendorOption>
   payeeOptionMap?: Record<string, ExpenseCreatePayeeOption>
   payeeAccountOptionMap?: Record<string, ExpenseCreatePayeeAccountOption>
 }>(), {
@@ -182,6 +184,7 @@ const props = withDefaults(defineProps<{
   departmentOptions: () => [],
   detailType: '',
   defaultBusinessScenario: '',
+  vendorOptionMap: () => ({}),
   payeeOptionMap: () => ({}),
   payeeAccountOptionMap: () => ({})
 })
@@ -261,6 +264,10 @@ function businessDisplayLines(block: ProcessFormDesignBlock, rawValue: unknown) 
   }
   if (businessCode(block) === 'undertake-department') {
     return normalizeLines(rawValue).map((item) => departmentMap.value.get(item) || item)
+  }
+  if (businessCode(block) === 'counterparty') {
+    const label = trimToNull(resolveVendorLabel(rawValue))
+    return label ? [label] : []
   }
   if (isRelatedDocumentBlock(block) || isWriteOffDocumentBlock(block)) {
     return []
@@ -378,6 +385,16 @@ function formatAmount(value: unknown) {
     return '--'
   }
   return formatMoney(amount)
+}
+
+function resolveVendorLabel(rawValue: unknown) {
+  const option = resolveVendorOption(rawValue)
+  return option?.label || formatValue(rawValue)
+}
+
+function resolveVendorOption(rawValue: unknown) {
+  const key = resolveLookupKey(rawValue)
+  return key ? props.vendorOptionMap[key] : undefined
 }
 
 function resolvePayeeLabel(rawValue: unknown) {

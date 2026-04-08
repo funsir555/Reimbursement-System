@@ -248,6 +248,14 @@ describe('MainLayout', () => {
     expect(wrapper.find('[data-index="/expense/payment/bank-link"]').exists()).toBe(true)
   })
 
+  it('shows finance system management when the user has the finance system permission', async () => {
+    const wrapper = await mountView(['finance:system_management:view'])
+
+    expect(wrapper.find('[data-submenu="/finance"]').exists()).toBe(true)
+    expect(wrapper.find('[data-index="/finance/system-management"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('财务系统管理')
+  })
+
   it('shows the agent entry when the user has agent permission', async () => {
     const wrapper = await mountView(['agents:view'])
 

@@ -378,6 +378,17 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: 'finance/system-management',
+        name: 'finance-system-management',
+        component: () => import('../views/finance/FinanceSystemManagementView.vue'),
+        meta: {
+          title: '??????',
+          tabTitle: '??????',
+          description: '???????????',
+          permissionCode: 'finance:system_management:view'
+        }
+      },
+      {
         path: 'finance/archives/customers',
         name: 'finance-archives-customers',
         component: () => import('../views/finance/FinanceCustomerArchiveView.vue'),

@@ -3,18 +3,21 @@ import {
   expenseCreateApi,
   type ExpenseCreatePayeeAccountOption,
   type ExpenseCreatePayeeOption,
+  type ExpenseCreateVendorOption,
   type ProcessFormDesignBlock,
   type ProcessFormDesignSchema
 } from '@/api'
 import { getBusinessComponentDefinition } from '@/views/process/formDesignerHelper'
 
 export function useReadonlyPayeeLookups() {
+  const vendorOptionMap = ref<Record<string, ExpenseCreateVendorOption>>({})
   const payeeOptionMap = ref<Record<string, ExpenseCreatePayeeOption>>({})
   const payeeAccountOptionMap = ref<Record<string, ExpenseCreatePayeeAccountOption>>({})
   let syncVersion = 0
 
   async function syncReadonlyPayeeLookups(schema?: ProcessFormDesignSchema | null) {
     const currentVersion = ++syncVersion
+    vendorOptionMap.value = {}
     payeeOptionMap.value = {}
     payeeAccountOptionMap.value = {}
 
@@ -27,11 +30,13 @@ export function useReadonlyPayeeLookups() {
       return
     }
 
+    vendorOptionMap.value = lookups.vendorOptionMap
     payeeOptionMap.value = lookups.payeeOptionMap
     payeeAccountOptionMap.value = lookups.payeeAccountOptionMap
   }
 
   return {
+    vendorOptionMap,
     payeeOptionMap,
     payeeAccountOptionMap,
     syncReadonlyPayeeLookups
@@ -39,25 +44,33 @@ export function useReadonlyPayeeLookups() {
 }
 
 async function loadReadonlyPayeeLookups(schema: ProcessFormDesignSchema) {
+  const needsVendor = hasBusinessComponent(schema, 'counterparty')
   const needsPayee = hasBusinessComponent(schema, 'payee')
   const needsPayeeAccount = hasBusinessComponent(schema, 'payee-account')
 
-  if (!needsPayee && !needsPayeeAccount) {
+  if (!needsVendor && !needsPayee && !needsPayeeAccount) {
     return {
+      vendorOptionMap: {},
       payeeOptionMap: {},
       payeeAccountOptionMap: {}
     }
   }
 
-  const [payeeResult, payeeAccountResult] = await Promise.allSettled([
+  const [vendorResult, payeeResult, payeeAccountResult] = await Promise.allSettled([
+    needsVendor
+      ? expenseCreateApi.listVendorOptions('', true)
+      : Promise.resolve({ data: [] as ExpenseCreateVendorOption[] }),
     needsPayee
-      ? expenseCreateApi.listPayeeOptions('')
+      ? expenseCreateApi.listPayeeOptions({ keyword: '' })
       : Promise.resolve({ data: [] as ExpenseCreatePayeeOption[] }),
     needsPayeeAccount
-      ? expenseCreateApi.listPayeeAccountOptions('')
+      ? expenseCreateApi.listPayeeAccountOptions({ keyword: '' })
       : Promise.resolve({ data: [] as ExpenseCreatePayeeAccountOption[] })
   ])
 
+  if (vendorResult.status === 'rejected') {
+    console.warn('Failed to load readonly vendor options', vendorResult.reason)
+  }
   if (payeeResult.status === 'rejected') {
     console.warn('Failed to load readonly payee options', payeeResult.reason)
   }
@@ -66,6 +79,7 @@ async function loadReadonlyPayeeLookups(schema: ProcessFormDesignSchema) {
   }
 
   return {
+    vendorOptionMap: vendorResult.status === 'fulfilled' ? buildOptionMap(vendorResult.value.data) : {},
     payeeOptionMap: payeeResult.status === 'fulfilled' ? buildOptionMap(payeeResult.value.data) : {},
     payeeAccountOptionMap: payeeAccountResult.status === 'fulfilled'
       ? buildOptionMap(payeeAccountResult.value.data)

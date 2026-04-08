@@ -20,6 +20,16 @@ public class UserBankAccount {
 
     private String branchName;
 
+    private String bankCode;
+
+    private String branchCode;
+
+    private String cnapsCode;
+
+    private String province;
+
+    private String city;
+
     private String accountName;
 
     private String accountNo;

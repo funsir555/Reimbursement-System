@@ -165,52 +165,62 @@
 
         <template v-else-if="businessCode(block) === 'counterparty'">
           <div class="space-y-3">
-            <div class="flex gap-3">
-              <el-select
-                v-model="formData[block.fieldKey]"
-                filterable
-                remote
-                reserve-keyword
-                clearable
-                class="w-full"
-                placeholder="请选择往来单位"
-                :remote-method="loadVendorOptions"
-                :loading="vendorOptionsLoading"
+            <el-select
+              v-model="formData[block.fieldKey]"
+              filterable
+              remote
+              reserve-keyword
+              clearable
+              class="w-full"
+              placeholder="请选择收款单位"
+              :remote-method="loadVendorOptions"
+              :loading="vendorOptionsLoading"
+              :disabled="isReadOnly(block)"
+            >
+              <el-option
+                v-for="item in vendorOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
               >
-                <el-option
-                  v-for="item in vendorOptions"
-                  :key="item.value"
-                  :label="item.label"
-                  :value="item.value"
+                <div class="flex items-center justify-between gap-3">
+                  <span class="truncate">{{ item.label }}</span>
+                  <span class="text-xs text-slate-400">{{ item.secondaryLabel }}</span>
+                </div>
+              </el-option>
+              <template #footer>
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                  @click.stop="openVendorDialog(block.fieldKey)"
                 >
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="truncate">{{ item.label }}</span>
-                    <span class="text-xs text-slate-400">{{ item.secondaryLabel }}</span>
-                  </div>
-                </el-option>
-              </el-select>
-              <el-button plain @click="openVendorDialog">新增往来单位</el-button>
-            </div>
+                  增加供应商
+                </button>
+              </template>
+            </el-select>
           </div>
         </template>
 
         <template v-else-if="businessCode(block) === 'payee'">
           <el-select
             v-model="formData[block.fieldKey]"
+            value-key="value"
             filterable
             remote
             reserve-keyword
             clearable
             class="w-full"
-            placeholder="请选择收款人"
+            :placeholder="PAYEE_PLACEHOLDER"
             :remote-method="loadPayeeOptions"
             :loading="payeeOptionsLoading"
+            :disabled="isReadOnly(block)"
+            @change="handlePayeeSelection(block.fieldKey, $event)"
           >
             <el-option
               v-for="item in payeeOptions"
               :key="item.value"
               :label="item.label"
-              :value="item.value"
+              :value="buildPayeeSnapshot(item)"
             >
               <div class="flex items-center justify-between gap-3">
                 <span class="truncate">{{ item.label }}</span>
@@ -223,20 +233,23 @@
         <template v-else-if="businessCode(block) === 'payee-account'">
           <el-select
             v-model="formData[block.fieldKey]"
+            value-key="value"
             filterable
             remote
             reserve-keyword
             clearable
             class="w-full"
-            placeholder="请选择收款账户"
+            :placeholder="PAYEE_ACCOUNT_PLACEHOLDER"
             :remote-method="loadPayeeAccountOptions"
             :loading="payeeAccountOptionsLoading"
+            :disabled="isReadOnly(block)"
+            @change="handlePayeeAccountSelection(block.fieldKey, $event)"
           >
             <el-option
               v-for="item in payeeAccountOptions"
               :key="item.value"
               :label="item.label"
-              :value="item.value"
+              :value="buildPayeeAccountSnapshot(item)"
             >
               <div class="space-y-1">
                 <div class="flex items-center justify-between gap-3">
@@ -403,44 +416,46 @@
       </p>
     </div>
 
-    <el-dialog v-model="vendorDialogVisible" title="新增往来单位" width="760px" destroy-on-close>
-      <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <el-form-item label="往来单位名称" required class="!mb-0">
-          <el-input v-model="vendorDraft.cVenName" placeholder="请输入往来单位名称" />
-        </el-form-item>
-        <el-form-item label="往来单位简称" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenAbbName" placeholder="请输入简称" />
-        </el-form-item>
-        <el-form-item label="纳税人登记号" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenRegCode" placeholder="请输入纳税号" />
-        </el-form-item>
-        <el-form-item label="联系人" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenPerson" placeholder="请输入联系人" />
-        </el-form-item>
-        <el-form-item label="电话" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenPhone" placeholder="请输入联系电话" />
-        </el-form-item>
-        <el-form-item label="开户地址" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenAddress" placeholder="请输入开户地址" />
-        </el-form-item>
-        <el-form-item label="开户行" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenBank" placeholder="请输入开户行" />
-        </el-form-item>
-        <el-form-item label="银行账号" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenAccount" placeholder="请输入银行账号" />
-        </el-form-item>
-        <el-form-item label="银行行号" class="!mb-0">
-          <el-input v-model="vendorDraft.cVenBankNub" placeholder="请输入银行行号" />
-        </el-form-item>
-        <el-form-item label="备注" class="xl:col-span-2 !mb-0">
+    <el-dialog v-model="vendorDialogVisible" title="新增供应商" width="920px" destroy-on-close>
+      <div class="space-y-5">
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <el-form-item label="供应商名称" required class="!mb-0">
+            <el-input v-model="vendorDraft.cVenName" placeholder="请输入供应商名称" />
+          </el-form-item>
+          <el-form-item label="供应商简称" class="!mb-0">
+            <el-input v-model="vendorDraft.cVenAbbName" placeholder="请输入供应商简称" />
+          </el-form-item>
+          <el-form-item label="工商注册号" class="!mb-0">
+            <el-input v-model="vendorDraft.cVenRegCode" placeholder="请输入工商注册号" />
+          </el-form-item>
+          <el-form-item label="联系人" class="!mb-0">
+            <el-input v-model="vendorDraft.cVenPerson" placeholder="请输入联系人" />
+          </el-form-item>
+          <el-form-item label="联系电话" class="!mb-0">
+            <el-input v-model="vendorDraft.cVenPhone" placeholder="请输入联系电话" />
+          </el-form-item>
+          <el-form-item label="联系地址" class="!mb-0">
+            <el-input v-model="vendorDraft.cVenAddress" placeholder="请输入联系地址" />
+          </el-form-item>
+        </div>
+
+        <SupplierPaymentInfoFields
+          :form-state="vendorDraft"
+          :required="true"
+          :show-section-header="true"
+          auto-fill-source-key="cVenName"
+          account-name-label="开户名/收款单位名称"
+        />
+
+        <el-form-item label="备注" class="!mb-0">
           <el-input v-model="vendorDraft.cMemo" type="textarea" :rows="3" placeholder="请输入备注" />
         </el-form-item>
       </div>
 
       <template #footer>
         <div class="flex justify-end gap-3">
-          <el-button @click="vendorDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="vendorSaving" @click="createVendor">新增往来单位</el-button>
+          <el-button @click="closeVendorDialog">取消</el-button>
+          <el-button type="primary" :loading="vendorSaving" @click="createVendor">保存供应商</el-button>
         </div>
       </template>
     </el-dialog>
@@ -550,6 +565,7 @@ import {
   type ProcessFormDesignSchema,
   type ProcessFormOption
 } from '@/api'
+import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { compareMoney, formatMoney, normalizeMoneyValue, subtractMoney } from '@/utils/money'
 import {
@@ -569,6 +585,32 @@ const formData = defineModel<Record<string, unknown>>({ required: true })
 
 type DocumentRelationType = 'RELATED' | 'WRITEOFF'
 type RuntimeDocumentRecord = ExpenseRelatedDocumentValue & Partial<ExpenseWriteOffDocumentValue>
+type PayeeAccountLinkageMode = 'EMPLOYEE' | 'ENTERPRISE'
+
+type RuntimePayeeSnapshot = {
+  value: string
+  label: string
+  sourceType: string
+  sourceCode: string
+}
+
+type RuntimePayeeAccountSnapshot = {
+  value: string
+  label: string
+  sourceType: string
+  ownerCode?: string
+  ownerName?: string
+  accountName?: string
+  accountNoMasked?: string
+  bankName?: string
+}
+
+const PERSONAL_PAYEE_PREFIX = 'PERSONAL_PAYEE:'
+const ENTERPRISE_DETAIL_TYPE = 'ENTERPRISE_TRANSACTION'
+const PAYEE_PLACEHOLDER = '\u8bf7\u9009\u62e9\u6536\u6b3e\u4eba'
+const PAYEE_ACCOUNT_PLACEHOLDER = '\u8bf7\u9009\u62e9\u6536\u6b3e\u8d26\u6237'
+const LOAD_PAYEE_ERROR = '\u52a0\u8f7d\u6536\u6b3e\u4eba\u5931\u8d25'
+const LOAD_PAYEE_ACCOUNT_ERROR = '\u52a0\u8f7d\u6536\u6b3e\u8d26\u6237\u5931\u8d25'
 
 const props = withDefaults(defineProps<{
   schema: ProcessFormDesignSchema
@@ -622,19 +664,33 @@ const documentPickerDialog = reactive<{
 })
 
 const vendorDialogVisible = ref(false)
+const vendorDialogFieldKey = ref('')
 const vendorSaving = ref(false)
-const vendorDraft = reactive<FinanceVendorSavePayload>({
+const emptyVendorDraft = (): FinanceVendorSavePayload => ({
   cVenName: '',
   cVenAbbName: '',
   cVenRegCode: '',
   cVenPerson: '',
   cVenPhone: '',
   cVenAddress: '',
+  receiptAccountName: '',
+  cVenBankCode: '',
   cVenBank: '',
+  receiptBankProvince: '',
+  receiptBankCity: '',
+  receiptBranchCode: '',
+  receiptBranchName: '',
   cVenAccount: '',
   cVenBankNub: '',
   cMemo: ''
 })
+const vendorDraft = reactive<FinanceVendorSavePayload>(emptyVendorDraft())
+const payeeFieldKeys = computed(() => findBusinessFieldKeys('payee'))
+const counterpartyFieldKeys = computed(() => findBusinessFieldKeys('counterparty'))
+const payeeAccountFieldKeys = computed(() => findBusinessFieldKeys('payee-account'))
+const selectedPayeeName = computed(() => resolveSelectedPayeeName())
+const selectedCounterpartyCode = computed(() => resolveSelectedCounterpartyCode())
+const payeeAccountLinkageMode = computed<PayeeAccountLinkageMode>(() => resolvePayeeAccountLinkageMode())
 
 void loadVendorOptions('')
 void loadPayeeOptions('')
@@ -649,6 +705,19 @@ watch(
     ensureExpenseDetailFormDefaults(formData.value, props.schema, props.detailType, props.defaultBusinessScenario)
   },
   { immediate: true, deep: true }
+)
+
+watch(
+  () => [payeeAccountLinkageMode.value, selectedPayeeName.value, selectedCounterpartyCode.value],
+  ([nextMode, nextPayeeName, nextCounterpartyCode], [prevMode, prevPayeeName, prevCounterpartyCode]) => {
+    const changed = nextMode !== prevMode || nextPayeeName !== prevPayeeName || nextCounterpartyCode !== prevCounterpartyCode
+    if (!changed) {
+      return
+    }
+    clearPayeeAccountSelections()
+    void loadPayeeAccountOptions('')
+  },
+  { immediate: false }
 )
 
 function controlType(block: ProcessFormDesignBlock) {
@@ -676,6 +745,75 @@ function placeholderOf(block: ProcessFormDesignBlock) {
 
 function businessCode(block: ProcessFormDesignBlock) {
   return getBusinessComponentDefinition(String(block.props.componentCode || ''))?.code || String(block.props.componentCode || '')
+}
+
+function findBusinessFieldKeys(code: string) {
+  return blocks.value
+    .filter((block) => block.kind === 'BUSINESS_COMPONENT' && businessCode(block) === code)
+    .map((block) => block.fieldKey)
+}
+
+function resolveSelectedPayeeName() {
+  for (const fieldKey of payeeFieldKeys.value) {
+    const value = normalizePayeeName(formData.value[fieldKey])
+    if (value) {
+      return value
+    }
+  }
+  return ''
+}
+
+function resolveSelectedCounterpartyCode() {
+  for (const fieldKey of counterpartyFieldKeys.value) {
+    const value = resolveLookupValue(formData.value[fieldKey])
+    if (value) {
+      return value
+    }
+  }
+  return ''
+}
+
+function resolvePayeeAccountLinkageMode(): PayeeAccountLinkageMode {
+  if (props.detailType === ENTERPRISE_DETAIL_TYPE) {
+    return 'ENTERPRISE'
+  }
+  return selectedCounterpartyCode.value ? 'ENTERPRISE' : 'EMPLOYEE'
+}
+
+function clearPayeeAccountSelections() {
+  payeeAccountFieldKeys.value.forEach((fieldKey) => {
+    formData.value[fieldKey] = ''
+  })
+}
+
+function buildPayeeSnapshot(option: ExpenseCreatePayeeOption): RuntimePayeeSnapshot {
+  return {
+    value: option.value,
+    label: option.label,
+    sourceType: option.sourceType,
+    sourceCode: option.sourceCode
+  }
+}
+
+function buildPayeeAccountSnapshot(option: ExpenseCreatePayeeAccountOption): RuntimePayeeAccountSnapshot {
+  return {
+    value: option.value,
+    label: option.label,
+    sourceType: option.sourceType,
+    ownerCode: option.ownerCode,
+    ownerName: option.ownerName,
+    accountName: option.accountName,
+    accountNoMasked: option.accountNoMasked,
+    bankName: option.bankName
+  }
+}
+
+function handlePayeeSelection(fieldKey: string, value: RuntimePayeeSnapshot | '' | null | undefined) {
+  formData.value[fieldKey] = value || ''
+}
+
+function handlePayeeAccountSelection(fieldKey: string, value: RuntimePayeeAccountSnapshot | '' | null | undefined) {
+  formData.value[fieldKey] = value || ''
 }
 
 function departmentLabel(value: string) {
@@ -980,10 +1118,10 @@ function formatAmount(value: unknown) {
 async function loadVendorOptions(keyword: string) {
   vendorOptionsLoading.value = true
   try {
-    const res = await expenseCreateApi.listVendorOptions(keyword)
+    const res = await expenseCreateApi.listVendorOptions(keyword || undefined)
     vendorOptions.value = res.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载往来单位失败'))
+    ElMessage.error(resolveErrorMessage(error, '加载收款单位失败'))
   } finally {
     vendorOptionsLoading.value = false
   }
@@ -992,10 +1130,13 @@ async function loadVendorOptions(keyword: string) {
 async function loadPayeeOptions(keyword: string) {
   payeeOptionsLoading.value = true
   try {
-    const res = await expenseCreateApi.listPayeeOptions(keyword)
+    const res = await expenseCreateApi.listPayeeOptions({
+      keyword,
+      personalOnly: true
+    })
     payeeOptions.value = res.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载收款人失败'))
+    ElMessage.error(resolveErrorMessage(error, LOAD_PAYEE_ERROR))
   } finally {
     payeeOptionsLoading.value = false
   }
@@ -1004,13 +1145,48 @@ async function loadPayeeOptions(keyword: string) {
 async function loadPayeeAccountOptions(keyword: string) {
   payeeAccountOptionsLoading.value = true
   try {
-    const res = await expenseCreateApi.listPayeeAccountOptions(keyword)
+    const res = await expenseCreateApi.listPayeeAccountOptions({
+      keyword,
+      linkageMode: payeeAccountLinkageMode.value,
+      payeeName: selectedPayeeName.value || undefined,
+      counterpartyCode: selectedCounterpartyCode.value || undefined
+    })
     payeeAccountOptions.value = res.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载收款账户失败'))
+    ElMessage.error(resolveErrorMessage(error, LOAD_PAYEE_ACCOUNT_ERROR))
   } finally {
     payeeAccountOptionsLoading.value = false
   }
+}
+
+function normalizePayeeName(value: unknown) {
+  if (!value) {
+    return ''
+  }
+  if (typeof value === 'string') {
+    return value.startsWith(PERSONAL_PAYEE_PREFIX) ? value.slice(PERSONAL_PAYEE_PREFIX.length) : value
+  }
+  if (isRecord(value)) {
+    const label = firstNonEmptyString(value.label, value.sourceCode)
+    if (label) {
+      return label.startsWith(PERSONAL_PAYEE_PREFIX) ? label.slice(PERSONAL_PAYEE_PREFIX.length) : label
+    }
+    const rawValue = firstNonEmptyString(value.value)
+    if (rawValue) {
+      return rawValue.startsWith(PERSONAL_PAYEE_PREFIX) ? rawValue.slice(PERSONAL_PAYEE_PREFIX.length) : rawValue
+    }
+  }
+  return ''
+}
+
+function resolveLookupValue(value: unknown) {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (isRecord(value)) {
+    return firstNonEmptyString(value.value, value.code, value.id)
+  }
+  return ''
 }
 
 function uploadFileList(block: ProcessFormDesignBlock): UploadUserFile[] {
@@ -1047,25 +1223,44 @@ function handleFileRemove(block: ProcessFormDesignBlock, uploadFile: UploadFile)
   })
 }
 
-function openVendorDialog() {
-  Object.assign(vendorDraft, {
-    cVenName: '',
-    cVenAbbName: '',
-    cVenRegCode: '',
-    cVenPerson: '',
-    cVenPhone: '',
-    cVenAddress: '',
-    cVenBank: '',
-    cVenAccount: '',
-    cVenBankNub: '',
-    cMemo: ''
-  })
+function openVendorDialog(fieldKey = '') {
+  vendorDialogFieldKey.value = fieldKey
+  Object.assign(vendorDraft, emptyVendorDraft())
   vendorDialogVisible.value = true
 }
 
-async function createVendor() {
+function closeVendorDialog() {
+  vendorDialogVisible.value = false
+  vendorDialogFieldKey.value = ''
+  Object.assign(vendorDraft, emptyVendorDraft())
+}
+
+function validateVendorDraft() {
   if (!String(vendorDraft.cVenName || '').trim()) {
-    ElMessage.warning('请先填写往来单位名称')
+    return '请先填写供应商名称'
+  }
+  if (!String(vendorDraft.receiptAccountName || vendorDraft.cVenName || '').trim()) {
+    return '请先填写开户名'
+  }
+  if (!String(vendorDraft.cVenAccount || '').trim()) {
+    return '请先填写银行账号'
+  }
+  if (!String(vendorDraft.cVenBank || '').trim()) {
+    return '请先选择开户银行'
+  }
+  if (!String(vendorDraft.receiptBankProvince || '').trim() || !String(vendorDraft.receiptBankCity || '').trim()) {
+    return '请先选择开户省市'
+  }
+  if (!String(vendorDraft.receiptBranchName || '').trim()) {
+    return '请先选择分支行'
+  }
+  return ''
+}
+
+async function createVendor() {
+  const validationMessage = validateVendorDraft()
+  if (validationMessage) {
+    ElMessage.warning(validationMessage)
     return
   }
   vendorSaving.value = true
@@ -1074,11 +1269,14 @@ async function createVendor() {
       Object.entries(vendorDraft).filter(([, value]) => value !== undefined && value !== null && value !== '')
     ) as FinanceVendorSavePayload
     const res = await expenseCreateApi.createVendor(payload)
-    ElMessage.success('往来单位已新增')
-    await loadVendorOptions(String(res.data.cVenName || ''))
-    vendorDialogVisible.value = false
+    await loadVendorOptions(String(res.data.cVenName || res.data.cVenCode || ''))
+    if (vendorDialogFieldKey.value) {
+      formData.value[vendorDialogFieldKey.value] = res.data.cVenCode
+    }
+    ElMessage.success('供应商已新增')
+    closeVendorDialog()
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '新增往来单位失败'))
+    ElMessage.error(resolveErrorMessage(error, '新增供应商失败'))
   } finally {
     vendorSaving.value = false
   }
@@ -1123,6 +1321,14 @@ function firstNonBlank(...values: unknown[]) {
     }
   }
   return undefined
+}
+
+function firstNonEmptyString(...values: unknown[]) {
+  return firstNonBlank(...values) || ''
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 function toOptionalNumber(...values: unknown[]) {

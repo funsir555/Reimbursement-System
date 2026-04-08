@@ -19,6 +19,11 @@ public class FinanceVendorSaveDTO {
     private String cVenBank;
     private String cVenAccount;
     private String cVenBankNub;
+    private String receiptAccountName;
+    private String receiptBankProvince;
+    private String receiptBankCity;
+    private String receiptBranchCode;
+    private String receiptBranchName;
     private String cVenPerson;
     private String cVenPhone;
     private String cVenHand;

@@ -68,10 +68,11 @@ public class ExpenseDocumentController {
     @GetMapping("/vendors/options")
     public Result<List<ExpenseCreateVendorOptionVO>> listVendorOptions(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean includeDisabled,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success(expenseDocumentService.listVendorOptions(getCurrentUserId(request), keyword));
+        return Result.success(expenseDocumentService.listVendorOptions(getCurrentUserId(request), keyword, includeDisabled));
     }
 
     @PostMapping("/vendors")
@@ -80,25 +81,35 @@ public class ExpenseDocumentController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success("往来单位已新增", financeVendorService.createVendor(getCurrentUserId(request), dto, getCurrentUsername(request)));
+        return Result.success("往来单位已新增", financeVendorService.createVendor(getCurrentUserId(request), dto, getCurrentUsername(request), true));
     }
 
     @GetMapping("/payees/options")
     public Result<List<ExpenseCreatePayeeOptionVO>> listPayeeOptions(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean personalOnly,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success(expenseDocumentService.listPayeeOptions(getCurrentUserId(request), keyword));
+        return Result.success(expenseDocumentService.listPayeeOptions(getCurrentUserId(request), keyword, personalOnly));
     }
 
     @GetMapping("/payee-accounts/options")
     public Result<List<ExpenseCreatePayeeAccountOptionVO>> listPayeeAccountOptions(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String linkageMode,
+            @RequestParam(required = false) String payeeName,
+            @RequestParam(required = false) String counterpartyCode,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success(expenseDocumentService.listPayeeAccountOptions(getCurrentUserId(request), keyword));
+        return Result.success(expenseDocumentService.listPayeeAccountOptions(
+                getCurrentUserId(request),
+                keyword,
+                linkageMode,
+                payeeName,
+                counterpartyCode
+        ));
     }
 
     @PostMapping("/documents")

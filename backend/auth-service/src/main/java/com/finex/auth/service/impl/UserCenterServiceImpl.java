@@ -8,6 +8,7 @@ import com.finex.auth.dto.ChangePasswordDTO;
 import com.finex.auth.dto.DownloadCenterVO;
 import com.finex.auth.dto.DownloadRecordVO;
 import com.finex.auth.dto.PersonalCenterVO;
+import com.finex.auth.dto.UserBankAccountSaveDTO;
 import com.finex.auth.dto.UserProfileVO;
 import com.finex.auth.entity.DownloadRecord;
 import com.finex.auth.entity.User;
@@ -27,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -45,8 +47,68 @@ public class UserCenterServiceImpl implements UserCenterService {
 
         PersonalCenterVO center = new PersonalCenterVO();
         center.setUser(toUserProfile(user));
-        center.setBankAccounts(listBankAccounts(userId));
+        center.setBankAccounts(loadBankAccounts(userId));
         return center;
+    }
+
+    @Override
+    public List<BankAccountVO> listBankAccounts(Long userId) {
+        requireUser(userId);
+        return loadBankAccounts(userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BankAccountVO createBankAccount(Long userId, UserBankAccountSaveDTO dto) {
+        requireUser(userId);
+        UserBankAccount account = new UserBankAccount();
+        applyBankAccount(account, dto);
+        account.setUserId(userId);
+        userBankAccountMapper.insert(account);
+        if (Integer.valueOf(1).equals(account.getDefaultAccount())) {
+            clearOtherDefaultBankAccounts(userId, account.getId());
+        }
+        return findBankAccount(userId, account.getId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BankAccountVO updateBankAccount(Long userId, Long accountId, UserBankAccountSaveDTO dto) {
+        requireUser(userId);
+        UserBankAccount account = requireBankAccount(userId, accountId);
+        applyBankAccount(account, dto);
+        userBankAccountMapper.updateById(account);
+        if (Integer.valueOf(1).equals(account.getDefaultAccount())) {
+            clearOtherDefaultBankAccounts(userId, accountId);
+        }
+        return findBankAccount(userId, accountId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean updateBankAccountStatus(Long userId, Long accountId, Integer status) {
+        requireUser(userId);
+        UserBankAccount account = requireBankAccount(userId, accountId);
+        account.setStatus(normalizeStatus(status));
+        if (!Integer.valueOf(1).equals(account.getStatus())) {
+            account.setDefaultAccount(0);
+        }
+        userBankAccountMapper.updateById(account);
+        return Boolean.TRUE;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean setDefaultBankAccount(Long userId, Long accountId) {
+        requireUser(userId);
+        UserBankAccount account = requireBankAccount(userId, accountId);
+        if (!Integer.valueOf(1).equals(account.getStatus())) {
+            throw new IllegalArgumentException("停用账户不能设为默认");
+        }
+        account.setDefaultAccount(1);
+        userBankAccountMapper.updateById(account);
+        clearOtherDefaultBankAccounts(userId, accountId);
+        return Boolean.TRUE;
     }
 
     @Override
@@ -74,7 +136,7 @@ public class UserCenterServiceImpl implements UserCenterService {
     public DownloadContent loadDownloadContent(Long userId, Long downloadId) {
         DownloadRecord record = requireDownloadRecord(userId, downloadId);
         if (!AsyncTaskSupport.DOWNLOAD_STATUS_COMPLETED.equalsIgnoreCase(record.getStatus())) {
-            throw new IllegalStateException("文件尚未生成完成");
+            throw new IllegalStateException("下载文件尚未生成完成");
         }
         Path path = downloadStorageService.resolvePath(record.getId());
         if (!Files.exists(path)) {
@@ -109,7 +171,7 @@ public class UserCenterServiceImpl implements UserCenterService {
         userService.updateById(user);
     }
 
-    private List<BankAccountVO> listBankAccounts(Long userId) {
+    private List<BankAccountVO> loadBankAccounts(Long userId) {
         return userBankAccountMapper.selectList(
                 Wrappers.<UserBankAccount>lambdaQuery()
                         .eq(UserBankAccount::getUserId, userId)
@@ -139,6 +201,23 @@ public class UserCenterServiceImpl implements UserCenterService {
         return record;
     }
 
+    private UserBankAccount requireBankAccount(Long userId, Long accountId) {
+        UserBankAccount account = userBankAccountMapper.selectOne(
+                Wrappers.<UserBankAccount>lambdaQuery()
+                        .eq(UserBankAccount::getId, accountId)
+                        .eq(UserBankAccount::getUserId, userId)
+                        .last("limit 1")
+        );
+        if (account == null) {
+            throw new IllegalArgumentException("收款账户不存在");
+        }
+        return account;
+    }
+
+    private BankAccountVO findBankAccount(Long userId, Long accountId) {
+        return toBankAccount(requireBankAccount(userId, accountId));
+    }
+
     private UserProfileVO toUserProfile(User user) {
         UserProfileVO profile = new UserProfileVO();
         profile.setUserId(user.getId());
@@ -157,14 +236,81 @@ public class UserCenterServiceImpl implements UserCenterService {
     private BankAccountVO toBankAccount(UserBankAccount account) {
         BankAccountVO vo = new BankAccountVO();
         vo.setId(account.getId());
+        vo.setBankCode(account.getBankCode());
         vo.setBankName(account.getBankName());
+        vo.setProvince(account.getProvince());
+        vo.setCity(account.getCity());
+        vo.setBranchCode(account.getBranchCode());
         vo.setBranchName(account.getBranchName());
+        vo.setCnapsCode(account.getCnapsCode());
         vo.setAccountName(account.getAccountName());
+        vo.setAccountNo(account.getAccountNo());
         vo.setAccountNoMasked(maskAccountNo(account.getAccountNo()));
         vo.setAccountType(StrUtil.blankToDefault(account.getAccountType(), "对私账户"));
         vo.setDefaultAccount(Integer.valueOf(1).equals(account.getDefaultAccount()));
-        vo.setStatus(Integer.valueOf(1).equals(account.getStatus()) ? "启用中" : "已停用");
+        vo.setStatus(normalizeStatus(account.getStatus()));
+        vo.setStatusLabel(Integer.valueOf(1).equals(vo.getStatus()) ? "启用中" : "已停用");
+        vo.setCreatedAt(account.getCreatedAt() == null ? "" : account.getCreatedAt().format(DATE_TIME_FORMATTER));
+        vo.setUpdatedAt(account.getUpdatedAt() == null ? "" : account.getUpdatedAt().format(DATE_TIME_FORMATTER));
         return vo;
+    }
+
+    private void applyBankAccount(UserBankAccount account, UserBankAccountSaveDTO dto) {
+        account.setAccountName(requireText(dto.getAccountName(), "账户名不能为空"));
+        account.setAccountNo(requireText(dto.getAccountNo(), "银行账号不能为空"));
+        account.setAccountType(defaultText(trimToNull(dto.getAccountType()), "对私账户"));
+        account.setBankCode(trimToNull(dto.getBankCode()));
+        account.setBankName(requireText(dto.getBankName(), "开户银行不能为空"));
+        account.setProvince(requireText(dto.getProvince(), "开户省不能为空"));
+        account.setCity(requireText(dto.getCity(), "开户市不能为空"));
+        account.setBranchCode(trimToNull(dto.getBranchCode()));
+        account.setBranchName(requireText(dto.getBranchName(), "分支行不能为空"));
+        account.setCnapsCode(trimToNull(dto.getCnapsCode()));
+        account.setStatus(normalizeStatus(dto.getStatus()));
+        account.setDefaultAccount(Integer.valueOf(1).equals(account.getStatus()) && normalizeFlag(dto.getDefaultAccount()) == 1 ? 1 : 0);
+    }
+
+    private void clearOtherDefaultBankAccounts(Long userId, Long currentId) {
+        List<UserBankAccount> accounts = userBankAccountMapper.selectList(
+                Wrappers.<UserBankAccount>lambdaQuery()
+                        .eq(UserBankAccount::getUserId, userId)
+                        .eq(UserBankAccount::getDefaultAccount, 1)
+        );
+        for (UserBankAccount account : accounts) {
+            if (Objects.equals(account.getId(), currentId)) {
+                continue;
+            }
+            account.setDefaultAccount(0);
+            userBankAccountMapper.updateById(account);
+        }
+    }
+
+    private Integer normalizeStatus(Integer status) {
+        return Integer.valueOf(0).equals(status) ? 0 : 1;
+    }
+
+    private int normalizeFlag(Integer value) {
+        return Integer.valueOf(1).equals(value) ? 1 : 0;
+    }
+
+    private String requireText(String value, String message) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            throw new IllegalArgumentException(message);
+        }
+        return normalized;
+    }
+
+    private String defaultText(String value, String fallback) {
+        return value == null ? fallback : value;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private DownloadRecordVO toDownloadRecord(DownloadRecord record) {

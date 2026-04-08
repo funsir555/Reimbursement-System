@@ -23,59 +23,59 @@ SET NAMES utf8mb4;
 /* ========================================================================== */
 
 CREATE TABLE IF NOT EXISTS sys_company (
-    company_id VARCHAR(64) NOT NULL COMMENT 'company id',
-    company_code VARCHAR(64) NOT NULL COMMENT 'company code',
-    company_name VARCHAR(128) NOT NULL COMMENT 'company name',
-    invoice_title VARCHAR(200) NULL COMMENT 'invoice title',
-    tax_no VARCHAR(100) NULL COMMENT 'tax number',
-    status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
+    company_id VARCHAR(64) NOT NULL COMMENT '公司主体编码',
+    company_code VARCHAR(64) NOT NULL COMMENT '公司编码',
+    company_name VARCHAR(128) NOT NULL COMMENT '公司名称',
+    invoice_title VARCHAR(200) NULL COMMENT '公司抬头',
+    tax_no VARCHAR(100) NULL COMMENT '税号',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (company_id),
     CONSTRAINT uk_sys_company_company_code UNIQUE (company_code),
     KEY idx_sys_company_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='company master data';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公司主体主数据表';
 
 CREATE TABLE IF NOT EXISTS sys_company_bank_account (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'company bank account id',
-    company_id VARCHAR(64) NOT NULL COMMENT 'company id',
-    bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
-    branch_name VARCHAR(200) NULL COMMENT 'branch name',
-    bank_code VARCHAR(64) NULL COMMENT 'bank code',
-    branch_code VARCHAR(64) NULL COMMENT 'branch code',
-    cnaps_code VARCHAR(64) NULL COMMENT 'cnaps code',
-    account_name VARCHAR(200) NOT NULL COMMENT 'account name',
-    account_no VARCHAR(100) NOT NULL COMMENT 'account number',
-    account_type VARCHAR(64) NULL COMMENT 'account type',
-    account_usage VARCHAR(100) NULL COMMENT 'account usage',
-    currency_code VARCHAR(32) NULL COMMENT 'currency code',
-    default_account TINYINT NOT NULL DEFAULT 0 COMMENT 'default account',
-    status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
-    remark VARCHAR(500) NULL COMMENT 'remark',
-    direct_connect_enabled TINYINT NOT NULL DEFAULT 0 COMMENT 'direct connect enabled',
-    direct_connect_provider VARCHAR(100) NULL COMMENT 'direct connect provider',
-    direct_connect_channel VARCHAR(100) NULL COMMENT 'direct connect channel',
-    direct_connect_protocol VARCHAR(100) NULL COMMENT 'direct connect protocol',
-    direct_connect_customer_no VARCHAR(100) NULL COMMENT 'direct connect customer no',
-    direct_connect_app_id VARCHAR(100) NULL COMMENT 'direct connect app id',
-    direct_connect_account_alias VARCHAR(100) NULL COMMENT 'direct connect account alias',
-    direct_connect_auth_mode VARCHAR(100) NULL COMMENT 'direct connect auth mode',
-    direct_connect_api_base_url VARCHAR(500) NULL COMMENT 'direct connect api base url',
-    direct_connect_cert_ref VARCHAR(200) NULL COMMENT 'direct connect cert ref',
-    direct_connect_secret_ref VARCHAR(200) NULL COMMENT 'direct connect secret ref',
-    direct_connect_sign_type VARCHAR(100) NULL COMMENT 'direct connect sign type',
-    direct_connect_encrypt_type VARCHAR(100) NULL COMMENT 'direct connect encrypt type',
-    direct_connect_last_sync_at DATETIME NULL COMMENT 'direct connect last sync at',
-    direct_connect_last_sync_status VARCHAR(64) NULL COMMENT 'direct connect last sync status',
-    direct_connect_last_error_msg VARCHAR(1000) NULL COMMENT 'direct connect last error message',
-    direct_connect_ext_json JSON NULL COMMENT 'direct connect ext json',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    company_id VARCHAR(64) NOT NULL COMMENT '公司主体编码',
+    bank_name VARCHAR(200) NOT NULL COMMENT '银行名称',
+    branch_name VARCHAR(200) NULL COMMENT '开户支行',
+    bank_code VARCHAR(64) NULL COMMENT '银行编码',
+    branch_code VARCHAR(64) NULL COMMENT '支行编码',
+    cnaps_code VARCHAR(64) NULL COMMENT '联行号',
+    account_name VARCHAR(200) NOT NULL COMMENT '账户名称',
+    account_no VARCHAR(100) NOT NULL COMMENT '银行账号',
+    account_type VARCHAR(64) NULL COMMENT '账户类型',
+    account_usage VARCHAR(100) NULL COMMENT '账户用途',
+    currency_code VARCHAR(32) NULL COMMENT '币种编码',
+    default_account TINYINT NOT NULL DEFAULT 0 COMMENT '默认账户:1是 0否',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
+    remark VARCHAR(500) NULL COMMENT '备注',
+    direct_connect_enabled TINYINT NOT NULL DEFAULT 0 COMMENT '是否启用银企直连',
+    direct_connect_provider VARCHAR(100) NULL COMMENT '银企直连服务商',
+    direct_connect_channel VARCHAR(100) NULL COMMENT '银企直连渠道',
+    direct_connect_protocol VARCHAR(100) NULL COMMENT '银企直连接口协议',
+    direct_connect_customer_no VARCHAR(100) NULL COMMENT '银企直连客户号',
+    direct_connect_app_id VARCHAR(100) NULL COMMENT '银企直连应用标识',
+    direct_connect_account_alias VARCHAR(100) NULL COMMENT '银企直连账户别名',
+    direct_connect_auth_mode VARCHAR(100) NULL COMMENT '银企直连认证方式',
+    direct_connect_api_base_url VARCHAR(500) NULL COMMENT '银企直连接口地址',
+    direct_connect_cert_ref VARCHAR(200) NULL COMMENT '银企直连证书引用',
+    direct_connect_secret_ref VARCHAR(200) NULL COMMENT '银企直连密钥引用',
+    direct_connect_sign_type VARCHAR(100) NULL COMMENT '银企直连签名方式',
+    direct_connect_encrypt_type VARCHAR(100) NULL COMMENT '银企直连加密方式',
+    direct_connect_last_sync_at DATETIME NULL COMMENT '银企直连最近同步时间',
+    direct_connect_last_sync_status VARCHAR(64) NULL COMMENT '银企直连最近同步状态',
+    direct_connect_last_error_msg VARCHAR(1000) NULL COMMENT '银企直连最近错误信息',
+    direct_connect_ext_json JSON NULL COMMENT '银企直连扩展信息',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     CONSTRAINT fk_sys_company_bank_account_company_id FOREIGN KEY (company_id) REFERENCES sys_company(company_id),
     CONSTRAINT uk_sys_company_bank_account_company_no UNIQUE (company_id, account_no),
     KEY idx_sys_company_bank_account_company_status (company_id, status),
     KEY idx_sys_company_bank_account_company_default (company_id, default_account)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='company bank account';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公司银行账户表';
 
 SET @schema_name = DATABASE();
 
@@ -200,6 +200,51 @@ SET @sql = (
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+/* ========================================================================== */
+/* 1.1 统一本次触达对象的中文注释                                              */
+/* ========================================================================== */
+
+ALTER TABLE sys_company COMMENT = '公司主体主数据表';
+
+ALTER TABLE sys_company_bank_account
+    MODIFY COLUMN id BIGINT AUTO_INCREMENT COMMENT '主键',
+    MODIFY COLUMN company_id VARCHAR(64) NOT NULL COMMENT '公司主体编码',
+    MODIFY COLUMN bank_name VARCHAR(200) NOT NULL COMMENT '银行名称',
+    MODIFY COLUMN branch_name VARCHAR(200) NULL COMMENT '开户支行',
+    MODIFY COLUMN bank_code VARCHAR(64) NULL COMMENT '银行编码',
+    MODIFY COLUMN branch_code VARCHAR(64) NULL COMMENT '支行编码',
+    MODIFY COLUMN cnaps_code VARCHAR(64) NULL COMMENT '联行号',
+    MODIFY COLUMN account_name VARCHAR(200) NOT NULL COMMENT '账户名称',
+    MODIFY COLUMN account_no VARCHAR(100) NOT NULL COMMENT '银行账号',
+    MODIFY COLUMN account_type VARCHAR(64) NULL COMMENT '账户类型',
+    MODIFY COLUMN account_usage VARCHAR(100) NULL COMMENT '账户用途',
+    MODIFY COLUMN currency_code VARCHAR(32) NULL COMMENT '币种编码',
+    MODIFY COLUMN default_account TINYINT NOT NULL DEFAULT 0 COMMENT '默认账户:1是 0否',
+    MODIFY COLUMN status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
+    MODIFY COLUMN remark VARCHAR(500) NULL COMMENT '备注',
+    MODIFY COLUMN direct_connect_enabled TINYINT NOT NULL DEFAULT 0 COMMENT '是否启用银企直连',
+    MODIFY COLUMN direct_connect_provider VARCHAR(100) NULL COMMENT '银企直连服务商',
+    MODIFY COLUMN direct_connect_channel VARCHAR(100) NULL COMMENT '银企直连渠道',
+    MODIFY COLUMN direct_connect_protocol VARCHAR(100) NULL COMMENT '银企直连接口协议',
+    MODIFY COLUMN direct_connect_customer_no VARCHAR(100) NULL COMMENT '银企直连客户号',
+    MODIFY COLUMN direct_connect_app_id VARCHAR(100) NULL COMMENT '银企直连应用标识',
+    MODIFY COLUMN direct_connect_account_alias VARCHAR(100) NULL COMMENT '银企直连账户别名',
+    MODIFY COLUMN direct_connect_auth_mode VARCHAR(100) NULL COMMENT '银企直连认证方式',
+    MODIFY COLUMN direct_connect_api_base_url VARCHAR(500) NULL COMMENT '银企直连接口地址',
+    MODIFY COLUMN direct_connect_cert_ref VARCHAR(200) NULL COMMENT '银企直连证书引用',
+    MODIFY COLUMN direct_connect_secret_ref VARCHAR(200) NULL COMMENT '银企直连密钥引用',
+    MODIFY COLUMN direct_connect_sign_type VARCHAR(100) NULL COMMENT '银企直连签名方式',
+    MODIFY COLUMN direct_connect_encrypt_type VARCHAR(100) NULL COMMENT '银企直连加密方式',
+    MODIFY COLUMN direct_connect_last_sync_at DATETIME NULL COMMENT '银企直连最近同步时间',
+    MODIFY COLUMN direct_connect_last_sync_status VARCHAR(64) NULL COMMENT '银企直连最近同步状态',
+    MODIFY COLUMN direct_connect_last_error_msg VARCHAR(1000) NULL COMMENT '银企直连最近错误信息',
+    MODIFY COLUMN direct_connect_ext_json JSON NULL COMMENT '银企直连扩展信息',
+    MODIFY COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    MODIFY COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    COMMENT = '公司银行账户表';
+
+ALTER TABLE sys_async_task COMMENT = '异步任务表';
 
 /* ========================================================================== */
 /* 2. 为现有业务表补充或统一 company_id 字段                                   */

@@ -3,9 +3,9 @@ package com.finex.auth.service.impl;
 import com.finex.auth.dto.FinanceVoucherQueryDTO;
 import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
+import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.GlAccvouch;
-import com.finex.auth.entity.SystemCompany;
-import com.finex.auth.entity.User;
+import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
@@ -33,6 +33,9 @@ class FinanceVoucherServiceImplTest {
     private GlAccvouchMapper glAccvouchMapper;
 
     @Mock
+    private FinanceAccountSubjectMapper financeAccountSubjectMapper;
+
+    @Mock
     private SystemCompanyMapper systemCompanyMapper;
 
     @Mock
@@ -45,10 +48,17 @@ class FinanceVoucherServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new FinanceVoucherServiceImpl(glAccvouchMapper, systemCompanyMapper, systemDepartmentMapper, userMapper);
+        service = new FinanceVoucherServiceImpl(
+                glAccvouchMapper,
+                financeAccountSubjectMapper,
+                systemCompanyMapper,
+                systemDepartmentMapper,
+                userMapper
+        );
 
         lenient().when(systemDepartmentMapper.selectList(any())).thenReturn(List.of());
         lenient().when(userMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("5601"), buildSubject("1002")));
     }
 
     @Test
@@ -86,6 +96,15 @@ class FinanceVoucherServiceImplTest {
                 service.updateVoucher("COMP-001", "COMP-001~3~记~8", dto, 1L, "alice")
         );
         assertEquals("当前凭证状态不允许修改", exception.getMessage());
+    }
+
+    private FinanceAccountSubject buildSubject(String code) {
+        FinanceAccountSubject subject = new FinanceAccountSubject();
+        subject.setCompanyId("COMP-001");
+        subject.setSubjectCode(code);
+        subject.setSubjectName(code);
+        subject.setStatus(1);
+        return subject;
     }
 
     private GlAccvouch buildRow(int id, String companyId, int period, String csign, int inoId, int inid, String billDate,

@@ -124,11 +124,13 @@ describe('DownloadCenterDrawer', () => {
     })
   })
 
-  it('does not render the removed static summary cards and still shows both download sections', async () => {
+  it('does not render removed static demo downloads and still shows both download sections', async () => {
     const wrapper = await mountView()
 
-    expect(wrapper.text()).not.toContain('进行中')
-    expect(wrapper.text()).not.toContain('历史记录')
+    expect(wrapper.text()).not.toContain('静态摘要')
+    expect(wrapper.text()).not.toContain('3月报销单导出.xlsx')
+    expect(wrapper.text()).not.toContain('待审批单据清单.xlsx')
+    expect(wrapper.text()).not.toContain('发票验真结果.csv')
     expect(wrapper.text()).toContain('正在下载')
     expect(wrapper.text()).toContain('下载记录')
     expect(wrapper.text()).toContain('导出文件.xlsx')
@@ -147,5 +149,6 @@ describe('DownloadCenterDrawer', () => {
     const wrapper = await mountView()
 
     expect(wrapper.findAll('[data-testid="empty"]')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain('3月报销单导出.xlsx')
   })
 })

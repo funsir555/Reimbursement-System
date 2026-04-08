@@ -342,6 +342,14 @@
                 会计科目
               </el-menu-item>
             </el-sub-menu>
+
+            <el-menu-item
+              v-if="canAny(['finance:system_management:view'])"
+              index="/finance/system-management"
+              class="menu-level-2"
+            >
+              财务系统管理
+            </el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu v-if="canShowArchives" index="/archives" class="menu-level-1">
@@ -527,7 +535,8 @@ const canShowFinance = computed(() =>
     'finance:archives:suppliers:view',
     'finance:archives:employees:view',
     'finance:archives:departments:view',
-    'finance:archives:account_subjects:view'
+    'finance:archives:account_subjects:view',
+    'finance:system_management:view'
   ])
 )
 const canShowArchives = computed(() => canAny(['archives:menu', 'archives:invoices:view', 'archives:account_books:view']))

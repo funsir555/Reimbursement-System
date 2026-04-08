@@ -36,7 +36,8 @@ public class FinanceContextController {
             "finance:archives:suppliers:view",
             "finance:archives:employees:view",
             "finance:archives:departments:view",
-            "finance:archives:account_subjects:view"
+            "finance:archives:account_subjects:view",
+            "finance:system_management:view"
     };
 
     private final FinanceContextService financeContextService;

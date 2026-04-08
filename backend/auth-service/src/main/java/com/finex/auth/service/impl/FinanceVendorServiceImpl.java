@@ -58,11 +58,12 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public FinanceVendorDetailVO createVendor(String companyId, FinanceVendorSaveDTO dto, String operatorName) {
-        validateSave(dto, null);
+    public FinanceVendorDetailVO createVendor(String companyId, FinanceVendorSaveDTO dto, String operatorName, boolean paymentInfoRequired) {
+        validateSave(dto, null, paymentInfoRequired);
         String normalizedCompanyId = requireCompanyId(companyId);
 
         FinanceVendor vendor = objectMapper.convertValue(dto, FinanceVendor.class);
+        normalizePaymentInfoFields(vendor, dto);
         vendor.setCVenCode(trimToNull(dto.getCVenCode()) == null ? buildVendorCode() : dto.getCVenCode().trim());
         vendor.setCompanyId(normalizedCompanyId);
         vendor.setCCreatePerson(defaultOperator(operatorName));
@@ -72,7 +73,7 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
         vendor.setCreatedAt(LocalDateTime.now());
 
         if (financeVendorMapper.selectById(vendor.getCVenCode()) != null) {
-            throw new IllegalStateException("渚涘簲鍟嗙紪鐮佸凡瀛樺湪");
+            throw new IllegalStateException("Supplier code already exists");
         }
 
         financeVendorMapper.insert(vendor);
@@ -81,18 +82,19 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public FinanceVendorDetailVO createVendor(Long currentUserId, FinanceVendorSaveDTO dto, String operatorName) {
-        return createVendor(requireCurrentUserCompanyId(currentUserId), dto, operatorName);
+    public FinanceVendorDetailVO createVendor(Long currentUserId, FinanceVendorSaveDTO dto, String operatorName, boolean paymentInfoRequired) {
+        return createVendor(requireCurrentUserCompanyId(currentUserId), dto, operatorName, paymentInfoRequired);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public FinanceVendorDetailVO updateVendor(String companyId, String vendorCode, FinanceVendorSaveDTO dto, String operatorName) {
+    public FinanceVendorDetailVO updateVendor(String companyId, String vendorCode, FinanceVendorSaveDTO dto, String operatorName, boolean paymentInfoRequired) {
         String normalizedCompanyId = requireCompanyId(companyId);
         FinanceVendor existing = requireVendor(normalizedCompanyId, vendorCode);
-        validateSave(dto, existing);
+        validateSave(dto, existing, paymentInfoRequired);
 
         FinanceVendor next = objectMapper.convertValue(dto, FinanceVendor.class);
+        normalizePaymentInfoFields(next, dto);
         BeanUtils.copyProperties(next, existing, "cVenCode", "createdAt", "updatedAt", "cCreatePerson");
         existing.setCVenCode(vendorCode);
         existing.setCompanyId(normalizedCompanyId);
@@ -116,7 +118,7 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
     }
 
     @Override
-    public List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String companyId, String keyword) {
+    public List<ExpenseCreateVendorOptionVO> listActiveVendorOptions(String companyId, String keyword, Boolean includeDisabled) {
         String normalizedCompanyId = requireCompanyId(companyId);
         QueryWrapper<FinanceVendor> query = new QueryWrapper<>();
         String normalizedKeyword = trimToNull(keyword);
@@ -129,30 +131,52 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
                     .or()
                     .like("cVenAbbName", normalizedKeyword));
         }
-        query.isNull("dEndDate").orderByAsc("cVenName").orderByAsc("cVenCode");
+        if (!Boolean.TRUE.equals(includeDisabled)) {
+            query.isNull("dEndDate");
+        }
+        query.orderByAsc("dEndDate").orderByAsc("cVenName").orderByAsc("cVenCode");
         return financeVendorMapper.selectList(query).stream()
                 .filter(item -> normalizedCompanyId.equals(trimToNull(item.getCompanyId())))
-                .map(this::toSummary).map(item -> {
-            ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
-            option.setValue(item.getCVenCode());
-            option.setLabel(item.getCVenName());
-            option.setSecondaryLabel(buildVendorSecondaryLabel(item.getCVenCode(), item.getCVenAbbName()));
-            option.setCVenCode(item.getCVenCode());
-            option.setCVenName(item.getCVenName());
-            option.setCVenAbbName(item.getCVenAbbName());
-            return option;
-        }).toList();
+                .map(this::toSummary)
+                .map(item -> {
+                    ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
+                    option.setValue(item.getCVenCode());
+                    option.setLabel(item.getCVenName());
+                    option.setSecondaryLabel(buildVendorSecondaryLabel(item.getCVenCode(), item.getCVenAbbName()));
+                    option.setCVenCode(item.getCVenCode());
+                    option.setCVenName(item.getCVenName());
+                    option.setCVenAbbName(item.getCVenAbbName());
+                    return option;
+                })
+                .toList();
     }
 
-    private void validateSave(FinanceVendorSaveDTO dto, FinanceVendor existing) {
+    private void validateSave(FinanceVendorSaveDTO dto, FinanceVendor existing, boolean paymentInfoRequired) {
         if (trimToNull(dto.getCVenName()) == null) {
-            throw new IllegalArgumentException("渚涘簲鍟嗗悕绉颁笉鑳戒负绌?");
+            throw new IllegalArgumentException("Supplier name is required");
+        }
+        if (paymentInfoRequired) {
+            if (effectiveReceiptAccountName(dto) == null) {
+                throw new IllegalArgumentException("Receipt account name is required");
+            }
+            if (trimToNull(dto.getCVenAccount()) == null) {
+                throw new IllegalArgumentException("Bank account number is required");
+            }
+            if (trimToNull(dto.getCVenBank()) == null) {
+                throw new IllegalArgumentException("Bank name is required");
+            }
+            if (trimToNull(dto.getReceiptBankProvince()) == null || trimToNull(dto.getReceiptBankCity()) == null) {
+                throw new IllegalArgumentException("Bank province and city are required");
+            }
+            if (trimToNull(dto.getReceiptBranchName()) == null) {
+                throw new IllegalArgumentException("Branch name is required");
+            }
         }
         if (existing == null && trimToNull(dto.getCVenCode()) != null) {
             QueryWrapper<FinanceVendor> query = new QueryWrapper<>();
             query.eq("cVenCode", dto.getCVenCode().trim()).last("limit 1");
             if (financeVendorMapper.selectOne(query) != null) {
-                throw new IllegalStateException("渚涘簲鍟嗙紪鐮佸凡瀛樺湪");
+                throw new IllegalStateException("Supplier code already exists");
             }
         }
     }
@@ -161,14 +185,14 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
         String normalizedCompanyId = requireCompanyId(companyId);
         String normalizedCode = trimToNull(vendorCode);
         if (normalizedCode == null) {
-            throw new IllegalArgumentException("渚涘簲鍟嗙紪鐮佷笉鑳戒负绌?");
+            throw new IllegalArgumentException("Supplier code is required");
         }
         FinanceVendor vendor = financeVendorMapper.selectById(normalizedCode);
         if (vendor == null) {
-            throw new IllegalStateException("渚涘簲鍟嗕笉瀛樺湪");
+            throw new IllegalStateException("Supplier not found");
         }
         if (!normalizedCompanyId.equals(trimToNull(vendor.getCompanyId()))) {
-            throw new SecurityException("鏃犳潈璁块棶褰撳墠渚涘簲鍟?");
+            throw new SecurityException("Supplier does not belong to the current company");
         }
         return vendor;
     }
@@ -194,6 +218,23 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
         FinanceVendorDetailVO detail = objectMapper.convertValue(vendor, FinanceVendorDetailVO.class);
         detail.setActive(vendor.getDEndDate() == null);
         return detail;
+    }
+
+    private void normalizePaymentInfoFields(FinanceVendor vendor, FinanceVendorSaveDTO dto) {
+        vendor.setReceiptAccountName(effectiveReceiptAccountName(dto));
+        vendor.setReceiptBankProvince(trimToNull(dto.getReceiptBankProvince()));
+        vendor.setReceiptBankCity(trimToNull(dto.getReceiptBankCity()));
+        vendor.setReceiptBranchCode(trimToNull(dto.getReceiptBranchCode()));
+        vendor.setReceiptBranchName(trimToNull(dto.getReceiptBranchName()));
+        vendor.setCVenBank(trimToNull(dto.getCVenBank()));
+        vendor.setCVenBankCode(trimToNull(dto.getCVenBankCode()));
+        vendor.setCVenBankNub(trimToNull(dto.getCVenBankNub()));
+        vendor.setCVenAccount(trimToNull(dto.getCVenAccount()));
+    }
+
+    private String effectiveReceiptAccountName(FinanceVendorSaveDTO dto) {
+        String explicitName = trimToNull(dto.getReceiptAccountName());
+        return explicitName != null ? explicitName : trimToNull(dto.getCVenName());
     }
 
     private String buildVendorCode() {
@@ -222,22 +263,22 @@ public class FinanceVendorServiceImpl implements FinanceVendorService {
     private String requireCompanyId(String companyId) {
         String normalized = trimToNull(companyId);
         if (normalized == null) {
-            throw new IllegalArgumentException("鍏徃涓讳綋涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("Company id is required");
         }
         return normalized;
     }
 
     private String requireCurrentUserCompanyId(Long currentUserId) {
         if (currentUserId == null) {
-            throw new IllegalArgumentException("瑜版挸澧犻悽銊﹀煕娑撳秷鍏樻稉铏光敄");
+            throw new IllegalArgumentException("Current user id is required");
         }
         User currentUser = userMapper.selectById(currentUserId);
         if (currentUser == null) {
-            throw new IllegalStateException("瑜版挸澧犻悽銊﹀煕娑撳秴鐡ㄩ崷?");
+            throw new IllegalStateException("Current user not found");
         }
         String companyId = trimToNull(currentUser.getCompanyId());
         if (companyId == null) {
-            throw new IllegalStateException("瑜版挸澧犻悽銊﹀煕閺堫亞绮︾€规艾鍙曢崣闀愬瘜娴?");
+            throw new IllegalStateException("Current user company is missing");
         }
         return companyId;
     }

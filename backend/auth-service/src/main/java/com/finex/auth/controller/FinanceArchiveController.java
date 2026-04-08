@@ -6,8 +6,8 @@ import com.finex.auth.dto.FinanceVendorSummaryVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.FinanceVendorService;
 import com.finex.common.Result;
-import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -62,7 +62,10 @@ public class FinanceArchiveController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), SUPPLIER_CREATE, SUPPLIER_EDIT);
-        return Result.success("渚涘簲鍟嗕繚瀛樻垚鍔?", financeVendorService.createVendor(companyId, dto, getCurrentUsername(request)));
+        return Result.success(
+                "Supplier created",
+                financeVendorService.createVendor(companyId, dto, getCurrentUsername(request), false)
+        );
     }
 
     @PutMapping("/{vendorCode}")
@@ -73,7 +76,10 @@ public class FinanceArchiveController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), SUPPLIER_EDIT);
-        return Result.success("渚涘簲鍟嗘洿鏂版垚鍔?", financeVendorService.updateVendor(companyId, vendorCode, dto, getCurrentUsername(request)));
+        return Result.success(
+                "Supplier updated",
+                financeVendorService.updateVendor(companyId, vendorCode, dto, getCurrentUsername(request), false)
+        );
     }
 
     @DeleteMapping("/{vendorCode}")
@@ -83,7 +89,10 @@ public class FinanceArchiveController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), SUPPLIER_DELETE, SUPPLIER_EDIT);
-        return Result.success("渚涘簲鍟嗗凡鍋滅敤", financeVendorService.disableVendor(companyId, vendorCode, getCurrentUsername(request)));
+        return Result.success(
+                "Supplier disabled",
+                financeVendorService.disableVendor(companyId, vendorCode, getCurrentUsername(request))
+        );
     }
 
     private Long getCurrentUserId(HttpServletRequest request) {
@@ -94,7 +103,7 @@ public class FinanceArchiveController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
+        throw new IllegalStateException("Current user id is missing");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {

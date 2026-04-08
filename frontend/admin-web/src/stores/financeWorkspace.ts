@@ -23,6 +23,7 @@ const FINANCE_ROUTE_TITLE_MAP: Record<string, string> = {
   'finance-reports-balance-sheet': '资产负债表',
   'finance-reports-income-statement': '利润表',
   'finance-reports-cash-flow': '现金流量表',
+  'finance-system-management': '财务系统管理',
   'finance-archives-customers': '客户档案',
   'finance-archives-suppliers': '供应商档案',
   'finance-archives-employees': '员工档案',

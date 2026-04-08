@@ -37,6 +37,7 @@
               :form-data="detail.formData"
               :company-options="detail.companyOptions"
               :department-options="detail.departmentOptions"
+              :vendor-option-map="vendorOptionMap"
               :payee-option-map="payeeOptionMap"
               :payee-account-option-map="payeeAccountOptionMap"
             />
@@ -462,7 +463,7 @@ const activeExpenseDetailNo = ref('')
 const expenseDetailLoadingNo = ref('')
 const expenseDetailCache = ref<Record<string, ExpenseDetailInstanceDetail>>({})
 const expenseDetailErrors = ref<Record<string, string>>({})
-const { payeeOptionMap, payeeAccountOptionMap, syncReadonlyPayeeLookups } = useReadonlyPayeeLookups()
+const { vendorOptionMap, payeeOptionMap, payeeAccountOptionMap, syncReadonlyPayeeLookups } = useReadonlyPayeeLookups()
 const storedUser = (readStoredUser() || {}) as { userId?: number; permissionCodes?: string[] }
 const commentDialogVisible = ref(false)
 const commentSubmitting = ref(false)

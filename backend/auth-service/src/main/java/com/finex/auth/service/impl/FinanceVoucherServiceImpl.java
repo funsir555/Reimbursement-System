@@ -11,10 +11,12 @@ import com.finex.auth.dto.FinanceVoucherQueryDTO;
 import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
+import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
+import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
@@ -111,6 +113,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
     );
 
     private final GlAccvouchMapper glAccvouchMapper;
+    private final FinanceAccountSubjectMapper financeAccountSubjectMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
@@ -140,7 +143,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         meta.setEmployeeOptions(employees.stream().map(this::toEmployeeOption).toList());
         meta.setVoucherTypeOptions(toOptions(VOUCHER_TYPE_SEEDS));
         meta.setCurrencyOptions(toOptions(CURRENCY_SEEDS));
-        meta.setAccountOptions(toOptions(ACCOUNT_SEEDS));
+        meta.setAccountOptions(loadAccountOptions(effectiveCompanyId));
         meta.setCustomerOptions(toOptions(CUSTOMER_SEEDS));
         meta.setSupplierOptions(toOptions(SUPPLIER_SEEDS));
         meta.setProjectClassOptions(toOptions(PROJECT_CLASS_SEEDS));
@@ -224,7 +227,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
 
         validateCompany(companyId);
         validateVoucherType(voucherType);
-        validateEntries(normalizedEntries);
+        validateEntries(companyId, normalizedEntries);
 
         String makerName = resolveMakerName(currentUser, currentUsername);
         int attachedDocCount = dto.getIdoc() == null ? 0 : Math.max(dto.getIdoc(), 0);
@@ -333,7 +336,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         List<FinanceVoucherEntryDTO> normalizedEntries = normalizeEntries(dto.getEntries());
         validateCompany(voucherKey.companyId());
         validateVoucherType(voucherKey.csign());
-        validateEntries(normalizedEntries);
+        validateEntries(voucherKey.companyId(), normalizedEntries);
 
         String makerName = trimToNull(headerRow.getCbill()) == null
                 ? resolveMakerName(requireUser(currentUserId), currentUsername)
@@ -412,6 +415,32 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                         .eq(SystemCompany::getStatus, 1)
                         .orderByAsc(SystemCompany::getCompanyCode, SystemCompany::getCompanyId)
         );
+    }
+
+    private List<FinanceVoucherOptionVO> loadAccountOptions(String companyId) {
+        String normalizedCompanyId = trimToNull(companyId);
+        if (normalizedCompanyId == null) {
+            return List.of();
+        }
+        return financeAccountSubjectMapper.selectList(
+                        Wrappers.<FinanceAccountSubject>lambdaQuery()
+                                .eq(FinanceAccountSubject::getCompanyId, normalizedCompanyId)
+                                .eq(FinanceAccountSubject::getStatus, 1)
+                                .orderByAsc(FinanceAccountSubject::getSubjectCode, FinanceAccountSubject::getId)
+                ).stream()
+                .map(item -> option(item.getSubjectCode(), item.getSubjectCode() + " " + item.getSubjectName()))
+                .toList();
+    }
+
+    private Set<String> loadAccountCodeSet(String companyId) {
+        return financeAccountSubjectMapper.selectList(
+                        Wrappers.<FinanceAccountSubject>lambdaQuery()
+                                .eq(FinanceAccountSubject::getCompanyId, companyId)
+                                .eq(FinanceAccountSubject::getStatus, 1)
+                ).stream()
+                .map(FinanceAccountSubject::getSubjectCode)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private List<SystemDepartment> loadEnabledDepartments() {
@@ -810,7 +839,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 && isNullOrZero(entry.getNcS());
     }
 
-    private void validateEntries(List<FinanceVoucherEntryDTO> entries) {
+    private void validateEntries(String companyId, List<FinanceVoucherEntryDTO> entries) {
         if (entries.size() < 2) {
             throw new IllegalArgumentException("至少需要两条有效分录");
         }
@@ -819,7 +848,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 .collect(Collectors.toMap(item -> String.valueOf(item.getId()), SystemDepartment::getDeptName));
         Map<String, String> employees = loadEnabledUsers().stream()
                 .collect(Collectors.toMap(item -> String.valueOf(item.getId()), this::resolveUserName));
-        Set<String> accounts = ACCOUNT_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> accounts = loadAccountCodeSet(companyId);
         Set<String> customers = CUSTOMER_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
         Set<String> suppliers = SUPPLIER_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
         Set<String> projectClasses = PROJECT_CLASS_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));

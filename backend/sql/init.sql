@@ -61,6 +61,67 @@ CREATE TABLE IF NOT EXISTS sys_company_bank_account (
     KEY idx_sys_company_bank_account_company_default (company_id, default_account)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='company bank account';
 
+CREATE TABLE IF NOT EXISTS sys_bank_catalog (
+    bank_code VARCHAR(64) NOT NULL COMMENT 'bank code',
+    bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT 'sort order',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
+    PRIMARY KEY (bank_code),
+    KEY idx_sys_bank_catalog_status_sort (status, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='domestic bank catalog';
+
+CREATE TABLE IF NOT EXISTS sys_bank_branch_catalog (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'bank branch id',
+    bank_code VARCHAR(64) NOT NULL COMMENT 'bank code',
+    bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
+    province VARCHAR(64) NOT NULL COMMENT 'province',
+    city VARCHAR(64) NOT NULL COMMENT 'city',
+    branch_code VARCHAR(64) NOT NULL COMMENT 'branch code',
+    branch_name VARCHAR(200) NOT NULL COMMENT 'branch name',
+    cnaps_code VARCHAR(64) NULL COMMENT 'cnaps code',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT 'sort order',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'updated at',
+    CONSTRAINT uk_sys_bank_branch_catalog_code UNIQUE (branch_code),
+    CONSTRAINT uk_sys_bank_branch_catalog_cnaps UNIQUE (cnaps_code),
+    KEY idx_sys_bank_branch_catalog_bank_area (bank_code, province, city, status),
+    KEY idx_sys_bank_branch_catalog_bank_branch (bank_code, branch_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='domestic bank branch catalog';
+
+INSERT INTO sys_bank_catalog (bank_code, bank_name, status, sort_order) VALUES
+    ('ICBC', '中国工商银行', 1, 10),
+    ('ABC', '中国农业银行', 1, 20),
+    ('BOC', '中国银行', 1, 30),
+    ('CCB', '中国建设银行', 1, 40),
+    ('CMB', '招商银行', 1, 50)
+ON DUPLICATE KEY UPDATE
+    bank_name = VALUES(bank_name),
+    status = VALUES(status),
+    sort_order = VALUES(sort_order);
+
+INSERT INTO sys_bank_branch_catalog (bank_code, bank_name, province, city, branch_code, branch_name, cnaps_code, status, sort_order) VALUES
+    ('ICBC', '中国工商银行', '上海市', '上海市', 'ICBC-SH-PD', '中国工商银行上海浦东支行', '102290040011', 1, 10),
+    ('ICBC', '中国工商银行', '北京市', '北京市', 'ICBC-BJ-HD', '中国工商银行北京海淀支行', '102100099996', 1, 20),
+    ('ABC', '中国农业银行', '广东省', '广州市', 'ABC-GZ-TH', '中国农业银行广州天河支行', '103581000123', 1, 10),
+    ('ABC', '中国农业银行', '浙江省', '杭州市', 'ABC-HZ-XH', '中国农业银行杭州西湖支行', '103331057771', 1, 20),
+    ('BOC', '中国银行', '广东省', '深圳市', 'BOC-SZ-NS', '中国银行深圳南山支行', '104584003210', 1, 10),
+    ('BOC', '中国银行', '上海市', '上海市', 'BOC-SH-MH', '中国银行上海闵行支行', '104290045678', 1, 20),
+    ('CCB', '中国建设银行', '北京市', '北京市', 'CCB-BJ-CY', '中国建设银行北京朝阳支行', '105100000017', 1, 10),
+    ('CCB', '中国建设银行', '四川省', '成都市', 'CCB-CD-GX', '中国建设银行成都高新支行', '105651001888', 1, 20),
+    ('CMB', '招商银行', '广东省', '深圳市', 'CMB-SZ-FH', '招商银行深圳福华支行', '308584000013', 1, 10),
+    ('CMB', '招商银行', '上海市', '上海市', 'CMB-SH-LJ', '招商银行上海陆家嘴支行', '308290003456', 1, 20)
+ON DUPLICATE KEY UPDATE
+    bank_name = VALUES(bank_name),
+    province = VALUES(province),
+    city = VALUES(city),
+    branch_name = VALUES(branch_name),
+    cnaps_code = VALUES(cnaps_code),
+    status = VALUES(status),
+    sort_order = VALUES(sort_order);
+
 CREATE TABLE IF NOT EXISTS pm_bank_payment_record (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'bank payment record id',
     task_id BIGINT NOT NULL COMMENT 'payment task id',
@@ -204,6 +265,11 @@ CREATE TABLE IF NOT EXISTS sys_user_bank_account (
     user_id BIGINT NOT NULL COMMENT '鐢ㄦ埛ID',
     bank_name VARCHAR(100) NOT NULL COMMENT '閾惰鍚嶇О',
     branch_name VARCHAR(100) COMMENT '鏀鍚嶇О',
+    bank_code VARCHAR(64) NULL COMMENT '寮€鎴烽摱琛岀紪鐮?',
+    branch_code VARCHAR(64) NULL COMMENT '鍒嗘敮琛岀紪鐮?',
+    cnaps_code VARCHAR(64) NULL COMMENT '鑱旇鍙?',
+    province VARCHAR(64) NULL COMMENT '寮€鎴风渷',
+    city VARCHAR(64) NULL COMMENT '寮€鎴峰競',
     account_name VARCHAR(100) NOT NULL COMMENT '璐︽埛鍚?,
     account_no VARCHAR(50) NOT NULL COMMENT '閾惰鍗″彿',
     account_type VARCHAR(50) DEFAULT '瀵圭璐︽埛' COMMENT '璐︽埛绫诲瀷',
@@ -450,39 +516,6 @@ WHERE u.username = 'lisi'
   AND NOT EXISTS (
       SELECT 1 FROM sys_user_bank_account a
       WHERE a.user_id = u.id AND a.account_no = '6222000098765432'
-  );
-
-INSERT INTO sys_download_record (
-    user_id, file_name, business_type, status, progress, file_size, created_at, finished_at
-)
-SELECT u.id, '3鏈堟姤閿€鍗曞鍑?xlsx', '鎶ラ攢鏄庣粏瀵煎嚭', 'DOWNLOADING', 68, '4.6 MB', DATE_SUB(NOW(), INTERVAL 3 MINUTE), NULL
-FROM sys_user u
-WHERE u.username = 'admin'
-  AND NOT EXISTS (
-      SELECT 1 FROM sys_download_record d
-      WHERE d.user_id = u.id AND d.file_name = '3鏈堟姤閿€鍗曞鍑?xlsx'
-  );
-
-INSERT INTO sys_download_record (
-    user_id, file_name, business_type, status, progress, file_size, created_at, finished_at
-)
-SELECT u.id, '寰呭鎵瑰崟鎹竻鍗?xlsx', '瀹℃壒娓呭崟瀵煎嚭', 'COMPLETED', 100, '2.1 MB', DATE_SUB(NOW(), INTERVAL 1 DAY), DATE_SUB(NOW(), INTERVAL 1 DAY) + INTERVAL 2 MINUTE
-FROM sys_user u
-WHERE u.username = 'admin'
-  AND NOT EXISTS (
-      SELECT 1 FROM sys_download_record d
-      WHERE d.user_id = u.id AND d.file_name = '寰呭鎵瑰崟鎹竻鍗?xlsx'
-  );
-
-INSERT INTO sys_download_record (
-    user_id, file_name, business_type, status, progress, file_size, created_at, finished_at
-)
-SELECT u.id, '鍙戠エ楠岀湡缁撴灉.csv', '鍙戠エ绠＄悊瀵煎嚭', 'COMPLETED', 100, '860 KB', DATE_SUB(NOW(), INTERVAL 2 DAY), DATE_SUB(NOW(), INTERVAL 2 DAY) + INTERVAL 1 MINUTE
-FROM sys_user u
-WHERE u.username = 'zhangsan'
-  AND NOT EXISTS (
-      SELECT 1 FROM sys_download_record d
-      WHERE d.user_id = u.id AND d.file_name = '鍙戠エ楠岀湡缁撴灉.csv'
   );
 
 INSERT INTO pm_template_category (category_code, category_name, category_description, sort_order, status)

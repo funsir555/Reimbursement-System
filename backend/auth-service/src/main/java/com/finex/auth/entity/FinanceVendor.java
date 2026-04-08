@@ -34,6 +34,16 @@ public class FinanceVendor {
     private String cVenAccount;
     @TableField("cVenBankNub")
     private String cVenBankNub;
+    @TableField("receipt_account_name")
+    private String receiptAccountName;
+    @TableField("receipt_bank_province")
+    private String receiptBankProvince;
+    @TableField("receipt_bank_city")
+    private String receiptBankCity;
+    @TableField("receipt_branch_code")
+    private String receiptBranchCode;
+    @TableField("receipt_branch_name")
+    private String receiptBranchName;
     @TableField("cVenPerson")
     private String cVenPerson;
     @TableField("cVenPhone")

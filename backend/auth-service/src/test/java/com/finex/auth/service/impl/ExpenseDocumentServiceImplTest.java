@@ -31,6 +31,7 @@ import com.finex.auth.entity.SystemCompanyBankAccount;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
+import com.finex.auth.entity.UserBankAccount;
 import com.finex.auth.mapper.FinanceVendorMapper;
 import com.finex.auth.mapper.PmBankPaymentRecordMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
@@ -1481,68 +1482,121 @@ class ExpenseDocumentServiceImplTest {
         option.setCVenName("Company Vendor");
 
         when(userMapper.selectById(1L)).thenReturn(currentUser);
-        when(financeVendorService.listActiveVendorOptions("COMPANY_A", "Vendor")).thenReturn(List.of(option));
+        when(financeVendorService.listActiveVendorOptions("COMPANY_A", "Vendor", null)).thenReturn(List.of(option));
 
-        List<ExpenseCreateVendorOptionVO> result = service.listVendorOptions(1L, "Vendor");
+        List<ExpenseCreateVendorOptionVO> result = service.listVendorOptions(1L, "Vendor", null);
 
         assertEquals(1, result.size());
         assertEquals("VEN_A", result.get(0).getCVenCode());
-        verify(financeVendorService).listActiveVendorOptions("COMPANY_A", "Vendor");
+        verify(financeVendorService).listActiveVendorOptions("COMPANY_A", "Vendor", null);
     }
 
     @Test
-    void listPayeeOptionsUsesCurrentUserCompanyIdForVendorCandidates() {
+    void listPayeeOptionsPersonalOnlyReturnsCurrentUserEnabledPrivateNames() {
+        UserBankAccount first = new UserBankAccount();
+        first.setId(8L);
+        first.setUserId(1L);
+        first.setStatus(1);
+        first.setAccountName("张三");
+        first.setAccountNo("6222000011112222");
+        first.setBankName("招商银行");
+        first.setBranchName("上海分行");
+
+        UserBankAccount duplicate = new UserBankAccount();
+        duplicate.setId(9L);
+        duplicate.setUserId(1L);
+        duplicate.setStatus(1);
+        duplicate.setAccountName("张三");
+        duplicate.setAccountNo("6222000011113333");
+        duplicate.setBankName("工商银行");
+        duplicate.setBranchName("北京分行");
+
+        UserBankAccount ignored = new UserBankAccount();
+        ignored.setId(10L);
+        ignored.setUserId(1L);
+        ignored.setStatus(1);
+        ignored.setAccountName("李四");
+        ignored.setAccountNo("95588000001111");
+        ignored.setBankName("建设银行");
+
+        when(userBankAccountMapper.selectList(any())).thenReturn(List.of(first, duplicate, ignored));
+
+        List<ExpenseCreatePayeeOptionVO> result = service.listPayeeOptions(1L, "张", true);
+
+        assertEquals(1, result.size());
+        assertEquals("PERSONAL_PAYEE:张三", result.get(0).getValue());
+        assertEquals("张三", result.get(0).getLabel());
+        assertEquals("PERSONAL_PRIVATE_PAYEE", result.get(0).getSourceType());
+        assertEquals("张三", result.get(0).getSourceCode());
+        assertEquals("个人中心对私账户", result.get(0).getSecondaryLabel());
+        verify(userBankAccountMapper).selectList(any());
+    }
+
+    @Test
+    void listPayeeAccountOptionsEmployeeModeFiltersCurrentUserAccountsByPayeeName() {
+        UserBankAccount first = new UserBankAccount();
+        first.setId(8L);
+        first.setUserId(1L);
+        first.setStatus(1);
+        first.setAccountName("张三");
+        first.setAccountNo("6222000011112222");
+        first.setBankName("招商银行");
+        first.setBranchName("上海分行");
+
+        UserBankAccount second = new UserBankAccount();
+        second.setId(9L);
+        second.setUserId(1L);
+        second.setStatus(1);
+        second.setAccountName("张三");
+        second.setAccountNo("6222000099998888");
+        second.setBankName("中国银行");
+        second.setBranchName("浦东支行");
+
+        UserBankAccount ignored = new UserBankAccount();
+        ignored.setId(10L);
+        ignored.setUserId(1L);
+        ignored.setStatus(1);
+        ignored.setAccountName("李四");
+        ignored.setAccountNo("95588000001111");
+        ignored.setBankName("建设银行");
+
+        when(userBankAccountMapper.selectList(any())).thenReturn(List.of(first, second, ignored));
+
+        List<ExpenseCreatePayeeAccountOptionVO> result = service.listPayeeAccountOptions(1L, "6222", "EMPLOYEE", "张三", null);
+
+        assertEquals(2, result.size());
+        assertEquals(List.of("USER_ACCOUNT:8", "USER_ACCOUNT:9"), result.stream().map(ExpenseCreatePayeeAccountOptionVO::getValue).toList());
+        assertTrue(result.stream().allMatch(item -> "张三".equals(item.getOwnerName())));
+        assertTrue(result.stream().allMatch(item -> "1".equals(item.getOwnerCode())));
+        verify(userBankAccountMapper).selectList(any());
+    }
+
+    @Test
+    void listPayeeAccountOptionsEnterpriseModeUsesCounterpartyOnly() {
         User currentUser = new User();
         currentUser.setId(1L);
         currentUser.setStatus(1);
         currentUser.setCompanyId("COMPANY_A");
 
-        ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
-        option.setCVenCode("VEN_A");
-        option.setCVenName("Company Vendor");
-        option.setSecondaryLabel("VEN_A / SHORT");
+        FinanceVendor vendor = new FinanceVendor();
+        vendor.setCVenCode("VEN_A");
+        vendor.setCVenName("广州供应商");
+        vendor.setCompanyId("COMPANY_A");
+        vendor.setCVenBank("中国银行");
+        vendor.setCVenAccount("6222000011112222");
+        vendor.setReceiptAccountName("广州供应商");
+        vendor.setReceiptBranchName("中国银行广州分行");
 
         when(userMapper.selectById(1L)).thenReturn(currentUser);
-        when(financeVendorService.listActiveVendorOptions("COMPANY_A", "Vendor")).thenReturn(List.of(option));
-        when(userMapper.selectList(any())).thenReturn(List.of());
+        when(financeVendorMapper.selectOne(any())).thenReturn(vendor);
 
-        List<ExpenseCreatePayeeOptionVO> result = service.listPayeeOptions(1L, "Vendor");
-
-        assertEquals(1, result.size());
-        assertEquals("VENDOR", result.get(0).getSourceType());
-        assertEquals("VEN_A", result.get(0).getSourceCode());
-        verify(financeVendorService).listActiveVendorOptions("COMPANY_A", "Vendor");
-    }
-
-    @Test
-    void listPayeeAccountOptionsOnlyIncludesVendorAccountsFromCurrentCompany() {
-        User currentUser = new User();
-        currentUser.setId(1L);
-        currentUser.setStatus(1);
-        currentUser.setCompanyId("COMPANY_A");
-
-        FinanceVendor companyVendor = new FinanceVendor();
-        companyVendor.setCVenCode("VEN_A");
-        companyVendor.setCVenName("Company Vendor");
-        companyVendor.setCompanyId("COMPANY_A");
-        companyVendor.setCVenBank("Bank A");
-        companyVendor.setCVenAccount("6222000011112222");
-
-        FinanceVendor otherVendor = new FinanceVendor();
-        otherVendor.setCVenCode("VEN_B");
-        otherVendor.setCVenName("Other Vendor");
-        otherVendor.setCompanyId("COMPANY_B");
-        otherVendor.setCVenBank("Bank B");
-        otherVendor.setCVenAccount("6222000099998888");
-
-        when(userMapper.selectById(1L)).thenReturn(currentUser);
-        when(financeVendorMapper.selectList(any())).thenReturn(List.of(companyVendor, otherVendor));
-        when(userMapper.selectList(any())).thenReturn(List.of());
-
-        List<ExpenseCreatePayeeAccountOptionVO> result = service.listPayeeAccountOptions(1L, null);
+        List<ExpenseCreatePayeeAccountOptionVO> result = service.listPayeeAccountOptions(1L, null, "ENTERPRISE", null, "VEN_A");
 
         assertEquals(1, result.size());
+        assertEquals("VENDOR:VEN_A", result.get(0).getValue());
         assertEquals("VEN_A", result.get(0).getOwnerCode());
+        assertEquals("广州供应商", result.get(0).getOwnerName());
+        assertEquals("中国银行", result.get(0).getBankName());
     }
 
     private ProcessDocumentInstance copyInstance(ProcessDocumentInstance source) {

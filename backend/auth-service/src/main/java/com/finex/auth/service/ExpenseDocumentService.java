@@ -35,11 +35,17 @@ public interface ExpenseDocumentService {
 
     ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode);
 
-    List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword);
+    List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled);
 
-    List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword);
+    List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly);
 
-    List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(Long userId, String keyword);
+    List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
+            Long userId,
+            String keyword,
+            String linkageMode,
+            String payeeName,
+            String counterpartyCode
+    );
 
     ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto);
 

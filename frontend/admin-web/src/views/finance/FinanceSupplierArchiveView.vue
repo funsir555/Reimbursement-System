@@ -87,6 +87,13 @@
                   当前维护公司：<strong>{{ currentCompanyName || currentCompanyId || '未设置' }}</strong>
                 </div>
               </div>
+              <div v-if="section.key === 'bank'" class="xl:col-span-3">
+                <SupplierPaymentInfoFields
+                  :form-state="vendorForm"
+                  auto-fill-source-key="cVenName"
+                  account-name-label="开户名"
+                />
+              </div>
               <template v-for="field in section.fields" :key="field.key">
                 <el-form-item
                   :label="field.label"
@@ -150,6 +157,7 @@ import {
   type FinanceVendorSavePayload,
   type FinanceVendorSummary
 } from '@/api'
+import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
@@ -220,11 +228,8 @@ const vendorSections: Array<{ key: string; label: string; fields: VendorFieldCon
     key: 'bank',
     label: '收款与税务',
     fields: [
-      { key: 'cVenBank', label: '开户银行', type: 'text' },
-      { key: 'cVenAccount', label: '银行账号', type: 'text' },
       { key: 'cTaxCode', label: '税号', type: 'text' },
       { key: 'cVenDCode', label: '地区编码', type: 'text' },
-      { key: 'cVenCCCCode', label: '联行号', type: 'text' },
       { key: 'cPayCode', label: '付款条件编码', type: 'text' },
       { key: 'cSCCode', label: '结算方式编码', type: 'text' },
       { key: 'bVenTax', label: '一般纳税人', type: 'switch' },

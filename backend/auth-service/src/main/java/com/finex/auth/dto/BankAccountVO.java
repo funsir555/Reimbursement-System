@@ -7,11 +7,23 @@ public class BankAccountVO {
 
     private Long id;
 
+    private String bankCode;
+
     private String bankName;
+
+    private String province;
+
+    private String city;
+
+    private String branchCode;
 
     private String branchName;
 
+    private String cnapsCode;
+
     private String accountName;
+
+    private String accountNo;
 
     private String accountNoMasked;
 
@@ -19,5 +31,11 @@ public class BankAccountVO {
 
     private Boolean defaultAccount;
 
-    private String status;
+    private Integer status;
+
+    private String statusLabel;
+
+    private String createdAt;
+
+    private String updatedAt;
 }

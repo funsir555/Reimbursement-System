@@ -1,8 +1,11 @@
 package com.finex.auth.controller;
 
+import com.finex.auth.dto.BankAccountVO;
 import com.finex.auth.dto.ChangePasswordDTO;
 import com.finex.auth.dto.DownloadCenterVO;
 import com.finex.auth.dto.PersonalCenterVO;
+import com.finex.auth.dto.UserBankAccountSaveDTO;
+import com.finex.auth.dto.UserBankAccountStatusDTO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.UserCenterService;
 import com.finex.common.Result;
@@ -17,11 +20,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @RestController
 @RequestMapping("/auth/user-center")
@@ -40,6 +45,55 @@ public class UserCenterController {
         Long userId = getCurrentUserId(request);
         accessControlService.requirePermission(userId, PROFILE_VIEW);
         return Result.success(userCenterService.getPersonalCenter(userId));
+    }
+
+    @GetMapping("/bank-accounts")
+    public Result<List<BankAccountVO>> listBankAccounts(HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, PROFILE_VIEW);
+        return Result.success(userCenterService.listBankAccounts(userId));
+    }
+
+    @PostMapping("/bank-accounts")
+    public Result<BankAccountVO> createBankAccount(
+            @Valid @RequestBody UserBankAccountSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, PROFILE_VIEW);
+        return Result.success(userCenterService.createBankAccount(userId, dto));
+    }
+
+    @PutMapping("/bank-accounts/{accountId}")
+    public Result<BankAccountVO> updateBankAccount(
+            @PathVariable Long accountId,
+            @Valid @RequestBody UserBankAccountSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, PROFILE_VIEW);
+        return Result.success(userCenterService.updateBankAccount(userId, accountId, dto));
+    }
+
+    @PostMapping("/bank-accounts/{accountId}/status")
+    public Result<Boolean> updateBankAccountStatus(
+            @PathVariable Long accountId,
+            @Valid @RequestBody UserBankAccountStatusDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, PROFILE_VIEW);
+        return Result.success(userCenterService.updateBankAccountStatus(userId, accountId, dto.getStatus()));
+    }
+
+    @PostMapping("/bank-accounts/{accountId}/default")
+    public Result<Boolean> setDefaultBankAccount(
+            @PathVariable Long accountId,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, PROFILE_VIEW);
+        return Result.success(userCenterService.setDefaultBankAccount(userId, accountId));
     }
 
     @GetMapping("/downloads")

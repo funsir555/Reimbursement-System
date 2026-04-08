@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ProcessCustomArchiveSummary,
   ProcessFormDesignBlock,
   ProcessFormDesignSchema,
@@ -96,20 +96,20 @@ export const WRITEOFF_DOCUMENT_ALLOWED_TEMPLATE_TYPES = ['report', 'loan'] as co
 export const BUSINESS_COMPONENT_DEFINITIONS: BusinessComponentDefinition[] = [
   {
     code: 'counterparty',
-    label: '往来单位',
-    description: '从供应商档案选择往来单位，提单时支持现场新增并立即回填。',
-    previewFields: ['供应商编码', '往来单位名称', '供应商简称']
+    label: '收款单位',
+    description: '从供应商档案选择对公付款的收款单位，提单时支持现场新增并立即回填。',
+    previewFields: ['供应商编码', '收款单位名称', '供应商简称']
   },
   {
     code: 'payee',
     label: '收款人',
-    description: '混合选择供应商名称与员工姓名，作为收款主体。',
-    previewFields: ['供应商名称', '员工姓名', '来源类型']
+    description: '从个人中心维护的对私收款姓名中选择，作为员工费用类单据的收款人。',
+    previewFields: ['收款人姓名', '来源类型']
   },
   {
     code: 'payee-account',
     label: '收款账户',
-    description: '从供应商档案或员工档案读取已维护好的收款账户信息。',
+    description: '员工费用类按收款人联动个人中心对私账户，企业往来类按收款单位联动供应商对公账户。',
     previewFields: ['开户行', '账户名称', '银行账号']
   },
   {

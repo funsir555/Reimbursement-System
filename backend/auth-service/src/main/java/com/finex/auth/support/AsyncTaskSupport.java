@@ -9,6 +9,7 @@ public final class AsyncTaskSupport {
     public static final String TASK_TYPE_EXPORT = "EXPORT";
     public static final String TASK_TYPE_INVOICE_VERIFY = "INVOICE_VERIFY";
     public static final String TASK_TYPE_INVOICE_OCR = "INVOICE_OCR";
+    public static final String TASK_TYPE_FINANCE_ACCOUNT_SET_CREATE = "FINANCE_ACCOUNT_SET_CREATE";
 
     public static final String TASK_STATUS_PENDING = "PENDING";
     public static final String TASK_STATUS_RUNNING = "RUNNING";
@@ -18,6 +19,7 @@ public final class AsyncTaskSupport {
     public static final String BUSINESS_TYPE_INVOICE_EXPORT = "INVOICE_EXPORT";
     public static final String BUSINESS_TYPE_EXPENSE_EXPORT = "EXPENSE_EXPORT";
     public static final String BUSINESS_TYPE_INVOICE = "INVOICE";
+    public static final String BUSINESS_TYPE_FINANCE_ACCOUNT_SET = "finance_account_set";
 
     public static final String EXPENSE_EXPORT_SCENE_MY_EXPENSES = "MY_EXPENSES";
     public static final String EXPENSE_EXPORT_SCENE_PENDING_APPROVAL = "PENDING_APPROVAL";
@@ -41,6 +43,7 @@ public final class AsyncTaskSupport {
         String prefix = switch (taskType) {
             case TASK_TYPE_INVOICE_VERIFY -> "VER";
             case TASK_TYPE_INVOICE_OCR -> "OCR";
+            case TASK_TYPE_FINANCE_ACCOUNT_SET_CREATE -> "FAS";
             default -> "EXP";
         };
         return prefix

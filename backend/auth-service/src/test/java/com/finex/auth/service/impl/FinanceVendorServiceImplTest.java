@@ -53,7 +53,7 @@ class FinanceVendorServiceImplTest {
         when(financeVendorMapper.selectById("VEN202604050001")).thenReturn(null, persisted);
         when(financeVendorMapper.insert(any(FinanceVendor.class))).thenReturn(1);
 
-        FinanceVendorDetailVO result = financeVendorService.createVendor("COMPANY_A", dto, "finance");
+        FinanceVendorDetailVO result = financeVendorService.createVendor("COMPANY_A", dto, "finance", false);
 
         assertEquals("COMPANY_A", result.getCompanyId());
         verify(financeVendorMapper).insert(any(FinanceVendor.class));
@@ -79,7 +79,7 @@ class FinanceVendorServiceImplTest {
         when(financeVendorMapper.selectById("VEN202604050002")).thenReturn(null, persisted);
         when(financeVendorMapper.insert(any(FinanceVendor.class))).thenReturn(1);
 
-        FinanceVendorDetailVO result = financeVendorService.createVendor(1L, dto, "tester");
+        FinanceVendorDetailVO result = financeVendorService.createVendor(1L, dto, "tester", false);
 
         assertEquals("COMPANY_A", result.getCompanyId());
         verify(userMapper).selectById(1L);
@@ -99,7 +99,7 @@ class FinanceVendorServiceImplTest {
 
         when(financeVendorMapper.selectList(any())).thenReturn(List.of(companyVendor, otherVendor));
 
-        List<ExpenseCreateVendorOptionVO> result = financeVendorService.listActiveVendorOptions("COMPANY_A", null);
+        List<ExpenseCreateVendorOptionVO> result = financeVendorService.listActiveVendorOptions("COMPANY_A", null, false);
 
         assertEquals(1, result.size());
         assertEquals("VEN_A", result.get(0).getCVenCode());
@@ -115,5 +115,18 @@ class FinanceVendorServiceImplTest {
         when(financeVendorMapper.selectById("VEN202604050001")).thenReturn(vendor);
 
         assertThrows(SecurityException.class, () -> financeVendorService.getVendorDetail("COMPANY_A", "VEN202604050001"));
+    }
+
+    @Test
+    void createVendorRequiresPaymentInfoWhenRequested() {
+        FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
+        dto.setCVenName("Quick Vendor");
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> financeVendorService.createVendor("COMPANY_A", dto, "tester", true)
+        );
+
+        assertEquals("Bank account number is required", error.getMessage());
     }
 }

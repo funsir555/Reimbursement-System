@@ -47,6 +47,7 @@
             :department-options="departmentOptions"
             :detail-type="detail.detailType"
             :default-business-scenario="detail.businessSceneMode || ''"
+            :vendor-option-map="vendorOptionMap"
             :payee-option-map="payeeOptionMap"
             :payee-account-option-map="payeeAccountOptionMap"
           />
@@ -74,7 +75,7 @@ const loading = ref(false)
 const detail = ref<ExpenseDetailInstanceDetail | null>(null)
 const companyOptions = ref<ProcessFormOption[]>([])
 const departmentOptions = ref<ProcessFormOption[]>([])
-const { payeeOptionMap, payeeAccountOptionMap, syncReadonlyPayeeLookups } = useReadonlyPayeeLookups()
+const { vendorOptionMap, payeeOptionMap, payeeAccountOptionMap, syncReadonlyPayeeLookups } = useReadonlyPayeeLookups()
 const emptySchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
 
 const documentCode = String(route.params.documentCode || '')
