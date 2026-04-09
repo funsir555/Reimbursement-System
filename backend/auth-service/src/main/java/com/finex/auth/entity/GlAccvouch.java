@@ -47,6 +47,8 @@ public class GlAccvouch {
 
     private String ccode;
 
+    private String ccodeName;
+
     private String cexchName;
 
     private BigDecimal md;

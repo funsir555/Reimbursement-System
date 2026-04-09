@@ -115,3 +115,17 @@ WHERE d.archive_code = 'PROCESS_INSTALLMENT_OPTIONS'
       SELECT 1 FROM pm_custom_archive_item i
       WHERE i.archive_id = d.id AND i.item_code = 'monthly-settlement'
   );
+
+-- comment standardization begin
+ALTER TABLE pm_custom_archive_rule
+    MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '自动划分规则ID',
+    MODIFY COLUMN archive_item_id bigint NOT NULL COMMENT '归属结果项ID',
+    MODIFY COLUMN group_no int NOT NULL DEFAULT 1 COMMENT '规则组号，同组条件为且、组间为或',
+    MODIFY COLUMN field_key varchar(64) NOT NULL COMMENT '匹配字段标识',
+    MODIFY COLUMN operator varchar(32) NOT NULL COMMENT '比较运算符:EQ/NE/IN/NOT_IN/GT/BETWEEN/CONTAINS',
+    MODIFY COLUMN compare_value varchar(500) NULL COMMENT '比较值，按JSON序列化存储',
+    MODIFY COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    MODIFY COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    COMMENT = '自定义档案自动划分规则表';
+
+-- comment standardization end

@@ -14,6 +14,8 @@ public class FinanceVoucherEntryVO {
 
     private String ccode;
 
+    private String ccodeName;
+
     private String cdeptId;
 
     private String cpersonId;

@@ -418,11 +418,12 @@ const floatingBarStyle = ref<Record<string, string>>({})
 const formValues = reactive<Record<string, unknown>>({})
 const expenseDetails = ref<ExpenseDetailInstance[]>([])
 
-let draftPersistTimer: ReturnType<typeof window.setTimeout> | undefined
+let draftPersistTimer: ReturnType<typeof setTimeout> | undefined
 let pageSyncVersion = 0
 let templateListRequestVersion = 0
 let templateListLoadingPromise: Promise<void> | null = null
 let floatingBarResizeObserver: ResizeObserver | null = null
+let isComponentUnmounted = false
 
 const emptySchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
 
@@ -679,6 +680,7 @@ watch(
 )
 
 onMounted(async () => {
+  isComponentUnmounted = false
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateFloatingBarLayout)
   }
@@ -693,9 +695,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  if (draftPersistTimer) {
-    window.clearTimeout(draftPersistTimer)
-  }
+  isComponentUnmounted = true
+  clearDraftPersistTimer()
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateFloatingBarLayout)
   }
@@ -975,33 +976,58 @@ function storageKey() {
   return `${DRAFT_PREFIX}${currentDraftKey.value}`
 }
 
+function draftStorage() {
+  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
+    return null
+  }
+  return window.sessionStorage
+}
+
+function clearDraftPersistTimer() {
+  if (!draftPersistTimer) {
+    return
+  }
+  clearTimeout(draftPersistTimer)
+  draftPersistTimer = undefined
+}
+
 function readDraft(): ExpenseCreateDraft | null {
   if (!currentDraftKey.value) {
     return null
   }
-  const raw = window.sessionStorage.getItem(storageKey())
+  const storage = draftStorage()
+  if (!storage) {
+    return null
+  }
+  const raw = storage.getItem(storageKey())
   if (!raw) {
     return null
   }
   try {
     return JSON.parse(raw) as ExpenseCreateDraft
   } catch {
-    window.sessionStorage.removeItem(storageKey())
+    storage.removeItem(storageKey())
     return null
   }
 }
 
 function schedulePersistDraft() {
-  if (draftPersistTimer) {
-    window.clearTimeout(draftPersistTimer)
+  if (isComponentUnmounted || !currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
+    return
   }
-  draftPersistTimer = window.setTimeout(() => {
+  clearDraftPersistTimer()
+  draftPersistTimer = setTimeout(() => {
+    draftPersistTimer = undefined
+    if (isComponentUnmounted) {
+      return
+    }
     persistDraft()
   }, 120)
 }
 
 function persistDraft(options: { includeTemplateDetail?: boolean } = {}) {
-  if (!currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
+  const storage = draftStorage()
+  if (isComponentUnmounted || !storage || !currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
     return
   }
   const currentDraft = readDraft()
@@ -1013,16 +1039,14 @@ function persistDraft(options: { includeTemplateDetail?: boolean } = {}) {
       ? cloneValue(templateDetail.value)
       : currentDraft?.templateDetail
   }
-  window.sessionStorage.setItem(storageKey(), JSON.stringify(payload))
+  storage.setItem(storageKey(), JSON.stringify(payload))
 }
 
 function clearDraft() {
-  if (draftPersistTimer) {
-    window.clearTimeout(draftPersistTimer)
-    draftPersistTimer = undefined
-  }
-  if (currentDraftKey.value) {
-    window.sessionStorage.removeItem(storageKey())
+  clearDraftPersistTimer()
+  const storage = draftStorage()
+  if (storage && currentDraftKey.value) {
+    storage.removeItem(storageKey())
   }
 }
 

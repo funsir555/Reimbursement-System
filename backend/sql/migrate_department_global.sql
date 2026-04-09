@@ -454,3 +454,56 @@ DEALLOCATE PREPARE stmt;
 3. 保留 wecom_user_id / dingtalk_user_id
 4. 新增 feishu_user_id
 */
+
+-- comment standardization begin
+ALTER TABLE sys_department
+    MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '部门ID',
+    MODIFY COLUMN company_id varchar(64) NULL COMMENT '公司主体编码',
+    MODIFY COLUMN dept_code varchar(64) NOT NULL COMMENT '部门编码',
+    MODIFY COLUMN leader_user_id bigint NULL COMMENT '部门负责人用户ID',
+    MODIFY COLUMN dept_name varchar(128) NOT NULL COMMENT '部门名称',
+    MODIFY COLUMN parent_id bigint NULL COMMENT '上级部门ID',
+    MODIFY COLUMN wecom_department_id varchar(100) NULL COMMENT '企微部门ID',
+    MODIFY COLUMN dingtalk_department_id varchar(100) NULL COMMENT '钉钉部门ID',
+    MODIFY COLUMN feishu_department_id varchar(100) NULL COMMENT '飞书部门ID',
+    MODIFY COLUMN sync_source varchar(32) NULL COMMENT '同步来源:MANUAL/WECOM/DINGTALK/FEISHU/MIXED',
+    MODIFY COLUMN sync_enabled tinyint NOT NULL DEFAULT 1 COMMENT '是否启用同步',
+    MODIFY COLUMN sync_managed tinyint NOT NULL DEFAULT 0 COMMENT '是否纳入同步管理:1是 0否',
+    MODIFY COLUMN sync_status varchar(32) NULL COMMENT '同步状态',
+    MODIFY COLUMN sync_remark varchar(500) NULL COMMENT '同步备注',
+    MODIFY COLUMN stat_department_belong varchar(100) NULL COMMENT '统计部门归属',
+    MODIFY COLUMN stat_region_belong varchar(100) NULL COMMENT '统计大区归属',
+    MODIFY COLUMN stat_area_belong varchar(100) NULL COMMENT '统计区域归属',
+    MODIFY COLUMN last_sync_at datetime NULL COMMENT '最近同步时间',
+    MODIFY COLUMN status tinyint NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
+    MODIFY COLUMN sort_order int NOT NULL DEFAULT 0 COMMENT '排序号',
+    MODIFY COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    MODIFY COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    COMMENT = '全局部门树主数据表';
+
+ALTER TABLE sys_user
+    MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '用户ID',
+    MODIFY COLUMN username varchar(50) NOT NULL COMMENT '用户名',
+    MODIFY COLUMN password varchar(64) NOT NULL COMMENT '密码(MD5)',
+    MODIFY COLUMN name varchar(50) NULL COMMENT '姓名',
+    MODIFY COLUMN phone varchar(20) NULL COMMENT '手机号',
+    MODIFY COLUMN email varchar(100) NULL COMMENT '邮箱',
+    MODIFY COLUMN dept_id bigint NULL COMMENT '部门ID',
+    MODIFY COLUMN position varchar(50) NULL COMMENT '岗位',
+    MODIFY COLUMN labor_relation_belong varchar(100) NULL COMMENT '劳动关系归属',
+    MODIFY COLUMN stat_department_belong varchar(100) NULL COMMENT '统计部门归属',
+    MODIFY COLUMN stat_region_belong varchar(100) NULL COMMENT '统计大区归属',
+    MODIFY COLUMN stat_area_belong varchar(100) NULL COMMENT '统计区域归属',
+    MODIFY COLUMN company_id varchar(64) NULL COMMENT '公司主体编码',
+    MODIFY COLUMN status tinyint NULL DEFAULT 1 COMMENT '状态:1正常 0停用',
+    MODIFY COLUMN source_type varchar(32) NULL COMMENT '来源类型',
+    MODIFY COLUMN sync_managed tinyint NOT NULL DEFAULT 0 COMMENT '是否纳入同步管理:1是 0否',
+    MODIFY COLUMN wecom_user_id varchar(100) NULL COMMENT '企微用户ID',
+    MODIFY COLUMN dingtalk_user_id varchar(100) NULL COMMENT '钉钉用户ID',
+    MODIFY COLUMN feishu_user_id varchar(100) NULL COMMENT '飞书用户ID',
+    MODIFY COLUMN last_sync_at datetime NULL COMMENT '最近同步时间',
+    MODIFY COLUMN created_at datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    MODIFY COLUMN updated_at datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    COMMENT = '用户表';
+
+-- comment standardization end

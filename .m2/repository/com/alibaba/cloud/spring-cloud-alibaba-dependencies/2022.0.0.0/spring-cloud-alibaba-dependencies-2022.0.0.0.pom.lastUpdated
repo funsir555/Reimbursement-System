@@ -1,0 +1,4 @@
+#NOTE: This is a Maven Resolver internal implementation file, its format can be changed without prior notice.
+#Thu Apr 09 12:44:01 CST 2026
+@default-central-https\://repo.maven.apache.org/maven2/.lastUpdated=1775709841567
+https\://repo.maven.apache.org/maven2/.error=Could not transfer artifact com.alibaba.cloud\:spring-cloud-alibaba-dependencies\:pom\:2022.0.0.0 from/to central (https\://repo.maven.apache.org/maven2)\: Permission denied\: getsockopt

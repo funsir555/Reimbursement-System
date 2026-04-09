@@ -332,19 +332,19 @@ export function filterExpenseWorkbenchRows<T extends ExpenseWorkbenchRow>(
     if (!matchesText(row.paymentCompanyName, filters.paymentCompanyName)) {
       return false
     }
-    if (!matchesText(row.payeeName, filters.payeeName)) {
+    if (!matchesText(getOptionalStringField(row, 'payeeName'), filters.payeeName)) {
       return false
     }
-    if (!matchesText(row.counterpartyName, filters.counterpartyName)) {
+    if (!matchesText(getOptionalStringField(row, 'counterpartyName'), filters.counterpartyName)) {
       return false
     }
     if (!matchesText(row.submitterDeptName, filters.submitterDeptName)) {
       return false
     }
-    if (!matchesArrayText(row.undertakeDepartmentNames, filters.undertakeDepartmentName)) {
+    if (!matchesArrayText(getOptionalStringArrayField(row, 'undertakeDepartmentNames'), filters.undertakeDepartmentName)) {
       return false
     }
-    if (!matchesArrayText(row.tagNames, filters.tagName)) {
+    if (!matchesArrayText(getOptionalStringArrayField(row, 'tagNames'), filters.tagName)) {
       return false
     }
     return true
@@ -360,7 +360,7 @@ export function resolveDocumentCode(row: ExpenseWorkbenchRow) {
 }
 
 export function resolveDocumentReason(row: ExpenseWorkbenchRow) {
-  return row.documentReason || ('reason' in row ? row.reason : '') || ''
+  return getOptionalStringField(row, 'documentReason') || ('reason' in row ? row.reason : '') || ''
 }
 
 export function resolveCurrentNodeName(row: ExpenseWorkbenchRow) {
@@ -368,7 +368,7 @@ export function resolveCurrentNodeName(row: ExpenseWorkbenchRow) {
 }
 
 export function resolveDocumentStatusLabel(row: ExpenseWorkbenchRow) {
-  return row.documentStatusLabel || row.status || ''
+  return row.documentStatusLabel || getOptionalStringField(row, 'status') || ''
 }
 
 export function getExpenseWorkbenchStatusType(status: string) {
@@ -431,18 +431,28 @@ export function resolveColumnText(row: ExpenseWorkbenchRow, key: ExpenseWorkbenc
     case 'paymentCompanyName':
       return row.paymentCompanyName || '-'
     case 'payeeName':
-      return row.payeeName || '-'
+      return getOptionalStringField(row, 'payeeName') || '-'
     case 'counterpartyName':
-      return row.counterpartyName || '-'
+      return getOptionalStringField(row, 'counterpartyName') || '-'
     case 'undertakeDepartmentNames':
-      return formatMultiValue(row.undertakeDepartmentNames)
+      return formatMultiValue(getOptionalStringArrayField(row, 'undertakeDepartmentNames'))
     case 'tagNames':
-      return formatMultiValue(row.tagNames)
+      return formatMultiValue(getOptionalStringArrayField(row, 'tagNames'))
     case 'taskCreatedAt':
       return 'taskCreatedAt' in row ? row.taskCreatedAt || '-' : '-'
     default:
       return '-'
   }
+}
+
+function getOptionalStringField(row: ExpenseWorkbenchRow, key: string) {
+  const value = (row as unknown as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function getOptionalStringArrayField(row: ExpenseWorkbenchRow, key: string) {
+  const value = (row as unknown as Record<string, unknown>)[key]
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined
 }
 
 function resolveColumnWidth(

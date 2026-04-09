@@ -7,6 +7,10 @@ public class FinanceVoucherOptionVO {
 
     private String value;
 
+    private String code;
+
+    private String name;
+
     private String label;
 
     private String parentValue;

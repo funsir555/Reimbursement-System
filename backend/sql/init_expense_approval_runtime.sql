@@ -95,3 +95,24 @@ CREATE TABLE IF NOT EXISTS pm_document_action_log (
     KEY idx_pm_document_action_log_document (document_code, created_at),
     KEY idx_pm_document_action_log_node (document_code, node_key, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='审批轨迹日志表';
+
+-- comment standardization begin
+ALTER TABLE pm_document_task
+    MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '审批任务ID',
+    MODIFY COLUMN document_code varchar(64) NOT NULL COMMENT '单据编码',
+    MODIFY COLUMN node_key varchar(64) NOT NULL COMMENT '节点key',
+    MODIFY COLUMN node_name varchar(100) NULL COMMENT '节点名称',
+    MODIFY COLUMN node_type varchar(32) NOT NULL COMMENT '节点类型',
+    MODIFY COLUMN assignee_user_id bigint NOT NULL COMMENT '处理人用户ID',
+    MODIFY COLUMN assignee_name varchar(100) NULL COMMENT '处理人姓名',
+    MODIFY COLUMN status varchar(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态',
+    MODIFY COLUMN task_batch_no varchar(64) NOT NULL COMMENT '同节点同批次任务号',
+    MODIFY COLUMN approval_mode varchar(32) NULL COMMENT '审批模式',
+    MODIFY COLUMN task_kind varchar(32) NULL COMMENT '任务类型',
+    MODIFY COLUMN source_task_id bigint NULL COMMENT '来源任务ID',
+    MODIFY COLUMN action_comment varchar(500) NULL COMMENT '处理意见',
+    MODIFY COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    MODIFY COLUMN handled_at datetime NULL COMMENT '处理时间',
+    COMMENT = '审批任务表';
+
+-- comment standardization end

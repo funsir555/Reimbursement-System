@@ -48,6 +48,18 @@ class FinanceProjectArchiveServiceImplTest {
     }
 
     @Test
+    void createProjectClassRejectsNonTwoDigitCode() {
+        FinanceProjectClassSaveDTO dto = new FinanceProjectClassSaveDTO();
+        dto.setProjectClassCode("A1");
+        dto.setProjectClassName("市场项目");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                service.createProjectClass("COMPANY_A", dto, "tester")
+        );
+        assertEquals("项目分类编码必须为2位数字文本", exception.getMessage());
+    }
+
+    @Test
     void createProjectClassInitializesEnabledRecord() {
         SystemCompany company = new SystemCompany();
         company.setCompanyId("COMPANY_A");
@@ -55,7 +67,7 @@ class FinanceProjectArchiveServiceImplTest {
 
         FinanceProjectClass created = new FinanceProjectClass();
         created.setCompanyId("COMPANY_A");
-        created.setProjectClassCode("CLASS001");
+        created.setProjectClassCode("01");
         created.setProjectClassName("研发项目");
         created.setStatus(1);
 
@@ -65,26 +77,39 @@ class FinanceProjectArchiveServiceImplTest {
         when(financeProjectArchiveMapper.selectCount(any())).thenReturn(0L);
 
         FinanceProjectClassSaveDTO dto = new FinanceProjectClassSaveDTO();
-        dto.setProjectClassCode("CLASS001");
+        dto.setProjectClassCode("01");
         dto.setProjectClassName("研发项目");
 
-        assertEquals("CLASS001", service.createProjectClass("COMPANY_A", dto, "tester").getProjectClassCode());
+        assertEquals("01", service.createProjectClass("COMPANY_A", dto, "tester").getProjectClassCode());
+    }
+
+    @Test
+    void createProjectRejectsNonSixDigitCode() {
+        FinanceProjectSaveDTO dto = new FinanceProjectSaveDTO();
+        dto.setCitemcode("P001");
+        dto.setCitemname("项目一");
+        dto.setCitemccode("01");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                service.createProject("COMPANY_A", dto, "tester")
+        );
+        assertEquals("项目编码必须为6位数字文本", exception.getMessage());
     }
 
     @Test
     void updateProjectRejectsControlledClassChangeWhenReferenced() {
         FinanceProjectArchive existing = new FinanceProjectArchive();
         existing.setCompanyId("COMPANY_A");
-        existing.setCitemcode("PROJ001");
+        existing.setCitemcode("000001");
         existing.setCitemname("项目一");
-        existing.setCitemccode("CLASS001");
+        existing.setCitemccode("01");
         existing.setStatus(1);
         existing.setBclose(0);
         existing.setIotherused(1);
 
         FinanceProjectClass newClass = new FinanceProjectClass();
         newClass.setCompanyId("COMPANY_A");
-        newClass.setProjectClassCode("CLASS002");
+        newClass.setProjectClassCode("02");
         newClass.setProjectClassName("交付项目");
         newClass.setStatus(1);
 
@@ -92,12 +117,12 @@ class FinanceProjectArchiveServiceImplTest {
         when(financeProjectClassMapper.selectOne(any())).thenReturn(newClass);
 
         FinanceProjectSaveDTO dto = new FinanceProjectSaveDTO();
-        dto.setCitemcode("PROJ001");
+        dto.setCitemcode("000001");
         dto.setCitemname("项目一");
-        dto.setCitemccode("CLASS002");
+        dto.setCitemccode("02");
 
         IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-                service.updateProject("COMPANY_A", "PROJ001", dto, "tester")
+                service.updateProject("COMPANY_A", "000001", dto, "tester")
         );
         assertEquals("当前项目已被引用，不能修改受控字段", exception.getMessage());
     }

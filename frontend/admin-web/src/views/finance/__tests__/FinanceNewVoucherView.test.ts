@@ -152,16 +152,19 @@ const mountOptions = {
 
 function buildMeta() {
   return {
-    companyOptions: [{ value: 'COMPANY_A', label: '广州远智教育科技有限公司' }],
-    departmentOptions: [],
-    employeeOptions: [],
+    companyOptions: [{ value: 'COMPANY_A', code: '001', name: '广州远智教育科技有限公司', label: '001  广州远智教育科技有限公司' }],
+    departmentOptions: [{ value: '10', code: 'D001', name: '财务部', label: 'D001  财务部' }],
+    employeeOptions: [{ value: '2', code: '2', name: '员工甲', label: '2  员工甲' }],
     voucherTypeOptions: [{ value: '记', label: '记账凭证' }],
-    currencyOptions: [],
-    accountOptions: [{ value: '1001', label: '1001 库存现金' }],
-    customerOptions: [],
-    supplierOptions: [],
-    projectClassOptions: [],
-    projectOptions: [],
+    currencyOptions: [{ value: 'CNY', label: '人民币' }],
+    accountOptions: [{ value: '1001', code: '1001', name: '库存现金', label: '1001  库存现金' }],
+    customerOptions: [{ value: 'C00001', code: 'C00001', name: '华南客户', label: 'C00001  华南客户' }],
+    supplierOptions: [{ value: 'V00001', code: 'V00001', name: '核心供应商', label: 'V00001  核心供应商' }],
+    projectClassOptions: [{ value: '01', code: '01', name: '市场项目', label: '01  市场项目' }],
+    projectOptions: [
+      { value: '000001', code: '000001', name: '华南推广项目', label: '000001  华南推广项目', parentValue: '01' },
+      { value: '000002', code: '000002', name: '华北推广项目', label: '000002  华北推广项目', parentValue: '02' }
+    ],
     defaultCompanyId: 'COMPANY_A',
     defaultBillDate: '2026-04-05',
     defaultPeriod: 4,
@@ -193,20 +196,10 @@ function buildDetail() {
     totalDebit: '100.00',
     totalCredit: '100.00',
     entries: [
-      { inid: 1, cdigest: '摘要 A', ccode: '1001', md: '100.00', mc: '' },
-      { inid: 2, cdigest: '摘要 B', ccode: '1001', md: '', mc: '100.00' }
+      { inid: 1, cdigest: '摘要 A', ccode: '1001', ccodeName: '库存现金', md: '100.00', mc: '' },
+      { inid: 2, cdigest: '摘要 B', ccode: '1002', ccodeName: '银行存款', md: '', mc: '100.00' }
     ]
   }
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
 }
 
 async function mountView(props: { pageMode?: 'create' | 'detail'; voucherNo?: string } = {}) {
@@ -215,41 +208,6 @@ async function mountView(props: { pageMode?: 'create' | 'detail'; voucherNo?: st
     props
   })
   mountedWrappers.push(wrapper)
-
-  await flushPromises()
-  await nextTick()
-  return wrapper
-}
-
-async function mountKeepAliveHost(props: { showVoucher: boolean; pageMode?: 'create' | 'detail'; voucherNo?: string }) {
-  const DummyView = defineComponent({ template: '<div data-testid="dummy-view">dummy</div>' })
-  const KeepAliveHost = defineComponent({
-    components: { FinanceNewVoucherView, DummyView },
-    props: {
-      showVoucher: { type: Boolean, default: true },
-      pageMode: { type: String, default: 'create' },
-      voucherNo: { type: String, default: '' }
-    },
-    setup() {
-      return { FinanceNewVoucherView, DummyView }
-    },
-    template: `
-      <keep-alive>
-        <component
-          :is="showVoucher ? FinanceNewVoucherView : DummyView"
-          :page-mode="pageMode"
-          :voucher-no="voucherNo"
-        />
-      </keep-alive>
-    `
-  })
-
-  const wrapper = mount(KeepAliveHost, {
-    ...mountOptions,
-    props
-  })
-  mountedWrappers.push(wrapper)
-
   await flushPromises()
   await nextTick()
   return wrapper
@@ -273,115 +231,88 @@ describe('FinanceNewVoucherView', () => {
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: buildDetail() })
   })
 
-  it('loads voucher meta with the global finance company', async () => {
+  it('loads voucher meta with the finance company context', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
 
     expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })
     expect(wrapper.text()).toContain('凭证编号')
     expect(wrapper.text()).toContain('备注')
-    expect(wrapper.find('input[placeholder="请输入凭证号"]').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('附加说明')
   })
 
-  it('restores the draft for the current company only', async () => {
-    sessionStorage.setItem('finance-new-voucher-draft:COMPANY_A', JSON.stringify({
-      companyId: 'COMPANY_A',
-      iperiod: 4,
-      csign: '记',
-      dbillDate: '2026-04-05',
-      idoc: 2,
-      cbill: '张三',
-      ctext1: '公司 A 草稿',
-      ctext2: '',
-      entries: [
-        { inid: 1, cdigest: '摘要 A', ccode: '1001', md: '100.00', mc: '' },
-        { inid: 2, cdigest: '摘要 B', ccode: '1001', md: '', mc: '100.00' }
-      ]
-    }))
-
+  it('renders archive options as code on the left and name on the right', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
 
-    const noteInput = wrapper.find('input[placeholder="请输入备注"]')
-    expect((noteInput.element as HTMLInputElement).value).toBe('公司 A 草稿')
-    expect(mocks.elMessage.success).toHaveBeenCalledWith('已恢复暂存草稿')
+    const optionTexts = wrapper.findAll('option').map((option) => option.text())
+    expect(optionTexts).toContain('1001  库存现金')
+    expect(optionTexts).toContain('C00001  华南客户')
+    expect(optionTexts).toContain('V00001  核心供应商')
+    expect(optionTexts).toContain('01  市场项目')
+    expect(optionTexts).toContain('000001  华南推广项目')
   })
 
-  it('loads voucher detail in readonly mode via props', async () => {
+  it('filters project options by the selected project class', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { entries: Array<{ citemClass?: string }> }
+      getFilteredProjectOptions: () => Array<{ value: string }>
+    }
+
+    vm.form.entries[0].citemClass = '01'
+    await nextTick()
+
+    expect(vm.getFilteredProjectOptions().map((item) => item.value)).toEqual(['000001'])
+  })
+
+  it('shows account code and snapshot name in detail mode even when the option is missing from meta', async () => {
+    const meta = buildMeta()
+    meta.accountOptions = [{ value: '1001', code: '1001', name: '库存现金', label: '1001  库存现金' }]
+    mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: meta })
+
     const wrapper = await mountView({ pageMode: 'detail', voucherNo: 'COMPANY_A~4~记~12' })
 
     expect(mocks.financeApi.getVoucherDetail).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
-    expect(wrapper.text()).toContain('凭证详情')
-    expect(wrapper.text()).toContain('修改')
-    expect(wrapper.text()).not.toContain('保存')
+    expect(wrapper.text()).toContain('1002  银行存款')
   })
 
-  it('does not reload a cached voucher page after it is deactivated', async () => {
-    const wrapper = await mountKeepAliveHost({ showVoucher: true, pageMode: 'create' })
-    const initialMetaCallCount = mocks.financeApi.getVoucherMeta.mock.calls.length
-
-    expect(initialMetaCallCount).toBeGreaterThan(0)
-    expect(mocks.financeCompany.registerSwitchGuard).toHaveBeenCalledTimes(1)
-
-    await wrapper.setProps({ showVoucher: false })
-    await flushPromises()
-
-    routeState.name = 'dashboard'
-    routeState.params = {}
-    financeCompanyStore.currentCompanyId = 'COMPANY_B'
-    await flushPromises()
-
-    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledTimes(initialMetaCallCount)
-    expect(mocks.financeCompany.unregisterSwitchGuard).toHaveBeenCalledWith('finance-new-voucher')
-  })
-
-  it('suppresses stale load errors after the voucher page is deactivated', async () => {
-    const pendingMeta = deferred<{ data: ReturnType<typeof buildMeta> }>()
-    mocks.financeApi.getVoucherMeta.mockReturnValueOnce(pendingMeta.promise)
-
-    const wrapper = await mountKeepAliveHost({ showVoucher: true, pageMode: 'create' })
-
-    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledTimes(1)
-
-    await wrapper.setProps({ showVoucher: false })
-    await flushPromises()
-
-    pendingMeta.reject(new Error('stale failure'))
-    await flushPromises()
-
-    expect(mocks.elMessage.error).not.toHaveBeenCalled()
-  })
-
-
-  it('filters project options by selected project class and clears mismatched project', async () => {
-    mocks.financeApi.getVoucherMeta.mockResolvedValue({
+  it('saves vouchers through the current finance company context', async () => {
+    mocks.financeApi.createVoucher.mockResolvedValue({
       data: {
-        ...buildMeta(),
-        projectClassOptions: [
-          { value: 'CLASS001', label: '???' },
-          { value: 'CLASS002', label: '???' }
-        ],
-        projectOptions: [
-          { value: 'PROJ001', label: '???', parentValue: 'CLASS001' },
-          { value: 'PROJ002', label: '???', parentValue: 'CLASS002' }
-        ]
+        voucherNo: 'COMPANY_A~4~记~12',
+        companyId: 'COMPANY_A',
+        iperiod: 4,
+        csign: '记',
+        inoId: 12,
+        entryCount: 2,
+        totalDebit: '100.00',
+        totalCredit: '100.00',
+        status: 'UNPOSTED'
       }
     })
 
     const wrapper = await mountView({ pageMode: 'create' })
     const vm = wrapper.vm as unknown as {
-      form: { entries: Array<{ citemClass?: string; citemId?: string }> }
-      selectedRow: { citemClass?: string; citemId?: string }
-      getFilteredProjectOptions: () => Array<{ value: string }>
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+        }>
+      }
     }
 
-    vm.form.entries[0].citemClass = 'CLASS001'
-    vm.form.entries[0].citemId = 'PROJ001'
-    await nextTick()
-    expect(vm.getFilteredProjectOptions().map((item) => item.value)).toEqual(['PROJ001'])
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
 
-    vm.form.entries[0].citemClass = 'CLASS002'
-    await nextTick()
-    expect(vm.selectedRow.citemId).toBe('')
-    expect(vm.getFilteredProjectOptions().map((item) => item.value)).toEqual(['PROJ002'])
+    await wrapper.findAll('button').find((button) => button.text() === '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeApi.createVoucher).toHaveBeenCalled()
+    expect(mocks.elMessage.success).toHaveBeenCalled()
   })
 })

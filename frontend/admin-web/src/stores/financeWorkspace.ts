@@ -31,9 +31,12 @@ const FINANCE_ROUTE_TITLE_MAP: Record<string, string> = {
   'finance-archives-account-subjects': '会计科目'
 }
 
-function resolveTabTitle(route: RouteLocationNormalizedLoaded) {
-  if (typeof route.name === 'string' && FINANCE_ROUTE_TITLE_MAP[route.name]) {
-    return FINANCE_ROUTE_TITLE_MAP[route.name]
+function resolveTabTitle(route: RouteLocationNormalizedLoaded): string {
+  if (typeof route.name === 'string') {
+    const mappedTitle = FINANCE_ROUTE_TITLE_MAP[route.name]
+    if (mappedTitle) {
+      return mappedTitle
+    }
   }
 
   const tabTitle = route.meta.tabTitle

@@ -409,6 +409,34 @@ describe('ExpenseCreateView', () => {
     expect(storedDraft.templateDetail?.templateName).toBe('差旅报销模板')
   })
 
+  it('ignores pending draft persistence after unmount', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.route.query = { templateCode: 'TPL-001', draftKey: 'draft-async-guard' }
+      mocks.route.fullPath = '/expense/create?templateCode=TPL-001&draftKey=draft-async-guard'
+      mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+        data: buildTemplateDetail()
+      })
+      writeDraft('draft-async-guard', 'TPL-001', {
+        formValues: {
+          amountField: '88.88'
+        }
+      })
+
+      const storageSetItemSpy = vi.spyOn(Storage.prototype, 'setItem')
+      const wrapper = await mountView()
+
+      expect(vi.getTimerCount()).toBeGreaterThan(0)
+      storageSetItemSpy.mockClear()
+
+      wrapper.unmount()
+      expect(() => vi.runOnlyPendingTimers()).not.toThrow()
+      expect(storageSetItemSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('submits a contract template without expense details', async () => {
     mocks.route.query = { templateCode: 'TPL-002', draftKey: 'draft-002' }
     mocks.route.fullPath = '/expense/create?templateCode=TPL-002&draftKey=draft-002'

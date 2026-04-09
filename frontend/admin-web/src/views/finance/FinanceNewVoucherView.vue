@@ -120,7 +120,7 @@
                 </div>
                 <div class="voucher-cell">
                   <el-select v-model="row.ccode" filterable clearable placeholder="请选择科目" :disabled="isReadonlyMode" @focus="selectRow(index)" @visible-change="selectRow(index)">
-                    <el-option v-for="item in voucherMeta?.accountOptions || []" :key="item.value" :label="item.label" :value="item.value" />
+                    <el-option v-for="item in accountOptionsForDisplay" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                   </el-select>
                 </div>
                 <div class="voucher-cell">
@@ -152,37 +152,37 @@
               <label class="assist-field">
                 <span>部门</span>
                 <el-select v-model="selectedRow.cdeptId" filterable clearable placeholder="请选择部门" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.departmentOptions || []" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-option v-for="item in voucherMeta?.departmentOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>人员</span>
                 <el-select v-model="selectedRow.cpersonId" filterable clearable placeholder="请选择人员" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.employeeOptions || []" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-option v-for="item in voucherMeta?.employeeOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>客户</span>
                 <el-select v-model="selectedRow.ccusId" filterable clearable placeholder="请选择客户" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.customerOptions || []" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-option v-for="item in voucherMeta?.customerOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>供应商</span>
                 <el-select v-model="selectedRow.csupId" filterable clearable placeholder="请选择供应商" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.supplierOptions || []" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-option v-for="item in voucherMeta?.supplierOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>项目分类</span>
                 <el-select v-model="selectedRow.citemClass" filterable clearable placeholder="请选择项目分类" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.projectClassOptions || []" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-option v-for="item in voucherMeta?.projectClassOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>项目</span>
                 <el-select v-model="selectedRow.citemId" filterable clearable placeholder="请选择项目" :disabled="isReadonlyMode">
-                  <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
             </div>
@@ -239,6 +239,7 @@ import {
   type FinanceVoucherEntry,
   type FinanceVoucherForm,
   type FinanceVoucherMeta,
+  type FinanceVoucherOption,
   type FinanceVoucherSavePayload
 } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
@@ -355,10 +356,28 @@ const totalCredit = computed(() => sumRows(effectiveRows.value, 'mc'))
 const balanceGap = computed(() => subtractVoucherAmount(totalDebit.value, totalCredit.value))
 const isBalanced = computed(() => effectiveEntryCount.value >= 2 && isZeroMoney(balanceGap.value) && validationErrors.value.length === 0)
 const selectedRow = computed(() => form.entries[Math.min(selectedRowIndex.value, Math.max(form.entries.length - 1, 0))] as VoucherEntryRow)
-const currentRowLabel = computed(() => (selectedRow.value?.ccode ? resolveAccountLabel(selectedRow.value.ccode) : '当前行'))
+const currentRowLabel = computed(() => {
+  if (!selectedRow.value?.ccode) return '当前行'
+  return resolveAccountLabel(selectedRow.value.ccode, selectedRow.value.ccodeName)
+})
 const currentCompanyName = computed(() => financeCompany.currentCompanyName || resolveCompanyName(form.companyId))
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
 const statusChipText = computed(() => (isDetailRoute.value ? voucherDetail.value?.statusLabel || '未记账' : hasDraft.value ? '已暂存' : '未暂存'))
+const accountOptionsForDisplay = computed(() => {
+  const options = [...(voucherMeta.value?.accountOptions || [])]
+  const existingValues = new Set(options.map((item) => item.value))
+  form.entries.forEach((row) => {
+    if (!row.ccode || existingValues.has(row.ccode)) return
+    options.push({
+      value: row.ccode,
+      code: row.ccode,
+      name: row.ccodeName,
+      label: row.ccodeName ? `${row.ccode}  ${row.ccodeName}` : row.ccode
+    })
+    existingValues.add(row.ccode)
+  })
+  return options
+})
 const filteredProjectOptions = computed(() => {
   const projectClassCode = selectedRow.value?.citemClass
   const options = voucherMeta.value?.projectOptions || []
@@ -866,9 +885,20 @@ function handleAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 
   }
 }
 
-function resolveAccountLabel(code?: string) {
+function formatVoucherOptionLabel(option?: FinanceVoucherOption | null) {
+  if (!option) return ''
+  if (option.code && option.name) return `${option.code}  ${option.name}`
+  if (option.name) return option.name
+  if (option.code) return option.code
+  return option.label || option.value
+}
+
+function resolveAccountLabel(code?: string, accountName?: string) {
   if (!code) return '当前行'
-  return voucherMeta.value?.accountOptions.find((item) => item.value === code)?.label || code
+  const matched = voucherMeta.value?.accountOptions.find((item) => item.value === code)
+  if (matched) return formatVoucherOptionLabel(matched)
+  if (accountName) return `${code}  ${accountName}`
+  return code
 }
 
 function resolveCompanyName(companyId?: string) {

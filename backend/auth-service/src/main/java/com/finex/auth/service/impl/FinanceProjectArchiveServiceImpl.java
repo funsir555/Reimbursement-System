@@ -28,10 +28,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class FinanceProjectArchiveServiceImpl implements FinanceProjectArchiveService {
+
+    private static final Pattern PROJECT_CLASS_CODE_PATTERN = Pattern.compile("^\\d{2}$");
+    private static final Pattern PROJECT_CODE_PATTERN = Pattern.compile("^\\d{6}$");
 
     private final FinanceProjectClassMapper financeProjectClassMapper;
     private final FinanceProjectArchiveMapper financeProjectArchiveMapper;
@@ -421,7 +425,10 @@ public class FinanceProjectArchiveServiceImpl implements FinanceProjectArchiveSe
         if (dto == null) {
             throw new IllegalArgumentException("项目分类数据不能为空");
         }
-        requireText(dto.getProjectClassCode(), "项目分类编码不能为空");
+        String projectClassCode = requireText(dto.getProjectClassCode(), "项目分类编码不能为空");
+        if (!PROJECT_CLASS_CODE_PATTERN.matcher(projectClassCode).matches()) {
+            throw new IllegalArgumentException("项目分类编码必须为2位数字文本");
+        }
         requireText(dto.getProjectClassName(), "项目分类名称不能为空");
     }
 
@@ -429,9 +436,15 @@ public class FinanceProjectArchiveServiceImpl implements FinanceProjectArchiveSe
         if (dto == null) {
             throw new IllegalArgumentException("项目档案数据不能为空");
         }
-        requireText(dto.getCitemcode(), "项目编码不能为空");
+        String projectCode = requireText(dto.getCitemcode(), "项目编码不能为空");
+        if (!PROJECT_CODE_PATTERN.matcher(projectCode).matches()) {
+            throw new IllegalArgumentException("项目编码必须为6位数字文本");
+        }
         requireText(dto.getCitemname(), "项目名称不能为空");
-        requireText(dto.getCitemccode(), "项目分类不能为空");
+        String projectClassCode = requireText(dto.getCitemccode(), "项目分类不能为空");
+        if (!PROJECT_CLASS_CODE_PATTERN.matcher(projectClassCode).matches()) {
+            throw new IllegalArgumentException("项目分类编码必须为2位数字文本");
+        }
     }
 
     private int resolveNextProjectClassSortOrder(String companyId) {

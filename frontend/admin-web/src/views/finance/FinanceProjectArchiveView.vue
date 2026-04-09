@@ -142,7 +142,7 @@
           <el-input :model-value="currentCompanyName || currentCompanyId || ''" disabled />
         </el-form-item>
         <el-form-item label="分类编码" class="!mb-0">
-          <el-input v-model="classForm.project_class_code" :disabled="classDialogMode === 'edit'" placeholder="请输入项目分类编码" />
+          <el-input v-model="classForm.project_class_code" :disabled="classDialogMode === 'edit'" maxlength="2" placeholder="请输入2位数字分类编码" />
         </el-form-item>
         <el-form-item label="分类名称" class="!mb-0">
           <el-input v-model="classForm.project_class_name" placeholder="请输入项目分类名称" />
@@ -179,7 +179,7 @@
 
         <el-form label-position="top" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <el-form-item label="项目编码" class="!mb-0">
-            <el-input v-model="projectForm.citemcode" :disabled="projectDialogMode !== 'create'" placeholder="请输入项目编码" />
+            <el-input v-model="projectForm.citemcode" :disabled="projectDialogMode !== 'create'" maxlength="6" placeholder="请输入6位数字项目编码" />
           </el-form-item>
           <el-form-item label="项目名称" class="!mb-0">
             <el-input v-model="projectForm.citemname" :disabled="isProjectDetailMode" placeholder="请输入项目名称" />
@@ -412,6 +412,10 @@ async function saveProjectClass() {
     ElMessage.warning('项目分类编码不能为空')
     return
   }
+  if (!/^\d{2}$/.test(classForm.project_class_code.trim())) {
+    ElMessage.warning('项目分类编码必须为2位数字文本')
+    return
+  }
   if (!classForm.project_class_name.trim()) {
     ElMessage.warning('项目分类名称不能为空')
     return
@@ -506,12 +510,20 @@ async function saveProject() {
     ElMessage.warning('项目编码不能为空')
     return
   }
+  if (!/^\d{6}$/.test(String(projectForm.citemcode || '').trim())) {
+    ElMessage.warning('项目编码必须为6位数字文本')
+    return
+  }
   if (!String(projectForm.citemname || '').trim()) {
     ElMessage.warning('项目名称不能为空')
     return
   }
   if (!String(projectForm.citemccode || '').trim()) {
     ElMessage.warning('项目分类不能为空')
+    return
+  }
+  if (!/^\d{2}$/.test(String(projectForm.citemccode || '').trim())) {
+    ElMessage.warning('项目分类编码必须为2位数字文本')
     return
   }
   savingProject.value = true

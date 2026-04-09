@@ -57,11 +57,16 @@
 Windows 本地开发建议新建一个未提交的 `backend/.env.local.cmd`，内容示例：
 
 ```bat
-set FINEX_DB_PASSWORD=your-password
-set FINEX_JWT_SECRET=replace-with-a-long-random-secret
+set FINEX_DB_PASSWORD=replace-with-your-db-password
+set FINEX_JWT_SECRET=replace-with-a-long-random-secret-at-least-32-chars
 ```
 
-`start-finex.bat` 会优先加载这个文件。
+`start-finex.bat` 会优先加载这个文件，并在以下情况直接拒绝启动：
+
+- `FINEX_DB_PASSWORD` 未设置或仍是示例占位值
+- `FINEX_JWT_SECRET` 未设置、仍是示例占位值，或长度少于 32 个字符
+
+开发环境也应提供固定 JWT 密钥，避免临时内存密钥导致登录态在重启后全部失效；生产环境必须通过环境变量注入真实密钥。
 
 ## 数据库初始化
 
@@ -90,6 +95,20 @@ set FINEX_JWT_SECRET=replace-with-a-long-random-secret
 ```bat
 start-finex.bat
 ```
+
+`start-finex.bat` 现在只负责一键启动入口：它会按顺序加载 `backend/.env.local.cmd` 与可选的 `backend/.env.shadow.cmd`、补齐默认端口、校验 `FINEX_DB_PASSWORD` / `FINEX_JWT_SECRET`、先编译 `backend/common`，然后再委派 `start-finex.ps1` 处理端口冲突、旧进程回收和三个模块的实际启动。
+
+默认启动模块固定为：
+
+- `backend/auth-service`
+- `backend/gateway`
+- `frontend/admin-web`
+
+若启动失败，优先检查：
+
+- `backend/.env.local.cmd` 里的数据库密码和 JWT 密钥是否为真实值
+- JWT 密钥是否至少 32 个字符
+- `8081`、`8080`、`5173` 是否被外部进程占用
 
 ### 分模块启动
 

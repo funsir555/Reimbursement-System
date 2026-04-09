@@ -97,3 +97,40 @@ SET @sql = (
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+-- comment standardization begin
+ALTER TABLE pm_document_template
+    MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '模板ID',
+    MODIFY COLUMN company_id varchar(64) NULL COMMENT '公司主体编码',
+    MODIFY COLUMN template_code varchar(64) NOT NULL COMMENT '模板编码',
+    MODIFY COLUMN template_name varchar(100) NOT NULL COMMENT '模板名称',
+    MODIFY COLUMN template_type varchar(32) NOT NULL COMMENT '模板类型:report/application/loan',
+    MODIFY COLUMN template_type_label varchar(32) NOT NULL COMMENT '模板类型中文名',
+    MODIFY COLUMN category_code varchar(64) NOT NULL COMMENT '分类编码',
+    MODIFY COLUMN template_description varchar(500) NULL COMMENT '模板说明',
+    MODIFY COLUMN numbering_rule varchar(64) NULL COMMENT '编号规则',
+    MODIFY COLUMN form_design_code varchar(64) NULL COMMENT '表单设计编码',
+    MODIFY COLUMN expense_detail_design_code varchar(64) NULL COMMENT '费用明细设计编码',
+    MODIFY COLUMN icon_color varchar(32) NULL DEFAULT 'blue' COMMENT '图标颜色',
+    MODIFY COLUMN enabled tinyint NULL DEFAULT 1 COMMENT '是否启用',
+    MODIFY COLUMN publish_status varchar(16) NULL DEFAULT 'ENABLED' COMMENT '发布状态',
+    MODIFY COLUMN print_mode varchar(64) NULL COMMENT '打印方式',
+    MODIFY COLUMN approval_flow varchar(64) NULL COMMENT '审批流程编码',
+    MODIFY COLUMN flow_name varchar(100) NULL COMMENT '审批流程名称',
+    MODIFY COLUMN payment_mode varchar(64) NULL COMMENT '付款联动模式',
+    MODIFY COLUMN split_payment tinyint NULL DEFAULT 0 COMMENT '是否支持分期付款:1是 0否',
+    MODIFY COLUMN travel_form varchar(64) NULL COMMENT '出差申请配置',
+    MODIFY COLUMN allocation_form varchar(64) NULL COMMENT '分摊表单',
+    MODIFY COLUMN ai_audit_mode varchar(64) NULL DEFAULT 'disabled' COMMENT 'AI审核模式',
+    MODIFY COLUMN relation_remark varchar(500) NULL COMMENT '关联规则说明',
+    MODIFY COLUMN validation_remark varchar(500) NULL COMMENT '校验规则说明',
+    MODIFY COLUMN installment_remark varchar(500) NULL COMMENT '分期付款说明',
+    MODIFY COLUMN highlights varchar(500) NULL COMMENT '卡片亮点，使用|分隔',
+    MODIFY COLUMN owner_name varchar(64) NULL COMMENT '负责人姓名',
+    MODIFY COLUMN sort_order int NULL DEFAULT 0 COMMENT '排序号',
+    MODIFY COLUMN created_at datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    MODIFY COLUMN updated_at datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    MODIFY COLUMN expense_detail_mode_default varchar(32) NULL COMMENT '企业往来默认模式',
+    COMMENT = '单据流程模板表';
+
+-- comment standardization end
