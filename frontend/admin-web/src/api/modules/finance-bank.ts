@@ -1,5 +1,5 @@
 import request, { buildQueryString } from './core'
-import type { FinanceBankBranchOption, FinanceBankOption } from './shared'
+import type { FinanceBankBranchOption, FinanceBankOption } from './finance-bank-types'
 
 export const financeBankApi = {
   listBanks: (keyword?: string) =>

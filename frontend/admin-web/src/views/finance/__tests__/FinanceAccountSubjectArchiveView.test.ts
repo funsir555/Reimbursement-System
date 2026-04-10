@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, inject, provide } from 'vue'
+import { defineComponent, inject, provide, reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FinanceAccountSubjectArchiveView from '@/views/finance/FinanceAccountSubjectArchiveView.vue'
 
@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   financeCompany: {
     currentCompanyId: 'COMPANY_A',
     currentCompanyName: '??????',
+    currentCompanyLabel: 'A01 - 广州测试公司',
+    currentCompanyHasActiveAccountSet: true,
     registerSwitchGuard: vi.fn(),
     unregisterSwitchGuard: vi.fn()
   },
@@ -29,12 +31,14 @@ const mocks = vi.hoisted(() => ({
   }
 }))
 
+const financeCompanyStore = reactive(mocks.financeCompany)
+
 vi.mock('@/api', () => ({
   financeArchiveApi: mocks.financeArchiveApi
 }))
 
 vi.mock('@/stores/financeCompany', () => ({
-  useFinanceCompanyStore: () => mocks.financeCompany
+  useFinanceCompanyStore: () => financeCompanyStore
 }))
 
 vi.mock('@/utils/permissions', () => ({
@@ -128,6 +132,10 @@ async function mountView() {
 describe('FinanceAccountSubjectArchiveView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    financeCompanyStore.currentCompanyId = 'COMPANY_A'
+    financeCompanyStore.currentCompanyName = '??????'
+    financeCompanyStore.currentCompanyLabel = 'A01 - 骞垮窞娴嬭瘯鍏徃'
+    financeCompanyStore.currentCompanyHasActiveAccountSet = true
     mocks.elMessageBox.confirm.mockResolvedValue(true)
     mocks.financeArchiveApi.getAccountSubjectMeta.mockResolvedValue({
       data: {
@@ -234,6 +242,43 @@ describe('FinanceAccountSubjectArchiveView', () => {
 
     expect(mocks.financeArchiveApi.updateAccountSubjectStatus).toHaveBeenCalledWith('COMPANY_A', '1001', 0)
     expect(mocks.financeArchiveApi.updateAccountSubjectClose).toHaveBeenCalledWith('COMPANY_A', '1001', 1)
+
+    wrapper.unmount()
+  })
+
+  it('shows a readable notice and skips querying subjects when the company has no account set', async () => {
+    financeCompanyStore.currentCompanyHasActiveAccountSet = false
+
+    const wrapper = await mountView()
+
+    expect(mocks.financeArchiveApi.listAccountSubjects).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('当前公司未创建账套，请切换公司或先建账。')
+
+    wrapper.unmount()
+  })
+
+  it('reloads the subject list when the finance company context changes', async () => {
+    const wrapper = await mountView()
+
+    financeCompanyStore.currentCompanyId = 'COMPANY_B'
+    financeCompanyStore.currentCompanyName = '深圳测试公司'
+    financeCompanyStore.currentCompanyLabel = 'B01 - 深圳测试公司'
+    await flushPromises()
+
+    expect(mocks.financeArchiveApi.listAccountSubjects).toHaveBeenCalledWith({
+      companyId: 'COMPANY_A',
+      keyword: undefined,
+      subjectCategory: undefined,
+      status: undefined,
+      bclose: undefined
+    })
+    expect(mocks.financeArchiveApi.listAccountSubjects).toHaveBeenCalledWith({
+      companyId: 'COMPANY_B',
+      keyword: undefined,
+      subjectCategory: undefined,
+      status: undefined,
+      bclose: undefined
+    })
 
     wrapper.unmount()
   })

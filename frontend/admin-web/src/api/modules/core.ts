@@ -13,6 +13,13 @@ export interface ApiResponse<T> {
 
 export type MoneyValue = string
 
+export interface PageResult<T> {
+  total: number
+  page: number
+  pageSize: number
+  items: T[]
+}
+
 export interface RequestOptions extends RequestInit {
   timeoutMs?: number
   timeoutMessage?: string

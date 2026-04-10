@@ -1,5 +1,6 @@
 import request, { buildQueryString } from './core'
-import type { ExpenseAttachmentMeta, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult, FinanceVendorDetail, FinanceVendorSavePayload } from './shared'
+import type { ExpenseAttachmentMeta, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult } from './expense-create-types'
+import type { FinanceVendorDetail, FinanceVendorSavePayload } from './finance-archive-types'
 
 export const expenseCreateApi = {
   listTemplates: () =>

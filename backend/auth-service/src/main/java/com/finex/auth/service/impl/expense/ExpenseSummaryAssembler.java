@@ -165,6 +165,10 @@ public class ExpenseSummaryAssembler {
         return item;
     }
 
+    SummaryEnrichmentData buildSummaryEnrichmentData(List<ProcessDocumentInstance> instances) {
+        return buildSummaryEnrichment(instances);
+    }
+
     private SummaryEnrichmentData buildSummaryEnrichment(List<ProcessDocumentInstance> instances) {
         if (instances == null || instances.isEmpty()) {
             return SummaryEnrichmentData.empty();
@@ -857,24 +861,24 @@ public class ExpenseSummaryAssembler {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private static final class SummaryEnrichmentData {
-        private static final SummaryEnrichmentData EMPTY = new SummaryEnrichmentData(Collections.emptyMap());
+    static final class SummaryEnrichmentData {
+        static final SummaryEnrichmentData EMPTY = new SummaryEnrichmentData(Collections.emptyMap());
         private final Map<String, SummaryMetadata> metadataByDocumentCode;
 
         private SummaryEnrichmentData(Map<String, SummaryMetadata> metadataByDocumentCode) {
             this.metadataByDocumentCode = metadataByDocumentCode;
         }
 
-        private static SummaryEnrichmentData empty() {
+        static SummaryEnrichmentData empty() {
             return EMPTY;
         }
 
-        private SummaryMetadata metadata(String documentCode) {
+        SummaryMetadata metadata(String documentCode) {
             return metadataByDocumentCode.getOrDefault(documentCode, SummaryMetadata.empty());
         }
     }
 
-    private static final class SummaryMetadata {
+    static final class SummaryMetadata {
         private static final SummaryMetadata EMPTY = new SummaryMetadata(
                 null,
                 null,
@@ -919,35 +923,35 @@ public class ExpenseSummaryAssembler {
             return EMPTY;
         }
 
-        private String submitterDeptName() {
+        String submitterDeptName() {
             return submitterDeptName;
         }
 
-        private String paymentCompanyId() {
+        String paymentCompanyId() {
             return paymentCompanyId;
         }
 
-        private String paymentCompanyName() {
+        String paymentCompanyName() {
             return paymentCompanyName;
         }
 
-        private String payeeName() {
+        String payeeName() {
             return payeeName;
         }
 
-        private String counterpartyName() {
+        String counterpartyName() {
             return counterpartyName;
         }
 
-        private String paymentDate() {
+        String paymentDate() {
             return paymentDate;
         }
 
-        private List<String> undertakeDepartmentNames() {
+        List<String> undertakeDepartmentNames() {
             return undertakeDepartmentNames;
         }
 
-        private List<String> tagNames() {
+        List<String> tagNames() {
             return tagNames;
         }
     }

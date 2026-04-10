@@ -1,5 +1,5 @@
 import request, { buildQueryString } from './core'
-import type { FixedAssetCard, FixedAssetCardPayload, FixedAssetCategory, FixedAssetCategoryPayload, FixedAssetChangeBill, FixedAssetChangeBillPayload, FixedAssetDeprPreviewPayload, FixedAssetDeprRun, FixedAssetDisposalBill, FixedAssetDisposalBillPayload, FixedAssetMeta, FixedAssetOpeningImportPayload, FixedAssetOpeningImportResult, FixedAssetPeriodClosePayload, FixedAssetPeriodStatus, FixedAssetTemplate, FixedAssetVoucherLink } from './shared'
+import type { FixedAssetCard, FixedAssetCardPayload, FixedAssetCategory, FixedAssetCategoryPayload, FixedAssetChangeBill, FixedAssetChangeBillPayload, FixedAssetDeprPreviewPayload, FixedAssetDeprRun, FixedAssetDisposalBill, FixedAssetDisposalBillPayload, FixedAssetMeta, FixedAssetOpeningImportPayload, FixedAssetOpeningImportResult, FixedAssetPeriodClosePayload, FixedAssetPeriodStatus, FixedAssetTemplate, FixedAssetVoucherLink } from './fixed-asset-types'
 
 export const fixedAssetApi = {
   getMeta: (params: { companyId?: string; fiscalYear?: number; fiscalPeriod?: number } = {}) =>

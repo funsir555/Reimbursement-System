@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   },
   financeCompany: {
     currentCompanyId: 'COMPANY_A',
-    currentCompanyName: '广州测试公司'
+    currentCompanyName: '广州测试公司',
+    currentCompanyLabel: 'A01 - 广州测试公司'
   },
   elMessage: {
     success: vi.fn(),
@@ -143,6 +144,7 @@ describe('FinanceSystemManagementView', () => {
       data: [
         {
           companyId: 'COMPANY_A',
+          companyCode: 'COMP202604050001',
           companyName: '广州测试公司',
           status: 'ACTIVE',
           statusLabel: '已启用',
@@ -182,12 +184,18 @@ describe('FinanceSystemManagementView', () => {
 
   it('loads meta and account set list on mount', async () => {
     const wrapper = await mountView()
-    const vm = wrapper.vm as unknown as { accountSets: Array<{ companyName: string }>; wizardForm: { subjectCodeScheme: string } }
+    const vm = wrapper.vm as unknown as {
+      accountSets: Array<{ companyName: string; companyCode?: string }>
+      wizardForm: { subjectCodeScheme: string }
+      formatCompanyDisplay: (row: { companyId: string; companyCode?: string; companyName?: string }) => string
+    }
 
     expect(mocks.financeSystemManagementApi.getMeta).toHaveBeenCalledTimes(1)
     expect(mocks.financeSystemManagementApi.listAccountSets).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('财务系统管理')
     expect(vm.accountSets[0]?.companyName).toBe('广州测试公司')
+    expect(vm.accountSets[0]?.companyCode).toBe('COMP202604050001')
+    expect(vm.formatCompanyDisplay(vm.accountSets[0] as { companyId: string; companyCode?: string; companyName?: string })).toBe('COMP202604050001 - 广州测试公司')
     expect(vm.wizardForm.subjectCodeScheme).toBe('4-2-2-2')
 
     wrapper.unmount()

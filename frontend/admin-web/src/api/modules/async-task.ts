@@ -1,5 +1,5 @@
 import request from './core'
-import type { AsyncTaskSubmitResult, ExpenseExportPayload, InvoiceTaskPayload } from './shared'
+import type { AsyncTaskSubmitResult, ExpenseExportPayload, InvoiceTaskPayload } from './async-task-types'
 
 export const asyncTaskApi = {
   exportInvoices: () =>

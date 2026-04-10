@@ -1,5 +1,5 @@
 import request from './core'
-import type { LoginResponse, UserProfile } from './shared'
+import type { LoginResponse, UserProfile } from './auth-types'
 
 export const authApi = {
   loginByPassword: (username: string, password: string) =>

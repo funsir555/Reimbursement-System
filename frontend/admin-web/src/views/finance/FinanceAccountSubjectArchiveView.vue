@@ -6,7 +6,7 @@
           <h1 class="text-2xl font-bold text-slate-800">会计科目</h1>
           <div class="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sm text-sky-700">
             <span class="font-semibold">当前公司</span>
-            <strong>{{ currentCompanyName || '未选择' }}</strong>
+            <strong>{{ currentCompanyDisplay || '未选择' }}</strong>
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -14,6 +14,14 @@
           <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreateDrawer()">新增科目</el-button>
         </div>
       </div>
+    </section>
+
+    <section
+      v-if="contextMessage"
+      class="rounded-[24px] border px-5 py-4 text-sm font-medium shadow-sm"
+      :class="contextMessageClass"
+    >
+      {{ contextMessage }}
     </section>
 
     <el-card class="!rounded-3xl !shadow-sm">
@@ -60,7 +68,7 @@
     <el-drawer v-model="drawerVisible" :title="drawerTitle" size="980px" destroy-on-close>
       <div class="space-y-5">
         <div class="grid grid-cols-1 gap-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 xl:grid-cols-4">
-          <div><div class="text-xs text-slate-500">所属公司</div><div class="mt-1 font-semibold text-slate-800">{{ currentCompanyName || currentCompanyId || '未选择' }}</div></div>
+          <div><div class="text-xs text-slate-500">所属公司</div><div class="mt-1 font-semibold text-slate-800">{{ currentCompanyDisplay || currentCompanyId || '未选择' }}</div></div>
           <div><div class="text-xs text-slate-500">启用状态</div><div class="mt-1 font-semibold text-slate-800">{{ subjectStatusText(form.status) }}</div></div>
           <div><div class="text-xs text-slate-500">封存状态</div><div class="mt-1 font-semibold text-slate-800">{{ closeStatusText(form.bclose) }}</div></div>
           <div><div class="text-xs text-slate-500">余额方向</div><div class="mt-1 font-semibold text-slate-800">{{ balanceDirectionText(balanceDirectionPreview) }}</div></div>
@@ -164,6 +172,10 @@ type AccountSubjectFormState = FinanceAccountSubjectDetail & { has_children?: bo
 
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const financeCompany = useFinanceCompanyStore()
+const financeCompanyState = financeCompany as typeof financeCompany & {
+  currentCompanyLabel?: string
+  currentCompanyHasActiveAccountSet?: boolean
+}
 const loading = ref(false)
 const saving = ref(false)
 const drawerVisible = ref(false)
@@ -183,6 +195,13 @@ const canDisable = computed(() => hasPermission('finance:archives:account_subjec
 const canClose = computed(() => hasPermission('finance:archives:account_subjects:close', permissionCodes.value))
 const currentCompanyId = computed(() => financeCompany.currentCompanyId)
 const currentCompanyName = computed(() => financeCompany.currentCompanyName)
+const currentCompanyOption = computed(() => financeCompany.companyOptions?.find((item) => item.companyId === currentCompanyId.value))
+const currentCompanyDisplay = computed(() => financeCompanyState.currentCompanyLabel || currentCompanyName.value || currentCompanyId.value || '')
+const hasActiveAccountSet = computed(() => {
+  if (typeof financeCompanyState.currentCompanyHasActiveAccountSet === 'boolean') return financeCompanyState.currentCompanyHasActiveAccountSet
+  if (typeof currentCompanyOption.value?.hasActiveAccountSet === 'boolean') return currentCompanyOption.value.hasActiveAccountSet
+  return Boolean(currentCompanyId.value)
+})
 const isCreateMode = computed(() => drawerMode.value === 'create')
 const isDetailMode = computed(() => drawerMode.value === 'detail')
 const drawerTitle = computed(() => (drawerMode.value === 'create' ? '新增会计科目' : drawerMode.value === 'edit' ? '编辑会计科目' : '会计科目详情'))
@@ -198,6 +217,13 @@ const balanceDirectionPreview = computed(() => {
   if (form.subject_category === 'LIABILITY' || form.subject_category === 'EQUITY' || form.subject_category === 'PROFIT') return 'CREDIT'
   return 'DEBIT'
 })
+const contextMessage = computed(() => {
+  if (!currentCompanyId.value) return '当前未选择财务公司，请先选择公司后再查看会计科目。'
+  if (!hasActiveAccountSet.value) return '当前公司未创建账套，请切换公司或先建账。'
+  if (!loading.value && subjectTree.value.length === 0) return '当前公司账套已启用，但暂无会计科目数据，请检查账套初始化结果。'
+  return ''
+})
+const contextMessageClass = computed(() => !currentCompanyId.value || !hasActiveAccountSet.value ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-sky-200 bg-sky-50 text-sky-700')
 
 onMounted(registerCompanySwitchGuard)
 onActivated(registerCompanySwitchGuard)
@@ -209,18 +235,19 @@ function registerCompanySwitchGuard() { if (guardRegistered) return; financeComp
 function unregisterCompanySwitchGuard() { if (!guardRegistered) return; financeCompany.unregisterSwitchGuard(COMPANY_SWITCH_GUARD_KEY); guardRegistered = false }
 
 async function loadMeta() { try { const res = await financeArchiveApi.getAccountSubjectMeta(); meta.subjectCategoryOptions = res.data.subjectCategoryOptions || []; meta.statusOptions = res.data.statusOptions || []; meta.closeStatusOptions = res.data.closeStatusOptions || []; meta.yesNoOptions = res.data.yesNoOptions || [] } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '加载会计科目元数据失败')) } }
-async function loadSubjects() { if (!currentCompanyId.value) { subjectTree.value = []; return }; loading.value = true; try { const res = await financeArchiveApi.listAccountSubjects({ companyId: currentCompanyId.value, keyword: filters.keyword.trim() || undefined, subjectCategory: filters.subjectCategory || undefined, status: filters.status, bclose: filters.bclose }); subjectTree.value = normalizeTree(res.data || []) } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '加载会计科目列表失败')) } finally { loading.value = false } }
+async function loadSubjects() { if (!currentCompanyId.value || !hasActiveAccountSet.value) { subjectTree.value = []; return }; loading.value = true; try { const res = await financeArchiveApi.listAccountSubjects({ companyId: currentCompanyId.value, keyword: filters.keyword.trim() || undefined, subjectCategory: filters.subjectCategory || undefined, status: filters.status, bclose: filters.bclose }); subjectTree.value = normalizeTree(res.data || []) } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '加载会计科目列表失败')) } finally { loading.value = false } }
 function resetFilters() { filters.keyword = ''; filters.subjectCategory = ''; filters.status = undefined; filters.bclose = undefined; void loadSubjects() }
+function ensureCurrentCompanyReady(actionText: string) { if (!currentCompanyId.value) { ElMessage.warning(`当前未选择财务公司，无法${actionText}`); return false }; if (!hasActiveAccountSet.value) { ElMessage.warning('当前公司未创建账套，请切换公司或先建账。'); return false }; return true }
 function resetForm(parentSubjectCode = '') { Object.assign(form, createDefaultForm()); form.parent_subject_code = parentSubjectCode || ''; form.subject_level = parentSubjectCode ? subjectLevelPreview.value : 1; form.subject_category = selectedParent.value?.subject_category || 'ASSET'; form.cclassany = form.subject_category; form.bproperty = balanceDirectionPreview.value === 'DEBIT' ? 1 : 0; form.cbook_type = defaultBookType(); form.cexch_name = 'CNY' }
 function syncDerivedFields() { form.subject_level = subjectLevelPreview.value; if (!form.cclassany) form.cclassany = form.subject_category; if (!form.cbook_type) form.cbook_type = defaultBookType(); if (form.bproperty === undefined || form.bproperty === null) form.bproperty = balanceDirectionPreview.value === 'DEBIT' ? 1 : 0 }
 function handleParentChange() { form.subject_level = subjectLevelPreview.value; if (selectedParent.value?.subject_category) form.subject_category = selectedParent.value.subject_category; if (selectedParent.value?.balance_direction) form.bproperty = selectedParent.value.balance_direction === 'DEBIT' ? 1 : 0; form.cbook_type = defaultBookType() }
-function openCreateDrawer(parentSubjectCode = '') { if (!currentCompanyId.value) { ElMessage.warning('当前财务公司缺失，无法新增会计科目'); return }; drawerMode.value = 'create'; editingSubjectCode.value = ''; resetForm(parentSubjectCode); activeSections.value = ['basic', 'attribute', 'auxiliary', 'cashBank', 'control']; drawerVisible.value = true }
+function openCreateDrawer(parentSubjectCode = '') { if (!ensureCurrentCompanyReady('维护会计科目')) return; drawerMode.value = 'create'; editingSubjectCode.value = ''; resetForm(parentSubjectCode); activeSections.value = ['basic', 'attribute', 'auxiliary', 'cashBank', 'control']; drawerVisible.value = true }
 async function openDetailDrawer(subjectCode: string) { await loadSubjectDetail(subjectCode, 'detail') }
 async function openEditDrawer(subjectCode: string) { await loadSubjectDetail(subjectCode, 'edit') }
-async function loadSubjectDetail(subjectCode: string, mode: DrawerMode) { if (!currentCompanyId.value) return; drawerMode.value = mode; editingSubjectCode.value = subjectCode; drawerVisible.value = true; activeSections.value = ['basic', 'attribute', 'auxiliary', 'cashBank', 'control']; try { const res = await financeArchiveApi.getAccountSubjectDetail(currentCompanyId.value, subjectCode); Object.assign(form, createDefaultForm(), res.data); form.parent_subject_code = form.parent_subject_code || ''; form.has_children = Boolean(res.data.has_children) } catch (error: unknown) { drawerVisible.value = false; ElMessage.error(resolveErrorMessage(error, '加载会计科目详情失败')) } }
-async function saveSubject() { if (!currentCompanyId.value) { ElMessage.warning('当前财务公司缺失，无法保存会计科目'); return }; if (!String(form.subject_code || '').trim()) { ElMessage.warning('科目编码不能为空'); return }; if (!String(form.subject_name || '').trim()) { ElMessage.warning('科目名称不能为空'); return }; saving.value = true; try { const payload = buildPayload(); if (drawerMode.value === 'create') { await financeArchiveApi.createAccountSubject(currentCompanyId.value, payload); ElMessage.success('会计科目创建成功') } else { await financeArchiveApi.updateAccountSubject(currentCompanyId.value, editingSubjectCode.value, payload); ElMessage.success('会计科目更新成功') }; closeDrawer(); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '保存会计科目失败')) } finally { saving.value = false } }
-async function toggleStatus(row: FinanceAccountSubjectSummary) { if (!currentCompanyId.value) return; const nextStatus = row.status === 1 ? 0 : 1; const actionText = nextStatus === 1 ? '启用' : '停用'; try { await ElMessageBox.confirm(`确认${actionText}会计科目 ${row.subject_code} - ${row.subject_name} 吗？`, `${actionText}会计科目`, { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }) } catch { return } try { await financeArchiveApi.updateAccountSubjectStatus(currentCompanyId.value, row.subject_code, nextStatus); ElMessage.success(`会计科目${actionText}成功`); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, `${actionText}会计科目失败`)) } }
-async function toggleClose(row: FinanceAccountSubjectSummary) { if (!currentCompanyId.value) return; const nextClose = row.bclose === 1 ? 0 : 1; const actionText = nextClose === 1 ? '封存' : '解封'; try { await ElMessageBox.confirm(`确认${actionText}会计科目 ${row.subject_code} - ${row.subject_name} 吗？`, `${actionText}会计科目`, { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }) } catch { return } try { await financeArchiveApi.updateAccountSubjectClose(currentCompanyId.value, row.subject_code, nextClose); ElMessage.success(`会计科目${actionText}成功`); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, `${actionText}会计科目失败`)) } }
+async function loadSubjectDetail(subjectCode: string, mode: DrawerMode) { if (!ensureCurrentCompanyReady('查看会计科目')) return; drawerMode.value = mode; editingSubjectCode.value = subjectCode; drawerVisible.value = true; activeSections.value = ['basic', 'attribute', 'auxiliary', 'cashBank', 'control']; try { const res = await financeArchiveApi.getAccountSubjectDetail(currentCompanyId.value, subjectCode); Object.assign(form, createDefaultForm(), res.data); form.parent_subject_code = form.parent_subject_code || ''; form.has_children = Boolean(res.data.has_children) } catch (error: unknown) { drawerVisible.value = false; ElMessage.error(resolveErrorMessage(error, '加载会计科目详情失败')) } }
+async function saveSubject() { if (!ensureCurrentCompanyReady('保存会计科目')) return; if (!String(form.subject_code || '').trim()) { ElMessage.warning('科目编码不能为空'); return }; if (!String(form.subject_name || '').trim()) { ElMessage.warning('科目名称不能为空'); return }; saving.value = true; try { const payload = buildPayload(); if (drawerMode.value === 'create') { await financeArchiveApi.createAccountSubject(currentCompanyId.value, payload); ElMessage.success('会计科目创建成功') } else { await financeArchiveApi.updateAccountSubject(currentCompanyId.value, editingSubjectCode.value, payload); ElMessage.success('会计科目更新成功') }; closeDrawer(); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '保存会计科目失败')) } finally { saving.value = false } }
+async function toggleStatus(row: FinanceAccountSubjectSummary) { if (!ensureCurrentCompanyReady('更新会计科目状态')) return; const nextStatus = row.status === 1 ? 0 : 1; const actionText = nextStatus === 1 ? '启用' : '停用'; try { await ElMessageBox.confirm(`确认${actionText}会计科目 ${row.subject_code} - ${row.subject_name} 吗？`, `${actionText}会计科目`, { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }) } catch { return } try { await financeArchiveApi.updateAccountSubjectStatus(currentCompanyId.value, row.subject_code, nextStatus); ElMessage.success(`会计科目${actionText}成功`); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, `${actionText}会计科目失败`)) } }
+async function toggleClose(row: FinanceAccountSubjectSummary) { if (!ensureCurrentCompanyReady('更新会计科目封存状态')) return; const nextClose = row.bclose === 1 ? 0 : 1; const actionText = nextClose === 1 ? '封存' : '解封'; try { await ElMessageBox.confirm(`确认${actionText}会计科目 ${row.subject_code} - ${row.subject_name} 吗？`, `${actionText}会计科目`, { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }) } catch { return } try { await financeArchiveApi.updateAccountSubjectClose(currentCompanyId.value, row.subject_code, nextClose); ElMessage.success(`会计科目${actionText}成功`); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, `${actionText}会计科目失败`)) } }
 function buildPayload(): FinanceAccountSubjectSavePayload { return { subject_code: String(form.subject_code || '').trim(), subject_name: String(form.subject_name || '').trim(), parent_subject_code: form.parent_subject_code || undefined, subject_level: subjectLevelPreview.value, subject_category: form.subject_category || 'ASSET', cclassany: trimString(form.cclassany), bproperty: normalizeNumber(form.bproperty, balanceDirectionPreview.value === 'DEBIT' ? 1 : 0), cbook_type: trimString(form.cbook_type), chelp: trimString(form.chelp), cexch_name: trimString(form.cexch_name || 'CNY'), cmeasure: trimString(form.cmeasure), bperson: normalizeNumber(form.bperson, 0), bcus: normalizeNumber(form.bcus, 0), bsup: normalizeNumber(form.bsup, 0), bdept: normalizeNumber(form.bdept, 0), bitem: normalizeNumber(form.bitem, 0), cass_item: trimString(form.cass_item), br: normalizeNumber(form.br, 0), be: normalizeNumber(form.be, 0), cgather: String(form.cgather || '0'), leaf_flag: form.has_children ? 0 : normalizeNumber(form.leaf_flag, 1), bexchange: normalizeNumber(form.bexchange, 0), bcash: normalizeNumber(form.bcash, 0), bbank: normalizeNumber(form.bbank, 0), bused: normalizeNumber(form.bused, 0), bd_c: normalizeNumber(form.bd_c, 0), dbegin: trimString(form.dbegin), dend: trimString(form.dend), itrans: normalizeNumber(form.itrans, 0), cother: trimString(form.cother), iotherused: normalizeNumber(form.iotherused, 0), bReport: normalizeNumber(form.bReport, 0), bGCJS: normalizeNumber(form.bGCJS, 0), bCashItem: normalizeNumber(form.bCashItem, 0), iViewItem: normalizeNumber(form.iViewItem, 0) } }
 function closeDrawer() { drawerVisible.value = false; editingSubjectCode.value = ''; Object.assign(form, createDefaultForm()) }
 function normalizeTree(nodes: FinanceAccountSubjectSummary[] = []): FinanceAccountSubjectSummary[] { return nodes.map((item) => ({ ...item, children: normalizeTree(item.children || []) })) }

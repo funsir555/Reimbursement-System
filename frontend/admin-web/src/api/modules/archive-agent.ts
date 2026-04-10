@@ -1,5 +1,5 @@
 import request, { buildQueryString } from './core'
-import type { ArchiveAgentDetail, ArchiveAgentMeta, ArchiveAgentRunDetail, ArchiveAgentRunRecord, ArchiveAgentSavePayload, ArchiveAgentSummary, ArchiveAgentTestRunPayload } from './shared'
+import type { ArchiveAgentDetail, ArchiveAgentMeta, ArchiveAgentRunDetail, ArchiveAgentRunRecord, ArchiveAgentSavePayload, ArchiveAgentSummary, ArchiveAgentTestRunPayload } from './archive-agent-types'
 
 export const archiveAgentApi = {
   list: (params: { keyword?: string; status?: string } = {}) =>

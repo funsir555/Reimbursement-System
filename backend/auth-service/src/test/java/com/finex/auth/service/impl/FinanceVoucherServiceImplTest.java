@@ -11,6 +11,7 @@ import com.finex.auth.entity.FinanceProjectClass;
 import com.finex.auth.entity.FinanceVendor;
 import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.entity.SystemCompany;
+import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
@@ -135,6 +136,22 @@ class FinanceVoucherServiceImplTest {
         assertEquals("01", meta.getProjectClassOptions().get(0).getCode());
         assertEquals("000001", meta.getProjectOptions().get(0).getCode());
         assertEquals("01", meta.getProjectOptions().get(0).getParentValue());
+    }
+
+    @Test
+    void getMetaLoadsSharedEmployeesAndDepartmentsAcrossCompanies() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "广州分公司")));
+        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(buildDepartment(10L, "财务部")));
+        when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "共享员工", "COMP-OTHER")));
+        when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
+
+        FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "记");
+
+        assertEquals("10", meta.getDepartmentOptions().get(0).getValue());
+        assertEquals("财务部", meta.getDepartmentOptions().get(0).getName());
+        assertEquals("2", meta.getEmployeeOptions().get(0).getValue());
+        assertEquals("共享员工", meta.getEmployeeOptions().get(0).getName());
     }
 
     @Test
@@ -264,6 +281,14 @@ class FinanceVoucherServiceImplTest {
         user.setCompanyId(companyId);
         user.setStatus(1);
         return user;
+    }
+
+    private SystemDepartment buildDepartment(Long id, String deptName) {
+        SystemDepartment department = new SystemDepartment();
+        department.setId(id);
+        department.setDeptName(deptName);
+        department.setStatus(1);
+        return department;
     }
 
     private GlAccvouch buildRow(int id, String companyId, int period, String csign, int inoId, int inid, String billDate,

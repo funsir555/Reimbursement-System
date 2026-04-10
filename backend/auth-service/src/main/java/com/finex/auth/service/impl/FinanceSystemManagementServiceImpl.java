@@ -224,6 +224,7 @@ public class FinanceSystemManagementServiceImpl implements FinanceSystemManageme
         AsyncTaskRecord task = taskMap.get(item.getLastTaskNo());
 
         summary.setCompanyId(item.getCompanyId());
+        summary.setCompanyCode(company == null ? null : trimToNull(company.getCompanyCode()));
         summary.setCompanyName(company == null ? item.getCompanyId() : company.getCompanyName());
         summary.setStatus(item.getStatus());
         summary.setStatusLabel(resolveAccountSetStatusLabel(item.getStatus()));

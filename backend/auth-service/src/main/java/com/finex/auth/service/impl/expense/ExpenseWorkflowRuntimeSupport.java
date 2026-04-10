@@ -222,6 +222,10 @@ public class ExpenseWorkflowRuntimeSupport {
         }
     }
 
+    public void validateFlowSnapshot(String snapshotJson) {
+        readFlowSnapshot(snapshotJson);
+    }
+
     public void approvePendingTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -502,34 +506,6 @@ public class ExpenseWorkflowRuntimeSupport {
             log.warn("Failed to inspect raw flow snapshot for repair screening", ex);
             return new RawFlowSnapshotSignature(false, false, false);
         }
-    }
-
-    public List<String> repairMisapprovedDocumentsByRootContainerBug() {
-        List<ProcessDocumentInstance> approvedDocuments = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getStatus, List.of(
-                                DOCUMENT_STATUS_APPROVED,
-                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
-                                DOCUMENT_STATUS_PAYMENT_FINISHED
-                        ))
-                        .orderByAsc(ProcessDocumentInstance::getId)
-        );
-        if (approvedDocuments.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<String> repairedDocumentCodes = new ArrayList<>();
-        for (ProcessDocumentInstance instance : approvedDocuments) {
-            RawFlowSnapshotSignature signature = inspectRawFlowSnapshot(instance.getFlowSnapshotJson());
-            if (!signature.hasApprovalNode() || !signature.hasBlankRootNode() || signature.hasNullRootNode()) {
-                continue;
-            }
-            if (!isMisapprovedByBlankRootBug(instance.getDocumentCode())) {
-                continue;
-            }
-            repairMisapprovedDocument(instance);
-            repairedDocumentCodes.add(instance.getDocumentCode());
-        }
-        return repairedDocumentCodes;
     }
 
     private FlowAdvanceState advanceFromPosition(
@@ -876,7 +852,7 @@ public class ExpenseWorkflowRuntimeSupport {
         return submitterDeptId == null ? Collections.emptyList() : List.of(submitterDeptId);
     }
 
-    private boolean isMisapprovedByBlankRootBug(String documentCode) {
+    boolean isMisapprovedByBlankRootBug(String documentCode) {
         if (trimToNull(documentCode) == null) {
             return false;
         }
@@ -893,7 +869,7 @@ public class ExpenseWorkflowRuntimeSupport {
         return hasFinish && !hasApprovalPending && taskCount == 0L;
     }
 
-    private void repairMisapprovedDocument(ProcessDocumentInstance instance) {
+    void rebuildMisapprovedRuntime(ProcessDocumentInstance instance) {
         String documentCode = instance.getDocumentCode();
         log.info("Repairing misapproved expense document documentCode={}", documentCode);
 

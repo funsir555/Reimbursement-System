@@ -1,5 +1,6 @@
 import request, { buildQueryString } from './core'
-import type { DashboardData, DashboardOutstandingKind, DashboardWriteoffBindingPayload, ExpenseDocumentPickerResult, ExpenseSummary } from './shared'
+import type { DashboardData, DashboardOutstandingKind, DashboardWriteoffBindingPayload } from './dashboard-types'
+import type { ExpenseDocumentPickerResult, ExpenseSummary } from './expense-types'
 
 export const dashboardApi = {
   getOverview: () => request<DashboardData>('/auth/dashboard'),

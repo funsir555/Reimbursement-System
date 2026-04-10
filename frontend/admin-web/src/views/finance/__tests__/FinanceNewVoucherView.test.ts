@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   financeCompany: {
     currentCompanyId: 'COMPANY_A',
     currentCompanyName: '广州远智教育科技有限公司',
+    currentCompanyLabel: '001  广州远智教育科技有限公司',
+    currentCompanyHasActiveAccountSet: true,
     registerSwitchGuard: vi.fn(),
     unregisterSwitchGuard: vi.fn()
   },
@@ -227,6 +229,8 @@ describe('FinanceNewVoucherView', () => {
     routeState.params = {}
     financeCompanyStore.currentCompanyId = 'COMPANY_A'
     financeCompanyStore.currentCompanyName = '广州远智教育科技有限公司'
+    financeCompanyStore.currentCompanyLabel = '001  广州远智教育科技有限公司'
+    financeCompanyStore.currentCompanyHasActiveAccountSet = true
     mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: buildMeta() })
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: buildDetail() })
   })
@@ -272,6 +276,42 @@ describe('FinanceNewVoucherView', () => {
 
     expect(mocks.financeApi.getVoucherDetail).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
     expect(wrapper.text()).toContain('1002  银行存款')
+  })
+
+  it('shows readable notices when account set or archive data is missing', async () => {
+    financeCompanyStore.currentCompanyHasActiveAccountSet = false
+    let wrapper = await mountView({ pageMode: 'create' })
+    expect(wrapper.text()).toContain('当前公司未创建账套，请切换公司或先建账。')
+    wrapper.unmount()
+
+    financeCompanyStore.currentCompanyHasActiveAccountSet = true
+    const meta = buildMeta()
+    meta.accountOptions = []
+    meta.customerOptions = []
+    meta.supplierOptions = []
+    meta.projectClassOptions = []
+    meta.projectOptions = []
+    mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: meta })
+
+    wrapper = await mountView({ pageMode: 'create' })
+    expect(wrapper.text()).toContain('当前公司账套已启用，但暂无会计科目数据，请检查账套初始化结果。')
+    expect(wrapper.text()).toContain('当前公司暂无客户档案数据。')
+    expect(wrapper.text()).toContain('当前公司暂无供应商档案数据。')
+    expect(wrapper.text()).toContain('当前公司暂无项目档案数据。')
+  })
+
+  it('reloads voucher meta when the finance company context changes', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+
+    financeCompanyStore.currentCompanyId = 'COMPANY_B'
+    financeCompanyStore.currentCompanyName = '深圳测试公司'
+    financeCompanyStore.currentCompanyLabel = '002  深圳测试公司'
+    await flushPromises()
+
+    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })
+    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_B' })
+
+    wrapper.unmount()
   })
 
   it('saves vouchers through the current finance company context', async () => {

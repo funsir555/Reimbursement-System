@@ -7,6 +7,8 @@ public class FinanceAccountSetSummaryVO {
 
     private String companyId;
 
+    private String companyCode;
+
     private String companyName;
 
     private String status;

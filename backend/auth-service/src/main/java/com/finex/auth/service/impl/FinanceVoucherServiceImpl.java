@@ -109,7 +109,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         List<SystemCompany> companies = loadEnabledCompanies();
         String effectiveCompanyId = resolveDefaultCompanyId(companyId, currentUser, companies);
         List<SystemDepartment> departments = loadEnabledDepartments();
-        List<User> employees = loadEnabledUsers(effectiveCompanyId);
+        List<User> employees = loadEnabledUsers();
         LocalDate effectiveBillDate = parseDateOrDefault(billDate, LocalDate.now());
         String effectiveVoucherType = normalize(csign, DEFAULT_VOUCHER_TYPE);
 
@@ -545,14 +545,9 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         );
     }
 
-    private List<User> loadEnabledUsers(String companyId) {
-        String normalizedCompanyId = trimToNull(companyId);
-        if (normalizedCompanyId == null) {
-            return List.of();
-        }
+    private List<User> loadEnabledUsers() {
         return userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
-                        .eq(User::getCompanyId, normalizedCompanyId)
                         .eq(User::getStatus, 1)
                         .orderByAsc(User::getId)
         );
@@ -978,7 +973,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
 
         Map<String, String> departments = loadEnabledDepartments().stream()
                 .collect(Collectors.toMap(item -> String.valueOf(item.getId()), SystemDepartment::getDeptName));
-        Map<String, String> employees = loadEnabledUsers(companyId).stream()
+        Map<String, String> employees = loadEnabledUsers().stream()
                 .collect(Collectors.toMap(item -> String.valueOf(item.getId()), this::resolveUserName));
         Set<String> accounts = loadAccountCodeSet(companyId);
         Set<String> customers = loadEnabledCustomerMap(companyId).keySet();

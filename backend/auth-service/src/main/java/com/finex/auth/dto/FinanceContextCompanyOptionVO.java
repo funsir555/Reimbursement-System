@@ -11,6 +11,8 @@ public class FinanceContextCompanyOptionVO {
 
     private String companyName;
 
+    private boolean hasActiveAccountSet;
+
     private String value;
 
     private String label;

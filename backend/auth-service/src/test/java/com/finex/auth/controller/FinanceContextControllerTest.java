@@ -44,6 +44,7 @@ class FinanceContextControllerTest {
         option.setCompanyId("COMPANY_A");
         option.setCompanyCode("COMP_A");
         option.setCompanyName("广州远智教育科技有限公司");
+        option.setHasActiveAccountSet(true);
         option.setValue("COMPANY_A");
         option.setLabel("COMP_A - 广州远智教育科技有限公司");
 
@@ -59,7 +60,8 @@ class FinanceContextControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.defaultCompanyId").value("COMPANY_A"))
-                .andExpect(jsonPath("$.data.companyOptions[0].companyName").value("广州远智教育科技有限公司"));
+                .andExpect(jsonPath("$.data.companyOptions[0].companyName").value("广州远智教育科技有限公司"))
+                .andExpect(jsonPath("$.data.companyOptions[0].hasActiveAccountSet").value(true));
 
         verify(financeContextService).getMeta(1L);
     }

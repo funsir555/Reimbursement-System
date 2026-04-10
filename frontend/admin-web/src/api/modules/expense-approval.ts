@@ -1,5 +1,7 @@
 import request, { buildQueryString } from './core'
-import type { ExpenseActionUserOption, ExpenseApprovalActionPayload, ExpenseApprovalPendingItem, ExpenseDocumentDetail, ExpenseDocumentEditContext, ExpenseDocumentUpdatePayload, ExpenseTaskAddSignPayload, ExpenseTaskTransferPayload } from './shared'
+import type { ExpenseActionUserOption, ExpenseApprovalActionPayload, ExpenseApprovalPendingItem, ExpenseTaskAddSignPayload, ExpenseTaskTransferPayload } from './expense-approval-types'
+import type { ExpenseDocumentEditContext, ExpenseDocumentUpdatePayload } from './expense-create-types'
+import type { ExpenseDocumentDetail } from './expense-types'
 
 export const expenseApprovalApi = {
   listPending: () => request<ExpenseApprovalPendingItem[]>('/auth/expense-approval/pending'),

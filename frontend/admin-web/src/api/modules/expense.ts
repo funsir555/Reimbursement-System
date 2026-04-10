@@ -1,5 +1,6 @@
 import request from './core'
-import type { ExpenseDetailInstanceDetail, ExpenseDocumentCommentPayload, ExpenseDocumentDetail, ExpenseDocumentEditContext, ExpenseDocumentNavigation, ExpenseDocumentPickerResult, ExpenseDocumentReminderPayload, ExpenseDocumentSubmitResult, ExpenseDocumentUpdatePayload, ExpenseSummary } from './shared'
+import type { ExpenseDocumentEditContext, ExpenseDocumentSubmitResult, ExpenseDocumentUpdatePayload } from './expense-create-types'
+import type { ExpenseDetailInstanceDetail, ExpenseDocumentCommentPayload, ExpenseDocumentDetail, ExpenseDocumentNavigation, ExpenseDocumentPickerResult, ExpenseDocumentReminderPayload, ExpenseSummary } from './expense-types'
 
 export const expenseApi = {
   list: () => request<ExpenseSummary[]>('/auth/expenses'),

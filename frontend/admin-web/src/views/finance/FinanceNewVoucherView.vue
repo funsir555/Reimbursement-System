@@ -83,6 +83,17 @@
           </aside>
         </section>
 
+        <section v-if="voucherNoticeItems.length" class="voucher-notice-panel">
+          <div
+            v-for="notice in voucherNoticeItems"
+            :key="notice.text"
+            class="voucher-notice-item"
+            :class="`voucher-notice-item-${notice.level}`"
+          >
+            {{ notice.text }}
+          </div>
+        </section>
+
         <section class="voucher-ledger-card">
           <div class="voucher-ledger-header">
             <div class="voucher-ledger-title">凭证明细</div>
@@ -356,11 +367,29 @@ const totalCredit = computed(() => sumRows(effectiveRows.value, 'mc'))
 const balanceGap = computed(() => subtractVoucherAmount(totalDebit.value, totalCredit.value))
 const isBalanced = computed(() => effectiveEntryCount.value >= 2 && isZeroMoney(balanceGap.value) && validationErrors.value.length === 0)
 const selectedRow = computed(() => form.entries[Math.min(selectedRowIndex.value, Math.max(form.entries.length - 1, 0))] as VoucherEntryRow)
+const financeCompanyState = financeCompany as typeof financeCompany & {
+  currentCompanyLabel?: string
+  currentCompanyHasActiveAccountSet?: boolean
+}
+const currentCompanyOption = computed(() =>
+  financeCompany.companyOptions?.find((item) => item.companyId === (financeCompany.currentCompanyId || form.companyId))
+)
 const currentRowLabel = computed(() => {
   if (!selectedRow.value?.ccode) return '当前行'
   return resolveAccountLabel(selectedRow.value.ccode, selectedRow.value.ccodeName)
 })
-const currentCompanyName = computed(() => financeCompany.currentCompanyName || resolveCompanyName(form.companyId))
+const currentCompanyName = computed(
+  () => financeCompanyState.currentCompanyLabel || financeCompany.currentCompanyName || resolveCompanyName(form.companyId)
+)
+const currentCompanyHasActiveAccountSet = computed(() => {
+  if (typeof financeCompanyState.currentCompanyHasActiveAccountSet === 'boolean') {
+    return financeCompanyState.currentCompanyHasActiveAccountSet
+  }
+  if (typeof currentCompanyOption.value?.hasActiveAccountSet === 'boolean') {
+    return currentCompanyOption.value.hasActiveAccountSet
+  }
+  return Boolean(financeCompany.currentCompanyId || form.companyId)
+})
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
 const statusChipText = computed(() => (isDetailRoute.value ? voucherDetail.value?.statusLabel || '未记账' : hasDraft.value ? '已暂存' : '未暂存'))
 const accountOptionsForDisplay = computed(() => {
@@ -383,6 +412,33 @@ const filteredProjectOptions = computed(() => {
   const options = voucherMeta.value?.projectOptions || []
   if (!projectClassCode) return options
   return options.filter((item) => item.parentValue === projectClassCode)
+})
+const voucherNoticeItems = computed<Array<{ level: 'warning' | 'danger' | 'info'; text: string }>>(() => {
+  const notices: Array<{ level: 'warning' | 'danger' | 'info'; text: string }> = []
+  if (!financeCompany.currentCompanyId) {
+    notices.push({ level: 'warning', text: '当前未选择财务公司，请先选择公司后再录入凭证。' })
+    return notices
+  }
+  if (!currentCompanyHasActiveAccountSet.value) {
+    notices.push({ level: 'warning', text: '当前公司未创建账套，请切换公司或先建账。' })
+    return notices
+  }
+  if (!voucherMeta.value) {
+    return notices
+  }
+  if (!voucherMeta.value.accountOptions?.length) {
+    notices.push({ level: 'danger', text: '当前公司账套已启用，但暂无会计科目数据，请检查账套初始化结果。' })
+  }
+  if (!voucherMeta.value.customerOptions?.length) {
+    notices.push({ level: 'info', text: '当前公司暂无客户档案数据。' })
+  }
+  if (!voucherMeta.value.supplierOptions?.length) {
+    notices.push({ level: 'info', text: '当前公司暂无供应商档案数据。' })
+  }
+  if (!voucherMeta.value.projectClassOptions?.length || !voucherMeta.value.projectOptions?.length) {
+    notices.push({ level: 'info', text: '当前公司暂无项目档案数据。' })
+  }
+  return notices
 })
 const remarkText = computed({
   get: () => form.ctext2 || form.ctext1 || '',
@@ -1003,6 +1059,11 @@ defineExpose({
 .voucher-page { height: 100%; display: flex; min-height: 0; flex-direction: column; gap: 12px; overflow: hidden; }
 .voucher-content-scroll { min-height: 0; flex: 1; overflow: auto; padding-bottom: 8px; }
 .voucher-shell { display: flex; min-height: 100%; flex-direction: column; gap: 16px; border-radius: 28px; background: radial-gradient(circle at top right, rgba(96,165,250,.1), transparent 28%), linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%); padding: 18px; }
+.voucher-notice-panel { display: flex; flex-direction: column; gap: 10px; }
+.voucher-notice-item { border-radius: 18px; border: 1px solid #d8e2f0; padding: 12px 14px; font-size: 13px; font-weight: 600; line-height: 1.6; }
+.voucher-notice-item-warning { border-color: #f5d38b; background: linear-gradient(180deg, #fff8e8 0%, #fff3da 100%); color: #8a5a12; }
+.voucher-notice-item-danger { border-color: #f1b4b4; background: linear-gradient(180deg, #fff3f3 0%, #ffe6e6 100%); color: #a63535; }
+.voucher-notice-item-info { border-color: #bfd4f2; background: linear-gradient(180deg, #f3f8ff 0%, #e9f1ff 100%); color: #325985; }
 .voucher-page-header { display: flex; justify-content: center; }
 .voucher-page-header h1 { font-size: 28px; font-weight: 700; color: #1e3a5f; letter-spacing: .28em; }
 .voucher-toolbar-panel { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid rgba(216,226,240,.9); border-radius: 22px; background: rgba(255,255,255,.92); padding: 14px 16px; backdrop-filter: blur(10px); box-shadow: 0 16px 30px rgba(15,23,42,.08); }

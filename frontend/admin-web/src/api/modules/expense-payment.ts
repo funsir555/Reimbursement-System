@@ -1,5 +1,7 @@
 import request, { buildQueryString } from './core'
-import type { ExpenseApprovalActionPayload, ExpenseBankLinkConfig, ExpenseBankLinkSavePayload, ExpenseBankLinkSummary, ExpenseDocumentDetail, ExpensePaymentOrder } from './shared'
+import type { ExpenseApprovalActionPayload } from './expense-approval-types'
+import type { ExpenseBankLinkConfig, ExpenseBankLinkSavePayload, ExpenseBankLinkSummary, ExpensePaymentOrder } from './expense-payment-types'
+import type { ExpenseDocumentDetail } from './expense-types'
 
 export const expensePaymentApi = {
   listOrders: (status?: string) =>

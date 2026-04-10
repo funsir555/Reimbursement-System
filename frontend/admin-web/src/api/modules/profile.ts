@@ -1,5 +1,5 @@
 import request from './core'
-import type { ChangePasswordPayload, PersonalCenterData, UserBankAccountRecord, UserBankAccountSavePayload } from './shared'
+import type { ChangePasswordPayload, PersonalCenterData, UserBankAccountRecord, UserBankAccountSavePayload } from './profile-types'
 
 export const profileApi = {
   getOverview: () => request<PersonalCenterData>('/auth/user-center/profile'),

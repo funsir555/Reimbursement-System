@@ -23,8 +23,13 @@ export const useFinanceCompanyStore = defineStore('financeCompany', {
     defaultCompanyId: ''
   }),
   getters: {
+    currentCompanyOption: (state) => state.companyOptions.find((item) => item.companyId === state.currentCompanyId),
     currentCompanyName: (state) =>
       state.companyOptions.find((item) => item.companyId === state.currentCompanyId)?.companyName || '',
+    currentCompanyLabel: (state) =>
+      state.companyOptions.find((item) => item.companyId === state.currentCompanyId)?.label || '',
+    currentCompanyHasActiveAccountSet: (state) =>
+      Boolean(state.companyOptions.find((item) => item.companyId === state.currentCompanyId)?.hasActiveAccountSet),
     hasCompany: (state) => Boolean(state.currentCompanyId)
   },
   actions: {
@@ -99,14 +104,28 @@ export const useFinanceCompanyStore = defineStore('financeCompany', {
       switchGuards.clear()
     },
     resolveInitialCompanyId(preferredCompanyId?: string) {
+      const storedCompanyId = normalizeText(localStorage.getItem(STORAGE_KEY))
+      const storedOption = this.findCompanyOption(storedCompanyId)
+      if (storedOption?.hasActiveAccountSet) {
+        return storedOption.companyId
+      }
+
       const candidates = [
-        normalizeText(localStorage.getItem(STORAGE_KEY)),
-        normalizeText(preferredCompanyId),
-        this.currentUserCompanyId,
         this.defaultCompanyId,
+        this.currentUserCompanyId,
+        normalizeText(preferredCompanyId),
+        storedOption?.companyId || '',
+        this.companyOptions.find((item) => item.hasActiveAccountSet)?.companyId || '',
         this.companyOptions[0]?.companyId || ''
       ]
-      return candidates.find((item) => item && this.companyOptions.some((option) => option.companyId === item)) || ''
+      return candidates.find((item) => item && this.findCompanyOption(item)) || ''
+    },
+    findCompanyOption(companyId?: string) {
+      const normalizedCompanyId = normalizeText(companyId)
+      if (!normalizedCompanyId) {
+        return undefined
+      }
+      return this.companyOptions.find((item) => item.companyId === normalizedCompanyId)
     },
     applyCurrentCompany(companyId: string) {
       this.currentCompanyId = companyId

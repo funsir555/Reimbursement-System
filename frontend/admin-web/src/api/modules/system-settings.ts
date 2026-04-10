@@ -1,5 +1,5 @@
 import request from './core'
-import type { CompanyBankAccountRecord, CompanyBankAccountSavePayload, CompanyRecord, CompanySavePayload, DepartmentSavePayload, DepartmentTreeNode, EmployeeQueryPayload, EmployeeRecord, EmployeeSavePayload, PermissionTreeNode, RoleRecord, RoleSavePayload, SyncConnectorConfig, SyncConnectorSavePayload, SyncJobRecord, SystemSettingsBootstrapData } from './shared'
+import type { CompanyBankAccountRecord, CompanyBankAccountSavePayload, CompanyRecord, CompanySavePayload, DepartmentSavePayload, DepartmentTreeNode, EmployeeQueryPayload, EmployeeRecord, EmployeeSavePayload, PermissionTreeNode, RoleRecord, RoleSavePayload, SyncConnectorConfig, SyncConnectorSavePayload, SyncJobRecord, SystemSettingsBootstrapData } from './system-settings-types'
 
 export const systemSettingsApi = {
   getBootstrap: () => request<SystemSettingsBootstrapData>('/auth/system-settings/bootstrap'),

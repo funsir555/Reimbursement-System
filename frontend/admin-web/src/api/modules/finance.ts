@@ -1,5 +1,6 @@
 import request, { buildQueryString, downloadBinaryFile } from './core'
-import type { FinanceVoucherDetail, FinanceVoucherMeta, FinanceVoucherQueryParams, FinanceVoucherSavePayload, FinanceVoucherSaveResult, FinanceVoucherSummary, PageResult } from './shared'
+import type { PageResult } from './core'
+import type { FinanceVoucherDetail, FinanceVoucherMeta, FinanceVoucherQueryParams, FinanceVoucherSavePayload, FinanceVoucherSaveResult, FinanceVoucherSummary } from './finance-types'
 
 export const financeApi = {
   getVoucherMeta: (params: { companyId?: string; billDate?: string; csign?: string } = {}) =>

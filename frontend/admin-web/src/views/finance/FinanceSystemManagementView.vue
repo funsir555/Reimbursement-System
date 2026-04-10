@@ -6,7 +6,7 @@
           <h1 class="text-2xl font-bold text-slate-800">财务系统管理</h1>
           <div class="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sm text-sky-700">
             <span class="font-semibold">当前财务公司</span>
-            <strong>{{ financeCompany.currentCompanyName || '未设置' }}</strong>
+            <strong>{{ currentCompanyDisplay || '未设置' }}</strong>
           </div>
           <div class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700">
             <span class="font-semibold">已建账套</span>
@@ -36,10 +36,10 @@
 
     <el-card class="!rounded-3xl !shadow-sm">
       <el-table v-loading="loading" :data="accountSets" style="width: 100%">
-        <el-table-column prop="companyName" label="目标公司" min-width="180" show-overflow-tooltip>
+        <el-table-column prop="companyName" label="目标公司" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="flex flex-col gap-1">
-              <span class="font-medium text-slate-700">{{ row.companyName || row.companyId }}</span>
+              <span class="font-medium text-slate-700">{{ formatCompanyDisplay(row) }}</span>
               <span class="text-xs text-slate-400">{{ row.companyId }}</span>
             </div>
           </template>
@@ -269,7 +269,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   financeSystemManagementApi,
@@ -282,6 +282,7 @@ import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
 const financeCompany = useFinanceCompanyStore()
+const financeCompanyState = financeCompany as typeof financeCompany & { currentCompanyLabel?: string }
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const loading = ref(false)
 const submitting = ref(false)
@@ -314,6 +315,7 @@ const selectedReferenceOption = computed(() =>
 const selectedTemplate = computed(() =>
   templateOptions.value.find((item) => item.templateCode === wizardForm.templateCode) || null
 )
+const currentCompanyDisplay = computed(() => financeCompanyState.currentCompanyLabel || financeCompany.currentCompanyName || financeCompany.currentCompanyId || '')
 const progressStatus = computed(() => {
   if (taskStatus.value?.status === 'FAILED') {
     return 'exception'
@@ -339,7 +341,9 @@ const effectiveSubjectScheme = computed(() => {
   return wizardForm.subjectCodeScheme || meta.value?.defaultSubjectCodeScheme || '--'
 })
 
-void loadPageData()
+onMounted(() => {
+  void loadPageData()
+})
 
 onBeforeUnmount(() => {
   stopTaskPolling()
@@ -551,7 +555,11 @@ async function refreshTaskStatus(taskNo = taskStatus.value?.taskNo) {
 }
 
 function resolveCompanyName(companyId?: string) {
-  return companyOptions.value.find((item) => item.companyId === companyId)?.companyName || companyId || '--'
+  const match = companyOptions.value.find((item) => item.companyId === companyId)
+  if (!match) {
+    return companyId || '--'
+  }
+  return match.companyCode ? `${match.companyCode} - ${match.companyName}` : match.companyName || match.companyId
 }
 
 function resolveSupervisorName(userId?: number) {
@@ -560,6 +568,10 @@ function resolveSupervisorName(userId?: number) {
   }
   const match = supervisorOptions.value.find((item) => Number(item.value) === Number(userId))
   return match?.label || String(userId)
+}
+
+function formatCompanyDisplay(row: FinanceAccountSetSummary) {
+  return row.companyCode ? `${row.companyCode} - ${row.companyName || row.companyId}` : row.companyName || row.companyId
 }
 
 function resolveStatusTagType(status?: string) {
@@ -606,6 +618,8 @@ function resolveTaskLabel(status?: string) {
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
+
+defineExpose({ accountSets, wizardForm, syncReferenceFields, buildPayload, submitCreateTask, formatCompanyDisplay })
 </script>
 
 <style scoped>

@@ -1,5 +1,6 @@
 import request, { buildQueryString } from './core'
-import type { PageResult, VoucherGeneratedDetail, VoucherGeneratedRecord, VoucherGenerationMeta, VoucherPushBatchResult, VoucherPushDocument, VoucherSubjectMapping, VoucherSubjectMappingPayload, VoucherTemplatePolicy, VoucherTemplatePolicyPayload } from './shared'
+import type { PageResult } from './core'
+import type { VoucherGeneratedDetail, VoucherGeneratedRecord, VoucherGenerationMeta, VoucherPushBatchResult, VoucherPushDocument, VoucherSubjectMapping, VoucherSubjectMappingPayload, VoucherTemplatePolicy, VoucherTemplatePolicyPayload } from './expense-voucher-generation-types'
 
 export const expenseVoucherGenerationApi = {
   getMeta: () => request<VoucherGenerationMeta>('/auth/expenses/voucher-generation/meta'),

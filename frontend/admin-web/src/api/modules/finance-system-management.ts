@@ -1,5 +1,5 @@
 import request from './core'
-import type { FinanceAccountSetCreatePayload, FinanceAccountSetMeta, FinanceAccountSetSummary, FinanceAccountSetTaskStatus } from './shared'
+import type { FinanceAccountSetCreatePayload, FinanceAccountSetMeta, FinanceAccountSetSummary, FinanceAccountSetTaskStatus } from './finance-system-management-types'
 
 export const financeSystemManagementApi = {
   getMeta: () => request<FinanceAccountSetMeta>('/auth/finance/system-management/meta'),

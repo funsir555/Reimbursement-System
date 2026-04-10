@@ -1,5 +1,5 @@
 import request, { downloadBinaryFile } from './core'
-import type { DownloadCenterData } from './shared'
+import type { DownloadCenterData } from './download-types'
 
 export const downloadApi = {
   getCenter: () => request<DownloadCenterData>('/auth/user-center/downloads'),

@@ -1,5 +1,5 @@
 import request from './core'
-import type { NotificationItem, NotificationSummary } from './shared'
+import type { NotificationItem, NotificationSummary } from './notification-types'
 
 export const notificationApi = {
   getSummary: () => request<NotificationSummary>('/auth/async-tasks/notifications/summary'),

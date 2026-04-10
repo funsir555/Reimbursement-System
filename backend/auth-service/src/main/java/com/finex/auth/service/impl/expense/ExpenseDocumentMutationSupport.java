@@ -271,7 +271,7 @@ public class ExpenseDocumentMutationSupport {
     private final ObjectMapper objectMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
 
-    public List<ExpenseCreateTemplateSummaryVO> listAvailableTemplates() {
+    List<ExpenseCreateTemplateSummaryVO> listAvailableTemplates() {
         return templateMapper.selectList(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
                         .eq(ProcessDocumentTemplate::getEnabled, 1)
@@ -282,7 +282,7 @@ public class ExpenseDocumentMutationSupport {
                 .toList();
     }
 
-    public ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode) {
+    ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode) {
         ProcessDocumentTemplate template = requireTemplate(templateCode);
         return buildTemplateDetail(userId, template);
     }
@@ -339,11 +339,11 @@ public class ExpenseDocumentMutationSupport {
         return detail;
     }
 
-    public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
+    List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
         return financeVendorService.listActiveVendorOptions(requireCurrentUserCompanyId(userId), keyword, includeDisabled);
     }
 
-    public List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly) {
+    List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly) {
         String normalizedKeyword = trimToNull(keyword);
         if (Boolean.TRUE.equals(personalOnly)) {
             return listPersonalPayeeOptions(userId, normalizedKeyword);
@@ -380,7 +380,7 @@ public class ExpenseDocumentMutationSupport {
         return options;
     }
 
-    public List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
+    List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
             Long userId,
             String keyword,
             String linkageMode,
@@ -585,7 +585,7 @@ public class ExpenseDocumentMutationSupport {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
+    ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         String templateCode = dto == null ? null : dto.getTemplateCode();
         String stage = "load-template";
         String documentCode = null;
@@ -680,7 +680,7 @@ public class ExpenseDocumentMutationSupport {
         }
     }
 
-    public List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
+    List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
@@ -689,7 +689,7 @@ public class ExpenseDocumentMutationSupport {
         return instances.isEmpty() ? Collections.emptyList() : toExpenseSummaries(instances);
     }
 
-    public List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
+    List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
                         .ne(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_DRAFT)
@@ -698,7 +698,7 @@ public class ExpenseDocumentMutationSupport {
         return instances.isEmpty() ? Collections.emptyList() : toExpenseSummaries(instances);
     }
 
-    public List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
+    List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
         String normalizedKind = normalizeDashboardOutstandingKind(kind);
         String templateType = Objects.equals(normalizedKind, WRITEOFF_SOURCE_LOAN) ? "loan" : "report";
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
@@ -743,11 +743,7 @@ public class ExpenseDocumentMutationSupport {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public List<String> repairMisapprovedDocumentsByRootContainerBug() {
-        return expenseWorkflowRuntimeSupport.repairMisapprovedDocumentsByRootContainerBug();
-    }
-
-    public ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
+    ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         if (!allowCrossView && !Objects.equals(instance.getSubmitterUserId(), userId)) {
             throw new IllegalStateException("Current user cannot view this document");
@@ -755,7 +751,7 @@ public class ExpenseDocumentMutationSupport {
         return buildDocumentDetail(instance);
     }
 
-    public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
+    ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         if (!allowCrossView && !Objects.equals(instance.getSubmitterUserId(), userId)) {
             throw new IllegalStateException("Current user cannot view this expense detail");
@@ -764,7 +760,7 @@ public class ExpenseDocumentMutationSupport {
         return toExpenseDetailDetailVO(detail);
     }
 
-    public ExpenseDocumentPickerVO getDocumentPicker(
+    ExpenseDocumentPickerVO getDocumentPicker(
             Long userId,
             String relationType,
             List<String> templateTypes,
@@ -824,7 +820,7 @@ public class ExpenseDocumentMutationSupport {
         return result;
     }
 
-    public ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
+    ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
             Long userId,
             String targetDocumentCode,
             String keyword,
@@ -900,7 +896,7 @@ public class ExpenseDocumentMutationSupport {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public boolean bindDashboardWriteOff(Long userId, String targetDocumentCode, String sourceReportDocumentCode) {
+    boolean bindDashboardWriteOff(Long userId, String targetDocumentCode, String sourceReportDocumentCode) {
         ProcessDocumentInstance target = requireDocument(targetDocumentCode);
         ProcessDocumentInstance sourceReport = requireDocument(sourceReportDocumentCode);
         requireSubmitter(target, userId);
@@ -961,125 +957,7 @@ public class ExpenseDocumentMutationSupport {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO recallDocument(Long userId, String username, String documentCode) {
-        ProcessDocumentInstance instance = requireDocument(documentCode);
-        requireSubmitter(instance, userId);
-        String status = trimToNull(instance.getStatus());
-        if (!Objects.equals(status, DOCUMENT_STATUS_PENDING) && !Objects.equals(status, DOCUMENT_STATUS_EXCEPTION)) {
-            throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆敮鎸佸彫鍥?");
-        }
-        LocalDateTime now = LocalDateTime.now();
-        cancelOpenTasks(loadOpenTasks(instance.getDocumentCode()), null, now);
-        instance.setStatus(DOCUMENT_STATUS_DRAFT);
-        instance.setCurrentNodeKey(null);
-        instance.setCurrentNodeName(null);
-        instance.setCurrentTaskType(null);
-        instance.setFinishedAt(null);
-        instance.setUpdatedAt(now);
-        processDocumentInstanceMapper.updateById(instance);
-        appendLog(instance.getDocumentCode(), null, null, LOG_RECALL, userId, defaultUsername(username), null, Map.of(
-                "fromStatus", defaultText(status, DOCUMENT_STATUS_PENDING)
-        ));
-        voidPendingWriteOffs(instance.getDocumentCode());
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO commentOnDocument(Long userId, String username, String documentCode, ExpenseDocumentCommentDTO dto, boolean allowCrossView) {
-        ProcessDocumentInstance instance = requireDocument(documentCode);
-        assertCanViewDocument(instance, userId, allowCrossView);
-        if (!isFlowRelatedUser(instance, userId)) {
-            throw new IllegalStateException("鍙湁娴佺▼鐩稿叧浜哄彲浠ヨ瘎璁哄綋鍓嶅崟鎹?");
-        }
-        String comment = trimToNull(dto == null ? null : dto.getComment());
-        List<String> attachmentFileNames = normalizeStringList(dto == null ? Collections.emptyList() : dto.getAttachmentFileNames());
-        if (comment == null && attachmentFileNames.isEmpty()) {
-            throw new IllegalArgumentException("璇勮鍐呭涓嶈兘涓虹┖");
-        }
-        Map<String, Object> payload = new LinkedHashMap<>();
-        if (comment != null) {
-            payload.put("comment", comment);
-        }
-        if (!attachmentFileNames.isEmpty()) {
-            payload.put("attachmentFileNames", attachmentFileNames);
-        }
-        appendLog(
-                instance.getDocumentCode(),
-                instance.getCurrentNodeKey(),
-                instance.getCurrentNodeName(),
-                LOG_COMMENT,
-                userId,
-                defaultUsername(username),
-                comment,
-                payload
-        );
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO remindDocument(Long userId, String username, String documentCode, ExpenseDocumentReminderDTO dto) {
-        ProcessDocumentInstance instance = requireDocument(documentCode);
-        requireSubmitter(instance, userId);
-        if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_PENDING)) {
-            throw new IllegalStateException("鍙湁瀹℃壒涓殑鍗曟嵁鎵嶅彲浠ュ偓鍔?");
-        }
-        List<ProcessDocumentTask> currentTasks = loadPendingTasks(instance.getDocumentCode());
-        if (currentTasks.isEmpty()) {
-            throw new IllegalStateException("褰撳墠鍗曟嵁娌℃湁寰呭鎵逛汉锛屾殏鏃舵棤娉曞偓鍔?");
-        }
-        ensureReminderThrottle(instance.getDocumentCode(), userId);
-        String remark = trimToNull(dto == null ? null : dto.getRemark());
-        List<ProcessDocumentTask> distinctTasks = currentTasks.stream()
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(ProcessDocumentTask::getAssigneeUserId, item -> item, (left, right) -> left, LinkedHashMap::new),
-                        item -> new ArrayList<>(item.values())
-                ));
-        for (ProcessDocumentTask task : distinctTasks) {
-            String title = "瀹℃壒鍌姙鎻愰啋";
-            String content = "鍗曟嵁 " + instance.getDocumentCode() + " 姝ｅ湪绛夊緟浣犵殑澶勭悊";
-            if (remark != null) {
-                content = content + "锛屽娉細" + remark;
-            }
-            notificationService.sendAsyncNotification(task.getAssigneeUserId(), "EXPENSE_REMINDER", title, content, instance.getDocumentCode());
-        }
-        appendLog(instance.getDocumentCode(), instance.getCurrentNodeKey(), instance.getCurrentNodeName(), LOG_REMIND, userId, defaultUsername(username), remark, Map.of(
-                "recipientUserIds", distinctTasks.stream().map(ProcessDocumentTask::getAssigneeUserId).toList(),
-                "recipientNames", distinctTasks.stream().map(ProcessDocumentTask::getAssigneeName).toList()
-        ));
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    public ExpenseDocumentNavigationVO getDocumentNavigation(Long userId, String documentCode, boolean approvalViewer) {
-        ExpenseDocumentNavigationVO navigation = new ExpenseDocumentNavigationVO();
-        if (!approvalViewer) {
-            return navigation;
-        }
-        requireDocument(documentCode);
-        List<String> orderedCodes = loadNavigationDocumentCodes(userId, documentCode);
-        int index = orderedCodes.indexOf(documentCode);
-        if (index < 0) {
-            return navigation;
-        }
-        if (index > 0) {
-            navigation.setPrevDocumentCode(orderedCodes.get(index - 1));
-        }
-        if (index + 1 < orderedCodes.size()) {
-            navigation.setNextDocumentCode(orderedCodes.get(index + 1));
-        }
-        return navigation;
-    }
-
-    public ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode) {
-        ProcessDocumentInstance instance = requireDocument(documentCode);
-        requireSubmitter(instance, userId);
-        if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆槸鍙噸鎻愯崏绋跨姸鎬?");
-        }
-        return buildEditContext(userId, instance, null, "RESUBMIT");
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto) {
+    ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
@@ -1105,811 +983,7 @@ public class ExpenseDocumentMutationSupport {
         return result;
     }
 
-    public List<ExpenseApprovalPendingItemVO> listPendingApprovals(Long userId) {
-        List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getAssigneeUserId, userId)
-                        .eq(ProcessDocumentTask::getNodeType, NODE_TYPE_APPROVAL)
-                        .eq(ProcessDocumentTask::getStatus, TASK_STATUS_PENDING)
-                        .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
-        );
-        if (tasks.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Map<String, ProcessDocumentInstance> instanceMap = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getDocumentCode, tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList())
-        ).stream().collect(Collectors.toMap(
-                ProcessDocumentInstance::getDocumentCode,
-                item -> item,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        SummaryEnrichmentData enrichmentData = buildSummaryEnrichment(new ArrayList<>(instanceMap.values()));
-        return tasks.stream().map(task -> toPendingItem(task, instanceMap.get(task.getDocumentCode()), enrichmentData)).toList();
-    }
-
-    public List<ExpensePaymentOrderVO> listPaymentOrders(Long userId, String status) {
-        String normalizedStatus = normalizePaymentOrderStatus(status);
-        List<ProcessDocumentTask> tasks = loadVisiblePaymentTasks(userId, normalizedStatus);
-        if (tasks.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<String> documentCodes = tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList();
-        Map<String, ProcessDocumentInstance> instanceMap = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getDocumentCode, documentCodes)
-        ).stream().collect(Collectors.toMap(
-                ProcessDocumentInstance::getDocumentCode,
-                item -> item,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        SummaryEnrichmentData enrichmentData = buildSummaryEnrichment(new ArrayList<>(instanceMap.values()));
-        Map<String, PmBankPaymentRecord> bankRecordMap = loadLatestBankRecordMap(documentCodes);
-        Map<Long, String> companyBankAccountNameMap = loadCompanyBankAccountNameMap(
-                bankRecordMap.values().stream()
-                        .map(PmBankPaymentRecord::getCompanyBankAccountId)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet())
-        );
-        return tasks.stream()
-                .map(task -> toPaymentOrder(
-                        task,
-                        instanceMap.get(task.getDocumentCode()),
-                        enrichmentData,
-                        bankRecordMap.get(task.getDocumentCode()),
-                        companyBankAccountNameMap
-                ))
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
-    public List<ExpenseBankLinkSummaryVO> listBankLinks() {
-        List<SystemCompanyBankAccount> accounts = systemCompanyBankAccountMapper.selectList(
-                Wrappers.<SystemCompanyBankAccount>lambdaQuery()
-                        .orderByAsc(SystemCompanyBankAccount::getCompanyId)
-                        .orderByDesc(SystemCompanyBankAccount::getDirectConnectEnabled)
-                        .orderByAsc(SystemCompanyBankAccount::getId)
-        );
-        if (accounts.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Map<String, String> companyNameMap = buildCompanyNameMap(
-                accounts.stream()
-                        .map(SystemCompanyBankAccount::getCompanyId)
-                        .filter(StrUtil::isNotBlank)
-                        .collect(Collectors.toSet())
-        );
-        Map<Long, PmBankPaymentRecord> latestRecordByAccountId = loadLatestBankRecordByAccountId(
-                accounts.stream().map(SystemCompanyBankAccount::getId).collect(Collectors.toSet())
-        );
-        return accounts.stream()
-                .map(account -> toBankLinkSummary(account, companyNameMap.get(account.getCompanyId()), latestRecordByAccountId.get(account.getId())))
-                .toList();
-    }
-
-    public ExpenseBankLinkConfigVO getBankLink(Long companyBankAccountId) {
-        SystemCompanyBankAccount account = requireCompanyBankAccount(companyBankAccountId);
-        return toBankLinkConfig(account, findCompanyName(account.getCompanyId()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseBankLinkConfigVO updateBankLink(Long companyBankAccountId, ExpenseBankLinkSaveDTO dto) {
-        if (dto == null) {
-            throw new IllegalArgumentException("银企直连配置不能为空");
-        }
-        SystemCompanyBankAccount account = requireCompanyBankAccount(companyBankAccountId);
-        String provider = trimToNull(dto.getDirectConnectProvider());
-        String channel = trimToNull(dto.getDirectConnectChannel());
-        if (!BANK_PROVIDER_CMB.equals(provider) || !BANK_CHANNEL_CMB_CLOUD.equals(channel)) {
-            throw new IllegalArgumentException("首期仅支持招商银行云直连");
-        }
-        boolean enabled = Boolean.TRUE.equals(dto.getEnabled());
-        if (enabled) {
-            requireNotBlank(dto.getOperatorKey(), "招行经办Key不能为空");
-            requireNotBlank(dto.getCallbackSecret(), "银行回调密钥不能为空");
-        }
-
-        account.setDirectConnectEnabled(enabled ? 1 : 0);
-        account.setDirectConnectProvider(provider);
-        account.setDirectConnectChannel(channel);
-        account.setDirectConnectProtocol(trimToNull(dto.getDirectConnectProtocol()));
-        account.setDirectConnectCustomerNo(trimToNull(dto.getDirectConnectCustomerNo()));
-        account.setDirectConnectAppId(trimToNull(dto.getDirectConnectAppId()));
-        account.setDirectConnectAccountAlias(trimToNull(dto.getDirectConnectAccountAlias()));
-        account.setDirectConnectAuthMode(trimToNull(dto.getDirectConnectAuthMode()));
-        account.setDirectConnectApiBaseUrl(trimToNull(dto.getDirectConnectApiBaseUrl()));
-        account.setDirectConnectCertRef(trimToNull(dto.getDirectConnectCertRef()));
-        account.setDirectConnectSecretRef(trimToNull(dto.getDirectConnectSecretRef()));
-        account.setDirectConnectSignType(trimToNull(dto.getDirectConnectSignType()));
-        account.setDirectConnectEncryptType(trimToNull(dto.getDirectConnectEncryptType()));
-        account.setDirectConnectLastSyncAt(LocalDateTime.now());
-        account.setDirectConnectLastSyncStatus(enabled ? "ENABLED" : "DISABLED");
-        account.setDirectConnectLastErrorMsg(null);
-        account.setDirectConnectExtJson(writeJson(Map.of(
-                "operatorKey", defaultText(trimToNull(dto.getOperatorKey()), ""),
-                "callbackSecret", defaultText(trimToNull(dto.getCallbackSecret()), ""),
-                "publicKeyRef", defaultText(trimToNull(dto.getPublicKeyRef()), ""),
-                "receiptQueryEnabled", Boolean.TRUE.equals(dto.getReceiptQueryEnabled())
-        )));
-        systemCompanyBankAccountMapper.updateById(account);
-
-        if (enabled) {
-            disableOtherEnabledBankLinks(account);
-        }
-        return toBankLinkConfig(requireCompanyBankAccount(companyBankAccountId), findCompanyName(account.getCompanyId()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO handleCmbCloudCallback(ExpenseBankCallbackDTO dto) {
-        PmBankPaymentRecord record = requireBankPaymentRecordForCallback(dto);
-        SystemCompanyBankAccount account = record.getCompanyBankAccountId() == null
-                ? null
-                : systemCompanyBankAccountMapper.selectById(record.getCompanyBankAccountId());
-        verifyCmbCallback(dto, account);
-
-        LocalDateTime now = LocalDateTime.now();
-        record.setCallbackPayloadJson(writeJson(dto == null ? Collections.emptyMap() : dto.getRawPayload()));
-        record.setCallbackReceivedAt(now);
-        record.setBankOrderNo(firstNonBlank(trimToNull(dto.getBankOrderNo()), record.getBankOrderNo()));
-        record.setBankFlowNo(firstNonBlank(trimToNull(dto.getBankFlowNo()), record.getBankFlowNo()));
-        record.setPushResultJson(writeJson(Map.of(
-                "resultCode", defaultText(trimToNull(dto.getResultCode()), ""),
-                "resultMessage", defaultText(trimToNull(dto.getResultMessage()), ""),
-                "success", resolveCallbackSuccess(dto)
-        )));
-
-        if (!resolveCallbackSuccess(dto)) {
-            record.setLastErrorMessage(firstNonBlank(trimToNull(dto.getResultMessage()), "银行回调返回失败"));
-            pmBankPaymentRecordMapper.updateById(record);
-            throw new IllegalStateException(record.getLastErrorMessage());
-        }
-
-        ProcessDocumentTask task = processDocumentTaskMapper.selectById(record.getTaskId());
-        if (task == null) {
-            throw new IllegalStateException("付款任务不存在");
-        }
-        ProcessDocumentInstance instance = requireDocument(record.getDocumentCode());
-        LocalDateTime paidAt = parseFlexibleDateTime(dto.getPaidAt(), now);
-        record.setManualPaid(0);
-        record.setPaidAt(paidAt);
-        if (trimToNull(record.getReceiptStatus()) == null) {
-            record.setReceiptStatus(RECEIPT_STATUS_PENDING);
-        }
-        record.setLastErrorMessage(null);
-        pmBankPaymentRecordMapper.updateById(record);
-
-        if (DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(trimToNull(instance.getStatus()))
-                || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(trimToNull(instance.getStatus()))) {
-            return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-        }
-        return completePaymentTaskInternal(null, SYSTEM_OPERATOR, task, instance, "银行回调确认已支付", false, paidAt);
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public void runBankReceiptPolling() {
-        List<PmBankPaymentRecord> records = pmBankPaymentRecordMapper.selectList(
-                Wrappers.<PmBankPaymentRecord>lambdaQuery()
-                        .eq(PmBankPaymentRecord::getManualPaid, 0)
-                        .and(wrapper -> wrapper.isNull(PmBankPaymentRecord::getReceiptStatus)
-                                .or()
-                                .ne(PmBankPaymentRecord::getReceiptStatus, RECEIPT_STATUS_RECEIVED))
-                        .orderByAsc(PmBankPaymentRecord::getUpdatedAt, PmBankPaymentRecord::getId)
-        );
-        if (records.isEmpty()) {
-            return;
-        }
-        for (PmBankPaymentRecord record : records) {
-            ProcessDocumentInstance instance = requireDocument(record.getDocumentCode());
-            if (!DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(trimToNull(instance.getStatus()))) {
-                continue;
-            }
-            SystemCompanyBankAccount account = record.getCompanyBankAccountId() == null
-                    ? null
-                    : systemCompanyBankAccountMapper.selectById(record.getCompanyBankAccountId());
-            if (!isReceiptQueryEnabled(account)) {
-                continue;
-            }
-            queryAndAttachBankReceipt(record, instance, account);
-        }
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO approveTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
-        ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        if (Objects.equals(trimToNull(task.getTaskKind()), TASK_KIND_ADD_SIGN)) {
-            expenseWorkflowRuntimeSupport.approveAddSignTask(
-                    instance,
-                    task,
-                    userId,
-                    username,
-                    dto == null ? null : dto.getComment()
-            );
-            return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-        }
-        expenseWorkflowRuntimeSupport.approvePendingTask(
-                instance,
-                task,
-                userId,
-                username,
-                dto == null ? null : dto.getComment()
-        );
-        if (isEffectiveApprovedStatus(requireDocument(instance.getDocumentCode()).getStatus())) {
-            finalizeEffectiveWriteOffs(instance.getDocumentCode());
-        }
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO rejectTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
-        ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        expenseWorkflowRuntimeSupport.rejectPendingTask(
-                instance,
-                task,
-                userId,
-                username,
-                dto == null ? null : dto.getComment()
-        );
-        voidPendingWriteOffs(instance.getDocumentCode());
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO startPaymentTask(Long userId, String username, Long taskId) {
-        ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        String status = trimToNull(instance.getStatus());
-        boolean retrying = DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status)
-                && expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task);
-        if (DOCUMENT_STATUS_PENDING_PAYMENT.equals(status) || retrying) {
-            return pushPaymentTaskToBank(userId, username, task, instance, retrying);
-        }
-        throw new IllegalStateException("当前付款任务无法发起支付");
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO completePaymentTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
-        ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        String status = trimToNull(instance.getStatus());
-        if (!DOCUMENT_STATUS_PAYING.equals(status) && !DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)) {
-            throw new IllegalStateException("当前付款任务不在可完成状态");
-        }
-        PmBankPaymentRecord record = findOrCreateBankPaymentRecord(task, instance, findActiveBankAccountForDocument(instance));
-        record.setManualPaid(1);
-        record.setLastErrorMessage(null);
-        if (trimToNull(record.getReceiptStatus()) == null) {
-            record.setReceiptStatus(RECEIPT_STATUS_PENDING);
-        }
-        saveBankPaymentRecord(record);
-        return completePaymentTaskInternal(
-                userId,
-                username,
-                task,
-                instance,
-                trimToNull(dto == null ? null : dto.getComment()),
-                true,
-                LocalDateTime.now()
-        );
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
-        ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        String status = trimToNull(instance.getStatus());
-        if (!DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)
-                && !DOCUMENT_STATUS_PAYING.equals(status)
-                && !DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status)) {
-            throw new IllegalStateException("???????????????????????");
-        }
-
-        String comment = trimToNull(dto == null ? null : dto.getComment());
-        boolean allowRetry = expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task);
-        expenseWorkflowRuntimeSupport.markPaymentException(
-                instance,
-                task,
-                userId,
-                username,
-                comment,
-                allowRetry
-        );
-        PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
-        if (record != null) {
-            record.setLastErrorMessage(firstNonBlank(comment, "???????????????"));
-            record.setReceiptStatus(RECEIPT_STATUS_FAILED);
-            pmBankPaymentRecordMapper.updateById(record);
-        }
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    public ExpenseDocumentEditContextVO getTaskModifyContext(Long userId, Long taskId) {
-        ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        return buildEditContext(userId, instance, task.getId(), "MODIFY");
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO modifyTaskDocument(Long userId, String username, Long taskId, ExpenseDocumentUpdateDTO dto) {
-        ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        DocumentMutationContext mutation = buildMutationContext(instance, dto, false);
-        applyDocumentMutation(instance, mutation, false);
-        syncDocumentBusinessRelations(instance.getDocumentCode(), mutation.formDesign(), mutation.formData());
-        appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_MODIFY, userId, defaultUsername(username), null, Map.of(
-                "taskId", task.getId(),
-                "taskKind", defaultText(task.getTaskKind(), TASK_KIND_NORMAL)
-        ));
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO transferTask(Long userId, String username, Long taskId, ExpenseTaskTransferDTO dto) {
-        ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        User targetUser = requireActiveUser(dto == null ? null : dto.getTargetUserId());
-        if (Objects.equals(targetUser.getId(), userId)) {
-            throw new IllegalArgumentException("杞氦瀵硅薄涓嶈兘鏄綋鍓嶅鎵逛汉");
-        }
-        String remark = trimToNull(dto == null ? null : dto.getRemark());
-        task.setAssigneeUserId(targetUser.getId());
-        task.setAssigneeName(normalizeUserName(targetUser));
-        processDocumentTaskMapper.updateById(task);
-        appendLog(task.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_TRANSFER, userId, defaultUsername(username), remark, Map.of(
-                "taskId", task.getId(),
-                "targetUserId", targetUser.getId(),
-                "targetUserName", normalizeUserName(targetUser)
-        ));
-        return buildDocumentDetail(requireDocument(task.getDocumentCode()));
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    public ExpenseDocumentDetailVO addSignTask(Long userId, String username, Long taskId, ExpenseTaskAddSignDTO dto) {
-        ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        User targetUser = requireActiveUser(dto == null ? null : dto.getTargetUserId());
-        if (Objects.equals(targetUser.getId(), userId)) {
-            throw new IllegalArgumentException("????????????????????????????");
-        }
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        String remark = trimToNull(dto == null ? null : dto.getRemark());
-        expenseWorkflowRuntimeSupport.createAddSignTask(instance, task, targetUser, userId, username, remark);
-        return buildDocumentDetail(requireDocument(task.getDocumentCode()));
-    }
-
-    public List<ExpenseActionUserOptionVO> searchActionUsers(Long userId, String keyword) {
-        String normalizedKeyword = trimToNull(keyword);
-        Map<Long, String> departmentNameMap = loadAllDepartmentMap().values().stream().collect(Collectors.toMap(
-                SystemDepartment::getId,
-                SystemDepartment::getDeptName,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        return userMapper.selectList(
-                Wrappers.<User>lambdaQuery()
-                        .eq(User::getStatus, 1)
-                        .orderByAsc(User::getName, User::getId)
-        ).stream()
-                .filter(item -> matchesKeyword(normalizedKeyword, item.getName(), item.getUsername(), item.getPhone(), item.getEmail()))
-                .map(item -> {
-                    ExpenseActionUserOptionVO option = new ExpenseActionUserOptionVO();
-                    option.setUserId(item.getId());
-                    option.setName(item.getName());
-                    option.setUsername(item.getUsername());
-                    option.setPhone(item.getPhone());
-                    option.setDeptName(item.getDeptId() == null ? null : departmentNameMap.get(item.getDeptId()));
-                    return option;
-                })
-                .toList();
-    }
-
-    private ExpenseDocumentDetailVO approveAddSignTask(Long userId, String username, ProcessDocumentTask task, ExpenseApprovalActionDTO dto) {
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        LocalDateTime now = LocalDateTime.now();
-        task.setStatus(TASK_STATUS_APPROVED);
-        task.setHandledAt(now);
-        task.setActionComment(trimToNull(dto == null ? null : dto.getComment()));
-        processDocumentTaskMapper.updateById(task);
-        appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_APPROVE, userId, defaultUsername(username), task.getActionComment(), Map.of(
-                "taskId", task.getId(),
-                "taskKind", TASK_KIND_ADD_SIGN,
-                "sourceTaskId", task.getSourceTaskId()
-        ));
-        resumeSourceTask(task.getSourceTaskId(), now);
-        instance.setStatus(DOCUMENT_STATUS_PENDING);
-        instance.setCurrentNodeKey(task.getNodeKey());
-        instance.setCurrentNodeName(task.getNodeName());
-        instance.setCurrentTaskType(NODE_TYPE_APPROVAL);
-        instance.setFinishedAt(null);
-        instance.setUpdatedAt(now);
-        processDocumentInstanceMapper.updateById(instance);
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    private void initializeRuntime(ProcessDocumentInstance instance, Map<String, Object> context) {
-        log.info(
-                "Expense submit stage=initialize-runtime documentCode={} approvalFlowCode={} status={}",
-                instance.getDocumentCode(),
-                instance.getApprovalFlowCode(),
-                instance.getStatus()
-        );
-        try {
-            FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
-            if (snapshot.nodes().isEmpty()) {
-                markDocumentApproved(instance, DOCUMENT_STATUS_APPROVED);
-                appendLog(instance.getDocumentCode(), null, null, LOG_FINISH, null, "SYSTEM", "No approval nodes configured", Collections.emptyMap());
-                return;
-            }
-            advanceFromPosition(instance, snapshot, context, null, 0, DOCUMENT_STATUS_APPROVED);
-        } catch (RuntimeException ex) {
-            log.error(
-                    "Expense submit runtime initialization failed documentCode={} approvalFlowCode={} status={}",
-                    instance.getDocumentCode(),
-                    instance.getApprovalFlowCode(),
-                    instance.getStatus(),
-                    ex
-            );
-            throw ex;
-        }
-    }
-
-    private FlowAdvanceState advanceFromPosition(
-            ProcessDocumentInstance instance,
-            FlowRuntimeSnapshot snapshot,
-            Map<String, Object> context,
-            String containerKey,
-            int startIndex,
-            String terminalStatus
-    ) {
-        FlowAdvanceState state = processContainer(instance, snapshot, context, containerKey, startIndex, terminalStatus);
-        if (state == FlowAdvanceState.PAUSED) {
-            return state;
-        }
-
-        ProcessFlowRouteDTO route = snapshot.routeByKey(containerKey);
-        if (route != null) {
-            ProcessFlowNodeDTO branchNode = snapshot.node(route.getSourceNodeKey());
-            if (branchNode != null) {
-                return advanceFromPosition(instance, snapshot, context, branchNode.getParentNodeKey(), nextIndex(snapshot, branchNode), terminalStatus);
-            }
-        }
-
-        markDocumentApproved(instance, terminalStatus);
-        appendLog(instance.getDocumentCode(), null, null, LOG_FINISH, null, "SYSTEM", FLOW_FINISH_COMMENT, Collections.emptyMap());
-        return FlowAdvanceState.COMPLETED;
-    }
-
-    private FlowAdvanceState processContainer(
-            ProcessDocumentInstance instance,
-            FlowRuntimeSnapshot snapshot,
-            Map<String, Object> context,
-            String containerKey,
-            int startIndex,
-            String terminalStatus
-    ) {
-        List<ProcessFlowNodeDTO> nodes = snapshot.children(containerKey);
-        for (int index = startIndex; index < nodes.size(); index++) {
-            ProcessFlowNodeDTO node = nodes.get(index);
-            switch (defaultText(asText(node.getNodeType()), "")) {
-                case NODE_TYPE_BRANCH -> {
-                    ProcessFlowRouteDTO matchedRoute = matchRoute(snapshot.routes(node.getNodeKey()), context);
-                    if (matchedRoute == null) {
-                        markDocumentException(instance, node, "No branch route matched");
-                        return FlowAdvanceState.PAUSED;
-                    }
-                    appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_ROUTE_HIT, null, "SYSTEM", null, Map.of(
-                            "routeKey", matchedRoute.getRouteKey(),
-                            "routeName", defaultText(matchedRoute.getRouteName(), matchedRoute.getRouteKey())
-                    ));
-                    return advanceFromPosition(instance, snapshot, context, matchedRoute.getRouteKey(), 0, terminalStatus);
-                }
-                case NODE_TYPE_APPROVAL -> {
-                    List<User> approvers = resolveApprovers(node, context);
-                    if (approvers.isEmpty()) {
-                        String missingHandler = resolveMissingHandler(node.getConfig());
-                        if (MISSING_HANDLER_AUTO_SKIP.equals(missingHandler)) {
-                            appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_AUTO_SKIP, null, "SYSTEM", "No approver resolved, auto skipped", Collections.emptyMap());
-                            continue;
-                        }
-                        markDocumentException(instance, node, "No approver resolved");
-                        return FlowAdvanceState.PAUSED;
-                    }
-                    createApprovalTasks(instance, node, approvers);
-                    return FlowAdvanceState.PAUSED;
-                }
-                case NODE_TYPE_CC -> appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_CC_REACHED, null, "SYSTEM", "CC node reached", Collections.emptyMap());
-                case NODE_TYPE_PAYMENT -> {
-                    appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_PAYMENT_REACHED, null, "SYSTEM", "Payment node reached", Collections.emptyMap());
-                    List<User> executors = resolvePaymentExecutors(node);
-                    if (executors.isEmpty()) {
-                        String missingHandler = resolveMissingHandler(node.getConfig());
-                        if (MISSING_HANDLER_AUTO_SKIP.equals(missingHandler)) {
-                            appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_AUTO_SKIP, null, "SYSTEM", "No payment executor resolved, auto skipped", Collections.emptyMap());
-                            continue;
-                        }
-                        markDocumentException(instance, node, "No payment executor resolved");
-                        return FlowAdvanceState.PAUSED;
-                    }
-                    createPaymentTasks(instance, node, executors);
-                    return FlowAdvanceState.PAUSED;
-                }
-                default -> {
-                }
-            }
-        }
-        return FlowAdvanceState.COMPLETED;
-    }
-
-    private void createApprovalTasks(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, List<User> approvers) {
-        LocalDateTime now = LocalDateTime.now();
-        String approvalMode = defaultText(asText(node.getConfig().get("approvalMode")), APPROVAL_MODE_OR_SIGN);
-        String batchNo = buildTaskBatchNo(instance.getDocumentCode(), node.getNodeKey());
-        List<User> distinctApprovers = approvers.stream()
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
-                        item -> new ArrayList<>(item.values())
-                ));
-        for (User approver : distinctApprovers) {
-            ProcessDocumentTask task = new ProcessDocumentTask();
-            task.setDocumentCode(instance.getDocumentCode());
-            task.setNodeKey(node.getNodeKey());
-            task.setNodeName(node.getNodeName());
-            task.setNodeType(node.getNodeType());
-            task.setAssigneeUserId(approver.getId());
-            task.setAssigneeName(normalizeUserName(approver));
-            task.setStatus(TASK_STATUS_PENDING);
-            task.setTaskBatchNo(batchNo);
-            task.setApprovalMode(approvalMode);
-            task.setTaskKind(TASK_KIND_NORMAL);
-            task.setCreatedAt(now);
-            processDocumentTaskMapper.insert(task);
-        }
-        instance.setStatus(DOCUMENT_STATUS_PENDING);
-        instance.setCurrentNodeKey(node.getNodeKey());
-        instance.setCurrentNodeName(node.getNodeName());
-        instance.setCurrentTaskType(NODE_TYPE_APPROVAL);
-        instance.setFinishedAt(null);
-        instance.setUpdatedAt(now);
-        processDocumentInstanceMapper.updateById(instance);
-
-        appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_APPROVAL_PENDING, null, "SYSTEM", null, Map.of(
-                "approvalMode", approvalMode,
-                "approverUserIds", distinctApprovers.stream().map(User::getId).toList(),
-                "approverNames", distinctApprovers.stream().map(this::normalizeUserName).toList()
-        ));
-    }
-
-    private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, List<User> executors) {
-        LocalDateTime now = LocalDateTime.now();
-        String batchNo = buildTaskBatchNo(instance.getDocumentCode(), node.getNodeKey());
-        List<User> distinctExecutors = executors.stream()
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
-                        item -> new ArrayList<>(item.values())
-                ));
-        for (User executor : distinctExecutors) {
-            ProcessDocumentTask task = new ProcessDocumentTask();
-            task.setDocumentCode(instance.getDocumentCode());
-            task.setNodeKey(node.getNodeKey());
-            task.setNodeName(node.getNodeName());
-            task.setNodeType(node.getNodeType());
-            task.setAssigneeUserId(executor.getId());
-            task.setAssigneeName(normalizeUserName(executor));
-            task.setStatus(TASK_STATUS_PENDING);
-            task.setTaskBatchNo(batchNo);
-            task.setApprovalMode(APPROVAL_MODE_OR_SIGN);
-            task.setTaskKind(TASK_KIND_NORMAL);
-            task.setCreatedAt(now);
-            processDocumentTaskMapper.insert(task);
-        }
-        persistDocumentRuntimeState(
-                instance,
-                DOCUMENT_STATUS_PENDING_PAYMENT,
-                node.getNodeKey(),
-                node.getNodeName(),
-                NODE_TYPE_PAYMENT,
-                null,
-                now
-        );
-        appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_PAYMENT_PENDING, null, "SYSTEM", null, Map.of(
-                "executorUserIds", distinctExecutors.stream().map(User::getId).toList(),
-                "executorNames", distinctExecutors.stream().map(this::normalizeUserName).toList(),
-                "allowRetry", paymentNodeAllowsRetry(node)
-        ));
-    }
-
-    private ProcessFlowRouteDTO matchRoute(List<ProcessFlowRouteDTO> routes, Map<String, Object> context) {
-        if (routes == null || routes.isEmpty()) {
-            return null;
-        }
-        return routes.stream()
-                .sorted(Comparator.comparing(item -> item.getPriority() == null ? Integer.MAX_VALUE : item.getPriority()))
-                .filter(route -> routeMatches(route, context))
-                .findFirst()
-                .orElse(null);
-    }
-
-    private boolean routeMatches(ProcessFlowRouteDTO route, Map<String, Object> context) {
-        if (route.getConditionGroups() == null || route.getConditionGroups().isEmpty()) {
-            return true;
-        }
-        return route.getConditionGroups().stream().anyMatch(group -> groupMatches(group, context));
-    }
-
-    private boolean groupMatches(ProcessFlowConditionGroupDTO group, Map<String, Object> context) {
-        if (group.getConditions() == null || group.getConditions().isEmpty()) {
-            return true;
-        }
-        return group.getConditions().stream().allMatch(condition -> conditionMatches(condition, context));
-    }
-
-    private boolean conditionMatches(ProcessFlowConditionDTO condition, Map<String, Object> context) {
-        Object actual = context.get(condition.getFieldKey());
-        Object compare = condition.getCompareValue();
-        String operator = defaultText(condition.getOperator(), "EQ");
-        return switch (operator) {
-            case "NE" -> !valuesEqual(actual, compare);
-            case "IN" -> anyIn(actual, compare, false);
-            case "NOT_IN" -> !anyIn(actual, compare, false);
-            case "GT" -> compareNumbers(actual, compare) > 0;
-            case "GE" -> compareNumbers(actual, compare) >= 0;
-            case "LT" -> compareNumbers(actual, compare) < 0;
-            case "LE" -> compareNumbers(actual, compare) <= 0;
-            case "BETWEEN" -> between(actual, compare);
-            case "CONTAINS" -> containsValue(actual, compare);
-            default -> valuesEqual(actual, compare);
-        };
-    }
-
-    private List<User> resolveApprovers(ProcessFlowNodeDTO node, Map<String, Object> context) {
-        Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
-        String approverType = defaultText(asText(config.get("approverType")), APPROVER_TYPE_MANAGER);
-        List<User> users;
-        if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
-            users = resolveDesignatedMembers(config);
-        } else if (APPROVER_TYPE_MANUAL_SELECT.equals(approverType)) {
-            users = resolveManualMembers(context);
-        } else {
-            users = resolveManagerMembers(config, context);
-        }
-        return users.stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
-                        item -> new ArrayList<>(item.values())
-                ));
-    }
-
-    private List<User> resolveManagerMembers(Map<String, Object> config, Map<String, Object> context) {
-        Map<String, Object> managerConfig = toObjectMap(config.get("managerConfig"));
-        String deptSource = defaultText(asText(managerConfig.get("deptSource")), DEPT_SOURCE_UNDERTAKE);
-        int managerLevel = clampLevel(asInteger(managerConfig.get("managerLevel"), 1));
-        boolean orgTreeLookupEnabled = asBoolean(managerConfig.get("orgTreeLookupEnabled"), true);
-        int lookupLevel = clampLevel(asInteger(managerConfig.get("orgTreeLookupLevel"), 1));
-        Map<Long, SystemDepartment> departmentMap = loadAllDepartmentMap();
-        List<Long> startDeptIds = resolveStartDeptIds(deptSource, context);
-        if (startDeptIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<User> result = new ArrayList<>();
-        for (Long deptId : startDeptIds) {
-            SystemDepartment sourceDept = departmentMap.get(deptId);
-            if (sourceDept == null) {
-                continue;
-            }
-            SystemDepartment targetDept = climbDepartment(sourceDept, departmentMap, Math.max(managerLevel - 1, 0));
-            LeaderResolution leader = resolveLeader(targetDept, departmentMap, orgTreeLookupEnabled, lookupLevel);
-            if (leader == null) {
-                continue;
-            }
-            User user = loadActiveUser(leader.userId());
-            if (user != null) {
-                result.add(user);
-            }
-        }
-        return result;
-    }
-
-    private List<User> resolveDesignatedMembers(Map<String, Object> config) {
-        return loadActiveUsers(toLongList(toObjectMap(config.get("designatedMemberConfig")).get("userIds")));
-    }
-
-    private List<User> resolveManualMembers(Map<String, Object> context) {
-        return loadActiveUsers(toLongList(context.get("manualSelectedUserIds")));
-    }
-
-    private List<User> resolvePaymentExecutors(ProcessFlowNodeDTO node) {
-        Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
-        String executorType = defaultText(asText(config.get("executorType")), PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER);
-        List<User> users;
-        if (PAYMENT_EXECUTOR_TYPE_FINANCE_ROLE.equals(executorType)) {
-            users = resolvePaymentFinanceRoleMembers();
-        } else {
-            users = resolvePaymentDesignatedMembers(config);
-        }
-        return users.stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
-                        item -> new ArrayList<>(item.values())
-                ));
-    }
-
-    private List<User> resolvePaymentDesignatedMembers(Map<String, Object> config) {
-        return loadActiveUsers(toLongList(config.get("executorUserIds")));
-    }
-
-    private List<User> resolvePaymentFinanceRoleMembers() {
-        SystemPermission permission = systemPermissionMapper.selectOne(
-                Wrappers.<SystemPermission>lambdaQuery()
-                        .eq(SystemPermission::getPermissionCode, PAYMENT_EXECUTE_PERMISSION)
-                        .eq(SystemPermission::getStatus, 1)
-                        .last("limit 1")
-        );
-        if (permission == null || permission.getId() == null) {
-            return Collections.emptyList();
-        }
-        List<Long> roleIds = systemRolePermissionMapper.selectList(
-                Wrappers.<SystemRolePermission>lambdaQuery()
-                        .eq(SystemRolePermission::getPermissionId, permission.getId())
-        ).stream().map(SystemRolePermission::getRoleId).distinct().toList();
-        if (roleIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<Long> userIds = systemUserRoleMapper.selectList(
-                Wrappers.<SystemUserRole>lambdaQuery()
-                        .in(SystemUserRole::getRoleId, roleIds)
-        ).stream().map(SystemUserRole::getUserId).distinct().toList();
-        if (userIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return loadActiveUsers(userIds);
-    }
-
-    private boolean paymentNodeAllowsRetry(ProcessFlowNodeDTO node) {
-        return paymentSpecialSettings(node).contains(PAYMENT_SPECIAL_ALLOW_RETRY);
-    }
-
-    private boolean paymentTaskAllowsRetry(ProcessDocumentTask task) {
-        ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
-        return paymentTaskAllowsRetry(instance, task);
-    }
-
-    private boolean paymentTaskAllowsRetry(ProcessDocumentInstance instance, ProcessDocumentTask task) {
-        FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
-        ProcessFlowNodeDTO node = snapshot.node(task.getNodeKey());
-        return node != null && paymentNodeAllowsRetry(node);
-    }
-
-    private Set<String> paymentSpecialSettings(ProcessFlowNodeDTO node) {
-        if (node == null || node.getConfig() == null) {
-            return Collections.emptySet();
-        }
-        Object raw = node.getConfig().get("specialSettings");
-        if (!(raw instanceof Collection<?> collection)) {
-            return Collections.emptySet();
-        }
-        return collection.stream()
-                .map(this::asText)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    private List<Long> resolveStartDeptIds(String deptSource, Map<String, Object> context) {
-        if (DEPT_SOURCE_SUBMITTER.equals(deptSource)) {
-            Long submitterDeptId = asLong(context.get("submitterDeptId"));
-            return submitterDeptId == null ? Collections.emptyList() : List.of(submitterDeptId);
-        }
-        List<Long> undertakeDeptIds = toLongList(context.get("undertakeDeptIds"));
-        if (!undertakeDeptIds.isEmpty()) {
-            return List.of(undertakeDeptIds.get(0));
-        }
-        Long submitterDeptId = asLong(context.get("submitterDeptId"));
-        return submitterDeptId == null ? Collections.emptyList() : List.of(submitterDeptId);
-    }
-
-    private ExpenseDocumentDetailVO buildDocumentDetail(ProcessDocumentInstance instance) {
+    ExpenseDocumentDetailVO buildDocumentDetail(ProcessDocumentInstance instance) {
         long totalStartedAt = System.nanoTime();
         String documentCode = instance.getDocumentCode();
         String templateType = trimToNull(instance.getTemplateType());
@@ -2694,45 +1768,11 @@ public class ExpenseDocumentMutationSupport {
             throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘缁戝畾鐨勬祦绋嬪揩鐓т笉瀛樺湪锛岃鍏堥噸鏂板彂甯冩祦绋?");
         }
         try {
-            readFlowSnapshot(snapshotJson);
+            expenseWorkflowRuntimeSupport.validateFlowSnapshot(snapshotJson);
         } catch (IllegalStateException ex) {
             throw new IllegalStateException("褰撳墠瀹℃壒妯℃澘缁戝畾鐨勬祦绋嬪揩鐓ф崯鍧忥紝璇峰厛閲嶆柊鍙戝竷娴佺▼", ex);
         }
         return snapshotJson;
-    }
-
-    private boolean isMisapprovedByBlankRootBug(String documentCode) {
-        if (trimToNull(documentCode) == null) {
-            return false;
-        }
-        List<ProcessDocumentActionLog> logs = loadActionLogs(documentCode);
-        boolean hasFinish = logs.stream().anyMatch(log ->
-                Objects.equals(log.getActionType(), LOG_FINISH)
-                        && Objects.equals(trimToNull(log.getActionComment()), FLOW_FINISH_COMMENT)
-        );
-        boolean hasApprovalPending = logs.stream().anyMatch(log -> Objects.equals(log.getActionType(), LOG_APPROVAL_PENDING));
-        long taskCount = processDocumentTaskMapper.selectCount(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getDocumentCode, documentCode)
-        );
-        return hasFinish && !hasApprovalPending && taskCount == 0L;
-    }
-
-    private void repairMisapprovedDocument(ProcessDocumentInstance instance) {
-        String documentCode = instance.getDocumentCode();
-        log.info("Repairing misapproved expense document documentCode={}", documentCode);
-
-        List<ProcessDocumentActionLog> logs = loadActionLogs(documentCode);
-        logs.stream()
-                .filter(log -> Objects.equals(log.getActionType(), LOG_FINISH))
-                .filter(log -> Objects.equals(trimToNull(log.getActionComment()), FLOW_FINISH_COMMENT))
-                .map(ProcessDocumentActionLog::getId)
-                .filter(Objects::nonNull)
-                .forEach(processDocumentActionLogMapper::deleteById);
-
-        persistDocumentRuntimeState(instance, DOCUMENT_STATUS_PENDING, null, null, null, null, LocalDateTime.now());
-
-        initializeRuntime(instance, buildRuntimeContextForInstance(instance));
     }
 
     private Map<String, Object> buildSubmitPayload(ProcessDocumentTemplate template) {
@@ -2799,7 +1839,7 @@ public class ExpenseDocumentMutationSupport {
         }
     }
 
-    private List<ProcessDocumentExpenseDetail> loadExpenseDetails(String documentCode) {
+    List<ProcessDocumentExpenseDetail> loadExpenseDetails(String documentCode) {
         return processDocumentExpenseDetailMapper.selectList(
                 Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
                         .eq(ProcessDocumentExpenseDetail::getDocumentCode, documentCode)
@@ -2877,7 +1917,7 @@ public class ExpenseDocumentMutationSupport {
         return detail;
     }
 
-    private ExpenseDetailInstanceDTO toRuntimeExpenseDetailDTO(ProcessDocumentExpenseDetail detail) {
+    ExpenseDetailInstanceDTO toRuntimeExpenseDetailDTO(ProcessDocumentExpenseDetail detail) {
         ExpenseDetailInstanceDTO dto = new ExpenseDetailInstanceDTO();
         dto.setDetailNo(detail.getDetailNo());
         dto.setDetailDesignCode(detail.getDetailDesignCode());
@@ -2932,7 +1972,7 @@ public class ExpenseDocumentMutationSupport {
         target.setCurrentUserDeptName(source.getCurrentUserDeptName());
     }
 
-    private DocumentMutationContext buildMutationContext(ProcessDocumentInstance instance, ExpenseDocumentUpdateDTO dto, boolean resetRuntime) {
+    DocumentMutationContext buildMutationContext(ProcessDocumentInstance instance, ExpenseDocumentUpdateDTO dto, boolean resetRuntime) {
         ProcessDocumentTemplate template = requireTemplateForDocument(instance.getTemplateCode());
         ProcessFormDesign formDesign = loadFormDesign(template.getFormDesignCode());
         ProcessExpenseDetailDesign expenseDetailDesign = loadExpenseDetailDesign(template.getExpenseDetailDesignCode());
@@ -2965,7 +2005,7 @@ public class ExpenseDocumentMutationSupport {
         );
     }
 
-    private void applyDocumentMutation(ProcessDocumentInstance instance, DocumentMutationContext context, boolean resetRuntime) {
+    void applyDocumentMutation(ProcessDocumentInstance instance, DocumentMutationContext context, boolean resetRuntime) {
         LocalDateTime now = LocalDateTime.now();
         if (resetRuntime) {
             cancelOpenTasks(loadOpenTasks(instance.getDocumentCode()), null, now);
@@ -3086,48 +2126,6 @@ public class ExpenseDocumentMutationSupport {
         item.setUndertakeDepartmentNames(metadata.undertakeDepartmentNames());
         item.setTagNames(metadata.tagNames());
         item.setTaskCreatedAt(formatTime(task.getCreatedAt()));
-        return item;
-    }
-
-    private ExpensePaymentOrderVO toPaymentOrder(
-            ProcessDocumentTask task,
-            ProcessDocumentInstance instance,
-            SummaryEnrichmentData enrichmentData,
-            PmBankPaymentRecord bankPaymentRecord,
-            Map<Long, String> companyBankAccountNameMap
-    ) {
-        if (instance == null) {
-            return null;
-        }
-        SummaryMetadata metadata = enrichmentData.metadata(task.getDocumentCode());
-        ExpensePaymentOrderVO item = new ExpensePaymentOrderVO();
-        item.setTaskId(task.getId());
-        item.setDocumentCode(task.getDocumentCode());
-        item.setDocumentTitle(instance.getDocumentTitle());
-        item.setTemplateName(instance.getTemplateName());
-        item.setTemplateType(instance.getTemplateType());
-        item.setTemplateTypeLabel(resolveTemplateTypeLabel(instance.getTemplateType(), readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel") == null
-                ? null
-                : String.valueOf(readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel"))));
-        item.setSubmitterName(instance.getSubmitterName());
-        item.setSubmitterDeptName(metadata.submitterDeptName());
-        item.setCurrentNodeName(firstNonBlank(instance.getCurrentNodeName(), task.getNodeName()));
-        item.setDocumentStatus(instance.getStatus());
-        item.setDocumentStatusLabel(resolveStatusLabel(instance.getStatus()));
-        item.setAmount(defaultDecimal(instance.getTotalAmount()));
-        item.setSubmittedAt(formatTime(instance.getCreatedAt()));
-        item.setPaymentDate(metadata.paymentDate());
-        item.setPaymentCompanyName(metadata.paymentCompanyName());
-        item.setPaymentStatusCode(instance.getStatus());
-        item.setPaymentStatusLabel(resolveStatusLabel(instance.getStatus()));
-        item.setManualPaid(bankPaymentRecord != null && isFlagEnabled(bankPaymentRecord.getManualPaid()));
-        item.setPaidAt(bankPaymentRecord == null ? null : formatTime(bankPaymentRecord.getPaidAt()));
-        item.setReceiptStatusLabel(resolveReceiptStatusLabel(bankPaymentRecord));
-        item.setReceiptReceivedAt(bankPaymentRecord == null ? null : formatTime(bankPaymentRecord.getReceiptReceivedAt()));
-        item.setBankFlowNo(bankPaymentRecord == null ? null : bankPaymentRecord.getBankFlowNo());
-        item.setCompanyBankAccountName(bankPaymentRecord == null ? null : companyBankAccountNameMap.get(bankPaymentRecord.getCompanyBankAccountId()));
-        item.setTaskCreatedAt(formatTime(task.getCreatedAt()));
-        item.setAllowRetry(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task));
         return item;
     }
 
@@ -3735,7 +2733,7 @@ public class ExpenseDocumentMutationSupport {
         );
     }
 
-    private void appendLog(
+    void appendLog(
             String documentCode,
             String nodeKey,
             String nodeName,
@@ -3758,51 +2756,15 @@ public class ExpenseDocumentMutationSupport {
         processDocumentActionLogMapper.insert(log);
     }
 
-    private void assertCanViewDocument(ProcessDocumentInstance instance, Long userId, boolean allowCrossView) {
+    void assertCanViewDocument(ProcessDocumentInstance instance, Long userId, boolean allowCrossView) {
         if (!allowCrossView && !Objects.equals(instance.getSubmitterUserId(), userId)) {
             throw new IllegalStateException("Current user cannot view this document");
         }
     }
 
-    private void requireSubmitter(ProcessDocumentInstance instance, Long userId) {
+    void requireSubmitter(ProcessDocumentInstance instance, Long userId) {
         if (!Objects.equals(instance.getSubmitterUserId(), userId)) {
             throw new IllegalStateException("鍙湁鎻愬崟浜哄彲浠ユ墽琛屽綋鍓嶆搷浣?");
-        }
-    }
-
-    private boolean isFlowRelatedUser(ProcessDocumentInstance instance, Long userId) {
-        if (Objects.equals(instance.getSubmitterUserId(), userId)) {
-            return true;
-        }
-        Long taskCount = processDocumentTaskMapper.selectCount(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getDocumentCode, instance.getDocumentCode())
-                        .eq(ProcessDocumentTask::getAssigneeUserId, userId)
-        );
-        if (taskCount != null && taskCount > 0) {
-            return true;
-        }
-        Long logCount = processDocumentActionLogMapper.selectCount(
-                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
-                        .eq(ProcessDocumentActionLog::getDocumentCode, instance.getDocumentCode())
-                        .eq(ProcessDocumentActionLog::getActorUserId, userId)
-        );
-        return logCount != null && logCount > 0;
-    }
-
-    private void ensureReminderThrottle(String documentCode, Long userId) {
-        ProcessDocumentActionLog latestLog = processDocumentActionLogMapper.selectOne(
-                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
-                        .eq(ProcessDocumentActionLog::getDocumentCode, documentCode)
-                        .eq(ProcessDocumentActionLog::getActionType, LOG_REMIND)
-                        .eq(ProcessDocumentActionLog::getActorUserId, userId)
-                        .orderByDesc(ProcessDocumentActionLog::getCreatedAt, ProcessDocumentActionLog::getId)
-                        .last("limit 1")
-        );
-        if (latestLog != null
-                && latestLog.getCreatedAt() != null
-                && latestLog.getCreatedAt().isAfter(LocalDateTime.now().minusMinutes(10))) {
-            throw new IllegalStateException("鍚屼竴鍗曟嵁 10 鍒嗛挓鍐呭彧鑳藉偓鍔炰竴娆?");
         }
     }
 
@@ -3815,51 +2777,6 @@ public class ExpenseDocumentMutationSupport {
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-    }
-
-    private List<String> loadNavigationDocumentCodes(Long userId, String currentDocumentCode) {
-        List<String> pendingCodes = processDocumentTaskMapper.selectList(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getAssigneeUserId, userId)
-                        .eq(ProcessDocumentTask::getStatus, TASK_STATUS_PENDING)
-                        .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
-        ).stream().map(ProcessDocumentTask::getDocumentCode).distinct().toList();
-        if (pendingCodes.contains(currentDocumentCode)) {
-            return pendingCodes;
-        }
-
-        LinkedHashSet<String> visibleDocumentCodes = new LinkedHashSet<>(pendingCodes);
-        processDocumentTaskMapper.selectList(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getAssigneeUserId, userId)
-                        .orderByDesc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
-                        .last("limit " + NAVIGATION_HISTORY_LIMIT)
-        ).forEach(item -> visibleDocumentCodes.add(item.getDocumentCode()));
-        processDocumentActionLogMapper.selectList(
-                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
-                        .eq(ProcessDocumentActionLog::getActorUserId, userId)
-                        .orderByDesc(ProcessDocumentActionLog::getCreatedAt, ProcessDocumentActionLog::getId)
-                        .last("limit " + NAVIGATION_HISTORY_LIMIT)
-        ).forEach(item -> visibleDocumentCodes.add(item.getDocumentCode()));
-        String normalizedCurrentDocumentCode = trimToNull(currentDocumentCode);
-        if (normalizedCurrentDocumentCode != null) {
-            visibleDocumentCodes.add(normalizedCurrentDocumentCode);
-        }
-
-        if (visibleDocumentCodes.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        return processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getDocumentCode, visibleDocumentCodes)
-                        .in(ProcessDocumentInstance::getStatus, List.of(
-                                DOCUMENT_STATUS_PENDING,
-                                DOCUMENT_STATUS_EXCEPTION,
-                                DOCUMENT_STATUS_APPROVED
-                        ))
-                        .orderByDesc(ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
-        ).stream().map(ProcessDocumentInstance::getDocumentCode).toList();
     }
 
     private void resumeSourceTask(Long sourceTaskId, LocalDateTime now) {
@@ -3908,7 +2825,7 @@ public class ExpenseDocumentMutationSupport {
         return template;
     }
 
-    private ProcessDocumentInstance requireDocument(String documentCode) {
+    ProcessDocumentInstance requireDocument(String documentCode) {
         String normalizedCode = trimToNull(documentCode);
         if (normalizedCode == null) {
             throw new IllegalArgumentException("Document code is required");
@@ -3922,23 +2839,6 @@ public class ExpenseDocumentMutationSupport {
             throw new IllegalStateException("Document not found");
         }
         return instance;
-    }
-
-    private ProcessDocumentTask requirePendingTask(Long taskId, Long userId) {
-        ProcessDocumentTask task = processDocumentTaskMapper.selectById(taskId);
-        if (task == null) {
-            throw new IllegalStateException("Approval task not found");
-        }
-        if (!Objects.equals(task.getAssigneeUserId(), userId)) {
-            throw new IllegalStateException("Current user cannot handle this task");
-        }
-        if (!NODE_TYPE_APPROVAL.equals(trimToNull(task.getNodeType()))) {
-            throw new IllegalStateException("Current task is not an approval task");
-        }
-        if (!TASK_STATUS_PENDING.equals(task.getStatus())) {
-            throw new IllegalStateException("Task has already been handled");
-        }
-        return task;
     }
 
     private ProcessDocumentTask requireOpenPaymentTask(Long taskId, Long userId) {
@@ -4010,41 +2910,6 @@ public class ExpenseDocumentMutationSupport {
             context.put("expenseTypeCode", expenseTypeCode);
         }
         List<String> undertakeDeptIds = resolveUndertakeDeptIds(formDesign, formData, expenseDetailDesign, expenseDetails);
-        if (!undertakeDeptIds.isEmpty()) {
-            context.put("undertakeDeptIds", undertakeDeptIds);
-        }
-        return context;
-    }
-
-    private Map<String, Object> buildRuntimeContextForInstance(ProcessDocumentInstance instance) {
-        Map<String, Object> formData = readMap(instance.getFormDataJson());
-        List<ProcessDocumentExpenseDetail> expenseDetails = loadExpenseDetails(instance.getDocumentCode());
-        Map<String, Object> context = mergeRuntimeFormData(
-                formData,
-                expenseDetails.stream().map(this::toRuntimeExpenseDetailDTO).toList()
-        );
-        if (instance.getSubmitterUserId() != null) {
-            context.put("submitterUserId", instance.getSubmitterUserId());
-        }
-        User submitter = instance.getSubmitterUserId() == null ? null : userMapper.selectById(instance.getSubmitterUserId());
-        if (submitter != null && submitter.getDeptId() != null) {
-            context.put("submitterDeptId", submitter.getDeptId());
-        }
-        if (instance.getTotalAmount() != null) {
-            context.put("amount", instance.getTotalAmount());
-        }
-        if (trimToNull(instance.getTemplateType()) != null) {
-            context.put("documentType", instance.getTemplateType());
-        }
-        String expenseTypeCode = firstNonBlank(stringValue(formData.get("expenseTypeCode")), readMap(instance.getTemplateSnapshotJson()).get("categoryCode") == null ? null : String.valueOf(readMap(instance.getTemplateSnapshotJson()).get("categoryCode")));
-        if (expenseTypeCode != null) {
-            context.put("expenseTypeCode", expenseTypeCode);
-        }
-        List<String> undertakeDeptIds = resolveUndertakeDeptIdsFromSnapshots(
-                readMap(instance.getFormSchemaSnapshotJson()),
-                formData,
-                expenseDetails
-        );
         if (!undertakeDeptIds.isEmpty()) {
             context.put("undertakeDeptIds", undertakeDeptIds);
         }
@@ -4296,57 +3161,6 @@ public class ExpenseDocumentMutationSupport {
         return version == null ? null : version.getSnapshotJson();
     }
 
-    private FlowRuntimeSnapshot readFlowSnapshot(String snapshotJson) {
-        if (trimToNull(snapshotJson) == null) {
-            return new FlowRuntimeSnapshot(Collections.emptyList(), Collections.emptyList());
-        }
-        try {
-            Map<String, Object> raw = objectMapper.readValue(snapshotJson, new TypeReference<LinkedHashMap<String, Object>>() {});
-            List<ProcessFlowNodeDTO> nodes = objectMapper.convertValue(raw.getOrDefault("nodes", Collections.emptyList()), new TypeReference<List<ProcessFlowNodeDTO>>() {});
-            List<ProcessFlowRouteDTO> routes = objectMapper.convertValue(raw.getOrDefault("routes", Collections.emptyList()), new TypeReference<List<ProcessFlowRouteDTO>>() {});
-            return new FlowRuntimeSnapshot(nodes, routes);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to parse flow snapshot", ex);
-        }
-    }
-
-    private RawFlowSnapshotSignature inspectRawFlowSnapshot(String snapshotJson) {
-        if (trimToNull(snapshotJson) == null) {
-            return new RawFlowSnapshotSignature(false, false, false);
-        }
-        try {
-            Map<String, Object> raw = objectMapper.readValue(snapshotJson, new TypeReference<LinkedHashMap<String, Object>>() {});
-            Object rawNodes = raw.get("nodes");
-            if (!(rawNodes instanceof List<?> nodes)) {
-                return new RawFlowSnapshotSignature(false, false, false);
-            }
-            boolean hasApprovalNode = false;
-            boolean hasBlankRootNode = false;
-            boolean hasNullRootNode = false;
-            for (Object rawNode : nodes) {
-                if (!(rawNode instanceof Map<?, ?> nodeMap)) {
-                    continue;
-                }
-                String nodeType = trimToNull(stringValue(nodeMap.get("nodeType")));
-                if (Objects.equals(nodeType, NODE_TYPE_APPROVAL)) {
-                    hasApprovalNode = true;
-                }
-                if (!nodeMap.containsKey("parentNodeKey") || nodeMap.get("parentNodeKey") == null) {
-                    hasNullRootNode = true;
-                    continue;
-                }
-                String parentNodeKey = trimToNull(String.valueOf(nodeMap.get("parentNodeKey")));
-                if (parentNodeKey == null) {
-                    hasBlankRootNode = true;
-                }
-            }
-            return new RawFlowSnapshotSignature(hasApprovalNode, hasBlankRootNode, hasNullRootNode);
-        } catch (Exception ex) {
-            log.warn("Failed to inspect raw flow snapshot for repair screening", ex);
-            return new RawFlowSnapshotSignature(false, false, false);
-        }
-    }
-
     private List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
@@ -4443,30 +3257,6 @@ public class ExpenseDocumentMutationSupport {
                         .in(ProcessDocumentTask::getStatus, List.of(TASK_STATUS_PENDING, TASK_STATUS_PAUSED))
                         .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
         );
-    }
-
-    private List<ProcessDocumentTask> loadVisiblePaymentTasks(Long userId, String normalizedStatus) {
-        List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getAssigneeUserId, userId)
-                        .eq(ProcessDocumentTask::getNodeType, NODE_TYPE_PAYMENT)
-                        .orderByDesc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
-        );
-        if (tasks.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Map<String, String> statusByDocumentCode = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getDocumentCode, tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList())
-        ).stream().collect(Collectors.toMap(
-                ProcessDocumentInstance::getDocumentCode,
-                ProcessDocumentInstance::getStatus,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        return tasks.stream()
-                .filter(task -> normalizedStatus.equals(trimToNull(statusByDocumentCode.get(task.getDocumentCode()))))
-                .toList();
     }
 
     private List<ProcessDocumentTask> loadNodeBatchTasks(String documentCode, String nodeKey, String batchNo) {
@@ -4569,7 +3359,7 @@ public class ExpenseDocumentMutationSupport {
         }
     }
 
-    private Map<String, Object> readFormData(String json) {
+    Map<String, Object> readFormData(String json) {
         return readMap(json);
     }
 
@@ -4673,140 +3463,6 @@ public class ExpenseDocumentMutationSupport {
         return prefix + String.format("%04d", next);
     }
 
-    private ExpenseDocumentDetailVO pushPaymentTaskToBank(
-            Long userId,
-            String username,
-            ProcessDocumentTask task,
-            ProcessDocumentInstance instance,
-            boolean retrying
-    ) {
-        SystemCompanyBankAccount account = findActiveBankAccountForDocument(instance);
-        SummaryMetadata metadata = buildSummaryEnrichment(List.of(instance)).metadata(instance.getDocumentCode());
-        LocalDateTime now = LocalDateTime.now();
-        PmBankPaymentRecord record = findOrCreateBankPaymentRecord(task, instance, account);
-        String pushRequestNo = buildBankPushRequestNo(instance.getDocumentCode());
-        record.setCompanyBankAccountId(account.getId());
-        record.setBankProvider(BANK_PROVIDER_CMB);
-        record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
-        record.setManualPaid(0);
-        record.setPushRequestNo(pushRequestNo);
-        record.setReceiptStatus(RECEIPT_STATUS_PENDING);
-        record.setPushPayloadJson(writeJson(Map.of(
-                "documentCode", defaultText(instance.getDocumentCode(), ""),
-                "documentTitle", defaultText(instance.getDocumentTitle(), ""),
-                "amount", defaultDecimal(instance.getTotalAmount()),
-                "paymentCompanyName", defaultText(metadata.paymentCompanyName(), ""),
-                "operatorKey", defaultText(readBankLinkExt(account).get("operatorKey"), "")
-        )));
-        record.setPushResultJson(writeJson(Map.of(
-                "accepted", true,
-                "retry", retrying,
-                "message", "??????????????????????????ey"
-        )));
-        record.setLastErrorMessage(null);
-        saveBankPaymentRecord(record);
-
-        expenseWorkflowRuntimeSupport.markPaymentStarted(
-                instance,
-                task,
-                userId,
-                username,
-                retrying,
-                account.getId(),
-                buildCompanyBankAccountName(account),
-                pushRequestNo
-        );
-
-        account.setDirectConnectLastSyncAt(now);
-        account.setDirectConnectLastSyncStatus("PUSHED");
-        account.setDirectConnectLastErrorMsg(null);
-        systemCompanyBankAccountMapper.updateById(account);
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    private ExpenseDocumentDetailVO completePaymentTaskInternal(
-            Long userId,
-            String username,
-            ProcessDocumentTask task,
-            ProcessDocumentInstance instance,
-            String comment,
-            boolean manualPaid,
-            LocalDateTime paidAt
-    ) {
-        PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
-        if (record == null) {
-            SystemCompanyBankAccount account = findActiveBankAccountForDocument(instance, false);
-            record = findOrCreateBankPaymentRecord(task, instance, account);
-            if (account != null) {
-                record.setCompanyBankAccountId(account.getId());
-                record.setBankProvider(BANK_PROVIDER_CMB);
-                record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
-            }
-        }
-        record.setManualPaid(manualPaid ? 1 : 0);
-        record.setPaidAt(paidAt == null ? LocalDateTime.now() : paidAt);
-        if (trimToNull(record.getReceiptStatus()) == null) {
-            record.setReceiptStatus(RECEIPT_STATUS_PENDING);
-        }
-        record.setLastErrorMessage(null);
-        saveBankPaymentRecord(record);
-
-        expenseWorkflowRuntimeSupport.completePaymentRuntime(
-                instance,
-                task,
-                userId,
-                username,
-                comment,
-                manualPaid,
-                record.getPaidAt()
-        );
-
-        String finalStatus = trimToNull(requireDocument(instance.getDocumentCode()).getStatus());
-        if (DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(finalStatus) || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(finalStatus)) {
-            finalizeEffectiveWriteOffs(instance.getDocumentCode());
-        }
-        return buildDocumentDetail(requireDocument(instance.getDocumentCode()));
-    }
-
-    private void queryAndAttachBankReceipt(
-            PmBankPaymentRecord record,
-            ProcessDocumentInstance instance,
-            SystemCompanyBankAccount account
-    ) {
-        LocalDateTime now = LocalDateTime.now();
-        record.setLastReceiptQueryAt(now);
-        record.setReceiptQueryCount((record.getReceiptQueryCount() == null ? 0 : record.getReceiptQueryCount()) + 1);
-        if (record.getPaidAt() == null && record.getCallbackReceivedAt() == null) {
-            record.setReceiptResultJson(writeJson(Map.of("found", false, "message", "银行尚未返回支付成功结果")));
-            saveBankPaymentRecord(record);
-            return;
-        }
-
-        String fileName = buildReceiptFileName(instance.getDocumentCode());
-        String receiptBody = buildReceiptContent(instance, record, account);
-        var attachment = expenseAttachmentService.saveGeneratedAttachment(
-                fileName,
-                "text/plain",
-                receiptBody.getBytes(StandardCharsets.UTF_8)
-        );
-        record.setReceiptAttachmentId(attachment.getAttachmentId());
-        record.setReceiptFileName(attachment.getFileName());
-        record.setReceiptStatus(RECEIPT_STATUS_RECEIVED);
-        record.setReceiptReceivedAt(now);
-        record.setReceiptResultJson(writeJson(Map.of(
-                "found", true,
-                "attachmentId", attachment.getAttachmentId(),
-                "fileName", attachment.getFileName()
-        )));
-        record.setLastErrorMessage(null);
-        saveBankPaymentRecord(record);
-
-        instance.setStatus(DOCUMENT_STATUS_PAYMENT_FINISHED);
-        instance.setFinishedAt(now);
-        instance.setUpdatedAt(now);
-        processDocumentInstanceMapper.updateById(instance);
-    }
-
     private String buildReceiptContent(ProcessDocumentInstance instance, PmBankPaymentRecord record, SystemCompanyBankAccount account) {
         List<String> lines = new ArrayList<>();
         lines.add("招商银行云直连回单");
@@ -4870,60 +3526,6 @@ public class ExpenseDocumentMutationSupport {
                 ));
     }
 
-    private ExpenseBankLinkSummaryVO toBankLinkSummary(
-            SystemCompanyBankAccount account,
-            String companyName,
-            PmBankPaymentRecord latestRecord
-    ) {
-        ExpenseBankLinkSummaryVO item = new ExpenseBankLinkSummaryVO();
-        item.setCompanyBankAccountId(account.getId());
-        item.setCompanyId(account.getCompanyId());
-        item.setCompanyName(companyName);
-        item.setAccountName(account.getAccountName());
-        item.setAccountNo(maskAccountNo(account.getAccountNo()));
-        item.setBankName(account.getBankName());
-        item.setAccountStatus(account.getStatus());
-        item.setDirectConnectEnabled(isFlagEnabled(account.getDirectConnectEnabled()));
-        item.setDirectConnectProvider(account.getDirectConnectProvider());
-        item.setDirectConnectChannel(account.getDirectConnectChannel());
-        item.setDirectConnectStatusLabel(resolveBankLinkStatusLabel(account));
-        item.setLastDirectConnectStatus(resolveBankLinkSyncStatus(account));
-        item.setLastReceiptStatus(resolveReceiptStatusLabel(latestRecord));
-        return item;
-    }
-
-    private ExpenseBankLinkConfigVO toBankLinkConfig(SystemCompanyBankAccount account, String companyName) {
-        Map<String, String> ext = readBankLinkExt(account);
-        ExpenseBankLinkConfigVO item = new ExpenseBankLinkConfigVO();
-        item.setCompanyBankAccountId(account.getId());
-        item.setCompanyId(account.getCompanyId());
-        item.setCompanyName(companyName);
-        item.setAccountName(account.getAccountName());
-        item.setAccountNo(account.getAccountNo());
-        item.setBankName(account.getBankName());
-        item.setAccountStatus(account.getStatus());
-        item.setDirectConnectEnabled(isFlagEnabled(account.getDirectConnectEnabled()));
-        item.setDirectConnectProvider(account.getDirectConnectProvider());
-        item.setDirectConnectChannel(account.getDirectConnectChannel());
-        item.setDirectConnectProtocol(account.getDirectConnectProtocol());
-        item.setDirectConnectCustomerNo(account.getDirectConnectCustomerNo());
-        item.setDirectConnectAppId(account.getDirectConnectAppId());
-        item.setDirectConnectAccountAlias(account.getDirectConnectAccountAlias());
-        item.setDirectConnectAuthMode(account.getDirectConnectAuthMode());
-        item.setDirectConnectApiBaseUrl(account.getDirectConnectApiBaseUrl());
-        item.setDirectConnectCertRef(account.getDirectConnectCertRef());
-        item.setDirectConnectSecretRef(account.getDirectConnectSecretRef());
-        item.setDirectConnectSignType(account.getDirectConnectSignType());
-        item.setDirectConnectEncryptType(account.getDirectConnectEncryptType());
-        item.setOperatorKey(ext.getOrDefault("operatorKey", ""));
-        item.setCallbackSecret(ext.getOrDefault("callbackSecret", ""));
-        item.setPublicKeyRef(ext.getOrDefault("publicKeyRef", ""));
-        item.setReceiptQueryEnabled(Boolean.parseBoolean(ext.getOrDefault("receiptQueryEnabled", "false")));
-        item.setLastDirectConnectStatus(resolveBankLinkSyncStatus(account));
-        item.setLastDirectConnectError(account.getDirectConnectLastErrorMsg());
-        return item;
-    }
-
     private ExpenseDocumentBankPaymentVO toDetailBankPayment(
             PmBankPaymentRecord record,
             String companyBankAccountName,
@@ -4960,36 +3562,6 @@ public class ExpenseDocumentMutationSupport {
         return List.of(item);
     }
 
-    private PmBankPaymentRecord requireBankPaymentRecordForCallback(ExpenseBankCallbackDTO dto) {
-        if (dto == null) {
-            throw new IllegalArgumentException("银行回调参数不能为空");
-        }
-        PmBankPaymentRecord record = null;
-        if (trimToNull(dto.getPushRequestNo()) != null) {
-            record = pmBankPaymentRecordMapper.selectOne(
-                    Wrappers.<PmBankPaymentRecord>lambdaQuery()
-                            .eq(PmBankPaymentRecord::getPushRequestNo, dto.getPushRequestNo())
-                            .orderByDesc(PmBankPaymentRecord::getId)
-                            .last("limit 1")
-            );
-        }
-        if (record == null && dto.getTaskId() != null) {
-            record = pmBankPaymentRecordMapper.selectOne(
-                    Wrappers.<PmBankPaymentRecord>lambdaQuery()
-                            .eq(PmBankPaymentRecord::getTaskId, dto.getTaskId())
-                            .orderByDesc(PmBankPaymentRecord::getId)
-                            .last("limit 1")
-            );
-        }
-        if (record == null && trimToNull(dto.getDocumentCode()) != null) {
-            record = findLatestBankPaymentRecord(dto.getDocumentCode());
-        }
-        if (record == null) {
-            throw new IllegalArgumentException("未匹配到银行付款记录");
-        }
-        return record;
-    }
-
     private PmBankPaymentRecord findLatestBankPaymentRecord(String documentCode) {
         if (trimToNull(documentCode) == null) {
             return null;
@@ -5000,68 +3572,6 @@ public class ExpenseDocumentMutationSupport {
                         .orderByDesc(PmBankPaymentRecord::getId)
                         .last("limit 1")
         );
-    }
-
-    private PmBankPaymentRecord findOrCreateBankPaymentRecord(
-            ProcessDocumentTask task,
-            ProcessDocumentInstance instance,
-            SystemCompanyBankAccount account
-    ) {
-        PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
-        if (record == null) {
-            record = new PmBankPaymentRecord();
-            record.setTaskId(task.getId());
-            record.setDocumentCode(instance.getDocumentCode());
-            record.setReceiptQueryCount(0);
-        }
-        if (account != null) {
-            record.setCompanyBankAccountId(account.getId());
-            record.setBankProvider(BANK_PROVIDER_CMB);
-            record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
-        }
-        return record;
-    }
-
-    private void saveBankPaymentRecord(PmBankPaymentRecord record) {
-        if (record.getId() == null) {
-            pmBankPaymentRecordMapper.insert(record);
-            return;
-        }
-        pmBankPaymentRecordMapper.updateById(record);
-    }
-
-    private SystemCompanyBankAccount findActiveBankAccountForDocument(ProcessDocumentInstance instance) {
-        return findActiveBankAccountForDocument(instance, true);
-    }
-
-    private SystemCompanyBankAccount findActiveBankAccountForDocument(ProcessDocumentInstance instance, boolean required) {
-        SummaryMetadata metadata = buildSummaryEnrichment(List.of(instance)).metadata(instance.getDocumentCode());
-        String paymentCompanyId = trimToNull(metadata.paymentCompanyId());
-        if (paymentCompanyId == null) {
-            if (required) {
-                throw new IllegalStateException("单据未配置付款公司，无法推送银行");
-            }
-            return null;
-        }
-        List<SystemCompanyBankAccount> accounts = systemCompanyBankAccountMapper.selectList(
-                Wrappers.<SystemCompanyBankAccount>lambdaQuery()
-                        .eq(SystemCompanyBankAccount::getCompanyId, paymentCompanyId)
-                        .eq(SystemCompanyBankAccount::getStatus, 1)
-                        .eq(SystemCompanyBankAccount::getDirectConnectEnabled, 1)
-                        .eq(SystemCompanyBankAccount::getDirectConnectProvider, BANK_PROVIDER_CMB)
-                        .eq(SystemCompanyBankAccount::getDirectConnectChannel, BANK_CHANNEL_CMB_CLOUD)
-                        .orderByAsc(SystemCompanyBankAccount::getId)
-        );
-        if (accounts.isEmpty()) {
-            if (required) {
-                throw new IllegalStateException("付款公司未启用招商银行云直连账户");
-            }
-            return null;
-        }
-        if (accounts.size() > 1) {
-            throw new IllegalStateException("同一公司只能启用一个招商银行云直连账户");
-        }
-        return accounts.get(0);
     }
 
     private void disableOtherEnabledBankLinks(SystemCompanyBankAccount currentAccount) {
@@ -5088,16 +3598,6 @@ public class ExpenseDocumentMutationSupport {
             throw new IllegalArgumentException("公司账户不存在");
         }
         return account;
-    }
-
-    private void verifyCmbCallback(ExpenseBankCallbackDTO dto, SystemCompanyBankAccount account) {
-        if (account == null) {
-            throw new IllegalStateException("银行回调未绑定公司账户");
-        }
-        String expectedSecret = trimToNull(readBankLinkExt(account).get("callbackSecret"));
-        if (expectedSecret != null && !Objects.equals(expectedSecret, trimToNull(dto.getCallbackSecret()))) {
-            throw new IllegalArgumentException("银行回调验签失败");
-        }
     }
 
     private boolean resolveCallbackSuccess(ExpenseBankCallbackDTO dto) {
@@ -5242,21 +3742,6 @@ public class ExpenseDocumentMutationSupport {
             case "loan" -> "\u501f\u6b3e\u5355";
             case "contract" -> "\u5408\u540c\u5355";
             default -> "\u62a5\u9500\u5355";
-        };
-    }
-
-    private String normalizePaymentOrderStatus(String status) {
-        String normalized = trimToNull(status);
-        if (normalized == null) {
-            return DOCUMENT_STATUS_PENDING_PAYMENT;
-        }
-        return switch (normalized) {
-            case DOCUMENT_STATUS_PENDING_PAYMENT,
-                    DOCUMENT_STATUS_PAYING,
-                    DOCUMENT_STATUS_PAYMENT_COMPLETED,
-                    DOCUMENT_STATUS_PAYMENT_FINISHED,
-                    DOCUMENT_STATUS_PAYMENT_EXCEPTION -> normalized;
-            default -> DOCUMENT_STATUS_PENDING_PAYMENT;
         };
     }
 
@@ -5467,10 +3952,6 @@ public class ExpenseDocumentMutationSupport {
         return normalized == null ? "褰撳墠鐢ㄦ埛" : normalized;
     }
 
-    private String resolveMissingHandler(Map<String, Object> config) {
-        return defaultText(asText(config == null ? null : config.get("missingHandler")), MISSING_HANDLER_AUTO_SKIP);
-    }
-
     private Map<Long, SystemDepartment> loadAllDepartmentMap() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getStatus, 1)
@@ -5524,26 +4005,6 @@ public class ExpenseDocumentMutationSupport {
             current = current.getParentId() == null ? null : departmentMap.get(current.getParentId());
         }
         return current;
-    }
-
-    private LeaderResolution resolveLeader(SystemDepartment startDept, Map<Long, SystemDepartment> departmentMap, boolean allowLookup, int lookupLevel) {
-        SystemDepartment current = startDept;
-        int remaining = lookupLevel;
-        while (current != null) {
-            if (current.getLeaderUserId() != null && current.getLeaderUserId() > 0) {
-                return new LeaderResolution(current.getId(), current.getLeaderUserId());
-            }
-            if (!allowLookup || remaining <= 0 || current.getParentId() == null) {
-                break;
-            }
-            current = departmentMap.get(current.getParentId());
-            remaining--;
-        }
-        return null;
-    }
-
-    private int nextIndex(FlowRuntimeSnapshot snapshot, ProcessFlowNodeDTO node) {
-        return snapshot.indexInContainer(node.getParentNodeKey(), node.getNodeKey()) + 1;
     }
 
     private String normalizeUserName(User user) {
@@ -5668,12 +4129,7 @@ public class ExpenseDocumentMutationSupport {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private enum FlowAdvanceState {
-        PAUSED,
-        COMPLETED
-    }
-
-    private record DocumentMutationContext(
+    record DocumentMutationContext(
             ProcessDocumentTemplate template,
             ProcessFormDesign formDesign,
             ProcessExpenseDetailDesign expenseDetailDesign,
@@ -5708,16 +4164,6 @@ public class ExpenseDocumentMutationSupport {
             BigDecimal requestedAmount,
             int sortOrder
     ) {
-    }
-
-    private record RawFlowSnapshotSignature(
-            boolean hasApprovalNode,
-            boolean hasBlankRootNode,
-            boolean hasNullRootNode
-    ) {
-    }
-
-    private record LeaderResolution(Long departmentId, Long userId) {
     }
 
     private static final class SummaryEnrichmentData {
@@ -5886,81 +4332,4 @@ public class ExpenseDocumentMutationSupport {
         }
     }
 
-    private static final class FlowRuntimeSnapshot {
-        private final List<ProcessFlowNodeDTO> nodes;
-        private final Map<String, ProcessFlowNodeDTO> nodeByKey;
-        private final Map<String, List<ProcessFlowNodeDTO>> childrenByContainer;
-        private final Map<String, List<ProcessFlowRouteDTO>> routesBySourceNode;
-        private final Map<String, ProcessFlowRouteDTO> routeByKey;
-
-        private FlowRuntimeSnapshot(List<ProcessFlowNodeDTO> rawNodes, List<ProcessFlowRouteDTO> rawRoutes) {
-            this.nodes = rawNodes == null ? Collections.emptyList() : rawNodes.stream()
-                    .sorted(Comparator.comparing(item -> item.getDisplayOrder() == null ? Integer.MAX_VALUE : item.getDisplayOrder()))
-                    .toList();
-            this.nodeByKey = this.nodes.stream().collect(Collectors.toMap(
-                    ProcessFlowNodeDTO::getNodeKey,
-                    item -> item,
-                    (left, right) -> left,
-                    LinkedHashMap::new
-            ));
-            this.childrenByContainer = this.nodes.stream().collect(Collectors.groupingBy(
-                    item -> normalizeContainerKey(item.getParentNodeKey()),
-                    LinkedHashMap::new,
-                    Collectors.collectingAndThen(Collectors.toList(), items -> items.stream()
-                            .sorted(Comparator.comparing(node -> node.getDisplayOrder() == null ? Integer.MAX_VALUE : node.getDisplayOrder()))
-                            .toList())
-            ));
-            List<ProcessFlowRouteDTO> routes = rawRoutes == null ? Collections.emptyList() : rawRoutes;
-            this.routesBySourceNode = routes.stream().collect(Collectors.groupingBy(
-                    ProcessFlowRouteDTO::getSourceNodeKey,
-                    LinkedHashMap::new,
-                    Collectors.collectingAndThen(Collectors.toList(), items -> items.stream()
-                            .sorted(Comparator.comparing(route -> route.getPriority() == null ? Integer.MAX_VALUE : route.getPriority()))
-                            .toList())
-            ));
-            this.routeByKey = routes.stream().collect(Collectors.toMap(
-                    ProcessFlowRouteDTO::getRouteKey,
-                    item -> item,
-                    (left, right) -> left,
-                    LinkedHashMap::new
-            ));
-        }
-
-        private List<ProcessFlowNodeDTO> nodes() {
-            return nodes;
-        }
-
-        private ProcessFlowNodeDTO node(String nodeKey) {
-            return nodeByKey.get(nodeKey);
-        }
-
-        private List<ProcessFlowNodeDTO> children(String containerKey) {
-            return childrenByContainer.getOrDefault(normalizeContainerKey(containerKey), Collections.emptyList());
-        }
-
-        private List<ProcessFlowRouteDTO> routes(String sourceNodeKey) {
-            return routesBySourceNode.getOrDefault(sourceNodeKey, Collections.emptyList());
-        }
-
-        private ProcessFlowRouteDTO routeByKey(String routeKey) {
-            if (routeKey == null) {
-                return null;
-            }
-            return routeByKey.get(routeKey);
-        }
-
-        private int indexInContainer(String containerKey, String nodeKey) {
-            List<ProcessFlowNodeDTO> children = children(containerKey);
-            for (int index = 0; index < children.size(); index++) {
-                if (Objects.equals(children.get(index).getNodeKey(), nodeKey)) {
-                    return index;
-                }
-            }
-            return children.size();
-        }
-
-        private static String normalizeContainerKey(String containerKey) {
-            return containerKey == null || containerKey.trim().isEmpty() ? ROOT_CONTAINER_KEY : containerKey.trim();
-        }
-    }
 }
