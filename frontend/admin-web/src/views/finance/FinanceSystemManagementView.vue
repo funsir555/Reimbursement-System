@@ -16,8 +16,23 @@
 
         <div class="flex flex-wrap items-center gap-2">
           <el-button :loading="loading" @click="loadPageData">刷新</el-button>
-          <el-button type="primary" :disabled="!canCreate" @click="openCreateWizard">新建账套</el-button>
+          <el-button type="primary" :disabled="!canOpenCreateWizard" @click="openCreateWizard">新建账套</el-button>
         </div>
+      </div>
+    </section>
+
+    <section v-if="metaErrorMessage || listErrorMessage" class="space-y-3">
+      <div
+        v-if="listErrorMessage"
+        class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+      >
+        {{ listErrorMessage }}
+      </div>
+      <div
+        v-if="metaErrorMessage"
+        class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700"
+      >
+        {{ metaErrorMessage }}
       </div>
     </section>
 
@@ -35,7 +50,14 @@
     </el-card>
 
     <el-card class="!rounded-3xl !shadow-sm">
-      <el-table v-loading="loading" :data="accountSets" style="width: 100%">
+      <div
+        v-if="!listErrorMessage && !loading && accountSets.length === 0"
+        class="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500"
+      >
+        当前暂无已创建账套。
+      </div>
+
+      <el-table v-loading="listLoading" :data="accountSets" style="width: 100%">
         <el-table-column prop="companyName" label="目标公司" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="flex flex-col gap-1">
@@ -284,13 +306,16 @@ import { hasPermission, readStoredUser } from '@/utils/permissions'
 const financeCompany = useFinanceCompanyStore()
 const financeCompanyState = financeCompany as typeof financeCompany & { currentCompanyLabel?: string }
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
-const loading = ref(false)
+const metaLoading = ref(false)
+const listLoading = ref(false)
 const submitting = ref(false)
 const drawerVisible = ref(false)
 const currentStep = ref(0)
 const meta = ref<FinanceAccountSetMeta | null>(null)
 const accountSets = ref<FinanceAccountSetSummary[]>([])
 const taskStatus = ref<FinanceAccountSetTaskStatus | null>(null)
+const metaErrorMessage = ref('')
+const listErrorMessage = ref('')
 let taskPollTimer: ReturnType<typeof window.setTimeout> | null = null
 
 const wizardForm = reactive<FinanceAccountSetCreatePayload>({
@@ -304,11 +329,13 @@ const wizardForm = reactive<FinanceAccountSetCreatePayload>({
 })
 
 const canCreate = computed(() => hasPermission('finance:system_management:create', permissionCodes.value))
+const canOpenCreateWizard = computed(() => canCreate.value && !metaLoading.value && !metaErrorMessage.value && Boolean(meta.value))
 const isReferenceMode = computed(() => wizardForm.createMode === 'REFERENCE')
 const companyOptions = computed(() => meta.value?.companyOptions || [])
 const supervisorOptions = computed(() => meta.value?.supervisorOptions || [])
 const templateOptions = computed(() => meta.value?.templateOptions || [])
 const referenceOptions = computed(() => meta.value?.referenceOptions || [])
+const loading = computed(() => metaLoading.value || listLoading.value)
 const selectedReferenceOption = computed(() =>
   referenceOptions.value.find((item) => item.companyId === wizardForm.referenceCompanyId) || null
 )
@@ -350,25 +377,14 @@ onBeforeUnmount(() => {
 })
 
 async function loadPageData() {
-  loading.value = true
-  try {
-    const [metaRes, listRes] = await Promise.all([
-      financeSystemManagementApi.getMeta(),
-      financeSystemManagementApi.listAccountSets()
-    ])
-    meta.value = metaRes.data
-    accountSets.value = listRes.data || []
-    if (!wizardForm.subjectCodeScheme) {
-      wizardForm.subjectCodeScheme = metaRes.data.defaultSubjectCodeScheme || '4-2-2-2'
-    }
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载财务系统管理页面失败'))
-  } finally {
-    loading.value = false
-  }
+  await Promise.allSettled([loadMeta(), loadAccountSets()])
 }
 
 function openCreateWizard() {
+  if (!canOpenCreateWizard.value) {
+    ElMessage.warning(metaErrorMessage.value || '账套元数据加载失败，请先刷新后重试。')
+    return
+  }
   resetWizard()
   drawerVisible.value = true
 }
@@ -615,11 +631,54 @@ function resolveTaskLabel(status?: string) {
   }
 }
 
+async function loadMeta() {
+  metaLoading.value = true
+  metaErrorMessage.value = ''
+  try {
+    const metaRes = await financeSystemManagementApi.getMeta()
+    meta.value = metaRes.data
+    if (!wizardForm.subjectCodeScheme) {
+      wizardForm.subjectCodeScheme = metaRes.data.defaultSubjectCodeScheme || '4-2-2-2'
+    }
+  } catch (error: unknown) {
+    meta.value = null
+    metaErrorMessage.value = resolveErrorMessage(error, '账套元数据加载失败，已创建账套仍可查看，请刷新后重试。')
+    ElMessage.error(metaErrorMessage.value)
+  } finally {
+    metaLoading.value = false
+  }
+}
+
+async function loadAccountSets() {
+  listLoading.value = true
+  listErrorMessage.value = ''
+  try {
+    const listRes = await financeSystemManagementApi.listAccountSets()
+    accountSets.value = listRes.data || []
+  } catch (error: unknown) {
+    accountSets.value = []
+    listErrorMessage.value = resolveErrorMessage(error, '账套列表加载失败，请刷新后重试。')
+    ElMessage.error(listErrorMessage.value)
+  } finally {
+    listLoading.value = false
+  }
+}
+
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
-defineExpose({ accountSets, wizardForm, syncReferenceFields, buildPayload, submitCreateTask, formatCompanyDisplay })
+defineExpose({
+  accountSets,
+  wizardForm,
+  syncReferenceFields,
+  buildPayload,
+  submitCreateTask,
+  formatCompanyDisplay,
+  canOpenCreateWizard,
+  metaErrorMessage,
+  listErrorMessage
+})
 </script>
 
 <style scoped>

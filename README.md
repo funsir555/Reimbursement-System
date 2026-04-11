@@ -2,25 +2,47 @@
 
 ## 当前定位
 
-当前仓库已经是一个可运行、可演示、可继续扩展的业务项目，不再是纯原型。
+当前仓库已经不是早期“认证骨架 + 前端原型”，而是一个以 `backend/auth-service` 为单体主服务、持续做内部边界治理的业务系统。
 
-当前部署形态是：
+当前真实形态：
 
-- `frontend/admin-web`：Vue 3 管理台
-- `backend/gateway`：统一 API 入口
-- `backend/auth-service`：当前主业务服务
-- `backend/common`：公共响应、JWT 等基础能力
-- `backend/sql`：数据库初始化与升级脚本
+- `frontend/admin-web`：Vue 3 管理台，承载登录、首页、报销、流程、财务、系统设置等页面
+- `backend/gateway`：统一 API 入口，当前主要负责 `/api/auth/**` 路由转发
+- `backend/auth-service`：单体主服务，已承载 `auth / profile / process / async-task / voucher / settings / mvp / finance / expense / fixed-asset / archive-agent` 等多个子域
+- `backend/common`：统一返回、JWT、公共基础能力
+- `backend/sql`：初始化、迁移、刷新脚本
 
-当前已经覆盖的主要功能包括：
+当前治理阶段：`4.4` 主链路与第一轮 residual 收口已完成，仓库已进入 `backend residual hotspot second-wave`。
 
-- 登录与当前用户信息
-- 首页、报销列表、发票列表
-- 个人中心与下载中心
-- 流程模板管理、流程设计、费用类型与自定义档案
-- 异步任务：下载导出、发票验真、OCR、通知
-- 系统设置
-- 财务凭证录入
+## 当前验证基线
+
+- backend：`mvn test` 通过，`297/297`
+- frontend：`npm run test:unit` 通过，`211/211`
+
+当前完成的重点治理批次包括：
+
+- `process + settings`
+- `voucher + finance-context`
+- `async-task`
+- `profile`
+- `auth + mvp-dashboard`
+- `finance-system`
+- `finance archive` 四个 service
+- `expense residual hotspot`
+- `fixed-asset residual`
+- `expense-voucher-generation residual`
+- `archive-agent residual`
+
+## 当前 residual 优先级
+
+根据当前仓库热点复盘，下一批 backend residual 建议顺位为：
+
+1. `ProcessFlowDesignServiceImpl`
+2. `ExpensePaymentDomainSupport`
+3. `ExpenseRelationWriteOffService`
+4. `ExpenseSummaryAssembler`
+
+说明：当前不回头重打已形成 owner 的 `Abstract*Support` 大基座；它们仍需约束，但不作为下一批首要目标。
 
 ## 运行环境
 
@@ -43,34 +65,31 @@
 │  └─ architecture/
 ├─ frontend/
 │  └─ admin-web/
+├─ 执行记录/
+├─ 当前实现架构图与演进路线图.md
 └─ start-finex.bat
 ```
 
 ## 配置说明
 
-后端已改为优先从环境变量读取数据库、JWT 和异步线程池配置，不再在仓库中保存真实密码或固定密钥。
+后端优先从环境变量读取数据库、JWT、端口和异步线程池配置；仓库内只保留样例，不保存真实密码或固定密钥。
 
-示例变量见：
+- 本地开发样例：`backend/.env.example`
+- 生产部署样例：`backend/.env.production.example`
+- 前端生产样例：`frontend/admin-web/.env.production.example`
 
-- `backend/.env.example`
-
-Windows 本地开发建议新建一个未提交的 `backend/.env.local.cmd`，内容示例：
+Windows 本地开发建议新建未提交的 `backend/.env.local.cmd`：
 
 ```bat
 set FINEX_DB_PASSWORD=replace-with-your-db-password
 set FINEX_JWT_SECRET=replace-with-a-long-random-secret-at-least-32-chars
 ```
 
-`start-finex.bat` 会优先加载这个文件，并在以下情况直接拒绝启动：
-
-- `FINEX_DB_PASSWORD` 未设置或仍是示例占位值
-- `FINEX_JWT_SECRET` 未设置、仍是示例占位值，或长度少于 32 个字符
-
-开发环境也应提供固定 JWT 密钥，避免临时内存密钥导致登录态在重启后全部失效；生产环境必须通过环境变量注入真实密钥。
+`start-finex.bat` 会优先加载该文件，并在数据库密码缺失、JWT 密钥仍为占位值、或 JWT 长度少于 32 个字符时直接拒绝启动。
 
 ## 数据库初始化
 
-建议在全新数据库中按下面顺序执行脚本：
+新库建议按下面顺序执行：
 
 1. `backend/sql/init.sql`
 2. `backend/sql/init_custom_archive.sql`
@@ -79,14 +98,12 @@ set FINEX_JWT_SECRET=replace-with-a-long-random-secret-at-least-32-chars
 5. `backend/sql/init_finance_gl.sql`
 6. `backend/sql/init_process_flow_design.sql`
 
-如果是在旧库上升级，请根据实际版本额外检查并执行：
+旧库升级则按实际差异补执行：
 
 - `backend/sql/migrate_*.sql`
 - `backend/sql/refresh_*.sql`
 
-更详细的初始化与启动说明见：
-
-- `docs/architecture/项目启动与初始化说明.md`
+更详细说明见 `docs/architecture/项目启动与初始化说明.md`。
 
 ## 启动方式
 
@@ -96,40 +113,28 @@ set FINEX_JWT_SECRET=replace-with-a-long-random-secret-at-least-32-chars
 start-finex.bat
 ```
 
-`start-finex.bat` 现在只负责一键启动入口：它会按顺序加载 `backend/.env.local.cmd` 与可选的 `backend/.env.shadow.cmd`、补齐默认端口、校验 `FINEX_DB_PASSWORD` / `FINEX_JWT_SECRET`、先编译 `backend/common`，然后再委派 `start-finex.ps1` 处理端口冲突、旧进程回收和三个模块的实际启动。
-
-默认启动模块固定为：
+默认会启动：
 
 - `backend/auth-service`
 - `backend/gateway`
 - `frontend/admin-web`
 
-若启动失败，优先检查：
-
-- `backend/.env.local.cmd` 里的数据库密码和 JWT 密钥是否为真实值
-- JWT 密钥是否至少 32 个字符
-- `8081`、`8080`、`5173` 是否被外部进程占用
-
 ### 分模块启动
 
-后端服务：
+后端：
 
 ```bash
 cd backend/common
 mvn compile
-```
 
-```bash
-cd backend/auth-service
+cd ../auth-service
+mvn spring-boot:run
+
+cd ../gateway
 mvn spring-boot:run
 ```
 
-```bash
-cd backend/gateway
-mvn spring-boot:run
-```
-
-前端管理台：
+前端：
 
 ```bash
 cd frontend/admin-web
@@ -139,7 +144,7 @@ npm run dev
 
 ## 质量校验
 
-后端测试：
+后端：
 
 ```bash
 cd backend
@@ -160,20 +165,11 @@ cd frontend/admin-web
 npm run build
 ```
 
-## 当前治理重点
-
-这轮仓库已经补上的基础护栏包括：
-
-- 数据库连接与 JWT 密钥外置
-- 默认日志级别下调到 `info`
-- 异步线程池参数支持配置化
-- 后端最小单元/控制器测试基线
-- 前端 Vitest 基线与权限/登录测试
-- README 与初始化说明同步到当前仓库状态
-
 ## 相关文档
 
+- `当前实现架构图与演进路线图.md`
 - `docs/architecture/系统架构设计.md`
 - `docs/architecture/开发架构与线程分布.md`
 - `docs/architecture/项目启动与初始化说明.md`
 - `docs/architecture/auth-service领域边界说明.md`
+- `执行记录/报销系统治理落地方案.md`

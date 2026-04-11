@@ -13,6 +13,7 @@ import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
+import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
@@ -22,6 +23,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,6 +72,12 @@ class FinanceVoucherServiceImplTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private FinanceAccountSetMapper financeAccountSetMapper;
+
+    @Mock
+    private UserService userService;
+
     private FinanceVoucherServiceImpl service;
 
     @BeforeEach
@@ -83,7 +91,9 @@ class FinanceVoucherServiceImplTest {
                 financeProjectArchiveMapper,
                 systemCompanyMapper,
                 systemDepartmentMapper,
-                userMapper
+                userMapper,
+                financeAccountSetMapper,
+                userService
         );
 
         lenient().when(systemDepartmentMapper.selectList(any())).thenReturn(List.of());
@@ -118,6 +128,7 @@ class FinanceVoucherServiceImplTest {
     @Test
     void getMetaLoadsCustomerSupplierAndProjectOptionsFromArchives() {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
         when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "广州分公司")));
         when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "员工甲", "COMP-001")));
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("1001", "库存现金")));
@@ -141,6 +152,7 @@ class FinanceVoucherServiceImplTest {
     @Test
     void getMetaLoadsSharedEmployeesAndDepartmentsAcrossCompanies() {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
         when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "广州分公司")));
         when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(buildDepartment(10L, "财务部")));
         when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "共享员工", "COMP-OTHER")));

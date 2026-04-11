@@ -3,6 +3,7 @@ package com.finex.auth.controller;
 import com.finex.auth.config.GlobalExceptionHandler;
 import com.finex.auth.dto.FinanceAccountSetTaskStatusVO;
 import com.finex.auth.dto.FinanceAccountSetMetaVO;
+import com.finex.auth.dto.FinanceAccountSetSummaryVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.FinanceSystemManagementService;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+
+import java.util.List;
 
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
@@ -61,6 +64,28 @@ class FinanceSystemManagementControllerTest {
 
         verify(accessControlService).requirePermission(1L, "finance:system_management:view");
         verify(financeSystemManagementService).getMeta();
+    }
+
+    @Test
+    void listAccountSetsRequiresPermissionAndReturnsPayload() throws Exception {
+        FinanceAccountSetSummaryVO summary = new FinanceAccountSetSummaryVO();
+        summary.setCompanyId("COMPANY_A");
+        summary.setCompanyCode("COMP202604050001");
+        summary.setCompanyName("广州测试公司");
+        summary.setStatus("ACTIVE");
+        summary.setStatusLabel("已启用");
+
+        doNothing().when(accessControlService).requirePermission(1L, "finance:system_management:view");
+        when(financeSystemManagementService.listAccountSets()).thenReturn(List.of(summary));
+
+        mockMvc.perform(get("/auth/finance/system-management/account-sets").requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].companyCode").value("COMP202604050001"))
+                .andExpect(jsonPath("$.data[0].companyName").value("广州测试公司"));
+
+        verify(accessControlService).requirePermission(1L, "finance:system_management:view");
+        verify(financeSystemManagementService).listAccountSets();
     }
 
     @Test

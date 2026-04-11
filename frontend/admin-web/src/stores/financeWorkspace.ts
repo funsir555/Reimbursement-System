@@ -1,52 +1,16 @@
 import { defineStore } from 'pinia'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
+import { resolveRouteTabTitle } from '@/router/route-meta'
 
 export interface FinanceWorkspaceTab {
   path: string
   title: string
 }
 
-const FINANCE_ROUTE_TITLE_MAP: Record<string, string> = {
-  'finance-new-voucher': '新建凭证',
-  'finance-query-voucher': '查询凭证',
-  'finance-query-voucher-detail': '凭证详情',
-  'finance-review-voucher': '审核凭证',
-  'finance-ledger-balance-sheet': '总账余额表',
-  'finance-detail-ledger': '明细账',
-  'finance-general-ledger-book': '总分类账',
-  'finance-project-detail-ledger': '项目明细账',
-  'finance-supplier-detail-ledger': '供应商明细账',
-  'finance-customer-detail-ledger': '客户明细账',
-  'finance-personal-detail-ledger': '个人明细账',
-  'finance-quantity-amount-detail-ledger': '数量金额明细账',
-  'finance-fixed-assets': '固定资产',
-  'finance-reports-balance-sheet': '资产负债表',
-  'finance-reports-income-statement': '利润表',
-  'finance-reports-cash-flow': '现金流量表',
-  'finance-system-management': '财务系统管理',
-  'finance-archives-customers': '客户档案',
-  'finance-archives-suppliers': '供应商档案',
-  'finance-archives-employees': '员工档案',
-  'finance-archives-departments': '部门档案',
-  'finance-archives-account-subjects': '会计科目'
-}
-
 function resolveTabTitle(route: RouteLocationNormalizedLoaded): string {
-  if (typeof route.name === 'string') {
-    const mappedTitle = FINANCE_ROUTE_TITLE_MAP[route.name]
-    if (mappedTitle) {
-      return mappedTitle
-    }
-  }
-
-  const tabTitle = route.meta.tabTitle
-  if (typeof tabTitle === 'string' && tabTitle.trim()) {
+  const tabTitle = resolveRouteTabTitle(route)
+  if (tabTitle) {
     return tabTitle
-  }
-
-  const title = route.meta.title
-  if (typeof title === 'string' && title.trim()) {
-    return title
   }
 
   return typeof route.name === 'string' ? route.name : route.fullPath

@@ -1,17 +1,13 @@
 package com.finex.auth.service.impl.expense;
 
-import com.finex.auth.dto.ExpenseDocumentCommentDTO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
 import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseSummaryVO;
-import com.finex.auth.entity.ProcessDocumentActionLog;
-import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
-import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.service.NotificationService;
@@ -33,7 +29,9 @@ import static org.mockito.Mockito.when;
 class ExpenseQueryDomainSupportTest {
 
     @Mock
-    private ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    private ExpenseDocumentReadSupport expenseDocumentReadSupport;
+    @Mock
+    private ExpenseDocumentActionLogSupport expenseDocumentActionLogSupport;
     @Mock
     private ExpenseDocumentTemplateSupport expenseDocumentTemplateSupport;
     @Mock
@@ -49,8 +47,6 @@ class ExpenseQueryDomainSupportTest {
     @Mock
     private ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     @Mock
-    private ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
-    @Mock
     private NotificationService notificationService;
 
     @Test
@@ -59,10 +55,11 @@ class ExpenseQueryDomainSupportTest {
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-001");
-        ProcessDocumentExpenseDetail expenseDetail = new ProcessDocumentExpenseDetail();
+        com.finex.auth.entity.ProcessDocumentExpenseDetail expenseDetail = new com.finex.auth.entity.ProcessDocumentExpenseDetail();
         ExpenseDetailInstanceDetailVO expenseDetailVo = new ExpenseDetailInstanceDetailVO();
         ExpenseQueryDomainSupport support = new ExpenseQueryDomainSupport(
-                expenseDocumentMutationSupport,
+                expenseDocumentReadSupport,
+                expenseDocumentActionLogSupport,
                 expenseDocumentTemplateSupport,
                 expenseRelationWriteOffService,
                 expenseSummaryAssembler,
@@ -70,14 +67,13 @@ class ExpenseQueryDomainSupportTest {
                 processDocumentTaskMapper,
                 processDocumentActionLogMapper,
                 processDocumentInstanceMapper,
-                processDocumentExpenseDetailMapper,
                 notificationService
         );
         when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
         when(expenseSummaryAssembler.toExpenseSummaries(List.of(instance))).thenReturn(summaries);
-        when(expenseDocumentMutationSupport.requireDocument("DOC-001")).thenReturn(instance);
-        when(expenseDocumentMutationSupport.buildDocumentDetail(instance)).thenReturn(detail);
-        when(processDocumentExpenseDetailMapper.selectOne(any())).thenReturn(expenseDetail);
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+        when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
+        when(expenseDocumentReadSupport.requireExpenseDetail("DOC-001", "D1")).thenReturn(expenseDetail);
         when(expenseDocumentDetailAssembler.toExpenseDetailDetailVO(expenseDetail)).thenReturn(expenseDetailVo);
 
         assertSame(summaries, support.listExpenseSummaries(1L));
@@ -89,7 +85,8 @@ class ExpenseQueryDomainSupportTest {
     void editContextUsesTemplateSupport() {
         ExpenseDocumentEditContextVO context = new ExpenseDocumentEditContextVO();
         ExpenseQueryDomainSupport support = new ExpenseQueryDomainSupport(
-                expenseDocumentMutationSupport,
+                expenseDocumentReadSupport,
+                expenseDocumentActionLogSupport,
                 expenseDocumentTemplateSupport,
                 expenseRelationWriteOffService,
                 expenseSummaryAssembler,
@@ -97,7 +94,6 @@ class ExpenseQueryDomainSupportTest {
                 processDocumentTaskMapper,
                 processDocumentActionLogMapper,
                 processDocumentInstanceMapper,
-                processDocumentExpenseDetailMapper,
                 notificationService
         );
         when(expenseDocumentTemplateSupport.getDocumentEditContext(1L, "DOC-001")).thenReturn(context);
@@ -114,17 +110,18 @@ class ExpenseQueryDomainSupportTest {
         instance.setSubmitterUserId(1L);
         instance.setStatus("PENDING_APPROVAL");
         instance.setCurrentNodeKey("N1");
-        instance.setCurrentNodeName("审批");
+        instance.setCurrentNodeName("Approve");
         ProcessDocumentTask task = new ProcessDocumentTask();
         task.setAssigneeUserId(2L);
-        task.setAssigneeName("审批人");
+        task.setAssigneeName("Reviewer");
         task.setStatus("PENDING");
         task.setCreatedAt(LocalDateTime.now());
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         ExpenseDocumentReminderDTO dto = new ExpenseDocumentReminderDTO();
-        dto.setRemark("请尽快处理");
+        dto.setRemark("please review");
         ExpenseQueryDomainSupport support = new ExpenseQueryDomainSupport(
-                expenseDocumentMutationSupport,
+                expenseDocumentReadSupport,
+                expenseDocumentActionLogSupport,
                 expenseDocumentTemplateSupport,
                 expenseRelationWriteOffService,
                 expenseSummaryAssembler,
@@ -132,17 +129,16 @@ class ExpenseQueryDomainSupportTest {
                 processDocumentTaskMapper,
                 processDocumentActionLogMapper,
                 processDocumentInstanceMapper,
-                processDocumentExpenseDetailMapper,
                 notificationService
         );
-        when(expenseDocumentMutationSupport.requireDocument("DOC-001")).thenReturn(instance, instance);
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance, instance);
         when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
         when(processDocumentActionLogMapper.selectOne(any())).thenReturn(null);
-        when(expenseDocumentMutationSupport.buildDocumentDetail(instance)).thenReturn(detail);
+        when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
 
         ExpenseDocumentDetailVO actual = support.remindDocument(1L, "tester", "DOC-001", dto);
 
         assertSame(detail, actual);
-        verify(expenseDocumentMutationSupport).appendLog(any(), any(), any(), any(), any(), any(), any(), anyMap());
+        verify(expenseDocumentActionLogSupport).appendLog(any(), any(), any(), any(), any(), any(), any(), anyMap());
     }
 }

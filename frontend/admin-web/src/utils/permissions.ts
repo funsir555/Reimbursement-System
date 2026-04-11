@@ -1,35 +1,11 @@
+import { FALLBACK_NAVIGATION_TARGETS } from '@/router/navigation-config'
+import { EXPENSE_CREATE_ENTRY_PERMISSION_CODES } from './permissionConstants'
+
 type StoredUserLike = {
   permissionCodes?: string[]
 }
 
-export const EXPENSE_CREATE_ENTRY_PERMISSION_CODES = [
-  'expense:create:view',
-  'expense:create:create',
-  'expense:create:submit'
-] as const
-
-const FALLBACK_PATHS: Array<{ path: string; permissionCodes: string[] }> = [
-  { path: '/dashboard', permissionCodes: ['dashboard:menu', 'dashboard:view'] },
-  { path: '/profile', permissionCodes: ['profile:menu', 'profile:view'] },
-  { path: '/expense/create', permissionCodes: [...EXPENSE_CREATE_ENTRY_PERMISSION_CODES] },
-  { path: '/expense/list', permissionCodes: ['expense:menu', 'expense:list:view'] },
-  { path: '/archives/agents', permissionCodes: ['agents:menu', 'agents:view'] },
-  { path: '/archives/invoices', permissionCodes: ['archives:menu', 'archives:invoices:view'] },
-  {
-    path: '/settings?tab=companyAccounts',
-    permissionCodes: ['settings:company_accounts:view']
-  },
-  {
-    path: '/settings?tab=organization',
-    permissionCodes: [
-      'settings:menu',
-      'settings:organization:view',
-      'settings:employees:view',
-      'settings:roles:view',
-      'settings:companies:view'
-    ]
-  }
-]
+export { EXPENSE_CREATE_ENTRY_PERMISSION_CODES }
 
 export function readStoredUser(): StoredUserLike | null {
   const raw = localStorage.getItem('user')
@@ -65,6 +41,6 @@ export function hasAnyPermission(permissionCodes: string[], source?: StoredUserL
 
 export function resolveFirstAccessiblePath(source?: StoredUserLike | string[] | null): string {
   const ownedCodes = getPermissionCodes(source)
-  const matched = FALLBACK_PATHS.find((item) => hasAnyPermission(item.permissionCodes, ownedCodes))
+  const matched = FALLBACK_NAVIGATION_TARGETS.find((item) => hasAnyPermission(item.permissionCodes, ownedCodes))
   return matched?.path || '/login'
 }

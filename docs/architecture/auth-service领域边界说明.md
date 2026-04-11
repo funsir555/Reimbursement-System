@@ -1,138 +1,267 @@
 # auth-service 领域边界说明
 
-## 1. 目标
+当前基线更新时间：2026-04-11
 
-当前不建议立刻拆微服务，但需要先把 `auth-service` 内部边界收紧，避免继续横向堆功能。
+本文用于约束 `auth-service` 的领域边界、冻结入口和 owner 归属。当前 `auth-service` 的正确定位是：单体主服务 + 多子域 owner，而不是继续把新真相直接堆回历史 mega service。
 
-## 2. 当前建议领域
+## 1. 总体原则
+
+- 不激进重命名，不先拆微服务
+- 已冻结 façade 只保留兼容委派或极薄桥接
+- 新真相优先进入清晰 owner，不得回灌旧入口
+- 已形成的 `Abstract*Support` 大基座继续受控，但当前不作为下一批首要治理目标
+
+## 2. 当前领域边界
 
 ### `auth`
 
-职责：
+职责：登录、JWT、当前用户身份识别、角色与权限读取。
 
-- 登录
-- JWT 认证
-- 当前用户身份识别
-- 权限校验
+稳定 owner：
 
-典型入口：
+- `AuthLoginDomainSupport`
+- `AuthAuthorizationDomainSupport`
 
-- `AuthController`
-- `AuthInterceptor`
-- `UserService`
-- `AccessControlService`
+冻结入口：
+
+- `UserServiceImpl`：frozen facade
+- `AccessControlServiceImpl`：companion facade
 
 ### `profile`
 
-职责：
+职责：个人中心、银行账户、下载中心、密码修改。
 
-- 个人中心
-- 下载中心
-- 密码修改
-- 银行账户等个人资料展示
+稳定 owner：
 
-典型入口：
+- `ProfileCenterDomainSupport`
+- `ProfileBankAccountDomainSupport`
+- `ProfileDownloadDomainSupport`
 
-- `UserCenterController`
-- `UserCenterService`
+冻结入口：
+
+- `UserCenterServiceImpl`：frozen facade
 
 ### `process`
 
-职责：
+职责：流程中心、模板、自定义档案、费用类型、表单设计、费用明细设计、流程设计。
 
-- 流程模板管理
-- 流程设计器
-- 费用类型树
-- 自定义档案
+稳定 owner：
 
-典型入口：
+- `ProcessCenterDomainSupport`
+- `ProcessTemplateDomainSupport`
+- `ProcessCustomArchiveDomainSupport`
+- `ProcessExpenseTypeDomainSupport`
+- `ProcessFormDesignServiceImpl`
+- `ProcessExpenseDetailDesignServiceImpl`
+- `ProcessFlowDesignServiceImpl`
 
-- `ProcessManagementController`
-- `ProcessManagementService`
-- `ProcessFlowDesignService`
+冻结入口：
+
+- `ProcessManagementServiceImpl`：frozen facade
+
+说明：`ProcessFlowDesignServiceImpl` 仍是当前 residual second-wave 的第一优先级，因为它依然是 process 域里最大的 live owner 之一。
 
 ### `async-task`
 
-职责：
+职责：导出、发票 OCR/验真任务提交，通知读侧与执行态协作。
 
-- 下载导出任务提交
-- 发票验真任务提交
-- OCR 任务提交
-- 通知发送与通知摘要
+稳定 owner：
 
-典型入口：
-
-- `AsyncTaskController`
-- `AsyncTaskService`
+- `AsyncTaskSubmissionDomainSupport`
+- `AsyncTaskNotificationDomainSupport`
 - `AsyncTaskWorker`
-- `NotificationService`
+- `NotificationServiceImpl`
+
+冻结入口：
+
+- `AsyncTaskServiceImpl`：frozen facade
 
 ### `voucher`
 
-职责：
+职责：凭证元数据、查询、录入与 finance context。
 
-- 财务凭证录入
-- 凭证明细与元数据查询
+稳定 owner：
 
-典型入口：
+- `VoucherMetaSupport`
+- `VoucherQueryDomainSupport`
+- `VoucherMutationDomainSupport`
+- `VoucherContextSupport`
 
-- `FinanceVoucherController`
-- `FinanceVoucherService`
+冻结入口：
+
+- `FinanceVoucherServiceImpl`：frozen facade
+- `FinanceContextServiceImpl`：frozen facade
 
 ### `settings`
 
-职责：
+职责：系统 bootstrap、组织、角色、公司、同步连接器与同步任务。
 
-- 组织、员工、角色、公司主体
-- 同步连接器与同步任务
-- 系统设置相关权限树
+稳定 owner：
 
-典型入口：
+- `SettingsBootstrapSupport`
+- `SettingsOrganizationDomainSupport`
+- `SettingsRoleDomainSupport`
+- `SettingsCompanyDomainSupport`
+- `SettingsSyncDomainSupport`
 
-- `SystemSettingsController`
-- 对应 settings 服务与 mapper
+冻结入口：
+
+- `SystemSettingsServiceImpl`：frozen facade
 
 ### `mvp-dashboard`
 
-职责：
+职责：首页概览、报销列表、发票列表、当前用户摘要读取。
 
-- 首页概览
-- 报销列表
-- 发票列表
-- 当前用户简档读取
+稳定 owner：
 
-典型入口：
+- `MvpCurrentUserDomainSupport`
+- `MvpDashboardDomainSupport`
+- `MvpInvoiceDomainSupport`
 
-- `MvpController`
-- `MvpDataService`
+冻结入口：
 
-## 3. 后续新增功能的归属规则
+- `MvpDataServiceImpl`：frozen facade
 
-- 新增认证、登录、权限相关能力，优先进入 `auth`
-- 新增流程模板、流程图、流程元数据，优先进入 `process`
-- 新增导出、通知、外部耗时处理，优先进入 `async-task`
-- 新增凭证、总账、会计档案相关能力，优先进入 `voucher`
-- 新增组织与主数据治理能力，优先进入 `settings`
-- 仅用于首页聚合展示的数据读取，才进入 `mvp-dashboard`
+## 3. finance 补充说明
 
-## 4. 代码治理规则
+### `financesystem`
 
-- 不要把新业务继续直接堆进 `AuthController` 或 `MvpController`
-- Controller 只负责协议层，不负责复杂编排
-- 耗时任务优先走异步执行器，不阻塞请求线程
-- 跨领域共享逻辑放在 `common` 或 `support`，不要反向侵入多个 controller
+职责：账套元数据、账套查询、账套任务编排。
 
-## 5. 当前阶段建议
+稳定 owner：
 
-这一阶段先做“领域收口”，不做“大拆分”：
+- `FinanceAccountSetMetaSupport`
+- `FinanceAccountSetQueryDomainSupport`
+- `FinanceAccountSetTaskDomainSupport`
 
-1. 新代码按领域归位
-2. 旧代码逐步顺手搬迁
-3. 等边界稳定后，再评估是否拆成独立服务
+冻结入口：
 
-## 6. Phase 1 治理红线
+- `FinanceSystemManagementServiceImpl`：frozen facade
 
-- `ExpenseDocumentServiceImpl` 进入公开方法冻结期，不再新增新的 public 业务入口
-- 新的报销创建、查询、审批、选择器能力先落到拆分后的领域 service，再由旧入口逐步收口
-- `frontend/admin-web/src/api/index.ts` 不再新增新的接口定义或业务 API 分组
-- 新的前端接口契约先进入按领域拆分的新模块，再视迁移节奏从 `index.ts` 做兼容导出
+### `financearchive`
+
+职责：会计科目、客户、项目分类/项目、供应商档案与 expense-create option。
+
+稳定 owner：
+
+- account-subject：`FinanceAccountSubjectMetaSupport` / `FinanceAccountSubjectQueryDomainSupport` / `FinanceAccountSubjectMutationDomainSupport`
+- customer：`FinanceCustomerQueryDomainSupport` / `FinanceCustomerMutationDomainSupport`
+- project：`FinanceProjectArchiveMetaSupport` / `FinanceProjectClassDomainSupport` / `FinanceProjectQueryDomainSupport` / `FinanceProjectMutationDomainSupport`
+- vendor：`FinanceVendorQueryDomainSupport` / `FinanceVendorMutationDomainSupport` / `FinanceVendorOptionDomainSupport`
+
+冻结入口：
+
+- `FinanceAccountSubjectArchiveServiceImpl`
+- `FinanceCustomerServiceImpl`
+- `FinanceProjectArchiveServiceImpl`
+- `FinanceVendorServiceImpl`
+
+说明：finance archive 主链路已收口完成，不再作为当前 residual first-priority。
+
+## 4. residual 子域补充说明
+
+### `expense-residual`
+
+职责：工作流运行时、文档读侧、模板/编辑上下文、日志、提交流程兼容层。
+
+稳定 owner：
+
+- `AbstractExpenseWorkflowSupport`
+- `ExpenseWorkflowContextSupport`
+- `ExpenseWorkflowExecutionSupport`
+- `ExpenseWorkflowRepairSupport`
+- `AbstractExpenseDocumentSupport`
+- `ExpenseDocumentReadSupport`
+- `ExpenseDocumentActionLogSupport`
+- `ExpenseDocumentTemplateDomainSupport`
+- `ExpenseDocumentMutationDomainSupport`
+
+冻结入口：
+
+- `ExpenseWorkflowRuntimeSupport`：runtime facade
+- `ExpenseDocumentMutationSupport`：compatibility facade
+
+当前 residual second-wave 仍重点关注：
+
+- `ExpensePaymentDomainSupport`
+- `ExpenseRelationWriteOffService`
+- `ExpenseSummaryAssembler`
+
+### `fixedasset`
+
+职责：固定资产元数据/类别、卡片与期初、变动与处置、折旧与期间关闭、凭证联查。
+
+稳定 owner：
+
+- `FixedAssetMetaCategorySupport`
+- `FixedAssetCardOpeningSupport`
+- `FixedAssetChangeDisposalSupport`
+- `FixedAssetDepreciationPeriodSupport`
+- `FixedAssetVoucherQuerySupport`
+
+冻结入口：
+
+- `FixedAssetServiceImpl`：thin facade
+
+### `expensevoucher`
+
+职责：报销凭证生成元数据、映射策略、推送执行、已生成记录查询。
+
+稳定 owner：
+
+- `ExpenseVoucherMetaSupport`
+- `ExpenseVoucherMappingDomainSupport`
+- `ExpenseVoucherPushDomainSupport`
+- `ExpenseVoucherRecordQuerySupport`
+
+冻结入口：
+
+- `ExpenseVoucherGenerationServiceImpl`：thin facade
+
+### `archiveagent`
+
+职责：agent 元数据、定义与版本、手动运行、调度运行、运行记录读侧。
+
+稳定 owner：
+
+- `ArchiveAgentMetaSupport`
+- `ArchiveAgentDefinitionDomainSupport`
+- `ArchiveAgentRunDomainSupport`
+- `ArchiveAgentScheduleDomainSupport`
+
+执行态 owner 继续在 `com.finex.auth.support.archiveagent`。
+
+冻结入口：
+
+- `ArchiveAgentServiceImpl`：thin facade
+
+## 5. 新增功能归属规则
+
+- 登录、权限、当前用户身份相关能力优先进入 `auth`
+- 个人中心、下载中心、个人账户相关能力优先进入 `profile`
+- 模板、流程、表单、费用类型相关能力优先进入 `process`
+- 导出、通知、异步提交相关能力优先进入 `async-task`
+- 凭证与 finance context 相关能力优先进入 `voucher`
+- 组织、角色、公司、同步相关能力优先进入 `settings`
+- 首页聚合只读能力进入 `mvp-dashboard`
+- finance archive、expense residual、fixedasset、expensevoucher、archiveagent 按既有子域 owner 继续下沉，不回流 façade
+
+## 6. 代码治理红线
+
+- 不要把新业务继续堆进已冻结入口
+- Controller 只负责协议层
+- 共享逻辑放到明确 owner 或 `common`，不要反向侵入多个 service
+- 已进入 frozen facade 阶段的类只保留兼容委派，不再承接 live business truth
+
+## 7. 当前阶段与下一批
+
+当前 `auth-service` 的主域边界已经基本成型，阶段判断为：`backend residual hotspot second-wave`。
+
+当前建议顺位：
+
+1. `ProcessFlowDesignServiceImpl`
+2. `ExpensePaymentDomainSupport`
+3. `ExpenseRelationWriteOffService`
+4. `ExpenseSummaryAssembler`
+
+`ExpenseVoucherGenerationServiceImpl` 和 `ArchiveAgentServiceImpl` 已完成收口，不再作为“下一优先级”保留在文档中。

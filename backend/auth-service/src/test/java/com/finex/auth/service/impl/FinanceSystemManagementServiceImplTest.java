@@ -2,10 +2,12 @@ package com.finex.auth.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.FinanceAccountSetCreateDTO;
+import com.finex.auth.dto.FinanceAccountSetMetaVO;
 import com.finex.auth.dto.FinanceAccountSetSummaryVO;
 import com.finex.auth.dto.FinanceAccountSetTaskStatusVO;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.entity.FinanceAccountSet;
+import com.finex.auth.entity.FinanceAccountSetTemplateSubject;
 import com.finex.auth.entity.FinanceAccountSetTemplate;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
@@ -26,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
@@ -124,6 +127,49 @@ class FinanceSystemManagementServiceImplTest {
         assertEquals(AsyncTaskSupport.TASK_TYPE_FINANCE_ACCOUNT_SET_CREATE, inserted.getTaskType());
         assertEquals(AsyncTaskSupport.BUSINESS_TYPE_FINANCE_ACCOUNT_SET, inserted.getBusinessType());
         verify(financeAccountSetTaskWorker).runCreateAccountSetTask(9L);
+    }
+
+    @Test
+    void getMetaReturnsCompanyOptionsAndTemplateSummaries() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setCompanyCode("COMP202604050001");
+        company.setCompanyName("广州测试公司");
+        company.setStatus(1);
+
+        User supervisor = new User();
+        supervisor.setId(2L);
+        supervisor.setName("李会计");
+        supervisor.setStatus(1);
+
+        FinanceAccountSetTemplate template = new FinanceAccountSetTemplate();
+        template.setTemplateCode("AS_2007_ENTERPRISE");
+        template.setTemplateName("2007 企业会计制度");
+        template.setAccountingStandard("2007 企业会计制度");
+        template.setStatus(1);
+
+        FinanceAccountSetTemplateSubject templateSubject = new FinanceAccountSetTemplateSubject();
+        templateSubject.setId(1L);
+        templateSubject.setTemplateCode("AS_2007_ENTERPRISE");
+        templateSubject.setSubjectLevel(1);
+        templateSubject.setStatus(1);
+        templateSubject.setBcDefine1(0);
+
+        when(systemCompanyMapper.selectList(any())).thenReturn(java.util.List.of(company));
+        when(userMapper.selectList(any())).thenReturn(java.util.List.of(supervisor));
+        when(financeAccountSetMapper.selectList(any())).thenReturn(java.util.List.of());
+        when(financeAccountSetTemplateMapper.selectList(any())).thenReturn(java.util.List.of(template));
+        when(financeAccountSetTemplateSubjectMapper.selectList(any())).thenReturn(java.util.List.of(templateSubject));
+        when(financeAccountSetCodeRuleMapper.selectList(any())).thenReturn(java.util.List.of());
+
+        FinanceAccountSetMetaVO meta = service.getMeta();
+
+        assertEquals(1, meta.getCompanyOptions().size());
+        assertEquals("COMP202604050001", meta.getCompanyOptions().get(0).getCompanyCode());
+        assertFalse(meta.getCompanyOptions().get(0).isHasActiveAccountSet());
+        assertEquals(1, meta.getTemplateOptions().size());
+        assertEquals("AS_2007_ENTERPRISE", meta.getTemplateOptions().get(0).getTemplateCode());
+        assertEquals("4-2-2-2", meta.getDefaultSubjectCodeScheme());
     }
 
     @Test

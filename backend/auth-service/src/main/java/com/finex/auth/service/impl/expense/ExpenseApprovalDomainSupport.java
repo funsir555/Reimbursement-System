@@ -37,7 +37,9 @@ public class ExpenseApprovalDomainSupport {
     private static final String LOG_MODIFY = "MODIFY";
     private static final String LOG_TRANSFER = "TRANSFER";
 
-    private final ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    private final ExpenseDocumentReadSupport expenseDocumentReadSupport;
+    private final ExpenseDocumentActionLogSupport expenseDocumentActionLogSupport;
+    private final ExpenseDocumentMutationDomainSupport expenseDocumentMutationDomainSupport;
     private final ExpenseDocumentTemplateSupport expenseDocumentTemplateSupport;
     private final ExpenseSummaryAssembler expenseSummaryAssembler;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
@@ -72,26 +74,26 @@ public class ExpenseApprovalDomainSupport {
 
     public ExpenseDocumentDetailVO approveTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         String comment = dto == null ? null : dto.getComment();
         if (Objects.equals(trimToNull(task.getTaskKind()), TASK_KIND_ADD_SIGN)) {
             expenseWorkflowRuntimeSupport.approveAddSignTask(instance, task, userId, username, comment);
-            return expenseDocumentMutationSupport.buildDocumentDetail(
-                    expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode())
+            return expenseDocumentReadSupport.buildDocumentDetail(
+                    expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
             );
         }
         expenseWorkflowRuntimeSupport.approvePendingTask(instance, task, userId, username, comment);
-        ProcessDocumentInstance latest = expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode());
+        ProcessDocumentInstance latest = expenseDocumentReadSupport.requireDocument(instance.getDocumentCode());
         if (isEffectiveApprovedStatus(latest.getStatus())) {
             expenseRelationWriteOffService.finalizeEffectiveWriteOffs(instance.getDocumentCode());
-            latest = expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode());
+            latest = expenseDocumentReadSupport.requireDocument(instance.getDocumentCode());
         }
-        return expenseDocumentMutationSupport.buildDocumentDetail(latest);
+        return expenseDocumentReadSupport.buildDocumentDetail(latest);
     }
 
     public ExpenseDocumentDetailVO rejectTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         expenseWorkflowRuntimeSupport.rejectPendingTask(
                 instance,
                 task,
@@ -100,28 +102,28 @@ public class ExpenseApprovalDomainSupport {
                 dto == null ? null : dto.getComment()
         );
         expenseRelationWriteOffService.voidPendingWriteOffs(instance.getDocumentCode());
-        return expenseDocumentMutationSupport.buildDocumentDetail(
-                expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode())
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
         );
     }
 
     public ExpenseDocumentEditContextVO getTaskModifyContext(Long userId, Long taskId) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         return expenseDocumentTemplateSupport.buildEditContext(userId, instance, task.getId(), "MODIFY");
     }
 
     public ExpenseDocumentDetailVO modifyTaskDocument(Long userId, String username, Long taskId, ExpenseDocumentUpdateDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
-        ExpenseDocumentMutationSupport.DocumentMutationContext mutation = expenseDocumentMutationSupport.buildMutationContext(instance, dto, false);
-        expenseDocumentMutationSupport.applyDocumentMutation(instance, mutation, false);
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
+        AbstractExpenseDocumentSupport.DocumentMutationContext mutation = expenseDocumentMutationDomainSupport.buildMutationContext(instance, dto, false);
+        expenseDocumentMutationDomainSupport.applyDocumentMutation(instance, mutation, false);
         expenseRelationWriteOffService.syncDocumentBusinessRelations(
                 instance.getDocumentCode(),
                 mutation.formDesign(),
                 mutation.formData()
         );
-        expenseDocumentMutationSupport.appendLog(
+        expenseDocumentActionLogSupport.appendLog(
                 instance.getDocumentCode(),
                 task.getNodeKey(),
                 task.getNodeName(),
@@ -134,8 +136,8 @@ public class ExpenseApprovalDomainSupport {
                         "taskKind", defaultText(task.getTaskKind(), TASK_KIND_NORMAL)
                 )
         );
-        return expenseDocumentMutationSupport.buildDocumentDetail(
-                expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode())
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
         );
     }
 
@@ -149,7 +151,7 @@ public class ExpenseApprovalDomainSupport {
         task.setAssigneeUserId(targetUser.getId());
         task.setAssigneeName(normalizeUserName(targetUser));
         processDocumentTaskMapper.updateById(task);
-        expenseDocumentMutationSupport.appendLog(
+        expenseDocumentActionLogSupport.appendLog(
                 task.getDocumentCode(),
                 task.getNodeKey(),
                 task.getNodeName(),
@@ -163,8 +165,8 @@ public class ExpenseApprovalDomainSupport {
                         "targetUserName", normalizeUserName(targetUser)
                 )
         );
-        return expenseDocumentMutationSupport.buildDocumentDetail(
-                expenseDocumentMutationSupport.requireDocument(task.getDocumentCode())
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(task.getDocumentCode())
         );
     }
 
@@ -174,11 +176,11 @@ public class ExpenseApprovalDomainSupport {
         if (Objects.equals(targetUser.getId(), userId)) {
             throw new IllegalArgumentException("加签目标用户不能是当前处理人");
         }
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         String remark = trimToNull(dto == null ? null : dto.getRemark());
         expenseWorkflowRuntimeSupport.createAddSignTask(instance, task, targetUser, userId, username, remark);
-        return expenseDocumentMutationSupport.buildDocumentDetail(
-                expenseDocumentMutationSupport.requireDocument(task.getDocumentCode())
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(task.getDocumentCode())
         );
     }
 

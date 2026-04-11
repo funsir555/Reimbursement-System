@@ -286,4 +286,41 @@ describe('FinanceSystemManagementView', () => {
 
     wrapper.unmount()
   })
+
+  it('keeps the account set list visible when meta loading fails', async () => {
+    mocks.financeSystemManagementApi.getMeta.mockRejectedValue(new Error('账套元数据加载失败'))
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      accountSets: Array<{ companyName: string; companyCode?: string }>
+      canOpenCreateWizard: boolean
+      metaErrorMessage: string
+      formatCompanyDisplay: (row: { companyId: string; companyCode?: string; companyName?: string }) => string
+    }
+
+    expect(mocks.financeSystemManagementApi.listAccountSets).toHaveBeenCalledTimes(1)
+    expect(vm.accountSets).toHaveLength(1)
+    expect(vm.canOpenCreateWizard).toBe(false)
+    expect(vm.metaErrorMessage).toBe('账套元数据加载失败')
+    expect(vm.formatCompanyDisplay(vm.accountSets[0] as { companyId: string; companyCode?: string; companyName?: string })).toBe('COMP202604050001 - 广州测试公司')
+    expect(wrapper.text()).toContain('账套元数据加载失败')
+
+    wrapper.unmount()
+  })
+
+  it('shows a readable error when the account set list fails', async () => {
+    mocks.financeSystemManagementApi.listAccountSets.mockRejectedValue(new Error('账套列表加载失败'))
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      accountSets: Array<unknown>
+      listErrorMessage: string
+    }
+
+    expect(vm.accountSets).toHaveLength(0)
+    expect(vm.listErrorMessage).toBe('账套列表加载失败')
+    expect(wrapper.text()).toContain('账套列表加载失败')
+
+    wrapper.unmount()
+  })
 })

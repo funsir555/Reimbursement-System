@@ -1,114 +1,72 @@
-# FinEx 财务报销系统 - 前端项目
+# FinEx 财务报销系统前端
 
-> 基于 Vue 3 + TypeScript + Element Plus 的现代化财务报销系统前端
+当前 `frontend/admin-web` 已不是演示型原型，而是和当前后端单体主服务协同演进的管理台前端。
 
-## 📸 界面预览
+## 当前状态
 
-### 登录页
-- 左右分栏设计，左侧品牌展示 + 右侧登录表单
-- 支持密码登录和验证码登录
-- 现代化渐变背景 + 玻璃拟态效果
+- 当前验证基线：`npm run test:unit` 通过，`211/211`
+- 当前角色：稳定消费 `backend/auth-service` 已形成的多领域接口
+- 当前阶段：不重开前端治理主批次，默认跟随后端 `backend residual hotspot second-wave`
 
-### 首页仪表板
-- 统计卡片展示关键数据
-- 快捷操作入口
-- 最近报销单列表
-- 待审批和异常提醒
+前端当前服务的主要业务域包括：
 
-### 报销管理
-- 报销单列表展示
-- 搜索筛选功能
-- 分页展示
+- 登录与当前用户
+- 首页概览
+- 报销运行态
+- 流程管理
+- 财务管理 / 电子档案 / 固定资产
+- 系统设置
+- Archive Agent
 
-### 发票管理
-- 发票库展示
-- 验真状态管理
-- 发票上传功能
-
-## 🛠 技术栈
+## 技术栈
 
 | 技术 | 版本 | 说明 |
-|------|------|------|
-| Vue | 3.4+ | 前端框架 |
-| TypeScript | 5.x | 类型语言 |
-| Element Plus | 2.5+ | UI组件库 |
-| Tailwind CSS | 3.x | CSS框架 |
+|---|---|---|
+| Vue | 3.x | 前端框架 |
+| TypeScript | 5.x | 类型系统 |
+| Element Plus | 2.x | UI 组件 |
 | Vite | 5.x | 构建工具 |
-| Vue Router | 4.x | 路由管理 |
+| Vue Router | 4.x | 路由 |
 | Pinia | 2.x | 状态管理 |
+| Vitest | 当前仓库版本 | 单元测试 |
 
-## 🚀 快速开始
+## 启动与验证
 
-### 1. 安装依赖
+安装依赖：
+
 ```bash
 cd frontend/admin-web
 npm install
 ```
 
-### 2. 启动开发服务器
+本地启动：
+
 ```bash
 npm run dev
 ```
 
-### 3. 浏览器访问
-打开 http://localhost:5173
+单测：
 
-### 4. 构建生产版本
+```bash
+npm run test:unit
+```
+
+构建：
+
 ```bash
 npm run build
 ```
 
-## 📁 项目结构
+## 当前约束
 
-```
-src/
-├── assets/           # 静态资源
-├── components/       # 公共组件
-│   └── NewExpenseDialog.vue    # 新建报销弹窗
-├── layouts/          # 布局组件
-│   └── MainLayout.vue           # 主布局（侧边栏+顶部导航）
-├── router/           # 路由配置
-│   └── index.ts                 # 路由定义
-├── styles/           # 样式文件
-│   └── main.css                 # 全局样式
-├── views/            # 页面视图
-│   ├── LoginView.vue            # 登录页
-│   ├── DashboardView.vue        # 首页仪表板
-│   ├── expense/
-│   │   └── ExpenseListView.vue  # 报销列表
-│   └── invoice/
-│       └── InvoiceListView.vue  # 发票列表
-├── App.vue           # 根组件
-└── main.ts           # 入口文件
-```
+- `src/api/index.ts` 继续保留兼容导出层
+- 新的 API 契约和类型 owner 继续放到 `src/api/modules/` 分域文件
+- 当前不把前端 residual 与 backend residual 混做；若未来重开前端 residual，应单独立批
+- 当前进度与优先级以 `C:\Users\funsir\Desktop\报销系统\执行记录\报销系统治理落地方案.md` 为准
 
-## 📖 文档
+## 相关文档
 
-- [项目说明文档](./项目说明.md) - 详细的项目结构和文件说明，适合前端新手
-
-## 📝 功能清单
-
-- [x] 登录页（密码/验证码登录）
-- [x] 首页仪表板
-- [x] 报销管理（列表、新建）
-- [x] 发票管理（列表、上传）
-- [ ] 审批流程
-- [ ] 银企直连
-- [ ] 凭证管理
-- [ ] 系统设置
-
-## 🔧 开发规范
-
-### 命名规范
-- 组件名：PascalCase（如 `NewExpenseDialog.vue`）
-- 文件名：kebab-case（如 `expense-list.vue`）
-- 变量名：camelCase（如 `currentPage`）
-
-### 代码风格
-- 使用 TypeScript 类型
-- 组件使用 `<script setup>` 语法
-- 使用组合式函数复用逻辑
-
-## 📄 许可证
-
-MIT
+- `frontend/admin-web/项目说明.md`
+- `frontend/admin-web/src/api/modules/README.md`
+- `C:\Users\funsir\Desktop\报销系统\README.md`
+- `C:\Users\funsir\Desktop\报销系统\docs\architecture\项目启动与初始化说明.md`

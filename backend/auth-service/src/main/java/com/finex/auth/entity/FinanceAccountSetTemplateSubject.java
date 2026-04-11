@@ -112,36 +112,52 @@ public class FinanceAccountSetTemplateSubject {
     @TableField("iViewItem")
     private Integer iViewItem;
 
+    @TableField("bcDefine1")
     private Integer bcDefine1;
 
+    @TableField("bcDefine2")
     private Integer bcDefine2;
 
+    @TableField("bcDefine3")
     private Integer bcDefine3;
 
+    @TableField("bcDefine4")
     private Integer bcDefine4;
 
+    @TableField("bcDefine5")
     private Integer bcDefine5;
 
+    @TableField("bcDefine6")
     private Integer bcDefine6;
 
+    @TableField("bcDefine7")
     private Integer bcDefine7;
 
+    @TableField("bcDefine8")
     private Integer bcDefine8;
 
+    @TableField("bcDefine9")
     private Integer bcDefine9;
 
+    @TableField("bcDefine10")
     private Integer bcDefine10;
 
+    @TableField("bcDefine11")
     private Integer bcDefine11;
 
+    @TableField("bcDefine12")
     private Integer bcDefine12;
 
+    @TableField("bcDefine13")
     private Integer bcDefine13;
 
+    @TableField("bcDefine14")
     private Integer bcDefine14;
 
+    @TableField("bcDefine15")
     private Integer bcDefine15;
 
+    @TableField("bcDefine16")
     private Integer bcDefine16;
 
     @TableField("sort_order")

@@ -2,6 +2,7 @@ package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
 import com.finex.auth.dto.ArchiveAgentDetailVO;
+import com.finex.auth.dto.ArchiveAgentMetaVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ArchiveAgentService;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -90,5 +92,23 @@ class ArchiveAgentControllerTest {
 
         verify(accessControlService).requirePermission(1L, "agents:edit");
         verify(archiveAgentService).updateAgentStatus(eq(1L), eq(2L), eq("DISABLED"));
+    }
+
+    @Test
+    void metaRequiresViewPermissionAndDelegates() throws Exception {
+        ArchiveAgentMetaVO meta = new ArchiveAgentMetaVO();
+        meta.setDefaultSystemPrompt("test");
+
+        doNothing().when(accessControlService).requirePermission(1L, "agents:view");
+        when(archiveAgentService.getMeta()).thenReturn(meta);
+
+        mockMvc.perform(get("/auth/archives/agents/meta")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.defaultSystemPrompt").value("test"));
+
+        verify(accessControlService).requirePermission(1L, "agents:view");
+        verify(archiveAgentService).getMeta();
     }
 }

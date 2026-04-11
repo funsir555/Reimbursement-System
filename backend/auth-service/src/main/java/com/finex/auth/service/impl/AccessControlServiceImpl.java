@@ -1,27 +1,46 @@
 package com.finex.auth.service.impl;
 
+import com.finex.auth.mapper.SystemPermissionMapper;
+import com.finex.auth.mapper.SystemRoleMapper;
+import com.finex.auth.mapper.SystemRolePermissionMapper;
+import com.finex.auth.mapper.SystemUserRoleMapper;
+import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.AccessControlService;
-import com.finex.auth.service.UserService;
-import lombok.RequiredArgsConstructor;
+import com.finex.auth.service.impl.auth.AuthAuthorizationDomainSupport;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class AccessControlServiceImpl implements AccessControlService {
 
-    private final UserService userService;
+    private final AuthAuthorizationDomainSupport authAuthorizationDomainSupport;
+
+    public AccessControlServiceImpl(
+            UserMapper userMapper,
+            SystemUserRoleMapper systemUserRoleMapper,
+            SystemRoleMapper systemRoleMapper,
+            SystemRolePermissionMapper systemRolePermissionMapper,
+            SystemPermissionMapper systemPermissionMapper
+    ) {
+        this.authAuthorizationDomainSupport = new AuthAuthorizationDomainSupport(
+                userMapper,
+                systemUserRoleMapper,
+                systemRoleMapper,
+                systemRolePermissionMapper,
+                systemPermissionMapper
+        );
+    }
 
     @Override
     public List<String> getRoleCodes(Long userId) {
-        return userService.getRoleCodes(userId);
+        return authAuthorizationDomainSupport.getRoleCodes(userId);
     }
 
     @Override
     public List<String> getPermissionCodes(Long userId) {
-        return userService.getPermissionCodes(userId);
+        return authAuthorizationDomainSupport.getPermissionCodes(userId);
     }
 
     @Override
@@ -29,7 +48,7 @@ public class AccessControlServiceImpl implements AccessControlService {
         if (getPermissionCodes(userId).contains(permissionCode)) {
             return;
         }
-        throw new SecurityException("无权执行当前操作");
+        throw new SecurityException("No permission for current action");
     }
 
     @Override
@@ -37,7 +56,7 @@ public class AccessControlServiceImpl implements AccessControlService {
         List<String> ownedCodes = getPermissionCodes(userId);
         boolean matched = Arrays.stream(permissionCodes).anyMatch(ownedCodes::contains);
         if (!matched) {
-            throw new SecurityException("无权访问当前模块");
+            throw new SecurityException("No permission for current module");
         }
     }
 }

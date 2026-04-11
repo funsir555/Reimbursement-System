@@ -9,11 +9,9 @@ import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.entity.ProcessDocumentActionLog;
-import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
-import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.service.NotificationService;
@@ -47,7 +45,8 @@ public class ExpenseQueryDomainSupport {
     private static final int NAVIGATION_HISTORY_LIMIT = 200;
     private static final String OUTSTANDING_KIND_LOAN = "LOAN";
 
-    private final ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    private final ExpenseDocumentReadSupport expenseDocumentReadSupport;
+    private final ExpenseDocumentActionLogSupport expenseDocumentActionLogSupport;
     private final ExpenseDocumentTemplateSupport expenseDocumentTemplateSupport;
     private final ExpenseRelationWriteOffService expenseRelationWriteOffService;
     private final ExpenseSummaryAssembler expenseSummaryAssembler;
@@ -55,7 +54,6 @@ public class ExpenseQueryDomainSupport {
     private final ProcessDocumentTaskMapper processDocumentTaskMapper;
     private final ProcessDocumentActionLogMapper processDocumentActionLogMapper;
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
-    private final ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     private final NotificationService notificationService;
 
     public List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
@@ -107,21 +105,21 @@ public class ExpenseQueryDomainSupport {
     }
 
     public ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(documentCode);
-        expenseDocumentMutationSupport.assertCanViewDocument(instance, userId, allowCrossView);
-        return expenseDocumentMutationSupport.buildDocumentDetail(instance);
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
+        return expenseDocumentReadSupport.buildDocumentDetail(instance);
     }
 
     public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(documentCode);
-        expenseDocumentMutationSupport.assertCanViewDocument(instance, userId, allowCrossView);
-        ProcessDocumentExpenseDetail detail = requireExpenseDetail(documentCode, detailNo);
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
+        var detail = expenseDocumentReadSupport.requireExpenseDetail(documentCode, detailNo);
         return expenseDocumentDetailAssembler.toExpenseDetailDetailVO(detail);
     }
 
     public ExpenseDocumentDetailVO recallDocument(Long userId, String username, String documentCode) {
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(documentCode);
-        expenseDocumentMutationSupport.requireSubmitter(instance, userId);
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.requireSubmitter(instance, userId);
         String status = trimToNull(instance.getStatus());
         if (!Objects.equals(status, DOCUMENT_STATUS_PENDING) && !Objects.equals(status, DOCUMENT_STATUS_EXCEPTION)) {
             throw new IllegalStateException("瑜版挸澧犻崡鏇熷祦娑撳秵鏁幐浣稿将閸?");
@@ -135,16 +133,16 @@ public class ExpenseQueryDomainSupport {
         instance.setFinishedAt(null);
         instance.setUpdatedAt(now);
         processDocumentInstanceMapper.updateById(instance);
-        expenseDocumentMutationSupport.appendLog(instance.getDocumentCode(), null, null, LOG_RECALL, userId, defaultUsername(username), null, Map.of(
+        expenseDocumentActionLogSupport.appendLog(instance.getDocumentCode(), null, null, LOG_RECALL, userId, defaultUsername(username), null, Map.of(
                 "fromStatus", defaultText(status, DOCUMENT_STATUS_PENDING)
         ));
         expenseRelationWriteOffService.voidPendingWriteOffs(instance.getDocumentCode());
-        return expenseDocumentMutationSupport.buildDocumentDetail(expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode()));
+        return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
 
     public ExpenseDocumentDetailVO commentOnDocument(Long userId, String username, String documentCode, ExpenseDocumentCommentDTO dto, boolean allowCrossView) {
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(documentCode);
-        expenseDocumentMutationSupport.assertCanViewDocument(instance, userId, allowCrossView);
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
         if (!isFlowRelatedUser(instance, userId)) {
             throw new IllegalStateException("閸欘亝婀佸ù浣衡柤閻╃鍙ф禍鍝勫讲娴犮儴鐦庣拋鍝勭秼閸撳秴宕熼幑?");
         }
@@ -160,7 +158,7 @@ public class ExpenseQueryDomainSupport {
         if (!attachmentFileNames.isEmpty()) {
             payload.put("attachmentFileNames", attachmentFileNames);
         }
-        expenseDocumentMutationSupport.appendLog(
+        expenseDocumentActionLogSupport.appendLog(
                 instance.getDocumentCode(),
                 instance.getCurrentNodeKey(),
                 instance.getCurrentNodeName(),
@@ -170,12 +168,12 @@ public class ExpenseQueryDomainSupport {
                 comment,
                 payload
         );
-        return expenseDocumentMutationSupport.buildDocumentDetail(expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode()));
+        return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
 
     public ExpenseDocumentDetailVO remindDocument(Long userId, String username, String documentCode, ExpenseDocumentReminderDTO dto) {
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(documentCode);
-        expenseDocumentMutationSupport.requireSubmitter(instance, userId);
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_PENDING)) {
             throw new IllegalStateException("閸欘亝婀佺€光剝澹掓稉顓犳畱閸楁洘宓侀幍宥呭讲娴犮儱鍋撻崝?");
         }
@@ -198,11 +196,11 @@ public class ExpenseQueryDomainSupport {
             }
             notificationService.sendAsyncNotification(task.getAssigneeUserId(), "EXPENSE_REMINDER", title, content, instance.getDocumentCode());
         }
-        expenseDocumentMutationSupport.appendLog(instance.getDocumentCode(), instance.getCurrentNodeKey(), instance.getCurrentNodeName(), LOG_REMIND, userId, defaultUsername(username), remark, Map.of(
+        expenseDocumentActionLogSupport.appendLog(instance.getDocumentCode(), instance.getCurrentNodeKey(), instance.getCurrentNodeName(), LOG_REMIND, userId, defaultUsername(username), remark, Map.of(
                 "recipientUserIds", distinctTasks.stream().map(ProcessDocumentTask::getAssigneeUserId).toList(),
                 "recipientNames", distinctTasks.stream().map(ProcessDocumentTask::getAssigneeName).toList()
         ));
-        return expenseDocumentMutationSupport.buildDocumentDetail(expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode()));
+        return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
 
     public ExpenseDocumentNavigationVO getDocumentNavigation(Long userId, String documentCode, boolean approvalViewer) {
@@ -210,7 +208,7 @@ public class ExpenseQueryDomainSupport {
         if (!approvalViewer) {
             return navigation;
         }
-        expenseDocumentMutationSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.requireDocument(documentCode);
         List<String> orderedCodes = loadNavigationDocumentCodes(userId, documentCode);
         int index = orderedCodes.indexOf(documentCode);
         if (index < 0) {
@@ -362,19 +360,6 @@ public class ExpenseQueryDomainSupport {
     private String normalizeOutstandingKind(String kind) {
         String normalized = trimToNull(kind);
         return Objects.equals(normalized, OUTSTANDING_KIND_LOAN) ? OUTSTANDING_KIND_LOAN : "PREPAY_REPORT";
-    }
-
-    private ProcessDocumentExpenseDetail requireExpenseDetail(String documentCode, String detailNo) {
-        ProcessDocumentExpenseDetail detail = processDocumentExpenseDetailMapper.selectOne(
-                Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
-                        .eq(ProcessDocumentExpenseDetail::getDocumentCode, trimToNull(documentCode))
-                        .eq(ProcessDocumentExpenseDetail::getDetailNo, trimToNull(detailNo))
-                        .last("limit 1")
-        );
-        if (detail == null) {
-            throw new IllegalStateException("Expense detail not found");
-        }
-        return detail;
     }
 
     private String trimToNull(String value) {

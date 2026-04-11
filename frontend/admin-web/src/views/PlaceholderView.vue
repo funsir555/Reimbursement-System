@@ -34,34 +34,13 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Tools } from '@element-plus/icons-vue'
+import { resolvePlaceholderDescription, resolvePlaceholderTitle } from '@/router/route-meta'
 
 const route = useRoute()
 const router = useRouter()
 
-const PLACEHOLDER_TEXT_MAP: Record<string, { title: string; description: string }> = {
-  '/finance/general-ledger/review-voucher': { title: '审核凭证', description: '功能建设中' },
-  '/finance/general-ledger/balance-sheet': { title: '总账余额表', description: '功能建设中' },
-  '/finance/general-ledger/detail-ledger': { title: '明细账', description: '功能建设中' },
-  '/finance/general-ledger/general-ledger': { title: '总分类账', description: '功能建设中' },
-  '/finance/general-ledger/project-detail-ledger': { title: '项目明细账', description: '功能建设中' },
-  '/finance/general-ledger/supplier-detail-ledger': { title: '供应商明细账', description: '功能建设中' },
-  '/finance/general-ledger/customer-detail-ledger': { title: '客户明细账', description: '功能建设中' },
-  '/finance/general-ledger/personal-detail-ledger': { title: '个人明细账', description: '功能建设中' },
-  '/finance/general-ledger/quantity-amount-detail-ledger': { title: '数量金额明细账', description: '功能建设中' },
-  '/finance/archives/departments': { title: '部门档案', description: '功能建设中' },
-  '/finance/archives/account-subjects': { title: '会计科目', description: '功能建设中' }
-}
-
-const pageTitle = computed(() => {
-  const fallback = PLACEHOLDER_TEXT_MAP[route.path]?.title
-  return String(fallback || route.meta.title || '功能页面')
-})
-
-const pageDescription = computed(() => {
-  const fallback = PLACEHOLDER_TEXT_MAP[route.path]?.description
-  return String(fallback || route.meta.description || '功能建设中')
-})
-
+const pageTitle = computed(() => resolvePlaceholderTitle(route))
+const pageDescription = computed(() => resolvePlaceholderDescription(route))
 const isFinanceArchivePlaceholder = computed(() => route.path.startsWith('/finance/archives/'))
 </script>
 

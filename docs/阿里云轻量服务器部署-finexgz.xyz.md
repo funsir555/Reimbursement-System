@@ -1,5 +1,11 @@
 # `finexgz.xyz` 阿里云轻量服务器部署手册
 
+## 当前状态说明
+
+- 本文仍是当前线上部署手册，适用于 `admin.finexgz.xyz` 的正式部署与维护
+- 当前验证基线：backend `297/297`，frontend `211/211`
+- 当前进度与 residual 排序请以 `C:\Users\funsir\Desktop\报销系统\执行记录\报销系统治理落地方案.md` 为准
+
 这份手册把仓库里的 Linux 部署脚本串成一条可以直接照着做的上线路径，目标是把当前项目以最低成本部署到阿里云中国内地轻量应用服务器，并使用正式域名 `admin.finexgz.xyz` 对外提供访问。
 
 ## 1. 目标架构
@@ -305,3 +311,4 @@ systemctl restart nginx
   - `FINEX_JWT_SECRET`
   - 企业微信 `CorpID`
   - 企业微信通讯录 `Secret`
+

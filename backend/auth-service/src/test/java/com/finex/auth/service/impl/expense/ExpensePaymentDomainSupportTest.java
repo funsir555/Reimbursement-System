@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ExpensePaymentDomainSupportTest {
 
-    @Mock private ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    @Mock private ExpenseDocumentReadSupport expenseDocumentReadSupport;
     @Mock private ExpenseSummaryAssembler expenseSummaryAssembler;
     @Mock private ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     @Mock private ExpenseRelationWriteOffService expenseRelationWriteOffService;
@@ -133,13 +133,13 @@ class ExpensePaymentDomainSupportTest {
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
 
         when(processDocumentTaskMapper.selectById(30L)).thenReturn(task);
-        when(expenseDocumentMutationSupport.requireDocument("DOC-003")).thenReturn(instance, completed, completed, completed);
+        when(expenseDocumentReadSupport.requireDocument("DOC-003")).thenReturn(instance, completed, completed, completed);
         when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
         when(enrichmentData.metadata("DOC-003")).thenReturn(metadata);
         when(metadata.paymentCompanyId()).thenReturn("C1");
         when(systemCompanyBankAccountMapper.selectList(any())).thenReturn(List.of(account));
         when(pmBankPaymentRecordMapper.selectOne(any())).thenReturn(null);
-        when(expenseDocumentMutationSupport.buildDocumentDetail(any())).thenReturn(detail);
+        when(expenseDocumentReadSupport.buildDocumentDetail(any())).thenReturn(detail);
 
         ExpenseDocumentDetailVO actual = support.completePaymentTask(1L, "tester", 30L, dto);
 
@@ -176,8 +176,8 @@ class ExpensePaymentDomainSupportTest {
         when(pmBankPaymentRecordMapper.selectOne(any())).thenReturn(record);
         when(processDocumentTaskMapper.selectById(40L)).thenReturn(task);
         when(systemCompanyBankAccountMapper.selectById(11L)).thenReturn(account);
-        when(expenseDocumentMutationSupport.requireDocument("DOC-004")).thenReturn(instance, instance, instance);
-        when(expenseDocumentMutationSupport.buildDocumentDetail(any())).thenReturn(detail);
+        when(expenseDocumentReadSupport.requireDocument("DOC-004")).thenReturn(instance, instance, instance);
+        when(expenseDocumentReadSupport.buildDocumentDetail(any())).thenReturn(detail);
         when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(record));
 
         ExpenseDocumentDetailVO actual = support.handleCmbCloudCallback(dto);
@@ -189,7 +189,7 @@ class ExpensePaymentDomainSupportTest {
 
     private ExpensePaymentDomainSupport newSupport() {
         return new ExpensePaymentDomainSupport(
-                expenseDocumentMutationSupport,
+                expenseDocumentReadSupport,
                 expenseSummaryAssembler,
                 expenseWorkflowRuntimeSupport,
                 expenseRelationWriteOffService,

@@ -1,5 +1,11 @@
 # Agent 模块上线执行清单
 
+## 当前状态说明
+
+- 本文属于 `archive-agent` 专项上线清单，当前仍适用于 archive-agent residual 已收口后的部署与验收
+- 当前项目进度请以 `C:\Users\funsir\Desktop\报销系统\执行记录\报销系统治理落地方案.md` 为准
+- 若需整体部署步骤，请同时参考 `docs/阿里云轻量服务器部署-finexgz.xyz.md` 与 `docs/architecture/项目启动与初始化说明.md`
+
 ## 1. 数据库增量初始化
 
 按下面顺序执行，全部针对现有 `finex_db` 做增量迁移，不清库：
@@ -9,7 +15,7 @@
    - 默认值：
      - `FINEX_DB_URL=jdbc:mysql://localhost:3306/finex_db?...`
      - `FINEX_DB_USERNAME=root`
-     - `FINEX_DB_PASSWORD=123456`
+     - `FINEX_DB_PASSWORD=replace-with-your-db-password`
 
 2. 执行 Agent 表迁移  
    - `backend/sql/migrate_archive_agent.sql`
@@ -109,3 +115,4 @@
 
 - `backend/sql/migrate_system_settings.sql` 已修复一处损坏的插入语句，可正常重复执行
 - Agent 运行调度已改为通过 `finexAsyncExecutor` 显式投递，避免本机联调时运行记录长期停留在 `PENDING`
+

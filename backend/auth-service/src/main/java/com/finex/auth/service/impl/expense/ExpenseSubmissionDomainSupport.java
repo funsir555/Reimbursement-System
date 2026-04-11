@@ -17,23 +17,23 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ExpenseSubmissionDomainSupport {
 
-    private final ExpenseDocumentTemplateSupport expenseDocumentTemplateSupport;
-    private final ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    private final ExpenseDocumentTemplateDomainSupport expenseDocumentTemplateDomainSupport;
+    private final ExpenseDocumentMutationDomainSupport expenseDocumentMutationDomainSupport;
 
     public List<ExpenseCreateTemplateSummaryVO> listAvailableTemplates() {
-        return expenseDocumentTemplateSupport.listAvailableTemplates();
+        return expenseDocumentTemplateDomainSupport.listAvailableTemplates();
     }
 
     public ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode) {
-        return expenseDocumentTemplateSupport.getTemplateDetail(userId, templateCode);
+        return expenseDocumentTemplateDomainSupport.getTemplateDetail(userId, templateCode);
     }
 
     public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
-        return expenseDocumentTemplateSupport.listVendorOptions(userId, keyword, includeDisabled);
+        return expenseDocumentTemplateDomainSupport.listVendorOptions(userId, keyword, includeDisabled);
     }
 
     public List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly) {
-        return expenseDocumentTemplateSupport.listPayeeOptions(userId, keyword, personalOnly);
+        return expenseDocumentTemplateDomainSupport.listPayeeOptions(userId, keyword, personalOnly);
     }
 
     public List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
@@ -43,7 +43,7 @@ public class ExpenseSubmissionDomainSupport {
             String payeeName,
             String counterpartyCode
     ) {
-        return expenseDocumentTemplateSupport.listPayeeAccountOptions(
+        return expenseDocumentTemplateDomainSupport.listPayeeAccountOptions(
                 userId,
                 keyword,
                 linkageMode,
@@ -53,10 +53,10 @@ public class ExpenseSubmissionDomainSupport {
     }
 
     public ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
-        return expenseDocumentMutationSupport.submitDocument(userId, username, dto);
+        return expenseDocumentMutationDomainSupport.submitDocument(userId, username, dto);
     }
 
     public ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto) {
-        return expenseDocumentMutationSupport.resubmitDocument(userId, username, documentCode, dto);
+        return expenseDocumentMutationDomainSupport.resubmitDocument(userId, username, documentCode, dto);
     }
 }

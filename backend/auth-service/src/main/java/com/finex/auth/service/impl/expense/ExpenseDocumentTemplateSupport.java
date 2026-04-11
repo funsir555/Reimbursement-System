@@ -16,22 +16,22 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ExpenseDocumentTemplateSupport {
 
-    private final ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    private final ExpenseDocumentTemplateDomainSupport expenseDocumentTemplateDomainSupport;
 
     public List<ExpenseCreateTemplateSummaryVO> listAvailableTemplates() {
-        return expenseDocumentMutationSupport.listAvailableTemplates();
+        return expenseDocumentTemplateDomainSupport.listAvailableTemplates();
     }
 
     public ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode) {
-        return expenseDocumentMutationSupport.getTemplateDetail(userId, templateCode);
+        return expenseDocumentTemplateDomainSupport.getTemplateDetail(userId, templateCode);
     }
 
     public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
-        return expenseDocumentMutationSupport.listVendorOptions(userId, keyword, includeDisabled);
+        return expenseDocumentTemplateDomainSupport.listVendorOptions(userId, keyword, includeDisabled);
     }
 
     public List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly) {
-        return expenseDocumentMutationSupport.listPayeeOptions(userId, keyword, personalOnly);
+        return expenseDocumentTemplateDomainSupport.listPayeeOptions(userId, keyword, personalOnly);
     }
 
     public List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
@@ -41,7 +41,7 @@ public class ExpenseDocumentTemplateSupport {
             String payeeName,
             String counterpartyCode
     ) {
-        return expenseDocumentMutationSupport.listPayeeAccountOptions(
+        return expenseDocumentTemplateDomainSupport.listPayeeAccountOptions(
                 userId,
                 keyword,
                 linkageMode,
@@ -51,50 +51,10 @@ public class ExpenseDocumentTemplateSupport {
     }
 
     public ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode) {
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(documentCode);
-        expenseDocumentMutationSupport.requireSubmitter(instance, userId);
-        return buildEditContext(userId, instance, null, "RESUBMIT");
+        return expenseDocumentTemplateDomainSupport.getDocumentEditContext(userId, documentCode);
     }
 
     ExpenseDocumentEditContextVO buildEditContext(Long userId, ProcessDocumentInstance instance, Long taskId, String editMode) {
-        ExpenseCreateTemplateDetailVO templateDetail = getTemplateDetail(userId, instance.getTemplateCode());
-        ExpenseDocumentEditContextVO context = new ExpenseDocumentEditContextVO();
-        context.setEditMode(editMode);
-        context.setDocumentCode(instance.getDocumentCode());
-        context.setTaskId(taskId);
-        copyTemplateDetail(templateDetail, context);
-        context.setFormData(expenseDocumentMutationSupport.readFormData(instance.getFormDataJson()));
-        context.setExpenseDetails(expenseDocumentMutationSupport.loadExpenseDetails(instance.getDocumentCode()).stream()
-                .map(expenseDocumentMutationSupport::toRuntimeExpenseDetailDTO)
-                .toList());
-        return context;
-    }
-
-    private void copyTemplateDetail(ExpenseCreateTemplateDetailVO source, ExpenseDocumentEditContextVO target) {
-        target.setTemplateCode(source.getTemplateCode());
-        target.setTemplateName(source.getTemplateName());
-        target.setTemplateType(source.getTemplateType());
-        target.setTemplateTypeLabel(source.getTemplateTypeLabel());
-        target.setCategoryCode(source.getCategoryCode());
-        target.setTemplateDescription(source.getTemplateDescription());
-        target.setFormDesignCode(source.getFormDesignCode());
-        target.setApprovalFlowCode(source.getApprovalFlowCode());
-        target.setFlowName(source.getFlowName());
-        target.setFormName(source.getFormName());
-        target.setSchema(source.getSchema());
-        target.setExpenseDetailDesignCode(source.getExpenseDetailDesignCode());
-        target.setExpenseDetailDesignName(source.getExpenseDetailDesignName());
-        target.setExpenseDetailType(source.getExpenseDetailType());
-        target.setExpenseDetailTypeLabel(source.getExpenseDetailTypeLabel());
-        target.setExpenseDetailModeDefault(source.getExpenseDetailModeDefault());
-        target.setExpenseDetailSchema(source.getExpenseDetailSchema());
-        target.setSharedArchives(source.getSharedArchives());
-        target.setExpenseDetailSharedArchives(source.getExpenseDetailSharedArchives());
-        target.setCompanyOptions(source.getCompanyOptions());
-        target.setDepartmentOptions(source.getDepartmentOptions());
-        target.setExpenseTypeOptions(source.getExpenseTypeOptions());
-        target.setExpenseTypeInvoiceFreeModeMap(source.getExpenseTypeInvoiceFreeModeMap());
-        target.setCurrentUserDeptId(source.getCurrentUserDeptId());
-        target.setCurrentUserDeptName(source.getCurrentUserDeptName());
+        return expenseDocumentTemplateDomainSupport.buildEditContext(userId, instance, taskId, editMode);
     }
 }

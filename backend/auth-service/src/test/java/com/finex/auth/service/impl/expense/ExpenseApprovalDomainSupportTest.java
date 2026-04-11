@@ -28,7 +28,11 @@ import static org.mockito.Mockito.when;
 class ExpenseApprovalDomainSupportTest {
 
     @Mock
-    private ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    private ExpenseDocumentReadSupport expenseDocumentReadSupport;
+    @Mock
+    private ExpenseDocumentActionLogSupport expenseDocumentActionLogSupport;
+    @Mock
+    private ExpenseDocumentMutationDomainSupport expenseDocumentMutationDomainSupport;
     @Mock
     private ExpenseDocumentTemplateSupport expenseDocumentTemplateSupport;
     @Mock
@@ -80,7 +84,7 @@ class ExpenseApprovalDomainSupportTest {
         ExpenseDocumentEditContextVO expected = new ExpenseDocumentEditContextVO();
         ExpenseApprovalDomainSupport support = newSupport();
         when(processDocumentTaskMapper.selectById(10L)).thenReturn(task);
-        when(expenseDocumentMutationSupport.requireDocument("DOC-001")).thenReturn(instance);
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
         when(expenseDocumentTemplateSupport.buildEditContext(1L, instance, 10L, "MODIFY")).thenReturn(expected);
 
         ExpenseDocumentEditContextVO actual = support.getTaskModifyContext(1L, 10L);
@@ -101,8 +105,8 @@ class ExpenseApprovalDomainSupportTest {
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         ExpenseApprovalDomainSupport support = newSupport();
         when(processDocumentTaskMapper.selectById(10L)).thenReturn(task);
-        when(expenseDocumentMutationSupport.requireDocument("DOC-001")).thenReturn(instance);
-        when(expenseDocumentMutationSupport.buildDocumentDetail(instance)).thenReturn(detail);
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance, instance);
+        when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
 
         ExpenseDocumentDetailVO actual = support.rejectTask(1L, "tester", 10L, new ExpenseApprovalActionDTO());
 
@@ -113,7 +117,9 @@ class ExpenseApprovalDomainSupportTest {
 
     private ExpenseApprovalDomainSupport newSupport() {
         return new ExpenseApprovalDomainSupport(
-                expenseDocumentMutationSupport,
+                expenseDocumentReadSupport,
+                expenseDocumentActionLogSupport,
+                expenseDocumentMutationDomainSupport,
                 expenseDocumentTemplateSupport,
                 expenseSummaryAssembler,
                 expenseWorkflowRuntimeSupport,

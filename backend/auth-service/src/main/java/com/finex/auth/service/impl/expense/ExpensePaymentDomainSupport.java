@@ -61,7 +61,7 @@ public class ExpensePaymentDomainSupport {
     private static final String RECEIPT_STATUS_RECEIVED = "RECEIVED";
     private static final String RECEIPT_STATUS_FAILED = "FAILED";
 
-    private final ExpenseDocumentMutationSupport expenseDocumentMutationSupport;
+    private final ExpenseDocumentReadSupport expenseDocumentReadSupport;
     private final ExpenseSummaryAssembler expenseSummaryAssembler;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     private final ExpenseRelationWriteOffService expenseRelationWriteOffService;
@@ -213,7 +213,7 @@ public class ExpensePaymentDomainSupport {
         if (task == null) {
             throw new IllegalStateException("\u4ED8\u6B3E\u4EFB\u52A1\u4E0D\u5B58\u5728");
         }
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(record.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(record.getDocumentCode());
         LocalDateTime paidAt = parseFlexibleDateTime(dto == null ? null : dto.getPaidAt(), now);
         record.setManualPaid(0);
         record.setPaidAt(paidAt);
@@ -225,8 +225,8 @@ public class ExpensePaymentDomainSupport {
 
         String status = trimToNull(instance.getStatus());
         if (DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(status) || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(status)) {
-            return expenseDocumentMutationSupport.buildDocumentDetail(
-                    expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode())
+            return expenseDocumentReadSupport.buildDocumentDetail(
+                    expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
             );
         }
         return completePaymentTaskInternal(
@@ -253,7 +253,7 @@ public class ExpensePaymentDomainSupport {
             return;
         }
         for (PmBankPaymentRecord record : records) {
-            ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(record.getDocumentCode());
+            ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(record.getDocumentCode());
             if (!DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(trimToNull(instance.getStatus()))) {
                 continue;
             }
@@ -269,7 +269,7 @@ public class ExpensePaymentDomainSupport {
 
     public ExpenseDocumentDetailVO startPaymentTask(Long userId, String username, Long taskId) {
         ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         String status = trimToNull(instance.getStatus());
         boolean retrying = DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status)
                 && expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task);
@@ -281,7 +281,7 @@ public class ExpensePaymentDomainSupport {
 
     public ExpenseDocumentDetailVO completePaymentTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         String status = trimToNull(instance.getStatus());
         if (!DOCUMENT_STATUS_PAYING.equals(status) && !DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)) {
             throw new IllegalStateException("\u5F53\u524D\u4ED8\u6B3E\u4EFB\u52A1\u4E0D\u5728\u53EF\u5B8C\u6210\u72B6\u6001");
@@ -306,7 +306,7 @@ public class ExpensePaymentDomainSupport {
 
     public ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
-        ProcessDocumentInstance instance = expenseDocumentMutationSupport.requireDocument(task.getDocumentCode());
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         String status = trimToNull(instance.getStatus());
         if (!DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)
                 && !DOCUMENT_STATUS_PAYING.equals(status)
@@ -330,8 +330,8 @@ public class ExpensePaymentDomainSupport {
             record.setReceiptStatus(RECEIPT_STATUS_FAILED);
             pmBankPaymentRecordMapper.updateById(record);
         }
-        return expenseDocumentMutationSupport.buildDocumentDetail(
-                expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode())
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
         );
     }
 
@@ -457,8 +457,8 @@ public class ExpensePaymentDomainSupport {
         account.setDirectConnectLastSyncStatus("PUSHED");
         account.setDirectConnectLastErrorMsg(null);
         systemCompanyBankAccountMapper.updateById(account);
-        return expenseDocumentMutationSupport.buildDocumentDetail(
-                expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode())
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
         );
     }
 
@@ -499,12 +499,12 @@ public class ExpensePaymentDomainSupport {
                 record.getPaidAt()
         );
 
-        String finalStatus = trimToNull(expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode()).getStatus());
+        String finalStatus = trimToNull(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()).getStatus());
         if (isEffectiveApprovedStatus(finalStatus)) {
             expenseRelationWriteOffService.finalizeEffectiveWriteOffs(instance.getDocumentCode());
         }
-        return expenseDocumentMutationSupport.buildDocumentDetail(
-                expenseDocumentMutationSupport.requireDocument(instance.getDocumentCode())
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
         );
     }
 
