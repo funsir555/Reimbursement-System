@@ -1,6 +1,11 @@
+// 这里集中封装 archive-agent.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
 import request, { buildQueryString } from './core'
 import type { ArchiveAgentDetail, ArchiveAgentMeta, ArchiveAgentRunDetail, ArchiveAgentRunRecord, ArchiveAgentSavePayload, ArchiveAgentSummary, ArchiveAgentTestRunPayload } from './archive-agent-types'
 
+// 这一组方法供对应页面统一调用。
 export const archiveAgentApi = {
   list: (params: { keyword?: string; status?: string } = {}) =>
     request<ArchiveAgentSummary[]>(`/auth/archives/agents${buildQueryString(params)}`),

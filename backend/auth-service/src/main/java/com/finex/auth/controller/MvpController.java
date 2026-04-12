@@ -1,3 +1,7 @@
+// 这里是 MvpController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.DashboardVO;
@@ -22,6 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 MvpController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -35,17 +44,20 @@ public class MvpController {
     private final ExpenseDocumentService expenseDocumentService;
     private final AccessControlService accessControlService;
 
+    // 处理 me 请求。
     @GetMapping("/me")
     public Result<UserProfileVO> me(HttpServletRequest request) {
         return Result.success(mvpDataService.getCurrentUser(getCurrentUserId(request)));
     }
 
+    // 处理 dashboard 请求。
     @GetMapping("/dashboard")
     public Result<DashboardVO> dashboard(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DASHBOARD_VIEW);
         return Result.success(mvpDataService.getDashboard(getCurrentUserId(request)));
     }
 
+    // 处理 outstandingDocuments 请求。
     @GetMapping("/dashboard/outstanding-documents")
     public Result<List<ExpenseSummaryVO>> outstandingDocuments(
             HttpServletRequest request,
@@ -55,6 +67,7 @@ public class MvpController {
         return Result.success(expenseDocumentService.listOutstandingDocuments(getCurrentUserId(request), kind));
     }
 
+    // 处理 writeoffReportPicker 请求。
     @GetMapping("/dashboard/writeoff-report-picker")
     public Result<ExpenseDocumentPickerVO> writeoffReportPicker(
             HttpServletRequest request,
@@ -73,6 +86,7 @@ public class MvpController {
         ));
     }
 
+    // 处理 bindWriteoff 请求。
     @PostMapping("/dashboard/writeoff-bindings")
     public Result<Boolean> bindWriteoff(
             HttpServletRequest request,
@@ -86,12 +100,14 @@ public class MvpController {
         ));
     }
 
+    // 处理 expenses 请求。
     @GetMapping("/expenses")
     public Result<List<ExpenseSummaryVO>> expenses(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_LIST_VIEW);
         return Result.success(expenseDocumentService.listExpenseSummaries(getCurrentUserId(request)));
     }
 
+    // 处理 invoices 请求。
     @GetMapping("/invoices")
     public Result<List<InvoiceSummaryVO>> invoices(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), INVOICE_VIEW);

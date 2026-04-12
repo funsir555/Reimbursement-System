@@ -1,6 +1,11 @@
+// 这里集中封装 fixed-asset.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
 import request, { buildQueryString } from './core'
 import type { FixedAssetCard, FixedAssetCardPayload, FixedAssetCategory, FixedAssetCategoryPayload, FixedAssetChangeBill, FixedAssetChangeBillPayload, FixedAssetDeprPreviewPayload, FixedAssetDeprRun, FixedAssetDisposalBill, FixedAssetDisposalBillPayload, FixedAssetMeta, FixedAssetOpeningImportPayload, FixedAssetOpeningImportResult, FixedAssetPeriodClosePayload, FixedAssetPeriodStatus, FixedAssetTemplate, FixedAssetVoucherLink } from './fixed-asset-types'
 
+// 这一组方法供对应页面统一调用。
 export const fixedAssetApi = {
   getMeta: (params: { companyId?: string; fiscalYear?: number; fiscalPeriod?: number } = {}) =>
     request<FixedAssetMeta>(`/auth/finance/fixed-assets/meta${buildQueryString(params)}`),
@@ -30,6 +35,7 @@ export const fixedAssetApi = {
       method: 'PUT',
       body: JSON.stringify(payload)
     }),
+  // 处理 getOpeningTemplate 请求。
   getOpeningTemplate: (params: { companyId: string; bookCode?: string; fiscalYear?: number; fiscalPeriod?: number }) =>
     request<FixedAssetTemplate>(`/auth/finance/fixed-assets/opening-import/template${buildQueryString(params)}`, {
       method: 'POST'
@@ -52,6 +58,7 @@ export const fixedAssetApi = {
     request<FixedAssetChangeBill>(`/auth/finance/fixed-assets/change-bills/${id}/post`, {
       method: 'POST'
     }),
+  // 处理 previewDepreciation 请求。
   previewDepreciation: (payload: FixedAssetDeprPreviewPayload) =>
     request<FixedAssetDeprRun>('/auth/finance/fixed-assets/depreciation-runs/preview', {
       method: 'POST',

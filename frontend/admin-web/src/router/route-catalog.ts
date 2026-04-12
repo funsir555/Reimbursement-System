@@ -5,6 +5,8 @@ import LoginView from '../views/LoginView.vue'
 
 type RouteComponent = NonNullable<RouteRecordRaw['component']>
 
+// 用一份轻量定义同时生成 Vue Router 路由记录和“路由名 -> 绝对路径”索引，
+// 可以避免同一套路由信息维护两份后发生不一致。
 interface AppRouteDefinition {
   path: string
   name?: string
@@ -17,19 +19,24 @@ interface AppRouteDefinition {
 
 const placeholderView = () => import('../views/PlaceholderView.vue')
 
+// 这份目录就是前端“页面地图”：定义每个路径对应哪个页面，
+// 以及该页面后续要套用哪套 meta 规则来驱动登录、菜单和权限判断。
 export const routeCatalog: AppRouteDefinition[] = [
   {
+    // 登录页：未登录用户的公开入口页面。
     path: '/login',
     name: 'login',
     component: LoginView,
     metaKey: 'login'
   },
   {
+    // 主框架页：登录后的大多数业务页面都挂在 MainLayout 下面。
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
     redirect: '/dashboard',
     children: [
       {
+        // 首页与个人中心：用户登录后最先接触到的入口区域。
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('../views/DashboardView.vue'),
@@ -55,6 +62,7 @@ export const routeCatalog: AppRouteDefinition[] = [
         component: () => import('../views/profile/PersonalCenterView.vue'),
         metaKey: 'profile'
       },
+      // 报销工作台：报销创建、查看、审批、付款、凭证生成等主业务页面。
       {
         path: 'expense/create',
         name: 'expense-create',
@@ -187,6 +195,7 @@ export const routeCatalog: AppRouteDefinition[] = [
         component: placeholderView,
         metaKey: 'expense-workbench-budget-management'
       },
+      // 财务模块：总账、固定资产、财务档案、财务系统管理等页面。
       {
         path: 'finance/general-ledger/new-voucher',
         name: 'finance-new-voucher',
@@ -330,6 +339,7 @@ export const routeCatalog: AppRouteDefinition[] = [
         component: () => import('../views/finance/FinanceProjectArchiveView.vue'),
         metaKey: 'finance-archives-projects'
       },
+      // 档案中心：发票、档案 Agent、账簿等档案类页面。
       {
         path: 'archives/invoices',
         name: 'archives-invoices',
@@ -348,6 +358,7 @@ export const routeCatalog: AppRouteDefinition[] = [
         component: placeholderView,
         metaKey: 'archives-account-books'
       },
+      // 系统设置：组织、角色、同步配置等系统级管理页面。
       {
         path: 'settings',
         name: 'settings',
@@ -392,6 +403,7 @@ export function getRoutePathByName(name: string): string {
 }
 
 function buildRoutes(definitions: AppRouteDefinition[]): RouteRecordRaw[] {
+  // 把轻量路由定义转换成 Vue Router 真正运行时使用的结构。
   return definitions.map((definition) => {
     const route = {
       path: definition.path

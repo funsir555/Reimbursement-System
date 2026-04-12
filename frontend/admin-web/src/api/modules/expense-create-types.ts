@@ -1,3 +1,7 @@
+// 这里定义 expense-create-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 import type { ExpenseDetailInstance } from './expense-types'
 import type { ProcessCustomArchiveDetail } from './process-archive-types'
 import type { ProcessFormDesignSchema } from './process-form-types'
@@ -81,6 +85,7 @@ export interface ExpenseCreateTemplateDetail {
   currentUserDeptName?: string
 }
 
+// 这是 ExpenseDocumentEditContext 的数据结构。
 export interface ExpenseDocumentEditContext extends ExpenseCreateTemplateDetail {
   editMode: string
   documentCode: string
@@ -101,6 +106,7 @@ export interface ExpenseDocumentSubmitResult {
   status: string
 }
 
+// 这是 ExpenseDocumentUpdatePayload 的数据结构。
 export interface ExpenseDocumentUpdatePayload {
   formData: Record<string, unknown>
   expenseDetails?: ExpenseDetailInstance[]

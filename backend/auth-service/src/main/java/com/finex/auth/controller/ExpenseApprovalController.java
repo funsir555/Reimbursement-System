@@ -1,3 +1,7 @@
+// 这里是 ExpenseApprovalController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.ExpenseActionUserOptionVO;
@@ -25,6 +29,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 ExpenseApprovalController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/expense-approval")
 @RequiredArgsConstructor
@@ -37,12 +46,14 @@ public class ExpenseApprovalController {
     private final ExpenseDocumentService expenseDocumentService;
     private final AccessControlService accessControlService;
 
+    // 处理 pending 请求。
     @GetMapping("/pending")
     public Result<List<ExpenseApprovalPendingItemVO>> pending(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_VIEW);
         return Result.success(expenseDocumentService.listPendingApprovals(getCurrentUserId(request)));
     }
 
+    // 处理 approve 请求。
     @PostMapping("/tasks/{taskId}/approve")
     public Result<ExpenseDocumentDetailVO> approve(
             @PathVariable Long taskId,
@@ -56,6 +67,7 @@ public class ExpenseApprovalController {
         );
     }
 
+    // 处理 reject 请求。
     @PostMapping("/tasks/{taskId}/reject")
     public Result<ExpenseDocumentDetailVO> reject(
             @PathVariable Long taskId,
@@ -69,12 +81,14 @@ public class ExpenseApprovalController {
         );
     }
 
+    // 处理 modifyContext 请求。
     @GetMapping("/tasks/{taskId}/modify-context")
     public Result<ExpenseDocumentEditContextVO> modifyContext(@PathVariable Long taskId, HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_APPROVAL_VIEW, EXPENSE_APPROVAL_APPROVE);
         return Result.success(expenseDocumentService.getTaskModifyContext(getCurrentUserId(request), taskId));
     }
 
+    // 处理 modify 请求。
     @PutMapping("/tasks/{taskId}/modify")
     public Result<ExpenseDocumentDetailVO> modify(
             @PathVariable Long taskId,
@@ -88,6 +102,7 @@ public class ExpenseApprovalController {
         );
     }
 
+    // 处理 addSign 请求。
     @PostMapping("/tasks/{taskId}/add-sign")
     public Result<ExpenseDocumentDetailVO> addSign(
             @PathVariable Long taskId,
@@ -101,6 +116,7 @@ public class ExpenseApprovalController {
         );
     }
 
+    // 处理 transfer 请求。
     @PostMapping("/tasks/{taskId}/transfer")
     public Result<ExpenseDocumentDetailVO> transfer(
             @PathVariable Long taskId,
@@ -114,6 +130,7 @@ public class ExpenseApprovalController {
         );
     }
 
+    // 处理 actionUsers 请求。
     @GetMapping("/action-users")
     public Result<List<ExpenseActionUserOptionVO>> actionUsers(
             @RequestParam(required = false) String keyword,

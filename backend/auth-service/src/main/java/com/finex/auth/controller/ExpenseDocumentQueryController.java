@@ -1,3 +1,7 @@
+// 这里是 ExpenseDocumentQueryController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
@@ -27,6 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 ExpenseDocumentQueryController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/expenses")
 @RequiredArgsConstructor
@@ -42,6 +51,7 @@ public class ExpenseDocumentQueryController {
     private final ExpenseDocumentService expenseDocumentService;
     private final AccessControlService accessControlService;
 
+    // 处理 queryDocuments 请求。
     @GetMapping("/query-documents")
     public Result<List<ExpenseSummaryVO>> queryDocuments(HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -49,6 +59,7 @@ public class ExpenseDocumentQueryController {
         return Result.success(expenseDocumentService.listQueryDocumentSummaries(userId));
     }
 
+    // 处理 detail 请求。
     @GetMapping("/{documentCode}")
     public Result<ExpenseDocumentDetailVO> detail(@PathVariable String documentCode, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -58,6 +69,7 @@ public class ExpenseDocumentQueryController {
         return Result.success(expenseDocumentService.getDocumentDetail(userId, documentCode, allowCrossView));
     }
 
+    // 处理 expenseDetail 请求。
     @GetMapping("/{documentCode}/details/{detailNo}")
     public Result<ExpenseDetailInstanceDetailVO> expenseDetail(
             @PathVariable String documentCode,
@@ -71,6 +83,7 @@ public class ExpenseDocumentQueryController {
         return Result.success(expenseDocumentService.getExpenseDetail(userId, documentCode, detailNo, allowCrossView));
     }
 
+    // 处理 documentPicker 请求。
     @GetMapping("/document-picker")
     public Result<ExpenseDocumentPickerVO> documentPicker(
             @RequestParam String relationType,
@@ -107,6 +120,7 @@ public class ExpenseDocumentQueryController {
         );
     }
 
+    // 处理 recall 请求。
     @PostMapping("/{documentCode}/recall")
     public Result<ExpenseDocumentDetailVO> recall(@PathVariable String documentCode, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -117,6 +131,7 @@ public class ExpenseDocumentQueryController {
         );
     }
 
+    // 处理 comment 请求。
     @PostMapping("/{documentCode}/comments")
     public Result<ExpenseDocumentDetailVO> comment(
             @PathVariable String documentCode,
@@ -139,6 +154,7 @@ public class ExpenseDocumentQueryController {
         );
     }
 
+    // 处理 remind 请求。
     @PostMapping("/{documentCode}/reminders")
     public Result<ExpenseDocumentDetailVO> remind(
             @PathVariable String documentCode,
@@ -153,6 +169,7 @@ public class ExpenseDocumentQueryController {
         );
     }
 
+    // 处理 navigation 请求。
     @GetMapping("/{documentCode}/navigation")
     public Result<ExpenseDocumentNavigationVO> navigation(@PathVariable String documentCode, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -162,6 +179,7 @@ public class ExpenseDocumentQueryController {
         return Result.success(expenseDocumentService.getDocumentNavigation(userId, documentCode, approvalViewer));
     }
 
+    // 处理 editContext 请求。
     @GetMapping("/{documentCode}/edit-context")
     public Result<ExpenseDocumentEditContextVO> editContext(@PathVariable String documentCode, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -169,6 +187,7 @@ public class ExpenseDocumentQueryController {
         return Result.success(expenseDocumentService.getDocumentEditContext(userId, documentCode));
     }
 
+    // 处理 resubmit 请求。
     @PutMapping("/{documentCode}/resubmit")
     public Result<ExpenseDocumentSubmitResultVO> resubmit(
             @PathVariable String documentCode,

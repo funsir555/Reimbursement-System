@@ -1,6 +1,11 @@
+// 这里集中封装 profile.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
 import request from './core'
 import type { ChangePasswordPayload, PersonalCenterData, UserBankAccountRecord, UserBankAccountSavePayload } from './profile-types'
 
+// 这一组方法供对应页面统一调用。
 export const profileApi = {
   getOverview: () => request<PersonalCenterData>('/auth/user-center/profile'),
   listBankAccounts: () => request<UserBankAccountRecord[]>('/auth/user-center/bank-accounts'),

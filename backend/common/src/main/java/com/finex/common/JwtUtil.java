@@ -13,8 +13,14 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Date;
 
+// 这里封装 JwtUtil 的 token 生成、校验和解析能力。
+// 登录成功后，很多请求会依赖它来识别当前用户。
+// 如果改错，最容易影响登录态、鉴权和当前用户解析。
+
 /**
- * JWT工具类
+ * 这是 JwtUtil 工具类。
+ * 它负责 token 的生成、校验、解码和密钥选择。
+ * 登录相关的接口通常会间接依赖这里。
  */
 @Slf4j
 public class JwtUtil {
@@ -38,12 +44,18 @@ public class JwtUtil {
     private JwtUtil() {
     }
 
+    /**
+     * 处理 configureSecret 请求。
+     */
     public static void configureSecret(String secret) {
         if (StrUtil.isNotBlank(secret)) {
             configuredSecret = secret.trim();
         }
     }
 
+    /**
+     * 处理 generateToken 请求。
+     */
     public static String generateToken(Long userId, String username) {
         Date now = new Date();
         Date expireTime = DateUtil.offsetDay(now, (int) EXPIRE_DAYS);
@@ -58,6 +70,9 @@ public class JwtUtil {
                 .sign(Algorithm.HMAC256(secret));
     }
 
+    /**
+     * 处理 verify 请求。
+     */
     public static boolean verify(String token) {
         if (StrUtil.isBlank(token)) {
             return false;
@@ -74,25 +89,40 @@ public class JwtUtil {
         }
     }
 
+    /**
+     * 处理 decode 请求。
+     */
     public static DecodedJWT decode(String token) {
         return JWT.decode(token);
     }
 
+    /**
+     * 处理 getUserId 请求。
+     */
     public static Long getUserId(String token) {
         DecodedJWT jwt = decode(token);
         return jwt.getClaim("userId").asLong();
     }
 
+    /**
+     * 处理 getUsername 请求。
+     */
     public static String getUsername(String token) {
         DecodedJWT jwt = decode(token);
         return jwt.getClaim("username").asString();
     }
 
+    /**
+     * 处理 isExpired 请求。
+     */
     public static boolean isExpired(String token) {
         DecodedJWT jwt = decode(token);
         return jwt.getExpiresAt().before(new Date());
     }
 
+    /**
+     * 处理 resolveSecret 请求。
+     */
     private static String resolveSecret() {
         String secret = firstNonBlank(
                 configuredSecret,
@@ -123,6 +153,9 @@ public class JwtUtil {
         return generatedFallbackSecret;
     }
 
+    /**
+     * 处理 firstNonBlank 请求。
+     */
     private static String firstNonBlank(String... values) {
         for (String value : values) {
             if (StrUtil.isNotBlank(value)) {
@@ -132,6 +165,9 @@ public class JwtUtil {
         return null;
     }
 
+    /**
+     * 处理 createEphemeralSecret 请求。
+     */
     private static String createEphemeralSecret() {
         byte[] bytes = new byte[32];
         SECURE_RANDOM.nextBytes(bytes);

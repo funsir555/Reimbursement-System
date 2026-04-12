@@ -1,3 +1,7 @@
+// 这里是 AuthController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.LoginDTO;
@@ -15,7 +19,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 璁よ瘉鎺у埗鍣? */
+ * 这是 AuthController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @Slf4j
 @RestController
 @RequestMapping("/auth")

@@ -1,3 +1,7 @@
+// 这里是 ExpenseDocumentController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.ExpenseCreatePayeeAccountOptionVO;
@@ -27,6 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 ExpenseDocumentController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/expenses/create")
 @RequiredArgsConstructor
@@ -40,12 +49,14 @@ public class ExpenseDocumentController {
     private final FinanceVendorService financeVendorService;
     private final AccessControlService accessControlService;
 
+    // 处理 listTemplates 请求。
     @GetMapping("/templates")
     public Result<List<ExpenseCreateTemplateSummaryVO>> listTemplates(HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(expenseDocumentService.listAvailableTemplates());
     }
 
+    // 处理 getTemplateDetail 请求。
     @GetMapping("/templates/{templateCode}")
     public Result<ExpenseCreateTemplateDetailVO> getTemplateDetail(
             @PathVariable String templateCode,
@@ -55,6 +66,7 @@ public class ExpenseDocumentController {
         return Result.success(expenseDocumentService.getTemplateDetail(getCurrentUserId(request), templateCode));
     }
 
+    // 处理 getExpenseDetail 请求。
     @GetMapping("/documents/{documentCode}/details/{detailNo}")
     public Result<ExpenseDetailInstanceDetailVO> getExpenseDetail(
             @PathVariable String documentCode,
@@ -65,6 +77,7 @@ public class ExpenseDocumentController {
         return Result.success(expenseDocumentService.getExpenseDetail(getCurrentUserId(request), documentCode, detailNo, false));
     }
 
+    // 处理 listVendorOptions 请求。
     @GetMapping("/vendors/options")
     public Result<List<ExpenseCreateVendorOptionVO>> listVendorOptions(
             @RequestParam(required = false) String keyword,
@@ -75,6 +88,7 @@ public class ExpenseDocumentController {
         return Result.success(expenseDocumentService.listVendorOptions(getCurrentUserId(request), keyword, includeDisabled));
     }
 
+    // 处理 createVendor 请求。
     @PostMapping("/vendors")
     public Result<FinanceVendorDetailVO> createVendor(
             @Valid @RequestBody FinanceVendorSaveDTO dto,
@@ -84,6 +98,7 @@ public class ExpenseDocumentController {
         return Result.success("往来单位已新增", financeVendorService.createVendor(getCurrentUserId(request), dto, getCurrentUsername(request), true));
     }
 
+    // 处理 listPayeeOptions 请求。
     @GetMapping("/payees/options")
     public Result<List<ExpenseCreatePayeeOptionVO>> listPayeeOptions(
             @RequestParam(required = false) String keyword,
@@ -94,6 +109,7 @@ public class ExpenseDocumentController {
         return Result.success(expenseDocumentService.listPayeeOptions(getCurrentUserId(request), keyword, personalOnly));
     }
 
+    // 处理 listPayeeAccountOptions 请求。
     @GetMapping("/payee-accounts/options")
     public Result<List<ExpenseCreatePayeeAccountOptionVO>> listPayeeAccountOptions(
             @RequestParam(required = false) String keyword,
@@ -112,6 +128,7 @@ public class ExpenseDocumentController {
         ));
     }
 
+    // 处理 submitDocument 请求。
     @PostMapping("/documents")
     public Result<ExpenseDocumentSubmitResultVO> submitDocument(
             @Valid @RequestBody ExpenseDocumentSubmitDTO dto,

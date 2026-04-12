@@ -1,7 +1,12 @@
+// 这里集中封装 expense.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
 import request from './core'
 import type { ExpenseDocumentEditContext, ExpenseDocumentSubmitResult, ExpenseDocumentUpdatePayload } from './expense-create-types'
 import type { ExpenseDetailInstanceDetail, ExpenseDocumentCommentPayload, ExpenseDocumentDetail, ExpenseDocumentNavigation, ExpenseDocumentPickerResult, ExpenseDocumentReminderPayload, ExpenseSummary } from './expense-types'
 
+// 这一组方法供对应页面统一调用。
 export const expenseApi = {
   list: () => request<ExpenseSummary[]>('/auth/expenses'),
   queryDocuments: () => request<ExpenseSummary[]>('/auth/expenses/query-documents'),
@@ -18,6 +23,7 @@ export const expenseApi = {
         timeoutMessage: '加载费用明细超时，请稍后重试'
       }
     ),
+  // 处理 getDocumentPicker 请求。
   getDocumentPicker: (params: {
     relationType: 'RELATED' | 'WRITEOFF'
     templateTypes?: string[]
@@ -61,6 +67,7 @@ export const expenseApi = {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
+  // 处理 getNavigation 请求。
   getNavigation: (documentCode: string) =>
     request<ExpenseDocumentNavigation>(`/auth/expenses/${encodeURIComponent(documentCode)}/navigation`, {
       timeoutMs: 5000,

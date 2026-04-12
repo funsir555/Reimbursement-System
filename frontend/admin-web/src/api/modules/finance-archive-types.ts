@@ -1,3 +1,7 @@
+// 这里定义 finance-archive-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 import type { MoneyValue } from './core'
 
 export interface FinanceAccountSubjectOption {
@@ -12,6 +16,7 @@ export interface FinanceAccountSubjectMeta {
   yesNoOptions: FinanceAccountSubjectOption[]
 }
 
+// 这是 FinanceAccountSubjectSummary 的数据结构。
 export interface FinanceAccountSubjectSummary {
   subject_code: string
   subject_name: string
@@ -180,6 +185,7 @@ export interface FinanceProjectClassSavePayload {
   project_class_name: string
 }
 
+// 这是 FinanceProjectSummary 的数据结构。
 export interface FinanceProjectSummary {
   id?: number
   company_id?: string
@@ -316,6 +322,7 @@ export type FinanceVendorSavePayload = Partial<FinanceVendorDetail> & {
   cVenName: string
 }
 
+// 这是 FinanceCustomerSummary 的数据结构。
 export interface FinanceCustomerSummary {
   cCusCode: string
   cCusName: string

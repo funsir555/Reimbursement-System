@@ -1,3 +1,7 @@
+// 这里是 FinanceVoucherController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceVoucherDetailVO;
@@ -31,6 +35,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * 这是 FinanceVoucherController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/finance/vouchers")
 @RequiredArgsConstructor
@@ -46,6 +55,7 @@ public class FinanceVoucherController {
     private final FinanceVoucherService financeVoucherService;
     private final AccessControlService accessControlService;
 
+    // 处理 list 请求。
     @GetMapping
     public Result<FinanceVoucherPageVO<FinanceVoucherSummaryVO>> list(
             @RequestParam String companyId,
@@ -73,6 +83,7 @@ public class FinanceVoucherController {
         return Result.success(financeVoucherService.queryVouchers(dto));
     }
 
+    // 处理 meta 请求。
     @GetMapping("/meta")
     public Result<FinanceVoucherMetaVO> meta(
             @RequestParam(required = false) String companyId,
@@ -93,6 +104,7 @@ public class FinanceVoucherController {
         );
     }
 
+    // 处理 export 请求。
     @GetMapping("/export")
     public ResponseEntity<ByteArrayResource> export(
             @RequestParam String companyId,
@@ -126,6 +138,7 @@ public class FinanceVoucherController {
                 .body(new ByteArrayResource(content));
     }
 
+    // 处理 detail 请求。
     @GetMapping("/{voucherNo}")
     public Result<FinanceVoucherDetailVO> detail(
             @PathVariable String voucherNo,
@@ -136,6 +149,7 @@ public class FinanceVoucherController {
         return Result.success(financeVoucherService.getDetail(companyId, voucherNo));
     }
 
+    // 处理 createVoucher 请求。
     @PostMapping
     public Result<FinanceVoucherSaveResultVO> createVoucher(
             @Valid @RequestBody FinanceVoucherSaveDTO dto,
@@ -149,6 +163,7 @@ public class FinanceVoucherController {
         );
     }
 
+    // 处理 updateVoucher 请求。
     @PutMapping("/{voucherNo}")
     public Result<FinanceVoucherSaveResultVO> updateVoucher(
             @PathVariable String voucherNo,

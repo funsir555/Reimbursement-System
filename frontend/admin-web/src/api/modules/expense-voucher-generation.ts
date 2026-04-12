@@ -1,7 +1,12 @@
+// 这里集中封装 expense-voucher-generation.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
 import request, { buildQueryString } from './core'
 import type { PageResult } from './core'
 import type { VoucherGeneratedDetail, VoucherGeneratedRecord, VoucherGenerationMeta, VoucherPushBatchResult, VoucherPushDocument, VoucherSubjectMapping, VoucherSubjectMappingPayload, VoucherTemplatePolicy, VoucherTemplatePolicyPayload } from './expense-voucher-generation-types'
 
+// 这一组方法供对应页面统一调用。
 export const expenseVoucherGenerationApi = {
   getMeta: () => request<VoucherGenerationMeta>('/auth/expenses/voucher-generation/meta'),
   getTemplatePolicies: (params: { companyId?: string; templateCode?: string; enabled?: number; page?: number; pageSize?: number } = {}) =>

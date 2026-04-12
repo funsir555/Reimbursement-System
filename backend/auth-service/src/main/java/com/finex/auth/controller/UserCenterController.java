@@ -1,3 +1,7 @@
+// 这里是 UserCenterController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.BankAccountVO;
@@ -28,6 +32,11 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+/**
+ * 这是 UserCenterController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/user-center")
 @RequiredArgsConstructor
@@ -40,6 +49,7 @@ public class UserCenterController {
     private final UserCenterService userCenterService;
     private final AccessControlService accessControlService;
 
+    // 处理 profile 请求。
     @GetMapping("/profile")
     public Result<PersonalCenterVO> profile(HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -47,6 +57,7 @@ public class UserCenterController {
         return Result.success(userCenterService.getPersonalCenter(userId));
     }
 
+    // 处理 listBankAccounts 请求。
     @GetMapping("/bank-accounts")
     public Result<List<BankAccountVO>> listBankAccounts(HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -54,6 +65,7 @@ public class UserCenterController {
         return Result.success(userCenterService.listBankAccounts(userId));
     }
 
+    // 处理 createBankAccount 请求。
     @PostMapping("/bank-accounts")
     public Result<BankAccountVO> createBankAccount(
             @Valid @RequestBody UserBankAccountSaveDTO dto,
@@ -64,6 +76,7 @@ public class UserCenterController {
         return Result.success(userCenterService.createBankAccount(userId, dto));
     }
 
+    // 处理 updateBankAccount 请求。
     @PutMapping("/bank-accounts/{accountId}")
     public Result<BankAccountVO> updateBankAccount(
             @PathVariable Long accountId,
@@ -75,6 +88,7 @@ public class UserCenterController {
         return Result.success(userCenterService.updateBankAccount(userId, accountId, dto));
     }
 
+    // 处理 updateBankAccountStatus 请求。
     @PostMapping("/bank-accounts/{accountId}/status")
     public Result<Boolean> updateBankAccountStatus(
             @PathVariable Long accountId,
@@ -86,6 +100,7 @@ public class UserCenterController {
         return Result.success(userCenterService.updateBankAccountStatus(userId, accountId, dto.getStatus()));
     }
 
+    // 处理 setDefaultBankAccount 请求。
     @PostMapping("/bank-accounts/{accountId}/default")
     public Result<Boolean> setDefaultBankAccount(
             @PathVariable Long accountId,
@@ -96,6 +111,7 @@ public class UserCenterController {
         return Result.success(userCenterService.setDefaultBankAccount(userId, accountId));
     }
 
+    // 处理 downloads 请求。
     @GetMapping("/downloads")
     public Result<DownloadCenterVO> downloads(HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -103,6 +119,7 @@ public class UserCenterController {
         return Result.success(userCenterService.getDownloadCenter(userId));
     }
 
+    // 处理 downloadContent 请求。
     @GetMapping("/downloads/{downloadId}/content")
     public ResponseEntity<Resource> downloadContent(
             @PathVariable Long downloadId,
@@ -121,6 +138,7 @@ public class UserCenterController {
                 .body(content.resource());
     }
 
+    // 处理 changePassword 请求。
     @PostMapping("/password")
     public Result<Boolean> changePassword(
             @Valid @RequestBody ChangePasswordDTO dto,

@@ -1,3 +1,7 @@
+// 这里是 FinanceProjectArchiveController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceProjectArchiveMetaVO;
@@ -25,6 +29,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 FinanceProjectArchiveController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/finance/archives/projects")
 @RequiredArgsConstructor
@@ -39,12 +48,14 @@ public class FinanceProjectArchiveController {
     private final FinanceProjectArchiveService financeProjectArchiveService;
     private final AccessControlService accessControlService;
 
+    // 处理 meta 请求。
     @GetMapping("/meta")
     public Result<FinanceProjectArchiveMetaVO> meta(@RequestParam String companyId, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROJECT_VIEW);
         return Result.success(financeProjectArchiveService.getMeta(companyId));
     }
 
+    // 处理 listProjectClasses 请求。
     @GetMapping("/classes")
     public Result<List<FinanceProjectClassSummaryVO>> listProjectClasses(
             @RequestParam String companyId,
@@ -56,6 +67,7 @@ public class FinanceProjectArchiveController {
         return Result.success(financeProjectArchiveService.listProjectClasses(companyId, keyword, status));
     }
 
+    // 处理 createProjectClass 请求。
     @PostMapping("/classes")
     public Result<FinanceProjectClassSummaryVO> createProjectClass(
             @RequestParam String companyId,
@@ -69,6 +81,7 @@ public class FinanceProjectArchiveController {
         );
     }
 
+    // 处理 updateProjectClass 请求。
     @PutMapping("/classes/{projectClassCode}")
     public Result<FinanceProjectClassSummaryVO> updateProjectClass(
             @RequestParam String companyId,
@@ -83,6 +96,7 @@ public class FinanceProjectArchiveController {
         );
     }
 
+    // 处理 updateProjectClassStatus 请求。
     @PostMapping("/classes/{projectClassCode}/status")
     public Result<Boolean> updateProjectClassStatus(
             @RequestParam String companyId,
@@ -97,6 +111,7 @@ public class FinanceProjectArchiveController {
         );
     }
 
+    // 处理 listProjects 请求。
     @GetMapping
     public Result<List<FinanceProjectSummaryVO>> listProjects(
             @RequestParam String companyId,
@@ -110,6 +125,7 @@ public class FinanceProjectArchiveController {
         return Result.success(financeProjectArchiveService.listProjects(companyId, keyword, projectClassCode, status, bclose));
     }
 
+    // 处理 getProjectDetail 请求。
     @GetMapping("/{projectCode}")
     public Result<FinanceProjectDetailVO> getProjectDetail(
             @RequestParam String companyId,
@@ -120,6 +136,7 @@ public class FinanceProjectArchiveController {
         return Result.success(financeProjectArchiveService.getProjectDetail(companyId, projectCode));
     }
 
+    // 处理 createProject 请求。
     @PostMapping
     public Result<FinanceProjectDetailVO> createProject(
             @RequestParam String companyId,
@@ -133,6 +150,7 @@ public class FinanceProjectArchiveController {
         );
     }
 
+    // 处理 updateProject 请求。
     @PutMapping("/{projectCode}")
     public Result<FinanceProjectDetailVO> updateProject(
             @RequestParam String companyId,
@@ -147,6 +165,7 @@ public class FinanceProjectArchiveController {
         );
     }
 
+    // 处理 updateProjectStatus 请求。
     @PostMapping("/{projectCode}/status")
     public Result<Boolean> updateProjectStatus(
             @RequestParam String companyId,
@@ -161,6 +180,7 @@ public class FinanceProjectArchiveController {
         );
     }
 
+    // 处理 updateProjectCloseStatus 请求。
     @PostMapping("/{projectCode}/close")
     public Result<Boolean> updateProjectCloseStatus(
             @RequestParam String companyId,

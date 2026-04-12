@@ -1,3 +1,7 @@
+// 这里是 AsyncTaskController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.AsyncTaskSubmitResultVO;
@@ -22,6 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * 这是 AsyncTaskController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/async-tasks")
 @RequiredArgsConstructor
@@ -38,6 +47,7 @@ public class AsyncTaskController {
     private final AsyncTaskService asyncTaskService;
     private final AccessControlService accessControlService;
 
+    // 处理 exportInvoices 请求。
     @PostMapping("/exports/invoices")
     public Result<AsyncTaskSubmitResultVO> exportInvoices(HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -48,6 +58,7 @@ public class AsyncTaskController {
         );
     }
 
+    // 处理 exportExpenses 请求。
     @PostMapping("/exports/expenses")
     public Result<AsyncTaskSubmitResultVO> exportExpenses(
             @Valid @RequestBody ExpenseExportSubmitDTO dto,
@@ -72,6 +83,7 @@ public class AsyncTaskController {
         );
     }
 
+    // 处理 verifyInvoice 请求。
     @PostMapping("/invoices/verify")
     public Result<AsyncTaskSubmitResultVO> verifyInvoice(
             @Valid @RequestBody InvoiceTaskSubmitDTO dto,
@@ -82,6 +94,7 @@ public class AsyncTaskController {
         return Result.success("发票验真任务已提交", asyncTaskService.submitInvoiceVerify(userId, dto));
     }
 
+    // 处理 ocrInvoice 请求。
     @PostMapping("/invoices/ocr")
     public Result<AsyncTaskSubmitResultVO> ocrInvoice(
             @Valid @RequestBody InvoiceTaskSubmitDTO dto,
@@ -92,16 +105,19 @@ public class AsyncTaskController {
         return Result.success("发票 OCR 任务已提交", asyncTaskService.submitInvoiceOcr(userId, dto));
     }
 
+    // 处理 notificationSummary 请求。
     @GetMapping("/notifications/summary")
     public Result<NotificationSummaryVO> notificationSummary(HttpServletRequest request) {
         return Result.success(asyncTaskService.getNotificationSummary(getCurrentUserId(request)));
     }
 
+    // 处理 notifications 请求。
     @GetMapping("/notifications")
     public Result<List<NotificationItemVO>> notifications(HttpServletRequest request) {
         return Result.success(asyncTaskService.listNotifications(getCurrentUserId(request)));
     }
 
+    // 处理 markNotificationRead 请求。
     @PostMapping("/notifications/{notificationId}/read")
     public Result<Boolean> markNotificationRead(
             @PathVariable Long notificationId,
@@ -110,6 +126,7 @@ public class AsyncTaskController {
         return Result.success(asyncTaskService.markNotificationRead(getCurrentUserId(request), notificationId));
     }
 
+    // 处理 markAllNotificationsRead 请求。
     @PostMapping("/notifications/read-all")
     public Result<Boolean> markAllNotificationsRead(HttpServletRequest request) {
         return Result.success(asyncTaskService.markAllNotificationsRead(getCurrentUserId(request)));

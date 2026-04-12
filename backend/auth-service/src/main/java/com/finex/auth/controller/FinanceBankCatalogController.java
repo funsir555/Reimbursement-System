@@ -1,3 +1,7 @@
+// 这里是 FinanceBankCatalogController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceBankBranchVO;
@@ -14,6 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 FinanceBankCatalogController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/finance")
 @RequiredArgsConstructor
@@ -30,6 +39,7 @@ public class FinanceBankCatalogController {
     private final FinanceBankCatalogService financeBankCatalogService;
     private final AccessControlService accessControlService;
 
+    // 处理 listBanks 请求。
     @GetMapping("/banks")
     public Result<List<FinanceBankOptionVO>> listBanks(
             @RequestParam(required = false) String keyword,
@@ -39,6 +49,7 @@ public class FinanceBankCatalogController {
         return Result.success(financeBankCatalogService.listBanks(keyword));
     }
 
+    // 处理 listBankBranches 请求。
     @GetMapping("/bank-branches")
     public Result<List<FinanceBankBranchVO>> listBankBranches(
             @RequestParam(required = false) String bankCode,
@@ -51,6 +62,7 @@ public class FinanceBankCatalogController {
         return Result.success(financeBankCatalogService.listBankBranches(bankCode, province, city, keyword));
     }
 
+    // 处理 lookupByCnaps 请求。
     @GetMapping("/bank-branches/lookup-by-cnaps")
     public Result<FinanceBankBranchVO> lookupByCnaps(
             @RequestParam String cnapsCode,

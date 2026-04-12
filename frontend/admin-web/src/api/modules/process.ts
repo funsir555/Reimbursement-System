@@ -1,3 +1,7 @@
+// 这里集中封装 process.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
 import request, { buildQueryString } from './core'
 import type { ProcessCustomArchiveDetail, ProcessCustomArchiveMeta, ProcessCustomArchiveResolvePayload, ProcessCustomArchiveResolveResult, ProcessCustomArchiveSavePayload, ProcessCustomArchiveStatusPayload, ProcessCustomArchiveSummary } from './process-archive-types'
 import type { ProcessExpenseTypeDetail, ProcessExpenseTypeMeta, ProcessExpenseTypeSavePayload, ProcessExpenseTypeStatusPayload, ProcessExpenseTypeTreeNode } from './process-expense-type-types'
@@ -6,6 +10,7 @@ import type { ProcessExpenseDetailDesignDetail, ProcessExpenseDetailDesignSavePa
 import type { ProcessTemplateDetail, ProcessTemplateFormOptions, ProcessTemplateSavePayload, ProcessTemplateSaveResult, ProcessTemplateTypeOption } from './process-template-types'
 import type { ProcessCenterOverview } from './process-center-types'
 
+// 这一组方法供对应页面统一调用。
 export const processApi = {
   getOverview: () => request<ProcessCenterOverview>('/auth/process-management/overview'),
   getTemplateTypes: () => request<ProcessTemplateTypeOption[]>('/auth/process-management/template-types'),
@@ -13,6 +18,7 @@ export const processApi = {
     request<ProcessTemplateFormOptions>(`/auth/process-management/form-options?templateType=${templateType}`),
   getTemplateDetail: (id: number) =>
     request<ProcessTemplateDetail>(`/auth/process-management/templates/${id}`),
+  // 处理 createTemplate 请求。
   createTemplate: (payload: ProcessTemplateSavePayload) =>
     request<ProcessTemplateSaveResult>('/auth/process-management/templates', {
       method: 'POST',
@@ -92,6 +98,7 @@ export const processApi = {
       method: 'PATCH',
       body: JSON.stringify(payload)
     }),
+  // 处理 resolveFlowApprovers 请求。
   resolveFlowApprovers: (payload: ProcessFlowResolveApproversPayload) =>
     request<ProcessFlowResolveApproversResult>('/auth/process-management/flows/resolve-approvers', {
       method: 'POST',

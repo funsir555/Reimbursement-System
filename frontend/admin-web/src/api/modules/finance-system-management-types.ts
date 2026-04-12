@@ -1,3 +1,7 @@
+// 这里定义 finance-system-management-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 import type { FinanceCompanyOption } from './finance-context-types'
 
 export interface FinanceAccountSetTemplateSummary {
@@ -31,6 +35,7 @@ export interface FinanceAccountSetMeta {
   defaultSubjectCodeScheme: string
 }
 
+// 这是 FinanceAccountSetSummary 的数据结构。
 export interface FinanceAccountSetSummary {
   companyId: string
   companyCode?: string

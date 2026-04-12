@@ -1,3 +1,7 @@
+// 这里是 ExpenseVoucherGenerationController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.ExpenseVoucherGeneratedRecordDetailVO;
@@ -26,6 +30,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 这是 ExpenseVoucherGenerationController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/expenses/voucher-generation")
 @RequiredArgsConstructor
@@ -41,12 +50,14 @@ public class ExpenseVoucherGenerationController {
     private final ExpenseVoucherGenerationService expenseVoucherGenerationService;
     private final AccessControlService accessControlService;
 
+    // 处理 meta 请求。
     @GetMapping("/meta")
     public Result<ExpenseVoucherGenerationMetaVO> meta(HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), PAGE_VIEW, MAPPING_VIEW, PUSH_VIEW, QUERY_VIEW);
         return Result.success(expenseVoucherGenerationService.getMeta(getCurrentUserId(request)));
     }
 
+    // 处理 getMappings 请求。
     @GetMapping("/mappings")
     public Result<?> getMappings(
             @RequestParam String type,
@@ -80,6 +91,7 @@ public class ExpenseVoucherGenerationController {
         return Result.success(result);
     }
 
+    // 处理 createTemplatePolicy 请求。
     @PostMapping("/mappings/template-policy")
     public Result<ExpenseVoucherTemplatePolicyVO> createTemplatePolicy(
             @Valid @RequestBody ExpenseVoucherTemplatePolicySaveDTO dto,
@@ -87,11 +99,12 @@ public class ExpenseVoucherGenerationController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), MAPPING_EDIT);
         return Result.success(
-                "??????????",
+                "模板策略新增成功",
                 expenseVoucherGenerationService.createTemplatePolicy(dto, getCurrentUserId(request), getCurrentUsername(request))
         );
     }
 
+    // 处理 updateTemplatePolicy 请求。
     @PutMapping("/mappings/template-policy/{id}")
     public Result<ExpenseVoucherTemplatePolicyVO> updateTemplatePolicy(
             @PathVariable Long id,
@@ -100,11 +113,12 @@ public class ExpenseVoucherGenerationController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), MAPPING_EDIT);
         return Result.success(
-                "??????????",
+                "模板策略更新成功",
                 expenseVoucherGenerationService.updateTemplatePolicy(id, dto, getCurrentUserId(request), getCurrentUsername(request))
         );
     }
 
+    // 处理 createSubjectMapping 请求。
     @PostMapping("/mappings/subject-lines")
     public Result<ExpenseVoucherSubjectMappingVO> createSubjectMapping(
             @Valid @RequestBody ExpenseVoucherSubjectMappingSaveDTO dto,
@@ -112,11 +126,12 @@ public class ExpenseVoucherGenerationController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), MAPPING_EDIT);
         return Result.success(
-                "????????????",
+                "科目映射新增成功",
                 expenseVoucherGenerationService.createSubjectMapping(dto, getCurrentUserId(request), getCurrentUsername(request))
         );
     }
 
+    // 处理 updateSubjectMapping 请求。
     @PutMapping("/mappings/subject-lines/{id}")
     public Result<ExpenseVoucherSubjectMappingVO> updateSubjectMapping(
             @PathVariable Long id,
@@ -125,11 +140,12 @@ public class ExpenseVoucherGenerationController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), MAPPING_EDIT);
         return Result.success(
-                "????????????",
+                "科目映射更新成功",
                 expenseVoucherGenerationService.updateSubjectMapping(id, dto, getCurrentUserId(request), getCurrentUsername(request))
         );
     }
 
+    // 处理 getPushDocuments 请求。
     @GetMapping("/push-documents")
     public Result<ExpenseVoucherPageVO<ExpenseVoucherPushDocumentVO>> getPushDocuments(
             @RequestParam(required = false) String companyId,
@@ -155,6 +171,7 @@ public class ExpenseVoucherGenerationController {
         ));
     }
 
+    // 处理 push 请求。
     @PostMapping("/push")
     public Result<ExpenseVoucherPushBatchResultVO> push(
             @Valid @RequestBody ExpenseVoucherPushDTO dto,
@@ -162,11 +179,12 @@ public class ExpenseVoucherGenerationController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PUSH_EXECUTE);
         return Result.success(
-                "??????",
+                "凭证推送已发起",
                 expenseVoucherGenerationService.pushDocuments(dto, getCurrentUserId(request), getCurrentUsername(request))
         );
     }
 
+    // 处理 getGeneratedVouchers 请求。
     @GetMapping("/vouchers")
     public Result<ExpenseVoucherPageVO<ExpenseVoucherGeneratedRecordVO>> getGeneratedVouchers(
             @RequestParam(required = false) String companyId,
@@ -194,6 +212,7 @@ public class ExpenseVoucherGenerationController {
         ));
     }
 
+    // 处理 getGeneratedVoucherDetail 请求。
     @GetMapping("/vouchers/{id}")
     public Result<ExpenseVoucherGeneratedRecordDetailVO> getGeneratedVoucherDetail(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), QUERY_VIEW);
@@ -208,7 +227,7 @@ public class ExpenseVoucherGenerationController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("??????????");
+        throw new IllegalStateException("缺少当前用户信息");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {
@@ -216,6 +235,6 @@ public class ExpenseVoucherGenerationController {
         if (username instanceof String value && !value.isBlank()) {
             return value;
         }
-        return "????";
+        return "system";
     }
 }

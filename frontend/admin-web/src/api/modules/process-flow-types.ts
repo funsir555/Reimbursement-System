@@ -1,3 +1,7 @@
+// 这里定义 process-flow-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 import type { ProcessFormOption } from './process-template-types'
 
 export interface ProcessFlowConfigOption {
@@ -79,6 +83,7 @@ export interface ProcessFlowNode {
   config: ProcessFlowNodeConfig
 }
 
+// 这是 ProcessFlowSummary 的数据结构。
 export interface ProcessFlowSummary {
   id: number
   flowCode: string
@@ -98,6 +103,7 @@ export interface ProcessFlowScene {
   status: number
 }
 
+// 这是 ProcessFlowDetail 的数据结构。
 export interface ProcessFlowDetail {
   id?: number
   flowCode?: string

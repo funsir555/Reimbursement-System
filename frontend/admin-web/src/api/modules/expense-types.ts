@@ -1,8 +1,13 @@
+// 这里定义 expense-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 import type { MoneyValue } from './core'
 import type { ProcessFlowNode, ProcessFlowRoute } from './process-flow-types'
 import type { ProcessFormDesignSchema } from './process-form-types'
 import type { ProcessFormOption } from './process-template-types'
 
+// 这是 ExpenseSummary 的数据结构。
 export interface ExpenseSummary {
   documentCode: string
   no: string
@@ -76,6 +81,7 @@ export interface ExpenseDocumentNavigation {
   nextDocumentCode?: string
 }
 
+// 这是 ExpenseDocumentDetail 的数据结构。
 export interface ExpenseDocumentDetail {
   documentCode: string
   documentTitle: string
@@ -217,6 +223,7 @@ export interface ExpenseDocumentPickerGroup {
   items: ExpenseDocumentPickerItem[]
 }
 
+// 这是 ExpenseDocumentPickerResult 的数据结构。
 export interface ExpenseDocumentPickerResult {
   relationType: 'RELATED' | 'WRITEOFF'
   groups: ExpenseDocumentPickerGroup[]

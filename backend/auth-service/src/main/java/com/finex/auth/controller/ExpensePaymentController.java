@@ -1,3 +1,7 @@
+// 这里是 ExpensePaymentController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
@@ -24,6 +28,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 ExpensePaymentController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/expense-payment")
 @RequiredArgsConstructor
@@ -37,6 +46,7 @@ public class ExpensePaymentController {
     private final ExpenseDocumentService expenseDocumentService;
     private final AccessControlService accessControlService;
 
+    // 处理 listOrders 请求。
     @GetMapping("/orders")
     public Result<List<ExpensePaymentOrderVO>> listOrders(
             @RequestParam(required = false) String status,
@@ -47,6 +57,7 @@ public class ExpensePaymentController {
         return Result.success(expenseDocumentService.listPaymentOrders(userId, status));
     }
 
+    // 处理 startTask 请求。
     @PostMapping("/tasks/{taskId}/start")
     public Result<ExpenseDocumentDetailVO> startTask(@PathVariable Long taskId, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
@@ -57,6 +68,7 @@ public class ExpensePaymentController {
         );
     }
 
+    // 处理 completeTask 请求。
     @PostMapping("/tasks/{taskId}/complete")
     public Result<ExpenseDocumentDetailVO> completeTask(
             @PathVariable Long taskId,
@@ -76,6 +88,7 @@ public class ExpensePaymentController {
         );
     }
 
+    // 处理 markException 请求。
     @PostMapping("/tasks/{taskId}/exception")
     public Result<ExpenseDocumentDetailVO> markException(
             @PathVariable Long taskId,
@@ -95,12 +108,14 @@ public class ExpensePaymentController {
         );
     }
 
+    // 处理 listBankLinks 请求。
     @GetMapping("/bank-links")
     public Result<List<ExpenseBankLinkSummaryVO>> listBankLinks(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_BANK_LINK_VIEW);
         return Result.success(expenseDocumentService.listBankLinks());
     }
 
+    // 处理 getBankLink 请求。
     @GetMapping("/bank-links/{companyBankAccountId}")
     public Result<ExpenseBankLinkConfigVO> getBankLink(
             @PathVariable Long companyBankAccountId,
@@ -110,6 +125,7 @@ public class ExpensePaymentController {
         return Result.success(expenseDocumentService.getBankLink(companyBankAccountId));
     }
 
+    // 处理 updateBankLink 请求。
     @PutMapping("/bank-links/{companyBankAccountId}")
     public Result<ExpenseBankLinkConfigVO> updateBankLink(
             @PathVariable Long companyBankAccountId,
@@ -120,6 +136,7 @@ public class ExpensePaymentController {
         return Result.success("银企直连配置已保存", expenseDocumentService.updateBankLink(companyBankAccountId, dto));
     }
 
+    // 处理 cmbCloudCallback 请求。
     @PostMapping("/banks/cmb-cloud/callback")
     public Result<ExpenseDocumentDetailVO> cmbCloudCallback(@RequestBody(required = false) ExpenseBankCallbackDTO dto) {
         ExpenseBankCallbackDTO payload = dto == null ? new ExpenseBankCallbackDTO() : dto;

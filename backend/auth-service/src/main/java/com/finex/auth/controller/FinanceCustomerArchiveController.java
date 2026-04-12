@@ -1,3 +1,7 @@
+// 这里是 FinanceCustomerArchiveController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceCustomerDetailVO;
@@ -21,6 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 FinanceCustomerArchiveController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/finance/archives/customers")
 @RequiredArgsConstructor
@@ -34,6 +43,7 @@ public class FinanceCustomerArchiveController {
     private final FinanceCustomerService financeCustomerService;
     private final AccessControlService accessControlService;
 
+    // 处理 listCustomers 请求。
     @GetMapping
     public Result<List<FinanceCustomerSummaryVO>> listCustomers(
             @RequestParam String companyId,
@@ -45,6 +55,7 @@ public class FinanceCustomerArchiveController {
         return Result.success(financeCustomerService.listCustomers(companyId, keyword, includeDisabled));
     }
 
+    // 处理 getCustomerDetail 请求。
     @GetMapping("/{customerCode}")
     public Result<FinanceCustomerDetailVO> getCustomerDetail(
             @RequestParam String companyId,
@@ -55,6 +66,7 @@ public class FinanceCustomerArchiveController {
         return Result.success(financeCustomerService.getCustomerDetail(companyId, customerCode));
     }
 
+    // 处理 createCustomer 请求。
     @PostMapping
     public Result<FinanceCustomerDetailVO> createCustomer(
             @RequestParam String companyId,
@@ -65,6 +77,7 @@ public class FinanceCustomerArchiveController {
         return Result.success("瀹㈡埛淇濆瓨鎴愬姛", financeCustomerService.createCustomer(companyId, dto, getCurrentUsername(request)));
     }
 
+    // 处理 updateCustomer 请求。
     @PutMapping("/{customerCode}")
     public Result<FinanceCustomerDetailVO> updateCustomer(
             @RequestParam String companyId,
@@ -76,6 +89,7 @@ public class FinanceCustomerArchiveController {
         return Result.success("瀹㈡埛鏇存柊鎴愬姛", financeCustomerService.updateCustomer(companyId, customerCode, dto, getCurrentUsername(request)));
     }
 
+    // 处理 disableCustomer 请求。
     @DeleteMapping("/{customerCode}")
     public Result<Boolean> disableCustomer(
             @RequestParam String companyId,

@@ -1,3 +1,7 @@
+// 这里定义 fixed-asset-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 import type { MoneyValue } from './core'
 
 export interface FixedAssetOption {
@@ -5,6 +9,7 @@ export interface FixedAssetOption {
   label: string
 }
 
+// 这是 FixedAssetMeta 的数据结构。
 export interface FixedAssetMeta {
   companyOptions: FixedAssetOption[]
   departmentOptions: FixedAssetOption[]
@@ -48,6 +53,7 @@ export interface FixedAssetCategoryPayload {
 
 export type FixedAssetCategory = FixedAssetCategoryPayload
 
+// 这是 FixedAssetCardPayload 的数据结构。
 export interface FixedAssetCardPayload {
   id?: number
   companyId: string

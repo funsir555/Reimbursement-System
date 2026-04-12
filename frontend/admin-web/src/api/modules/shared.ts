@@ -1,3 +1,10 @@
+// 这里集中封装 shared.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
+// 这里集中封装 shared.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
 export * from './auth-types'
 export * from './system-settings-types'
 export * from './finance-context-types'

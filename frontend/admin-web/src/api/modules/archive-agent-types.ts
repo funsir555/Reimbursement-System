@@ -1,3 +1,7 @@
+// 这里定义 archive-agent-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 export interface ArchiveAgentVersionRecord {
   id: number
   versionNo: number
@@ -40,6 +44,7 @@ export interface ArchiveAgentToolDefinition {
   content?: string
 }
 
+// 这是 ArchiveAgentSummary 的数据结构。
 export interface ArchiveAgentSummary {
   id: number
   agentCode: string

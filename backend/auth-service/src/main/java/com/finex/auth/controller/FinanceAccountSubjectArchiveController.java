@@ -1,3 +1,7 @@
+// 这里是 FinanceAccountSubjectArchiveController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceAccountSubjectCloseDTO;
@@ -23,6 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 FinanceAccountSubjectArchiveController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/finance/archives/account-subjects")
 @RequiredArgsConstructor
@@ -37,12 +46,14 @@ public class FinanceAccountSubjectArchiveController {
     private final FinanceAccountSubjectArchiveService financeAccountSubjectArchiveService;
     private final AccessControlService accessControlService;
 
+    // 处理 meta 请求。
     @GetMapping("/meta")
     public Result<FinanceAccountSubjectMetaVO> meta(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), SUBJECT_VIEW);
         return Result.success(financeAccountSubjectArchiveService.getMeta());
     }
 
+    // 处理 listSubjects 请求。
     @GetMapping
     public Result<List<FinanceAccountSubjectSummaryVO>> listSubjects(
             @RequestParam String companyId,
@@ -56,6 +67,7 @@ public class FinanceAccountSubjectArchiveController {
         return Result.success(financeAccountSubjectArchiveService.listSubjects(companyId, keyword, subjectCategory, status, bclose));
     }
 
+    // 处理 getSubjectDetail 请求。
     @GetMapping("/{subjectCode}")
     public Result<FinanceAccountSubjectDetailVO> getSubjectDetail(
             @RequestParam String companyId,
@@ -66,6 +78,7 @@ public class FinanceAccountSubjectArchiveController {
         return Result.success(financeAccountSubjectArchiveService.getSubjectDetail(companyId, subjectCode));
     }
 
+    // 处理 createSubject 请求。
     @PostMapping
     public Result<FinanceAccountSubjectDetailVO> createSubject(
             @RequestParam String companyId,
@@ -79,6 +92,7 @@ public class FinanceAccountSubjectArchiveController {
         );
     }
 
+    // 处理 updateSubject 请求。
     @PutMapping("/{subjectCode}")
     public Result<FinanceAccountSubjectDetailVO> updateSubject(
             @RequestParam String companyId,
@@ -93,6 +107,7 @@ public class FinanceAccountSubjectArchiveController {
         );
     }
 
+    // 处理 updateStatus 请求。
     @PostMapping("/{subjectCode}/status")
     public Result<Boolean> updateStatus(
             @RequestParam String companyId,
@@ -107,6 +122,7 @@ public class FinanceAccountSubjectArchiveController {
         );
     }
 
+    // 处理 updateCloseStatus 请求。
     @PostMapping("/{subjectCode}/close")
     public Result<Boolean> updateCloseStatus(
             @RequestParam String companyId,

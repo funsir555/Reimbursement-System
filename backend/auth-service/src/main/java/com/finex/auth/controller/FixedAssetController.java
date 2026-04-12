@@ -1,3 +1,7 @@
+// 这里是 FixedAssetController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FixedAssetCardSaveDTO;
@@ -34,6 +38,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 FixedAssetController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/finance/fixed-assets")
 @RequiredArgsConstructor
@@ -53,6 +62,7 @@ public class FixedAssetController {
     private final FixedAssetService fixedAssetService;
     private final AccessControlService accessControlService;
 
+    // 处理 meta 请求。
     @GetMapping("/meta")
     public Result<FixedAssetMetaVO> meta(@RequestParam(required = false) String companyId,
                                          @RequestParam(required = false) Integer fiscalYear,
@@ -62,24 +72,28 @@ public class FixedAssetController {
         return Result.success(fixedAssetService.getMeta(getCurrentUserId(request), getCurrentUsername(request), companyId, fiscalYear, fiscalPeriod));
     }
 
+    // 处理 listCategories 请求。
     @GetMapping("/categories")
     public Result<List<FixedAssetCategoryVO>> listCategories(@RequestParam String companyId, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), VIEW);
         return Result.success(fixedAssetService.listCategories(companyId));
     }
 
+    // 处理 createCategory 请求。
     @PostMapping("/categories")
     public Result<FixedAssetCategoryVO> createCategory(@Valid @RequestBody FixedAssetCategorySaveDTO dto, HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), CREATE, EDIT);
         return Result.success("鍥哄畾璧勪骇绫诲埆淇濆瓨鎴愬姛", fixedAssetService.createCategory(dto, getCurrentUsername(request)));
     }
 
+    // 处理 updateCategory 请求。
     @PutMapping("/categories/{id}")
     public Result<FixedAssetCategoryVO> updateCategory(@PathVariable Long id, @Valid @RequestBody FixedAssetCategorySaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EDIT);
         return Result.success("鍥哄畾璧勪骇绫诲埆鏇存柊鎴愬姛", fixedAssetService.updateCategory(id, dto, getCurrentUsername(request)));
     }
 
+    // 处理 listCards 请求。
     @GetMapping("/cards")
     public Result<List<FixedAssetCardVO>> listCards(@RequestParam String companyId,
                                                     @RequestParam(required = false) String bookCode,
@@ -91,24 +105,28 @@ public class FixedAssetController {
         return Result.success(fixedAssetService.listCards(companyId, bookCode, keyword, categoryId, status));
     }
 
+    // 处理 getCard 请求。
     @GetMapping("/cards/{id}")
     public Result<FixedAssetCardVO> getCard(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), VIEW);
         return Result.success(fixedAssetService.getCard(id));
     }
 
+    // 处理 createCard 请求。
     @PostMapping("/cards")
     public Result<FixedAssetCardVO> createCard(@Valid @RequestBody FixedAssetCardSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CREATE);
         return Result.success("鍥哄畾璧勪骇鍗＄墖淇濆瓨鎴愬姛", fixedAssetService.createCard(dto, getCurrentUsername(request)));
     }
 
+    // 处理 updateCard 请求。
     @PutMapping("/cards/{id}")
     public Result<FixedAssetCardVO> updateCard(@PathVariable Long id, @Valid @RequestBody FixedAssetCardSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), EDIT);
         return Result.success("鍥哄畾璧勪骇鍗＄墖鏇存柊鎴愬姛", fixedAssetService.updateCard(id, dto, getCurrentUsername(request)));
     }
 
+    // 处理 openingTemplate 请求。
     @PostMapping("/opening-import/template")
     public Result<FixedAssetTemplateVO> openingTemplate(@RequestParam String companyId,
                                                         @RequestParam(required = false) String bookCode,
@@ -119,18 +137,21 @@ public class FixedAssetController {
         return Result.success(fixedAssetService.getOpeningTemplate(companyId, bookCode, fiscalYear, fiscalPeriod));
     }
 
+    // 处理 importOpening 请求。
     @PostMapping("/opening-import")
     public Result<FixedAssetOpeningImportResultVO> importOpening(@Valid @RequestBody FixedAssetOpeningImportDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), IMPORT);
         return Result.success("鍥哄畾璧勪骇鏈熷垵瀵煎叆瀹屾垚", fixedAssetService.importOpening(dto, getCurrentUsername(request)));
     }
 
+    // 处理 openingImportDetail 请求。
     @GetMapping("/opening-import/{batchId}")
     public Result<FixedAssetOpeningImportResultVO> openingImportDetail(@PathVariable Long batchId, HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), VIEW, IMPORT);
         return Result.success(fixedAssetService.getOpeningImportResult(batchId));
     }
 
+    // 处理 listChangeBills 请求。
     @GetMapping("/change-bills")
     public Result<List<FixedAssetChangeBillVO>> listChangeBills(@RequestParam String companyId,
                                                                 @RequestParam(required = false) String bookCode,
@@ -141,24 +162,28 @@ public class FixedAssetController {
         return Result.success(fixedAssetService.listChangeBills(companyId, bookCode, fiscalYear, fiscalPeriod));
     }
 
+    // 处理 createChangeBill 请求。
     @PostMapping("/change-bills")
     public Result<FixedAssetChangeBillVO> createChangeBill(@Valid @RequestBody FixedAssetChangeBillSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CHANGE);
         return Result.success("鍥哄畾璧勪骇鍙樺姩鍗曚繚瀛樻垚鍔?", fixedAssetService.createChangeBill(dto, getCurrentUsername(request)));
     }
 
+    // 处理 postChangeBill 请求。
     @PostMapping("/change-bills/{id}/post")
     public Result<FixedAssetChangeBillVO> postChangeBill(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CHANGE);
         return Result.success("鍥哄畾璧勪骇鍙樺姩鍗曡繃璐︽垚鍔?", fixedAssetService.postChangeBill(id, getCurrentUsername(request)));
     }
 
+    // 处理 previewDepreciation 请求。
     @PostMapping("/depreciation-runs/preview")
     public Result<FixedAssetDeprRunVO> previewDepreciation(@Valid @RequestBody FixedAssetDeprPreviewDTO dto, HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), VIEW, DEPRECIATE);
         return Result.success(fixedAssetService.previewDepreciation(dto));
     }
 
+    // 处理 listDepreciationRuns 请求。
     @GetMapping("/depreciation-runs")
     public Result<List<FixedAssetDeprRunVO>> listDepreciationRuns(@RequestParam String companyId,
                                                                   @RequestParam(required = false) String bookCode,
@@ -169,18 +194,21 @@ public class FixedAssetController {
         return Result.success(fixedAssetService.listDepreciationRuns(companyId, bookCode, fiscalYear, fiscalPeriod));
     }
 
+    // 处理 createDepreciationRun 请求。
     @PostMapping("/depreciation-runs")
     public Result<FixedAssetDeprRunVO> createDepreciationRun(@Valid @RequestBody FixedAssetDeprPreviewDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DEPRECIATE);
         return Result.success("鍥哄畾璧勪骇鎶樻棫鎵规鐢熸垚鎴愬姛", fixedAssetService.createDepreciationRun(dto, getCurrentUsername(request)));
     }
 
+    // 处理 postDepreciationRun 请求。
     @PostMapping("/depreciation-runs/{id}/post")
     public Result<FixedAssetDeprRunVO> postDepreciationRun(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DEPRECIATE);
         return Result.success("鍥哄畾璧勪骇鎶樻棫杩囪处鎴愬姛", fixedAssetService.postDepreciationRun(id, getCurrentUsername(request)));
     }
 
+    // 处理 listDisposalBills 请求。
     @GetMapping("/disposal-bills")
     public Result<List<FixedAssetDisposalBillVO>> listDisposalBills(@RequestParam String companyId,
                                                                     @RequestParam(required = false) String bookCode,
@@ -191,24 +219,28 @@ public class FixedAssetController {
         return Result.success(fixedAssetService.listDisposalBills(companyId, bookCode, fiscalYear, fiscalPeriod));
     }
 
+    // 处理 createDisposalBill 请求。
     @PostMapping("/disposal-bills")
     public Result<FixedAssetDisposalBillVO> createDisposalBill(@Valid @RequestBody FixedAssetDisposalBillSaveDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DISPOSE);
         return Result.success("鍥哄畾璧勪骇澶勭疆鍗曚繚瀛樻垚鍔?", fixedAssetService.createDisposalBill(dto, getCurrentUsername(request)));
     }
 
+    // 处理 postDisposalBill 请求。
     @PostMapping("/disposal-bills/{id}/post")
     public Result<FixedAssetDisposalBillVO> postDisposalBill(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), DISPOSE);
         return Result.success("鍥哄畾璧勪骇澶勭疆杩囪处鎴愬姛", fixedAssetService.postDisposalBill(id, getCurrentUsername(request)));
     }
 
+    // 处理 closePeriod 请求。
     @PostMapping("/period-close")
     public Result<FixedAssetPeriodStatusVO> closePeriod(@Valid @RequestBody FixedAssetPeriodCloseDTO dto, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), CLOSE_PERIOD);
         return Result.success("鍥哄畾璧勪骇鏈熼棿缁撹处鎴愬姛", fixedAssetService.closePeriod(dto, getCurrentUsername(request)));
     }
 
+    // 处理 periodStatus 请求。
     @GetMapping("/period-close/status")
     public Result<FixedAssetPeriodStatusVO> periodStatus(@RequestParam String companyId,
                                                          @RequestParam(required = false) String bookCode,
@@ -219,6 +251,7 @@ public class FixedAssetController {
         return Result.success(fixedAssetService.getPeriodStatus(companyId, bookCode, fiscalYear, fiscalPeriod));
     }
 
+    // 处理 voucherLink 请求。
     @GetMapping("/voucher-link")
     public Result<FixedAssetVoucherLinkVO> voucherLink(@RequestParam String companyId,
                                                        @RequestParam String businessType,
@@ -236,7 +269,7 @@ public class FixedAssetController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("????????ID");
+        throw new IllegalStateException("缺少当前用户ID");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {

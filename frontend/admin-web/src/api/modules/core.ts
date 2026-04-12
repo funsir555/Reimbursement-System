@@ -1,5 +1,10 @@
+// 这里集中封装 core.ts 相关接口。
+// 上游通常是对应业务页面，下游对应后端同域接口。
+// 如果改错，最容易影响页面的加载、保存或提交流程。
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
+// 清理本地登录态。
 function clearLoginState() {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
@@ -25,6 +30,7 @@ export interface RequestOptions extends RequestInit {
   timeoutMessage?: string
 }
 
+// 发起统一请求，并集中处理 token、超时和统一回包。
 export async function request<T>(url: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
   const token = localStorage.getItem('token')
   const { timeoutMs, timeoutMessage, signal, ...fetchOptions } = options
@@ -113,6 +119,7 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
 
 type QueryValue = string | number | boolean | undefined | null
 
+// 把对象参数拼成 URL 查询字符串。
 export function buildQueryString<T extends object>(params: T) {
   const search = new URLSearchParams()
   Object.entries(params as Record<string, QueryValue>).forEach(([key, value]) => {
@@ -141,6 +148,7 @@ function decodeContentDispositionFileName(contentDisposition: string | null) {
   return plainMatch?.[1] || ''
 }
 
+// 下载二进制文件，并处理登录失效和文件名。
 export async function downloadBinaryFile(url: string, fallbackFileName?: string) {
   const token = localStorage.getItem('token')
   const headers: Record<string, string> = {}
@@ -165,7 +173,6 @@ export async function downloadBinaryFile(url: string, fallbackFileName?: string)
       const payload = await response.json()
       message = payload?.message || message
     } catch {
-      // Ignore JSON parsing failures for binary responses.
     }
     throw new Error(message)
   }

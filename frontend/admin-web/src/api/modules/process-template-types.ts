@@ -1,3 +1,7 @@
+// 这里定义 process-template-types.ts 相关数据结构。
+// 页面与 API 封装会依赖这些类型来约定字段。
+// 如果改错，最容易影响列表、表单和接口联调。
+
 import type { MoneyValue } from './core'
 import type { ProcessExpenseTypeTreeNode } from './process-expense-type-types'
 import type { ProcessExpenseDetailDesignSummary } from './process-form-types'
@@ -56,6 +60,7 @@ export interface ProcessTemplateSavePayload {
   installmentOption: string
 }
 
+// 这是 ProcessTemplateDetail 的数据结构。
 export interface ProcessTemplateDetail extends ProcessTemplateSavePayload {
   id: number
   templateCode: string

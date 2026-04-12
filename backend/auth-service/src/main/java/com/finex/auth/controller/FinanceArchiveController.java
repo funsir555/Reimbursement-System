@@ -1,3 +1,7 @@
+// 这里是 FinanceArchiveController 的后端接口入口。
+// 它主要负责接收请求、校验权限并调用下游 Service。
+// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
+
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceVendorDetailVO;
@@ -21,6 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 这是 FinanceArchiveController 控制器。
+ * 它主要负责接收请求、校验权限并调用下游 Service。
+ * 具体业务规则以 Service 层为准。
+ */
 @RestController
 @RequestMapping("/auth/finance/archives/suppliers")
 @RequiredArgsConstructor
@@ -34,6 +43,7 @@ public class FinanceArchiveController {
     private final FinanceVendorService financeVendorService;
     private final AccessControlService accessControlService;
 
+    // 处理 listVendors 请求。
     @GetMapping
     public Result<List<FinanceVendorSummaryVO>> listVendors(
             @RequestParam String companyId,
@@ -45,6 +55,7 @@ public class FinanceArchiveController {
         return Result.success(financeVendorService.listVendors(companyId, keyword, includeDisabled));
     }
 
+    // 处理 getVendorDetail 请求。
     @GetMapping("/{vendorCode}")
     public Result<FinanceVendorDetailVO> getVendorDetail(
             @RequestParam String companyId,
@@ -55,6 +66,7 @@ public class FinanceArchiveController {
         return Result.success(financeVendorService.getVendorDetail(companyId, vendorCode));
     }
 
+    // 处理 createVendor 请求。
     @PostMapping
     public Result<FinanceVendorDetailVO> createVendor(
             @RequestParam String companyId,
@@ -68,6 +80,7 @@ public class FinanceArchiveController {
         );
     }
 
+    // 处理 updateVendor 请求。
     @PutMapping("/{vendorCode}")
     public Result<FinanceVendorDetailVO> updateVendor(
             @RequestParam String companyId,
@@ -82,6 +95,7 @@ public class FinanceArchiveController {
         );
     }
 
+    // 处理 disableVendor 请求。
     @DeleteMapping("/{vendorCode}")
     public Result<Boolean> disableVendor(
             @RequestParam String companyId,
