@@ -9,6 +9,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.SQLSyntaxErrorException;
+import java.sql.SQLDataException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -90,5 +91,18 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(500, result.getCode());
         assertEquals("\u7cfb\u7edf\u5f02\u5e38\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5", result.getMessage());
+    }
+
+    @Test
+    void resolveDatabaseMessageReturnsFriendlyTextForDataTooLong() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        PersistenceException exception = new PersistenceException(
+                "save fixed asset failed",
+                new SQLDataException("Data truncation: Data too long for column 'asset_code' at row 1")
+        );
+
+        String message = (String) ReflectionTestUtils.invokeMethod(handler, "resolveDatabaseMessage", exception);
+
+        assertEquals("\u63d0\u4ea4\u5185\u5bb9\u8d85\u8fc7\u5b57\u6bb5\u957f\u5ea6\u9650\u5236\uff0c\u8bf7\u68c0\u67e5\u7f16\u7801\u3001\u540d\u79f0\u7b49\u8f93\u5165\u957f\u5ea6\u540e\u91cd\u8bd5", message);
     }
 }

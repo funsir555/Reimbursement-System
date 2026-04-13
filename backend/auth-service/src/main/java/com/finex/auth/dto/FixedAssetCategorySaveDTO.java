@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -16,9 +17,11 @@ public class FixedAssetCategorySaveDTO {
     private String companyId;
 
     @NotBlank(message = "categoryCode is required")
+    @Size(max = 32, message = "类别编码长度不能超过32个字符")
     private String categoryCode;
 
     @NotBlank(message = "categoryName is required")
+    @Size(max = 64, message = "类别名称长度不能超过64个字符")
     private String categoryName;
 
     @NotBlank(message = "shareScope is required")

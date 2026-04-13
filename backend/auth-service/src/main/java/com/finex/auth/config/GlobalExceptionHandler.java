@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     private static final String GENERIC_SYSTEM_ERROR = "\u7cfb\u7edf\u5f02\u5e38\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5";
+    private static final String DATA_TOO_LONG_MESSAGE = "\u63d0\u4ea4\u5185\u5bb9\u8d85\u8fc7\u5b57\u6bb5\u957f\u5ea6\u9650\u5236\uff0c\u8bf7\u68c0\u67e5\u7f16\u7801\u3001\u540d\u79f0\u7b49\u8f93\u5165\u957f\u5ea6\u540e\u91cd\u8bd5";
     private static final String CUSTOM_ARCHIVE_INIT_MESSAGE = "\u81ea\u5b9a\u4e49\u6863\u6848\u76f8\u5173\u8868\u672a\u521d\u59cb\u5316\uff0c\u8bf7\u5148\u6267\u884c backend/sql/init_custom_archive.sql";
     private static final String EXPENSE_CREATE_INIT_MESSAGE = "\u5ba1\u6279\u5355\u521b\u5efa\u76f8\u5173\u8868\u6216\u5b57\u6bb5\u672a\u521d\u59cb\u5316\uff0c\u8bf7\u5148\u6267\u884c backend/sql/init_expense_create_incremental.sql";
     private static final String LEGACY_EXPENSE_DETAIL_INDEX_MESSAGE = "\u8d39\u7528\u660e\u7ec6\u7f16\u53f7\u7d22\u5f15\u4ecd\u662f\u65e7\u7ed3\u6784\uff0c\u8bf7\u5148\u6267\u884c backend/sql/migrate_expense_detail_detail_no_unique_index.sql \u540e\u91cd\u8bd5";
@@ -93,6 +94,9 @@ public class GlobalExceptionHandler {
 
     private String resolveDatabaseMessage(Throwable ex) {
         String message = resolveThrowableMessage(ex);
+        if (isDataTooLongMessage(message)) {
+            return DATA_TOO_LONG_MESSAGE;
+        }
         if (isLegacyExpenseDetailNoIndexConflict(message)) {
             return LEGACY_EXPENSE_DETAIL_INDEX_MESSAGE;
         }
@@ -186,6 +190,17 @@ public class GlobalExceptionHandler {
         String normalized = message.toLowerCase();
         return (normalized.contains("duplicate entry") || normalized.contains("duplicate key"))
                 && normalized.contains("uk_pm_document_expense_detail_no");
+    }
+
+    private boolean isDataTooLongMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = message.toLowerCase();
+        return normalized.contains("data too long for column")
+                || normalized.contains("data truncation")
+                || normalized.contains("string or binary data would be truncated")
+                || normalized.contains("value too long for type");
     }
 
     private Throwable getRootCause(Throwable ex) {

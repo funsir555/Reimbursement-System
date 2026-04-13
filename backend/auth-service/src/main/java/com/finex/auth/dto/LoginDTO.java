@@ -5,14 +5,14 @@ import lombok.Data;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * 鐧诲綍璇锋眰DTO
+ * 登录请求 DTO
  */
 @Data
 public class LoginDTO {
 
-    @NotBlank(message = "鐢ㄦ埛鍚嶄笉鑳戒负绌?")
+    @NotBlank(message = "用户名不能为空")
     private String username;
 
-    @NotBlank(message = "瀵嗙爜涓嶈兘涓虹┖")
+    @NotBlank(message = "密码不能为空")
     private String password;
 }

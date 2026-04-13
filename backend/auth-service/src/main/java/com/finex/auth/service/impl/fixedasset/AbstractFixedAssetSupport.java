@@ -114,6 +114,8 @@ public abstract class AbstractFixedAssetSupport {
     private static final String SOURCE_CHANGE_ADD = "CHANGE_ADD";
     private static final String VOUCHER_TYPE = "杞?";
     private static final int VOUCHER_SIGN_SEQUENCE = 4;
+    private static final int FIXED_ASSET_CODE_MAX_LENGTH = 32;
+    private static final int FIXED_ASSET_NAME_MAX_LENGTH = 64;
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     private static final BigDecimal ZERO_QTY = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
 
@@ -433,13 +435,14 @@ public abstract class AbstractFixedAssetSupport {
         query.orderByDesc("created_at");
         return faAssetChangeBillMapper.selectList(query).stream().map(this::mapChangeBill).toList();
     }
-        public FixedAssetChangeBillVO createChangeBill(FixedAssetChangeBillSaveDTO dto, String operatorName) {
+    public FixedAssetChangeBillVO createChangeBill(FixedAssetChangeBillSaveDTO dto, String operatorName) {
         String companyId = requireCompanyId(dto.getCompanyId());
         String bookCode = defaultBookCode(dto.getBookCode());
         int year = dto.getFiscalYear() == null ? LocalDate.now().getYear() : dto.getFiscalYear();
         int period = normalizePeriod(dto.getFiscalPeriod() == null ? LocalDate.now().getMonthValue() : dto.getFiscalPeriod());
         ensurePeriodOpen(companyId, bookCode, year, period);
         validateChangeType(dto.getBillType());
+        dto.getLines().forEach(this::validateChangeLineInput);
 
         FaAssetChangeBill bill = new FaAssetChangeBill();
         bill.setCompanyId(companyId);
@@ -662,12 +665,13 @@ public abstract class AbstractFixedAssetSupport {
         query.orderByDesc("created_at");
         return faAssetDisposalBillMapper.selectList(query).stream().map(this::mapDisposalBill).toList();
     }
-        public FixedAssetDisposalBillVO createDisposalBill(FixedAssetDisposalBillSaveDTO dto, String operatorName) {
+    public FixedAssetDisposalBillVO createDisposalBill(FixedAssetDisposalBillSaveDTO dto, String operatorName) {
         String companyId = requireCompanyId(dto.getCompanyId());
         String bookCode = defaultBookCode(dto.getBookCode());
         int year = dto.getFiscalYear() == null ? LocalDate.now().getYear() : dto.getFiscalYear();
         int period = normalizePeriod(dto.getFiscalPeriod() == null ? LocalDate.now().getMonthValue() : dto.getFiscalPeriod());
         ensurePeriodOpen(companyId, bookCode, year, period);
+        dto.getLines().forEach(this::validateDisposalLineInput);
 
         FaAssetDisposalBill bill = new FaAssetDisposalBill();
         bill.setCompanyId(companyId);
@@ -922,6 +926,8 @@ public abstract class AbstractFixedAssetSupport {
     }
 
     private void validateCategorySave(FixedAssetCategorySaveDTO dto) {
+        validateFieldLength(dto.getCategoryCode(), FIXED_ASSET_CODE_MAX_LENGTH, "类别编码");
+        validateFieldLength(dto.getCategoryName(), FIXED_ASSET_NAME_MAX_LENGTH, "类别名称");
         String shareScope = trimToNull(dto.getShareScope());
         if (!Objects.equals(shareScope, SHARE_SCOPE_COMPANY) && !Objects.equals(shareScope, SHARE_SCOPE_GROUP)) {
             throw new IllegalArgumentException("???????");
@@ -963,6 +969,8 @@ public abstract class AbstractFixedAssetSupport {
     }
 
     private void validateCardSave(FixedAssetCardSaveDTO dto, FaAssetCard existing) {
+        validateFieldLength(dto.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
+        validateFieldLength(dto.getAssetName(), FIXED_ASSET_NAME_MAX_LENGTH, "资产名称");
         if (dto.getOriginalAmount().compareTo(ZERO) <= 0) {
             throw new IllegalArgumentException("??????0");
         }
@@ -1019,6 +1027,10 @@ public abstract class AbstractFixedAssetSupport {
     }
 
     private String validateOpeningRow(String companyId, FixedAssetOpeningImportRowDTO row, Set<String> duplicateCodes) {
+        String lengthMessage = validateOpeningRowTextLengths(row);
+        if (lengthMessage != null) {
+            return lengthMessage;
+        }
         String assetCode = trimToNull(row.getAssetCode());
         if (assetCode == null) {
             return "assetCode is required";
@@ -1130,6 +1142,41 @@ public abstract class AbstractFixedAssetSupport {
         if (!supported.contains(trimToNull(billType))) {
             throw new IllegalArgumentException("???????");
         }
+    }
+
+    private void validateChangeLineInput(FixedAssetChangeLineDTO dto) {
+        validateFieldLength(dto.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
+        validateFieldLength(dto.getAssetName(), FIXED_ASSET_NAME_MAX_LENGTH, "资产名称");
+        validateFieldLength(dto.getCategoryCode(), FIXED_ASSET_CODE_MAX_LENGTH, "类别编码");
+    }
+
+    private void validateDisposalLineInput(FixedAssetDisposalLineDTO dto) {
+        validateFieldLength(dto.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
+    }
+
+    private String validateOpeningRowTextLengths(FixedAssetOpeningImportRowDTO row) {
+        try {
+            validateFieldLength(row.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
+            validateFieldLength(row.getAssetName(), FIXED_ASSET_NAME_MAX_LENGTH, "资产名称");
+            validateFieldLength(row.getCategoryCode(), FIXED_ASSET_CODE_MAX_LENGTH, "类别编码");
+        } catch (IllegalArgumentException ex) {
+            return prefixRowMessage(row.getRowNo(), ex.getMessage());
+        }
+        return null;
+    }
+
+    private void validateFieldLength(String value, int maxLength, String fieldLabel) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > maxLength) {
+            throw new IllegalArgumentException(fieldLabel + "长度不能超过 " + maxLength + " 个字符");
+        }
+    }
+
+    private String prefixRowMessage(Integer rowNo, String message) {
+        if (rowNo == null) {
+            return message;
+        }
+        return "第 " + rowNo + " 行" + message;
     }
 
     private void validateDepreciationMethod(String method) {

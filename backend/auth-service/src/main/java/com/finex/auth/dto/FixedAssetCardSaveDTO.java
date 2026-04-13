@@ -5,6 +5,7 @@ import com.finex.auth.support.json.MoneyInput;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -17,9 +18,11 @@ public class FixedAssetCardSaveDTO {
     private String companyId;
 
     @NotBlank(message = "assetCode is required")
+    @Size(max = 32, message = "资产编码长度不能超过32个字符")
     private String assetCode;
 
     @NotBlank(message = "assetName is required")
+    @Size(max = 64, message = "资产名称长度不能超过64个字符")
     private String assetName;
 
     @NotNull(message = "categoryId is required")
