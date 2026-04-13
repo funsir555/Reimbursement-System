@@ -33,13 +33,13 @@ public class AuthController {
     private final UserService userService;
 
     /**
-     * 鐢ㄦ埛鐧诲綍
+     * 登录接口
      */
     @PostMapping("/login")
     public Result<LoginVO> login(@Validated @RequestBody LoginDTO loginDTO) {
         try {
             LoginVO loginVO = userService.login(loginDTO);
-            return Result.success("鐧诲綍鎴愬姛", loginVO);
+            return Result.success("登录成功", loginVO);
         } catch (RuntimeException ex) {
             log.error("Login failed for username={}", loginDTO.getUsername(), ex);
             return Result.error(resolveLoginErrorMessage(ex));
@@ -47,11 +47,11 @@ public class AuthController {
     }
 
     /**
-     * 娴嬭瘯鎺ュ彛
+     * 测试接口
      */
     @GetMapping("/test")
     public Result<String> test() {
-        return Result.success("鏈嶅姟杩愯姝ｅ父");
+        return Result.success("接口访问成功");
     }
 
     private String resolveLoginErrorMessage(RuntimeException ex) {
@@ -68,18 +68,18 @@ public class AuthController {
         if (rootMessage != null) {
             String lowerCaseMessage = rootMessage.toLowerCase();
             if (lowerCaseMessage.contains("access denied")) {
-                return "鏁版嵁搴撹繛鎺ュけ璐ワ紝璇锋鏌?FINEX_DB_USERNAME 鍜?FINEX_DB_PASSWORD 閰嶇疆";
+                return "数据库账号或密码错误，请检查 FINEX_DB_USERNAME 和 FINEX_DB_PASSWORD 配置。";
             }
             if (lowerCaseMessage.contains("communications link failure")
                     || lowerCaseMessage.contains("connection refused")
                     || lowerCaseMessage.contains("the driver has not received any packets")) {
-                return "鏁版嵁搴撴湭杩炴帴锛岃纭 MySQL 宸插惎鍔ㄤ笖 FINEX_DB_URL 閰嶇疆姝ｇ‘";
+                return "数据库连接失败，请确认 MySQL 已启动且 FINEX_DB_URL 配置正确。";
             }
             if (lowerCaseMessage.contains("unknown database")) {
-                return "鏁版嵁搴?finex_db 涓嶅瓨鍦紝璇峰厛鎵ц鍒濆鍖?SQL";
+                return "数据库 finex_db 不存在，请先执行初始化 SQL。";
             }
         }
 
-        return "鐧诲綍澶辫触锛岃妫€鏌ユ暟鎹簱閰嶇疆鍜屽垵濮嬪寲鐘舵€?";
+        return "登录失败，系统当前无法完成身份验证，请检查服务和数据库配置后重试。";
     }
 }

@@ -16,7 +16,7 @@ class RuntimeConfigValidatorTest {
         );
 
         assertEquals(
-                "FINEX_DB_PASSWORD is required. Set it in backend/.env.local.cmd or the process environment before starting auth-service.",
+                "FINEX_DB_PASSWORD is required. auth-service will auto-load backend/.env.local.cmd for local runs, so verify that file or the process environment before starting auth-service.",
                 exception.getMessage()
         );
     }
@@ -42,7 +42,7 @@ class RuntimeConfigValidatorTest {
         );
 
         assertEquals(
-                "FINEX_JWT_SECRET is required. Set a stable secret in backend/.env.local.cmd for development and inject it from the environment in production.",
+                "FINEX_JWT_SECRET is required. auth-service will auto-load backend/.env.local.cmd for local runs, so verify that file or inject the secret from the environment.",
                 exception.getMessage()
         );
     }

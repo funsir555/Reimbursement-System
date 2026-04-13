@@ -31,6 +31,7 @@ import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherMappingDomainSup
 import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherMetaSupport;
 import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherPushDomainSupport;
 import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherRecordQuerySupport;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,7 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
     private final ExpenseVoucherPushDomainSupport expenseVoucherPushDomainSupport;
     private final ExpenseVoucherRecordQuerySupport expenseVoucherRecordQuerySupport;
 
+    @Autowired
     public ExpenseVoucherGenerationServiceImpl(
             ExpVoucherTemplatePolicyMapper templatePolicyMapper,
             ExpVoucherSubjectMappingMapper subjectMappingMapper,

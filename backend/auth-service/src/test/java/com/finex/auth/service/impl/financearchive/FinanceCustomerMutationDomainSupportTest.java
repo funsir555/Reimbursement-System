@@ -12,6 +12,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,17 +37,19 @@ class FinanceCustomerMutationDomainSupportTest {
 
     @Test
     void createCustomerGeneratesCodeAndOverridesPayloadCompanyId() {
+        String generatedCode = "CUS" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "0001";
+
         FinanceCustomerSaveDTO dto = new FinanceCustomerSaveDTO();
         dto.setCCusName("????");
         dto.setCompanyId("COMPANY_B");
 
         FinanceCustomer persisted = new FinanceCustomer();
-        persisted.setCCusCode("CUS202604110001");
+        persisted.setCCusCode(generatedCode);
         persisted.setCCusName("????");
         persisted.setCompanyId("COMPANY_A");
 
         when(financeCustomerMapper.selectCount(any())).thenReturn(0L);
-        when(financeCustomerMapper.selectById("CUS202604110001")).thenReturn(null, persisted);
+        when(financeCustomerMapper.selectById(generatedCode)).thenReturn(null, persisted);
         when(financeCustomerMapper.insert(any(FinanceCustomer.class))).thenReturn(1);
 
         FinanceCustomerDetailVO result = support.createCustomer("COMPANY_A", dto, "tester");
@@ -53,7 +58,7 @@ class FinanceCustomerMutationDomainSupportTest {
         verify(financeCustomerMapper).insert(captor.capture());
         FinanceCustomer inserted = captor.getValue();
         assertEquals("COMPANY_A", inserted.getCompanyId());
-        assertEquals("CUS202604110001", inserted.getCCusCode());
+        assertEquals(generatedCode, inserted.getCCusCode());
         assertNotNull(inserted.getCreatedAt());
         assertNotNull(inserted.getUpdatedAt());
         assertEquals("COMPANY_A", result.getCompanyId());

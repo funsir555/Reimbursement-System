@@ -41,6 +41,7 @@ import com.finex.auth.service.impl.fixedasset.FixedAssetDepreciationPeriodSuppor
 import com.finex.auth.service.impl.fixedasset.FixedAssetMetaCategorySupport;
 import com.finex.auth.service.impl.fixedasset.FixedAssetVoucherQuerySupport;
 import com.finex.auth.service.impl.fixedasset.SharedFixedAssetSupport;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +56,7 @@ public class FixedAssetServiceImpl implements FixedAssetService {
     private final FixedAssetDepreciationPeriodSupport fixedAssetDepreciationPeriodSupport;
     private final FixedAssetVoucherQuerySupport fixedAssetVoucherQuerySupport;
 
+    @Autowired
     public FixedAssetServiceImpl(
             FaAssetCategoryMapper faAssetCategoryMapper,
             FaAssetAccountPolicyMapper faAssetAccountPolicyMapper,

@@ -23,6 +23,7 @@ import com.finex.auth.service.impl.archiveagent.ArchiveAgentMetaSupport;
 import com.finex.auth.service.impl.archiveagent.ArchiveAgentRunDomainSupport;
 import com.finex.auth.service.impl.archiveagent.ArchiveAgentScheduleDomainSupport;
 import com.finex.auth.support.archiveagent.TriggerDispatcher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +37,7 @@ public class ArchiveAgentServiceImpl implements ArchiveAgentService {
     private final ArchiveAgentRunDomainSupport archiveAgentRunDomainSupport;
     private final ArchiveAgentScheduleDomainSupport archiveAgentScheduleDomainSupport;
 
+    @Autowired
     public ArchiveAgentServiceImpl(
             ArchiveAgentDefinitionMapper archiveAgentDefinitionMapper,
             ArchiveAgentVersionMapper archiveAgentVersionMapper,
