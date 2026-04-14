@@ -19,6 +19,7 @@ import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import java.util.List;
 
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -139,5 +140,30 @@ class FinanceSystemManagementControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("启用年月格式必须为 YYYY-MM"));
+    }
+
+    @Test
+    void createAccountSetReturnsChineseBusinessMessageWhenTemplateDisabled() throws Exception {
+        doNothing().when(accessControlService).requirePermission(1L, "finance:system_management:create");
+        doThrow(new IllegalStateException("账套模板已停用"))
+                .when(financeSystemManagementService)
+                .submitCreateTask(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any());
+
+        mockMvc.perform(post("/auth/finance/system-management/account-sets/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .content("""
+                                {
+                                  "createMode": "BLANK",
+                                  "targetCompanyId": "COMPANY_A",
+                                  "enabledYearMonth": "2022-11",
+                                  "templateCode": "AS_2007_ENTERPRISE",
+                                  "supervisorUserId": 2,
+                                  "subjectCodeScheme": "4-2-2-2"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("账套模板已停用"));
     }
 }

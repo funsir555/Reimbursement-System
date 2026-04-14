@@ -215,7 +215,7 @@
                 <p class="mt-1 text-sm text-slate-500">首版仅支持会计科目分级段长规则，第一级固定为 4 位。</p>
               </div>
               <div class="flex flex-col gap-3">
-                <el-input v-model="wizardForm.subjectCodeScheme" :disabled="isReferenceMode" placeholder="例如 4-2-2-2" />
+                <el-input v-model="wizardForm.subjectCodeScheme" :disabled="isReferenceMode" maxlength="32" placeholder="例如 4-2-2-2" />
                 <div class="rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-700">
                   {{ isReferenceMode ? '参照模式下编码规则由来源账套继承，不可修改。' : '建议使用 4-2-2-2，后续会按模板层级自动生成公司级会计科目编码。' }}
                 </div>
@@ -291,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   financeSystemManagementApi,
@@ -368,6 +368,37 @@ const effectiveSubjectScheme = computed(() => {
   return wizardForm.subjectCodeScheme || meta.value?.defaultSubjectCodeScheme || '--'
 })
 
+watch(
+  () => wizardForm.createMode,
+  (mode, previousMode) => {
+    if (mode === previousMode) {
+      return
+    }
+    if (mode === 'REFERENCE') {
+      syncReferenceFields(true)
+      return
+    }
+    wizardForm.referenceCompanyId = ''
+    if (!wizardForm.subjectCodeScheme) {
+      wizardForm.subjectCodeScheme = meta.value?.defaultSubjectCodeScheme || '4-2-2-2'
+    }
+    if (wizardForm.templateCode && !isTemplateOptionAvailable(wizardForm.templateCode)) {
+      wizardForm.templateCode = ''
+      ElMessage.warning('当前所选账套模板已失效，请重新选择')
+    }
+  }
+)
+
+watch(
+  () => wizardForm.referenceCompanyId,
+  (value, previousValue) => {
+    if (!isReferenceMode.value || value === previousValue) {
+      return
+    }
+    syncReferenceFields(Boolean(value))
+  }
+)
+
 onMounted(() => {
   void loadPageData()
 })
@@ -424,9 +455,12 @@ function handleNext() {
 function validateStep(step: number) {
   switch (step) {
     case 0:
-      if (isReferenceMode.value && !wizardForm.referenceCompanyId) {
-        ElMessage.warning('请选择参照账套')
-        return false
+      if (isReferenceMode.value) {
+        const referenceError = resolveReferenceValidationError()
+        if (referenceError) {
+          ElMessage.warning(referenceError)
+          return false
+        }
       }
       return true
     case 1:
@@ -440,9 +474,18 @@ function validateStep(step: number) {
       }
       return true
     case 2:
-      if (!isReferenceMode.value && !wizardForm.templateCode) {
-        ElMessage.warning('请选择账套模板')
-        return false
+      if (isReferenceMode.value) {
+        const referenceError = resolveReferenceValidationError()
+        if (referenceError) {
+          ElMessage.warning(referenceError)
+          return false
+        }
+      } else {
+        const templateError = resolveTemplateValidationError()
+        if (templateError) {
+          ElMessage.warning(templateError)
+          return false
+        }
       }
       if (!wizardForm.supervisorUserId) {
         ElMessage.warning('请选择账套主管')
@@ -450,6 +493,10 @@ function validateStep(step: number) {
       }
       return true
     case 3:
+      if (!isReferenceMode.value && (wizardForm.subjectCodeScheme || '').trim().length > 32) {
+        ElMessage.warning('科目编码规则长度不能超过32个字符')
+        return false
+      }
       if (!isReferenceMode.value && !/^\d+(?:-\d+)*$/.test(wizardForm.subjectCodeScheme || '')) {
         ElMessage.warning('请填写正确的科目编码规则，例如 4-2-2-2')
         return false
@@ -460,19 +507,75 @@ function validateStep(step: number) {
   }
 }
 
-function syncReferenceFields() {
+function isTemplateOptionAvailable(templateCode?: string | null) {
+  return Boolean(
+    templateCode &&
+      templateOptions.value.some((item) => item.templateCode === templateCode)
+  )
+}
+
+function resolveTemplateValidationError() {
+  if (isReferenceMode.value) {
+    return ''
+  }
+  if (!wizardForm.templateCode) {
+    return '请选择账套模板'
+  }
+  if (templateOptions.value.length === 0) {
+    return '当前没有可用账套模板，请先检查模板配置'
+  }
+  if (!isTemplateOptionAvailable(wizardForm.templateCode)) {
+    return '当前所选账套模板已失效，请重新选择'
+  }
+  return ''
+}
+
+function resolveReferenceValidationError() {
+  if (!isReferenceMode.value) {
+    return ''
+  }
+  if (!wizardForm.referenceCompanyId) {
+    return '请选择参照账套'
+  }
+  if (!selectedReferenceOption.value) {
+    return '当前所选参照账套已失效，请重新选择'
+  }
+  if (!selectedReferenceOption.value.templateCode) {
+    return '所选参照账套缺少账套模板，请重新选择'
+  }
+  if (!selectedReferenceOption.value.subjectCodeScheme?.trim()) {
+    return '所选参照账套缺少科目编码规则，请重新选择'
+  }
+  if (!isTemplateOptionAvailable(selectedReferenceOption.value.templateCode)) {
+    return '所选参照账套绑定的账套模板已失效，请重新选择'
+  }
+  return ''
+}
+
+function syncReferenceFields(notifyInvalid = false) {
   if (!isReferenceMode.value) {
     if (!wizardForm.subjectCodeScheme) {
       wizardForm.subjectCodeScheme = meta.value?.defaultSubjectCodeScheme || '4-2-2-2'
     }
     return
   }
+  const referenceError = resolveReferenceValidationError()
+  if (referenceError) {
+    const hasReferenceSelection = Boolean(wizardForm.referenceCompanyId)
+    wizardForm.referenceCompanyId = ''
+    wizardForm.templateCode = ''
+    wizardForm.subjectCodeScheme = ''
+    if (notifyInvalid && hasReferenceSelection) {
+      ElMessage.warning(referenceError)
+    }
+    return
+  }
   wizardForm.templateCode = selectedReferenceOption.value?.templateCode || ''
-  wizardForm.subjectCodeScheme = selectedReferenceOption.value?.subjectCodeScheme || ''
+  wizardForm.subjectCodeScheme = selectedReferenceOption.value?.subjectCodeScheme?.trim() || ''
 }
 
 async function submitCreateTask() {
-  if (!validateStep(3)) {
+  if (!validateStep(0) || !validateStep(1) || !validateStep(2) || !validateStep(3)) {
     return
   }
   submitting.value = true
@@ -637,6 +740,13 @@ async function loadMeta() {
   try {
     const metaRes = await financeSystemManagementApi.getMeta()
     meta.value = metaRes.data
+    syncReferenceFields(drawerVisible.value)
+    if (!isReferenceMode.value && wizardForm.templateCode && !isTemplateOptionAvailable(wizardForm.templateCode)) {
+      wizardForm.templateCode = ''
+      if (drawerVisible.value) {
+        ElMessage.warning('当前所选账套模板已失效，请重新选择')
+      }
+    }
     if (!wizardForm.subjectCodeScheme) {
       wizardForm.subjectCodeScheme = metaRes.data.defaultSubjectCodeScheme || '4-2-2-2'
     }
@@ -665,12 +775,33 @@ async function loadAccountSets() {
 }
 
 function resolveErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (error && typeof error === 'object') {
+    const maybeObject = error as {
+      message?: unknown
+      response?: {
+        data?: {
+          message?: unknown
+        }
+      }
+    }
+    if (typeof maybeObject.response?.data?.message === 'string' && maybeObject.response.data.message.trim()) {
+      return maybeObject.response.data.message.trim()
+    }
+    if (typeof maybeObject.message === 'string' && maybeObject.message.trim()) {
+      return maybeObject.message.trim()
+    }
+  }
+  return fallback
 }
 
 defineExpose({
   accountSets,
   wizardForm,
+  validateStep,
+  loadMeta,
   syncReferenceFields,
   buildPayload,
   submitCreateTask,

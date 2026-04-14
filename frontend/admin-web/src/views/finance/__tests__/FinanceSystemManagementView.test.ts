@@ -308,6 +308,145 @@ describe('FinanceSystemManagementView', () => {
     wrapper.unmount()
   })
 
+  it('blocks blank mode when templateCode is not in current options', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      wizardForm: {
+        createMode: 'BLANK' | 'REFERENCE'
+        templateCode?: string
+        supervisorUserId: number
+      }
+      validateStep: (step: number) => boolean
+    }
+
+    vm.wizardForm.createMode = 'BLANK'
+    vm.wizardForm.templateCode = 'AS_INVALID'
+    vm.wizardForm.supervisorUserId = 2
+
+    expect(vm.validateStep(2)).toBe(false)
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('当前所选账套模板已失效，请重新选择')
+
+    wrapper.unmount()
+  })
+
+  it('clears invalid reference option when template context is incomplete', async () => {
+    mocks.financeSystemManagementApi.getMeta.mockResolvedValueOnce({
+      data: {
+        companyOptions: [
+          { companyId: 'COMPANY_A', companyCode: 'A01', companyName: '广州测试公司', label: 'A01 - 广州测试公司', value: 'COMPANY_A' }
+        ],
+        supervisorOptions: [
+          { value: '2', label: '李会计' }
+        ],
+        templateOptions: [
+          {
+            templateCode: 'AS_2007_ENTERPRISE',
+            templateName: '2007 企业会计制度',
+            accountingStandard: '2007 企业会计制度',
+            level1SubjectCount: 60,
+            commonSubjectCount: 12
+          }
+        ],
+        referenceOptions: [
+          {
+            companyId: 'COMP-REF',
+            companyName: '参考账套公司',
+            templateCode: '',
+            templateName: '2007 企业会计制度',
+            enabledYearMonth: '2026-01',
+            subjectCodeScheme: '4-2-2-2',
+            label: '参考账套公司 / 2007 企业会计制度 / 2026-01'
+          }
+        ],
+        defaultSubjectCodeScheme: '4-2-2-2'
+      }
+    })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      wizardForm: {
+        createMode: 'BLANK' | 'REFERENCE'
+        referenceCompanyId?: string
+      }
+      validateStep: (step: number) => boolean
+    }
+
+    vm.wizardForm.createMode = 'REFERENCE'
+    vm.wizardForm.referenceCompanyId = 'COMP-REF'
+    await flushPromises()
+
+    expect(vm.wizardForm.referenceCompanyId).toBe('')
+    expect(vm.validateStep(0)).toBe(false)
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('所选参照账套缺少账套模板，请重新选择')
+
+    wrapper.unmount()
+  })
+
+  it('clears stale template selection after meta reload', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      wizardForm: {
+        createMode: 'BLANK' | 'REFERENCE'
+        templateCode?: string
+      }
+      loadMeta: () => Promise<void>
+    }
+
+    vm.wizardForm.createMode = 'BLANK'
+    vm.wizardForm.templateCode = 'AS_2007_ENTERPRISE'
+    mocks.financeSystemManagementApi.getMeta.mockResolvedValueOnce({
+      data: {
+        companyOptions: [
+          { companyId: 'COMPANY_A', companyCode: 'A01', companyName: '广州测试公司', label: 'A01 - 广州测试公司', value: 'COMPANY_A' }
+        ],
+        supervisorOptions: [
+          { value: '2', label: '李会计' }
+        ],
+        templateOptions: [],
+        referenceOptions: [],
+        defaultSubjectCodeScheme: '4-2-2-2'
+      }
+    })
+
+    await vm.loadMeta()
+    await flushPromises()
+
+    expect(vm.wizardForm.templateCode).toBe('')
+
+    wrapper.unmount()
+  })
+
+  it('shows backend chinese validation message when create task fails', async () => {
+    mocks.financeSystemManagementApi.createAccountSet.mockRejectedValueOnce(new Error('账套模板已停用'))
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      wizardForm: {
+        createMode: 'BLANK' | 'REFERENCE'
+        targetCompanyId: string
+        enabledYearMonth: string
+        templateCode?: string
+        supervisorUserId: number
+        subjectCodeScheme?: string
+      }
+      submitCreateTask: () => Promise<void>
+    }
+
+    vm.wizardForm.createMode = 'BLANK'
+    vm.wizardForm.targetCompanyId = 'COMPANY_B'
+    vm.wizardForm.enabledYearMonth = '2026-04'
+    vm.wizardForm.templateCode = 'AS_2007_ENTERPRISE'
+    vm.wizardForm.supervisorUserId = 2
+    vm.wizardForm.subjectCodeScheme = '4-2-2-2'
+
+    await vm.submitCreateTask()
+    await flushPromises()
+
+    expect(mocks.elMessage.error).toHaveBeenCalledWith('账套模板已停用')
+
+    wrapper.unmount()
+  })
+
   it('shows a readable error when the account set list fails', async () => {
     mocks.financeSystemManagementApi.listAccountSets.mockRejectedValue(new Error('账套列表加载失败'))
 

@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
@@ -75,12 +76,12 @@ class FinanceAccountSetTaskDomainSupportTest {
     void submitCreateTaskBuildsAsyncTaskForBlankAccountSet() throws Exception {
         SystemCompany company = new SystemCompany();
         company.setCompanyId("COMPANY_A");
-        company.setCompanyName("骞垮窞娴嬭瘯鍏徃");
+        company.setCompanyName("广州测试公司");
         company.setStatus(1);
 
         User supervisor = new User();
         supervisor.setId(2L);
-        supervisor.setName("鏉庝細璁?");
+        supervisor.setName("李会计");
         supervisor.setStatus(1);
 
         FinanceAccountSetTemplate template = new FinanceAccountSetTemplate();
@@ -148,5 +149,111 @@ class FinanceAccountSetTaskDomainSupportTest {
         assertEquals("TASK_1", result.getTaskNo());
         assertEquals("ACTIVE", result.getAccountSetStatus());
         assertEquals(true, result.getFinished());
+    }
+
+    @Test
+    void submitCreateTaskRejectsDisabledTemplateWithChineseMessage() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setStatus(1);
+
+        User supervisor = new User();
+        supervisor.setId(2L);
+        supervisor.setStatus(1);
+
+        FinanceAccountSetTemplate template = new FinanceAccountSetTemplate();
+        template.setTemplateCode("AS_2007_ENTERPRISE");
+        template.setStatus(0);
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(userMapper.selectById(2L)).thenReturn(supervisor);
+        when(financeAccountSetMapper.selectById("COMPANY_A")).thenReturn(null);
+        when(asyncTaskRecordMapper.selectOne(any())).thenReturn(null);
+        when(financeAccountSetTemplateMapper.selectById("AS_2007_ENTERPRISE")).thenReturn(template);
+
+        FinanceAccountSetCreateDTO dto = new FinanceAccountSetCreateDTO();
+        dto.setCreateMode("BLANK");
+        dto.setTargetCompanyId("COMPANY_A");
+        dto.setEnabledYearMonth("2026-04");
+        dto.setTemplateCode("AS_2007_ENTERPRISE");
+        dto.setSupervisorUserId(2L);
+        dto.setSubjectCodeScheme("4-2-2-2");
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> support.submitCreateTask(1L, dto));
+
+        assertEquals("账套模板已停用", exception.getMessage());
+    }
+
+    @Test
+    void submitCreateTaskRejectsDuplicateRunningTaskWithChineseMessage() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setStatus(1);
+
+        User supervisor = new User();
+        supervisor.setId(2L);
+        supervisor.setStatus(1);
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(userMapper.selectById(2L)).thenReturn(supervisor);
+        when(financeAccountSetMapper.selectById("COMPANY_A")).thenReturn(null);
+        when(asyncTaskRecordMapper.selectOne(any())).thenReturn(new AsyncTaskRecord());
+
+        FinanceAccountSetCreateDTO dto = new FinanceAccountSetCreateDTO();
+        dto.setCreateMode("BLANK");
+        dto.setTargetCompanyId("COMPANY_A");
+        dto.setEnabledYearMonth("2026-04");
+        dto.setTemplateCode("AS_2007_ENTERPRISE");
+        dto.setSupervisorUserId(2L);
+        dto.setSubjectCodeScheme("4-2-2-2");
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> support.submitCreateTask(1L, dto));
+
+        assertEquals("当前公司已有建账套任务执行中", exception.getMessage());
+    }
+
+    @Test
+    void submitCreateTaskRejectsReferenceAccountSetWithMissingTemplate() {
+        SystemCompany targetCompany = new SystemCompany();
+        targetCompany.setCompanyId("COMPANY_A");
+        targetCompany.setStatus(1);
+
+        SystemCompany referenceCompany = new SystemCompany();
+        referenceCompany.setCompanyId("COMP-REF");
+        referenceCompany.setStatus(1);
+
+        User supervisor = new User();
+        supervisor.setId(2L);
+        supervisor.setStatus(1);
+
+        FinanceAccountSet referenceAccountSet = new FinanceAccountSet();
+        referenceAccountSet.setCompanyId("COMP-REF");
+        referenceAccountSet.setStatus("ACTIVE");
+        referenceAccountSet.setTemplateCode(null);
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(targetCompany);
+        when(systemCompanyMapper.selectById("COMP-REF")).thenReturn(referenceCompany);
+        when(userMapper.selectById(2L)).thenReturn(supervisor);
+        when(financeAccountSetMapper.selectById("COMPANY_A")).thenReturn(null);
+        when(asyncTaskRecordMapper.selectOne(any())).thenReturn(null);
+        when(financeAccountSetMapper.selectById("COMP-REF")).thenReturn(referenceAccountSet);
+
+        FinanceAccountSetCreateDTO dto = new FinanceAccountSetCreateDTO();
+        dto.setCreateMode("REFERENCE");
+        dto.setReferenceCompanyId("COMP-REF");
+        dto.setTargetCompanyId("COMPANY_A");
+        dto.setEnabledYearMonth("2026-04");
+        dto.setSupervisorUserId(2L);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> support.submitCreateTask(1L, dto));
+
+        assertEquals("账套模板不能为空", exception.getMessage());
+    }
+
+    @Test
+    void getTaskStatusRejectsBlankTaskNoWithChineseMessage() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> support.getTaskStatus("   "));
+
+        assertEquals("任务号不能为空", exception.getMessage());
     }
 }

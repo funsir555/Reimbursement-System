@@ -29,6 +29,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public Result<Void> handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
+        String financeSystemMessage = resolveFinanceSystemBusinessMessage(ex, request);
+        if (financeSystemMessage != null) {
+            log.warn("Finance-system business exception on {}: {}", request.getRequestURI(), financeSystemMessage, ex);
+            return Result.error(financeSystemMessage);
+        }
         String message = resolveBusinessStateMessage(ex);
         if (message == null) {
             return handleException(ex, request);
@@ -133,6 +138,37 @@ public class GlobalExceptionHandler {
             return message;
         }
         return null;
+    }
+
+    private String resolveFinanceSystemBusinessMessage(IllegalStateException ex, HttpServletRequest request) {
+        if (!isFinanceSystemRequest(request)) {
+            return null;
+        }
+        String message = trimToNull(ex.getMessage());
+        if (message == null || message.startsWith("Failed to ")) {
+            return null;
+        }
+        if (message.startsWith("目标公司")
+                || message.startsWith("账套主管")
+                || message.startsWith("启用年月")
+                || message.startsWith("创建方式")
+                || message.startsWith("科目编码规则")
+                || message.startsWith("当前公司")
+                || message.startsWith("参照账套")
+                || message.startsWith("账套模板")
+                || message.startsWith("任务号")
+                || message.startsWith("任务不存在")
+                || message.startsWith("任务参数序列化失败")
+                || message.startsWith("无法获取当前登录用户")) {
+            return message;
+        }
+        return null;
+    }
+
+    private boolean isFinanceSystemRequest(HttpServletRequest request) {
+        return request != null
+                && request.getRequestURI() != null
+                && request.getRequestURI().startsWith("/auth/finance/system-management/");
     }
 
     private boolean isExpenseCreateInitializationMissing(String message) {

@@ -138,7 +138,7 @@ public class FinanceAccountSetMetaSupport extends AbstractFinanceSystemManagemen
                     option.setSubjectCodeScheme(resolveSubjectCodeScheme(item, codeRuleMap));
                     option.setLabel(firstNonBlank(option.getCompanyName(), item.getCompanyId())
                             + " / " + firstNonBlank(option.getTemplateName(), item.getTemplateCode())
-                            + " / " + firstNonBlank(option.getEnabledYearMonth(), "鏈缃惎鐢ㄦ湡闂?"));
+                            + " / " + firstNonBlank(option.getEnabledYearMonth(), "未设置启用期间"));
                     return option;
                 })
                 .toList();

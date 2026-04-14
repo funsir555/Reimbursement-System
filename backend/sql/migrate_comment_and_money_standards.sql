@@ -474,13 +474,13 @@ ALTER TABLE fin_account_set
     MODIFY COLUMN status varchar(16) NOT NULL DEFAULT 'INITIALIZING' COMMENT '账套状态:INITIALIZING初始化中/READY已就绪/FAILED失败',
     MODIFY COLUMN enabled_year int NULL COMMENT '启用年度',
     MODIFY COLUMN enabled_period int NULL COMMENT '启用期间',
-    MODIFY COLUMN template_code varchar(64) NULL COMMENT '模板编码',
+    MODIFY COLUMN template_code varchar(32) NULL COMMENT '模板编码',
     MODIFY COLUMN supervisor_user_id bigint NULL COMMENT '账套主管用户ID',
     MODIFY COLUMN create_mode varchar(16) NOT NULL DEFAULT 'BLANK' COMMENT '创建方式',
     MODIFY COLUMN reference_company_id varchar(64) NULL COMMENT '参照账套公司',
-    MODIFY COLUMN subject_code_scheme varchar(64) NULL COMMENT '科目编码规则',
+    MODIFY COLUMN subject_code_scheme varchar(32) NULL COMMENT '科目编码规则',
     MODIFY COLUMN subject_count int NOT NULL DEFAULT 0 COMMENT '科目数量',
-    MODIFY COLUMN last_task_no varchar(64) NULL COMMENT '鏈€杩戜换鍔″彿',
+    MODIFY COLUMN last_task_no varchar(32) NULL COMMENT '最近任务号',
     MODIFY COLUMN error_message varchar(500) NULL COMMENT '失败原因',
     MODIFY COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     MODIFY COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -489,15 +489,15 @@ ALTER TABLE fin_account_set
 ALTER TABLE fin_account_set_code_rule
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
     MODIFY COLUMN company_id varchar(64) NOT NULL COMMENT '公司主体编码',
-    MODIFY COLUMN rule_type varchar(64) NOT NULL COMMENT '规则类型',
-    MODIFY COLUMN scheme varchar(64) NOT NULL COMMENT '规则表达式',
+    MODIFY COLUMN rule_type varchar(32) NOT NULL COMMENT '规则类型',
+    MODIFY COLUMN scheme varchar(32) NOT NULL COMMENT '规则表达式',
     MODIFY COLUMN level1_length int NOT NULL DEFAULT 4 COMMENT '一级科目长度',
     MODIFY COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     MODIFY COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     COMMENT = '账套编码规则';
 
 ALTER TABLE fin_account_set_template
-    MODIFY COLUMN template_code varchar(64) NOT NULL COMMENT '模板编码',
+    MODIFY COLUMN template_code varchar(32) NOT NULL COMMENT '模板编码',
     MODIFY COLUMN template_name varchar(128) NOT NULL COMMENT '模板名称',
     MODIFY COLUMN accounting_standard varchar(128) NOT NULL COMMENT '制度口径',
     MODIFY COLUMN description varchar(500) NULL COMMENT '模板说明',
@@ -508,7 +508,7 @@ ALTER TABLE fin_account_set_template
 
 ALTER TABLE fin_account_set_template_subject
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
-    MODIFY COLUMN template_code varchar(64) NOT NULL COMMENT '模板编码',
+    MODIFY COLUMN template_code varchar(32) NOT NULL COMMENT '模板编码',
     MODIFY COLUMN subject_key varchar(128) NOT NULL COMMENT '模板科目标识',
     MODIFY COLUMN parent_subject_key varchar(128) NULL COMMENT '父级模板科目标识',
     MODIFY COLUMN subject_level int NOT NULL COMMENT '科目层级',
@@ -626,7 +626,7 @@ ALTER TABLE fin_account_subject
     MODIFY COLUMN bcDefine15 tinyint NOT NULL DEFAULT 0 COMMENT '科目自定义项15',
     MODIFY COLUMN bcDefine16 tinyint NOT NULL DEFAULT 0 COMMENT '科目自定义项16',
     MODIFY COLUMN status tinyint NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
-    MODIFY COLUMN template_code varchar(64) NULL COMMENT '来源模板编码',
+    MODIFY COLUMN template_code varchar(32) NULL COMMENT '来源模板编码',
     MODIFY COLUMN sort_order int NOT NULL DEFAULT 0 COMMENT '排序号',
     MODIFY COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     MODIFY COLUMN updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

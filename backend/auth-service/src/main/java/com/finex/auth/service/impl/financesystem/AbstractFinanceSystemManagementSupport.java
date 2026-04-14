@@ -170,10 +170,10 @@ public abstract class AbstractFinanceSystemManagementSupport {
 
     protected String resolveAccountSetStatusLabel(String status) {
         return switch (status == null ? "" : status.toUpperCase(Locale.ROOT)) {
-            case "ACTIVE" -> "宸插惎鐢?";
-            case "INITIALIZING" -> "鍒涘缓涓?";
-            case "FAILED" -> "鍒涘缓澶辫触";
-            default -> "鏈垱寤?";
+            case "ACTIVE" -> "已启用";
+            case "INITIALIZING" -> "创建中";
+            case "FAILED" -> "创建失败";
+            default -> "未创建";
         };
     }
 
@@ -199,36 +199,36 @@ public abstract class AbstractFinanceSystemManagementSupport {
     protected SystemCompany requireEnabledCompany(String companyId) {
         SystemCompany company = systemCompanyMapper.selectById(companyId);
         if (company == null || !Integer.valueOf(1).equals(company.getStatus())) {
-            throw new IllegalStateException("鐩爣鍏徃涓嶅瓨鍦ㄦ垨鏈惎鐢?");
+            throw new IllegalStateException("目标公司不存在或未启用");
         }
         return company;
     }
 
     protected User requireSupervisor(Long supervisorUserId) {
         if (supervisorUserId == null) {
-            throw new IllegalArgumentException("璐﹀涓荤涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("账套主管不能为空");
         }
         User user = userMapper.selectById(supervisorUserId);
         if (user == null || !Integer.valueOf(1).equals(user.getStatus())) {
-            throw new IllegalStateException("璐﹀涓荤涓嶅瓨鍦ㄦ垨鏈惎鐢?");
+            throw new IllegalStateException("账套主管不存在或未启用");
         }
         return user;
     }
 
     protected String requireEnabledYearMonth(String enabledYearMonth) {
-        String normalized = requireText(enabledYearMonth, "鍚敤骞存湀涓嶈兘涓虹┖");
+        String normalized = requireText(enabledYearMonth, "启用年月不能为空");
         try {
             YearMonth.parse(normalized);
             return normalized;
         } catch (Exception ex) {
-            throw new IllegalArgumentException("鍚敤骞存湀鏍煎紡蹇呴』涓?YYYY-MM");
+            throw new IllegalArgumentException("启用年月格式必须为 YYYY-MM");
         }
     }
 
     protected String normalizeCreateMode(String createMode) {
-        String normalized = requireText(createMode, "鍒涘缓鏂瑰紡涓嶈兘涓虹┖").toUpperCase(Locale.ROOT);
+        String normalized = requireText(createMode, "创建方式不能为空").toUpperCase(Locale.ROOT);
         if (!Set.of(CREATE_MODE_BLANK, CREATE_MODE_REFERENCE).contains(normalized)) {
-            throw new IllegalArgumentException("涓嶆敮鎸佺殑鍒涘缓鏂瑰紡");
+            throw new IllegalArgumentException("不支持的创建方式");
         }
         return normalized;
     }
@@ -241,16 +241,16 @@ public abstract class AbstractFinanceSystemManagementSupport {
         String normalized = normalizeScheme(scheme);
         String[] parts = normalized.split("-");
         if (parts.length == 0 || !"4".equals(parts[0])) {
-            throw new IllegalArgumentException("绉戠洰缂栫爜瑙勫垯蹇呴』浠?4 寮€澶?");
+            throw new IllegalArgumentException("科目编码规则必须以 4 开头");
         }
         for (String part : parts) {
             try {
                 int length = Integer.parseInt(part);
                 if (length <= 0) {
-                    throw new IllegalArgumentException("绉戠洰缂栫爜瑙勫垯蹇呴』涓烘鏁存暟娈甸暱");
+                    throw new IllegalArgumentException("科目编码规则必须为正整数段长");
                 }
             } catch (NumberFormatException ex) {
-                throw new IllegalArgumentException("绉戠洰缂栫爜瑙勫垯鏍煎紡涓嶆纭?");
+                throw new IllegalArgumentException("科目编码规则格式不正确");
             }
         }
     }
@@ -259,7 +259,7 @@ public abstract class AbstractFinanceSystemManagementSupport {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (Exception ex) {
-            throw new IllegalStateException("璐﹀鍒涘缓浠诲姟鍙傛暟搴忓垪鍖栧け璐?", ex);
+            throw new IllegalStateException("任务参数序列化失败", ex);
         }
     }
 

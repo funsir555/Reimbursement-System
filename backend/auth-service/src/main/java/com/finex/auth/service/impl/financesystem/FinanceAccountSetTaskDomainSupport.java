@@ -55,10 +55,10 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
         task.setTaskType(AsyncTaskSupport.TASK_TYPE_FINANCE_ACCOUNT_SET_CREATE);
         task.setBusinessType(AsyncTaskSupport.BUSINESS_TYPE_FINANCE_ACCOUNT_SET);
         task.setBusinessKey(payload.getTargetCompanyId());
-        task.setDisplayName("鏂板缓璐﹀");
+        task.setDisplayName("新建账套");
         task.setStatus(AsyncTaskSupport.TASK_STATUS_PENDING);
         task.setProgress(0);
-        task.setResultMessage("璐﹀鍒涘缓浠诲姟宸叉彁浜?");
+        task.setResultMessage("账套创建任务已提交");
         task.setResultPayload(writePayload(payload));
         asyncTaskRecordMapper().insert(task);
 
@@ -69,7 +69,7 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
     public FinanceAccountSetTaskStatusVO getTaskStatus(String taskNo) {
         String normalizedTaskNo = trimToNull(taskNo);
         if (normalizedTaskNo == null) {
-            throw new IllegalArgumentException("浠诲姟鍙蜂笉鑳戒负绌?");
+            throw new IllegalArgumentException("任务号不能为空");
         }
         AsyncTaskRecord task = asyncTaskRecordMapper().selectOne(
                 Wrappers.<AsyncTaskRecord>lambdaQuery()
@@ -77,7 +77,7 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
                         .last("limit 1")
         );
         if (task == null) {
-            throw new IllegalStateException("璐﹀浠诲姟涓嶅瓨鍦?");
+            throw new IllegalStateException("任务不存在");
         }
         FinanceAccountSet accountSet = task.getCompanyId() == null ? null : financeAccountSetMapper().selectById(task.getCompanyId());
         return toTaskStatus(task, accountSet == null ? null : accountSet.getStatus());
@@ -87,7 +87,7 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
         FinanceAccountSetTaskPayload payload = new FinanceAccountSetTaskPayload();
         payload.setCreateMode(normalizeCreateMode(dto.getCreateMode()));
         payload.setReferenceCompanyId(trimToNull(dto.getReferenceCompanyId()));
-        payload.setTargetCompanyId(requireText(dto.getTargetCompanyId(), "鐩爣鍏徃涓嶈兘涓虹┖"));
+        payload.setTargetCompanyId(requireText(dto.getTargetCompanyId(), "目标公司不能为空"));
         payload.setEnabledYearMonth(requireEnabledYearMonth(dto.getEnabledYearMonth()));
         payload.setTemplateCode(trimToNull(dto.getTemplateCode()));
         payload.setSupervisorUserId(dto.getSupervisorUserId());
@@ -100,7 +100,7 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
         requireSupervisor(payload.getSupervisorUserId());
 
         if (financeAccountSetMapper().selectById(payload.getTargetCompanyId()) != null) {
-            throw new IllegalStateException("鐩爣鍏徃宸插瓨鍦ㄨ处濂楋紝涓嶈兘閲嶅鍒涘缓");
+            throw new IllegalStateException("目标公司已存在账套");
         }
 
         AsyncTaskRecord activeTask = asyncTaskRecordMapper().selectOne(
@@ -112,27 +112,36 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
                         .last("limit 1")
         );
         if (activeTask != null) {
-            throw new IllegalStateException("褰撳墠鍏徃宸叉湁璐﹀鍒涘缓浠诲姟姝ｅ湪鎵ц");
+            throw new IllegalStateException("当前公司已有建账套任务执行中");
         }
 
         if (CREATE_MODE_REFERENCE.equals(payload.getCreateMode())) {
-            String referenceCompanyId = requireText(payload.getReferenceCompanyId(), "鍙傜収璐﹀涓嶈兘涓虹┖");
+            String referenceCompanyId = requireText(payload.getReferenceCompanyId(), "参照账套不能为空");
             if (referenceCompanyId.equals(payload.getTargetCompanyId())) {
-                throw new IllegalArgumentException("鐩爣鍏徃涓庡弬鐓ц处濂楀叕鍙镐笉鑳界浉鍚?");
+                throw new IllegalArgumentException("目标公司与参照账套公司不能相同");
             }
             FinanceAccountSet referenceAccountSet = financeAccountSetMapper().selectById(referenceCompanyId);
             if (referenceAccountSet == null || !"ACTIVE".equalsIgnoreCase(referenceAccountSet.getStatus())) {
-                throw new IllegalStateException("鍙傜収璐﹀涓嶅瓨鍦ㄦ垨灏氭湭鍚敤");
+                throw new IllegalStateException("参照账套不存在或未启用");
             }
             requireEnabledCompany(referenceCompanyId);
+            validateTemplate(referenceAccountSet.getTemplateCode());
             return;
         }
 
-        String templateCode = requireText(payload.getTemplateCode(), "璐﹀妯℃澘涓嶈兘涓虹┖");
-        FinanceAccountSetTemplate template = financeAccountSetTemplateMapper().selectById(templateCode);
-        if (template == null || !Integer.valueOf(1).equals(template.getStatus())) {
-            throw new IllegalStateException("璐﹀妯℃澘涓嶅瓨鍦?");
-        }
+        String templateCode = requireText(payload.getTemplateCode(), "账套模板不能为空");
+        validateTemplate(templateCode);
         validateScheme(payload.getSubjectCodeScheme());
+    }
+
+    private void validateTemplate(String templateCode) {
+        String normalizedTemplateCode = requireText(templateCode, "账套模板不能为空");
+        FinanceAccountSetTemplate template = financeAccountSetTemplateMapper().selectById(normalizedTemplateCode);
+        if (template == null) {
+            throw new IllegalStateException("账套模板不存在");
+        }
+        if (!Integer.valueOf(1).equals(template.getStatus())) {
+            throw new IllegalStateException("账套模板已停用");
+        }
     }
 }

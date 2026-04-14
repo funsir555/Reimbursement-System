@@ -94,6 +94,34 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleIllegalStateReturnsFinanceSystemChineseMessageDirectly() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("账套模板已停用");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/finance/system-management/account-sets/create")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("账套模板已停用", result.getMessage());
+    }
+
+    @Test
+    void handleIllegalStateDoesNotBroadenFinanceSystemPassthroughToOtherPaths() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("账套模板已停用");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/expenses/create/documents")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("\u7cfb\u7edf\u5f02\u5e38\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5", result.getMessage());
+    }
+
+    @Test
     void resolveDatabaseMessageReturnsFriendlyTextForDataTooLong() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         PersistenceException exception = new PersistenceException(
