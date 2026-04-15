@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -47,6 +52,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * AbstractExpenseWorkflowSupport：通用支撑类。
+ * 封装 报销单这块可复用的业务能力。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Slf4j
 @RequiredArgsConstructor
 class AbstractExpenseWorkflowSupport {
@@ -73,7 +83,7 @@ class AbstractExpenseWorkflowSupport {
     private static final String PAYMENT_EXECUTE_PERMISSION = "expense:payment:payment_order:execute";
 
     private static final String DOCUMENT_STATUS_PENDING = "PENDING_APPROVAL";
-    private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
     private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
     private static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
@@ -117,6 +127,9 @@ class AbstractExpenseWorkflowSupport {
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 组装运行时流程上下文。
+     */
     public Map<String, Object> buildRuntimeFlowContext(
             User currentUser,
             ProcessDocumentTemplate template,
@@ -154,6 +167,9 @@ class AbstractExpenseWorkflowSupport {
         return context;
     }
 
+    /**
+     * 组装运行时上下文ForInstance。
+     */
     public Map<String, Object> buildRuntimeContextForInstance(ProcessDocumentInstance instance) {
         Map<String, Object> formData = readMap(instance.getFormDataJson());
         List<ProcessDocumentExpenseDetail> expenseDetails = loadExpenseDetails(instance.getDocumentCode());
@@ -193,6 +209,9 @@ class AbstractExpenseWorkflowSupport {
         return context;
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void initializeRuntime(ProcessDocumentInstance instance, Map<String, Object> context) {
         log.info(
                 "Expense submit stage=initialize-runtime documentCode={} approvalFlowCode={} status={}",
@@ -203,11 +222,11 @@ class AbstractExpenseWorkflowSupport {
         try {
             FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
             if (snapshot.nodes().isEmpty()) {
-                markDocumentApproved(instance, DOCUMENT_STATUS_APPROVED);
+                markDocumentApproved(instance, DOCUMENT_STATUS_COMPLETED);
                 appendLog(instance.getDocumentCode(), null, null, LOG_FINISH, null, "SYSTEM", "No approval nodes configured", Collections.emptyMap());
                 return;
             }
-            advanceFromPosition(instance, snapshot, context, null, 0, DOCUMENT_STATUS_APPROVED);
+            advanceFromPosition(instance, snapshot, context, null, 0, DOCUMENT_STATUS_COMPLETED);
         } catch (RuntimeException ex) {
             log.error(
                     "Expense submit runtime initialization failed documentCode={} approvalFlowCode={} status={}",
@@ -220,10 +239,16 @@ class AbstractExpenseWorkflowSupport {
         }
     }
 
+    /**
+     * 校验流程Snapshot。
+     */
     public void validateFlowSnapshot(String snapshotJson) {
         readFlowSnapshot(snapshotJson);
     }
 
+    /**
+     * 审批通过Pending任务。
+     */
     public void approvePendingTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -260,13 +285,16 @@ class AbstractExpenseWorkflowSupport {
         if (nodeCompleted) {
             Map<String, Object> context = buildRuntimeContextForInstance(instance);
             clearCurrentNode(instance);
-            advanceFromPosition(instance, snapshot, context, node.getParentNodeKey(), nextIndex(snapshot, node), DOCUMENT_STATUS_APPROVED);
+            advanceFromPosition(instance, snapshot, context, node.getParentNodeKey(), nextIndex(snapshot, node), DOCUMENT_STATUS_COMPLETED);
         } else {
             instance.setUpdatedAt(now);
             processDocumentInstanceMapper.updateById(instance);
         }
     }
 
+    /**
+     * 审批驳回Pending任务。
+     */
     public void rejectPendingTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -294,6 +322,9 @@ class AbstractExpenseWorkflowSupport {
         ));
     }
 
+    /**
+     * 创建AddSign任务。
+     */
     public void createAddSignTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -336,6 +367,9 @@ class AbstractExpenseWorkflowSupport {
         ));
     }
 
+    /**
+     * 审批通过AddSign任务。
+     */
     public void approveAddSignTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -363,17 +397,26 @@ class AbstractExpenseWorkflowSupport {
         processDocumentInstanceMapper.updateById(instance);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public boolean paymentTaskAllowsRetry(ProcessDocumentTask task) {
         ProcessDocumentInstance instance = requireDocument(task.getDocumentCode());
         return paymentTaskAllowsRetry(instance, task);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public boolean paymentTaskAllowsRetry(ProcessDocumentInstance instance, ProcessDocumentTask task) {
         FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
         ProcessFlowNodeDTO node = snapshot.node(task.getNodeKey());
         return node != null && paymentNodeAllowsRetry(node);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void markPaymentStarted(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -403,6 +446,9 @@ class AbstractExpenseWorkflowSupport {
         ));
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void completePaymentRuntime(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -445,6 +491,9 @@ class AbstractExpenseWorkflowSupport {
         advanceFromPosition(instance, snapshot, context, node.getParentNodeKey(), nextIndex(snapshot, node), DOCUMENT_STATUS_PAYMENT_COMPLETED);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void markPaymentException(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -469,6 +518,9 @@ class AbstractExpenseWorkflowSupport {
         ));
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public RawFlowSnapshotSignature inspectRawFlowSnapshot(String snapshotJson) {
         if (trimToNull(snapshotJson) == null) {
             return new RawFlowSnapshotSignature(false, false, false);
@@ -593,6 +645,9 @@ class AbstractExpenseWorkflowSupport {
         return FlowAdvanceState.COMPLETED;
     }
 
+    /**
+     * 创建审批任务。
+     */
     private void createApprovalTasks(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, List<User> approvers) {
         LocalDateTime now = LocalDateTime.now();
         String approvalMode = defaultText(asText(node.getConfig().get("approvalMode")), APPROVAL_MODE_OR_SIGN);
@@ -632,6 +687,9 @@ class AbstractExpenseWorkflowSupport {
         ));
     }
 
+    /**
+     * 创建付款任务。
+     */
     private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, List<User> executors) {
         LocalDateTime now = LocalDateTime.now();
         String batchNo = buildTaskBatchNo(instance.getDocumentCode(), node.getNodeKey());
@@ -714,6 +772,9 @@ class AbstractExpenseWorkflowSupport {
         };
     }
 
+    /**
+     * 解析Approvers。
+     */
     private List<User> resolveApprovers(ProcessFlowNodeDTO node, Map<String, Object> context) {
         Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
         String approverType = defaultText(asText(config.get("approverType")), APPROVER_TYPE_MANAGER);
@@ -733,6 +794,9 @@ class AbstractExpenseWorkflowSupport {
                 ));
     }
 
+    /**
+     * 解析ManagerMembers。
+     */
     private List<User> resolveManagerMembers(Map<String, Object> config, Map<String, Object> context) {
         Map<String, Object> managerConfig = toObjectMap(config.get("managerConfig"));
         String deptSource = defaultText(asText(managerConfig.get("deptSource")), DEPT_SOURCE_UNDERTAKE);
@@ -763,14 +827,23 @@ class AbstractExpenseWorkflowSupport {
         return result;
     }
 
+    /**
+     * 解析DesignatedMembers。
+     */
     private List<User> resolveDesignatedMembers(Map<String, Object> config) {
         return loadActiveUsers(toLongList(toObjectMap(config.get("designatedMemberConfig")).get("userIds")));
     }
 
+    /**
+     * 解析ManualMembers。
+     */
     private List<User> resolveManualMembers(Map<String, Object> context) {
         return loadActiveUsers(toLongList(context.get("manualSelectedUserIds")));
     }
 
+    /**
+     * 解析付款Executors。
+     */
     private List<User> resolvePaymentExecutors(ProcessFlowNodeDTO node) {
         Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
         String executorType = defaultText(asText(config.get("executorType")), PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER);
@@ -788,10 +861,16 @@ class AbstractExpenseWorkflowSupport {
                 ));
     }
 
+    /**
+     * 解析付款DesignatedMembers。
+     */
     private List<User> resolvePaymentDesignatedMembers(Map<String, Object> config) {
         return loadActiveUsers(toLongList(config.get("executorUserIds")));
     }
 
+    /**
+     * 解析付款财务角色Members。
+     */
     private List<User> resolvePaymentFinanceRoleMembers() {
         SystemPermission permission = systemPermissionMapper.selectOne(
                 Wrappers.<SystemPermission>lambdaQuery()
@@ -837,6 +916,9 @@ class AbstractExpenseWorkflowSupport {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    /**
+     * 解析StartDeptIds。
+     */
     private List<Long> resolveStartDeptIds(String deptSource, Map<String, Object> context) {
         if (DEPT_SOURCE_SUBMITTER.equals(deptSource)) {
             Long submitterDeptId = asLong(context.get("submitterDeptId"));
@@ -850,6 +932,9 @@ class AbstractExpenseWorkflowSupport {
         return submitterDeptId == null ? Collections.emptyList() : List.of(submitterDeptId);
     }
 
+    /**
+     * 判断Misapproved按BlankRootBug是否成立。
+     */
     boolean isMisapprovedByBlankRootBug(String documentCode) {
         if (trimToNull(documentCode) == null) {
             return false;
@@ -883,6 +968,9 @@ class AbstractExpenseWorkflowSupport {
         initializeRuntime(instance, buildRuntimeContextForInstance(instance));
     }
 
+    /**
+     * 加载报销单明细。
+     */
     private List<ProcessDocumentExpenseDetail> loadExpenseDetails(String documentCode) {
         return processDocumentExpenseDetailMapper.selectList(
                 Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
@@ -907,7 +995,7 @@ class AbstractExpenseWorkflowSupport {
 
     private void markDocumentApproved(ProcessDocumentInstance instance, String terminalStatus) {
         LocalDateTime now = LocalDateTime.now();
-        instance.setStatus(defaultText(trimToNull(terminalStatus), DOCUMENT_STATUS_APPROVED));
+        instance.setStatus(defaultText(trimToNull(terminalStatus), DOCUMENT_STATUS_COMPLETED));
         instance.setCurrentNodeKey(null);
         instance.setCurrentNodeName(null);
         instance.setCurrentTaskType(null);
@@ -928,6 +1016,9 @@ class AbstractExpenseWorkflowSupport {
         appendLog(instance.getDocumentCode(), node == null ? null : node.getNodeKey(), node == null ? null : node.getNodeName(), LOG_EXCEPTION, null, "SYSTEM", reason, Collections.emptyMap());
     }
 
+    /**
+     * 清理当前Node。
+     */
     private void clearCurrentNode(ProcessDocumentInstance instance) {
         instance.setCurrentNodeKey(null);
         instance.setCurrentNodeName(null);
@@ -1031,6 +1122,9 @@ class AbstractExpenseWorkflowSupport {
         }
     }
 
+    /**
+     * 加载开立任务。
+     */
     private List<ProcessDocumentTask> loadOpenTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -1040,6 +1134,9 @@ class AbstractExpenseWorkflowSupport {
         );
     }
 
+    /**
+     * 加载Node开立任务。
+     */
     private List<ProcessDocumentTask> loadNodeOpenTasks(String documentCode, String nodeKey) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -1050,6 +1147,9 @@ class AbstractExpenseWorkflowSupport {
         );
     }
 
+    /**
+     * 加载ActionLogs。
+     */
     private List<ProcessDocumentActionLog> loadActionLogs(String documentCode) {
         return processDocumentActionLogMapper.selectList(
                 Wrappers.<ProcessDocumentActionLog>lambdaQuery()
@@ -1070,6 +1170,9 @@ class AbstractExpenseWorkflowSupport {
         }
     }
 
+    /**
+     * 解析TotalAmount。
+     */
     private BigDecimal resolveTotalAmount(Map<String, Object> formData) {
         BigDecimal directAmount = toBigDecimal(formData.get("__totalAmount"));
         if (directAmount != null) {
@@ -1116,6 +1219,9 @@ class AbstractExpenseWorkflowSupport {
         }
     }
 
+    /**
+     * 解析UndertakeDeptIds。
+     */
     private List<String> resolveUndertakeDeptIds(
             ProcessFormDesign formDesign,
             Map<String, Object> formData,
@@ -1137,6 +1243,9 @@ class AbstractExpenseWorkflowSupport {
         return new ArrayList<>(deptIds);
     }
 
+    /**
+     * 解析UndertakeDeptIdsFromSnapshots。
+     */
     private List<String> resolveUndertakeDeptIdsFromSnapshots(
             Map<String, Object> mainSchema,
             Map<String, Object> mainFormData,
@@ -1156,6 +1265,9 @@ class AbstractExpenseWorkflowSupport {
         return new ArrayList<>(deptIds);
     }
 
+    /**
+     * 合并运行时表单数据。
+     */
     private Map<String, Object> mergeRuntimeFormData(Map<String, Object> formData, List<ExpenseDetailInstanceDTO> expenseDetails) {
         Map<String, Object> merged = formData == null ? new LinkedHashMap<>() : new LinkedHashMap<>(formData);
         if (expenseDetails == null || expenseDetails.isEmpty()) {
@@ -1310,14 +1422,23 @@ class AbstractExpenseWorkflowSupport {
         return List.of(value);
     }
 
+    /**
+     * 组装任务BatchNo。
+     */
     private String buildTaskBatchNo(String documentCode, String nodeKey) {
         return documentCode + "-" + nodeKey + "-" + System.currentTimeMillis();
     }
 
+    /**
+     * 解析MissingHandler。
+     */
     private String resolveMissingHandler(Map<String, Object> config) {
         return defaultText(asText(config == null ? null : config.get("missingHandler")), MISSING_HANDLER_AUTO_SKIP);
     }
 
+    /**
+     * 加载全部Department映射。
+     */
     private Map<Long, SystemDepartment> loadAllDepartmentMap() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getStatus, 1)
@@ -1329,6 +1450,9 @@ class AbstractExpenseWorkflowSupport {
         ));
     }
 
+    /**
+     * 加载Active用户。
+     */
     private User loadActiveUser(Long userId) {
         if (userId == null) {
             return null;
@@ -1337,6 +1461,9 @@ class AbstractExpenseWorkflowSupport {
         return user != null && Objects.equals(user.getStatus(), 1) ? user : null;
     }
 
+    /**
+     * 加载Active用户。
+     */
     private List<User> loadActiveUsers(List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Collections.emptyList();
@@ -1356,6 +1483,9 @@ class AbstractExpenseWorkflowSupport {
         return current;
     }
 
+    /**
+     * 解析上级。
+     */
     private LeaderResolution resolveLeader(SystemDepartment startDept, Map<Long, SystemDepartment> departmentMap, boolean allowLookup, int lookupLevel) {
         SystemDepartment current = startDept;
         int remaining = lookupLevel;

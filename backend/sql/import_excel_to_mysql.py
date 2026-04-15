@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import re
 import sys
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -48,9 +49,11 @@ from excel_mysql_common import (
     ColumnMeta,
     ExcelToolError,
     fetch_columns,
+    fetch_regex_check_constraints,
+    is_system_managed_column,
     open_connection,
-    split_csv_arg,
     quote_identifier,
+    split_csv_arg,
 )
 
 DATE_INPUT_FORMATS = (
@@ -71,6 +74,7 @@ SUSPICIOUS_TEXT_PATTERNS = (
     "�",
 )
 INSERT_BATCH_SIZE = 200
+TEXT_LENGTH_PATTERN = re.compile(r"^(?:var)?char\((\d+)\)$")
 
 
 @dataclass
@@ -82,8 +86,7 @@ class ValidationError(ExcelToolError):
 
     def __str__(self) -> str:
         return (
-            f"Row {self.row_number}, column '{self.column_name}', "
-            f"value={self.raw_value!r}: {self.reason}"
+            f"第 {self.row_number} 行，列“{self.column_name}”，原值={self.raw_value!r}：{self.reason}"
         )
 
 
@@ -135,21 +138,21 @@ def ensure_dependencies() -> tuple[Any, Any]:
     try:
         import openpyxl  # type: ignore
     except ModuleNotFoundError as exc:
-        raise SystemExit("Missing dependency 'openpyxl'. Run: pip install openpyxl pymysql") from exc
+        raise SystemExit("缺少依赖 openpyxl，请先执行：pip install openpyxl pymysql") from exc
     try:
         import pymysql  # type: ignore
     except ModuleNotFoundError as exc:
-        raise SystemExit("Missing dependency 'pymysql'. Run: pip install openpyxl pymysql") from exc
+        raise SystemExit("缺少依赖 pymysql，请先执行：pip install openpyxl pymysql") from exc
     return openpyxl, pymysql
 
 
 def load_workbook(openpyxl: Any, file_path: Path, sheet_name: str | None) -> Any:
     if not file_path.exists():
-        raise ExcelToolError(f"Excel file not found: {file_path}")
+        raise ExcelToolError(f"Excel 文件不存在：{file_path}")
     workbook = openpyxl.load_workbook(filename=file_path, read_only=True, data_only=True)
     if sheet_name:
         if sheet_name not in workbook.sheetnames:
-            raise ExcelToolError(f"Worksheet not found: {sheet_name}")
+            raise ExcelToolError(f"工作表不存在：{sheet_name}")
         return workbook[sheet_name]
     return workbook[workbook.sheetnames[0]]
 
@@ -164,11 +167,11 @@ def read_headers(sheet: Any, header_row: int) -> list[str]:
             continue
         header = str(value).strip()
         if header in seen:
-            raise ExcelToolError(f"Duplicate header in Excel: {header}")
+            raise ExcelToolError(f"Excel 表头重复：{header}")
         seen.add(header)
         headers.append(header)
     if not headers:
-        raise ExcelToolError("Header row is empty.")
+        raise ExcelToolError("Excel 表头行为空。")
     return headers
 
 
@@ -176,21 +179,21 @@ def validate_headers(headers: Sequence[str], columns: dict[str, ColumnMeta], key
     db_columns = set(columns)
     extra_headers = [header for header in headers if header not in db_columns]
     if extra_headers:
-        raise ExcelToolError(f"Excel has columns not found in DB: {', '.join(extra_headers)}")
+        raise ExcelToolError(f"Excel 包含数据库中不存在的列：{', '.join(extra_headers)}")
     missing_required = []
     for name, meta in columns.items():
         if name in headers:
             continue
-        if meta.is_nullable or meta.column_default is not None or "auto_increment" in meta.extra:
+        if meta.is_nullable or meta.column_default is not None or "auto_increment" in meta.extra or is_system_managed_column(meta):
             continue
         missing_required.append(name)
     if missing_required:
         raise ExcelToolError(
-            "Excel is missing required DB columns: " + ", ".join(missing_required)
+            "Excel 缺少数据库必填列：" + ", ".join(missing_required)
         )
     missing_keys = [column for column in key_columns if column not in headers]
     if missing_keys:
-        raise ExcelToolError("Key columns are missing from Excel header: " + ", ".join(missing_keys))
+        raise ExcelToolError("Excel 表头缺少唯一键列：" + ", ".join(missing_keys))
 
 
 def is_blank_row(row_values: Sequence[Any]) -> bool:
@@ -218,31 +221,37 @@ def parse_date_value(value: Any, meta: ColumnMeta, row_number: int, column_name:
                 return parsed
             except ValueError:
                 continue
-    raise ValidationError(row_number, column_name, value, "invalid date format")
+    raise ValidationError(row_number, column_name, value, "日期格式不正确")
 
 
 def parse_amount_value(value: Any, row_number: int, column_name: str) -> Decimal | None:
     if value is None or str(value).strip() == "":
         return None
     if isinstance(value, bool):
-        raise ValidationError(row_number, column_name, value, "boolean is not a valid amount")
+        raise ValidationError(row_number, column_name, value, "布尔值不是合法金额")
     if isinstance(value, str):
         text = value.strip()
         if "," in text:
-            raise ValidationError(row_number, column_name, value, "comma-separated amount is not supported")
+            raise ValidationError(row_number, column_name, value, "金额不支持千分位逗号格式")
         candidate = text
     else:
         candidate = str(value)
     try:
         decimal_value = Decimal(candidate)
     except InvalidOperation as exc:
-        raise ValidationError(row_number, column_name, value, "invalid numeric amount") from exc
+        raise ValidationError(row_number, column_name, value, "金额不是合法数字") from exc
     if decimal_value.as_tuple().exponent < -2:
-        raise ValidationError(row_number, column_name, value, "amount has more than 2 decimal places")
+        raise ValidationError(row_number, column_name, value, "金额小数位不能超过 2 位")
     return decimal_value.quantize(AMOUNT_QUANT)
 
+def parse_text_length_limit(column_type: str) -> int | None:
+    match = TEXT_LENGTH_PATTERN.fullmatch(column_type.strip().lower())
+    if not match:
+        return None
+    return int(match.group(1))
 
-def check_text_value(value: Any, row_number: int, column_name: str, strict: bool) -> str | None:
+
+def check_text_value(value: Any, row_number: int, column_name: str, strict: bool, max_length: int | None) -> str | None:
     if value is None:
         return None
     text = str(value)
@@ -250,9 +259,11 @@ def check_text_value(value: Any, row_number: int, column_name: str, strict: bool
         return None
     for marker in SUSPICIOUS_TEXT_PATTERNS:
         if marker in text:
-            raise ValidationError(row_number, column_name, value, "suspected garbled text")
+            raise ValidationError(row_number, column_name, value, "疑似乱码文本")
     if strict and text.strip() in {"?", "??", "???", "????", "NULL", "null"}:
-        raise ValidationError(row_number, column_name, value, "placeholder text is not allowed")
+        raise ValidationError(row_number, column_name, value, "不允许使用占位文本")
+    if max_length is not None and len(text.strip()) > max_length:
+        raise ValidationError(row_number, column_name, value, f"文本长度超过上限 {max_length}")
     return text
 
 
@@ -278,11 +289,29 @@ def normalize_row(
             continue
         if meta.data_type in TEXT_DATA_TYPES or column_name in strict_text_columns:
             normalized[column_name] = check_text_value(
-                value, row_number, column_name, column_name in strict_text_columns
+                value,
+                row_number,
+                column_name,
+                column_name in strict_text_columns,
+                parse_text_length_limit(meta.column_type),
             )
             continue
         normalized[column_name] = value
     return normalized
+
+
+def resolve_insert_columns(
+    headers: Sequence[str],
+    row_map: dict[str, Any],
+    columns: dict[str, ColumnMeta],
+) -> list[str]:
+    insert_columns: list[str] = []
+    for column_name in headers:
+        value = row_map.get(column_name)
+        if value is None and is_system_managed_column(columns[column_name]):
+            continue
+        insert_columns.append(column_name)
+    return insert_columns
 
 
 def build_key_tuple(row_map: dict[str, Any], key_columns: Sequence[str], row_number: int) -> tuple[Any, ...]:
@@ -300,7 +329,7 @@ def detect_duplicate_keys_in_excel(key_rows: Iterable[tuple[int, tuple[Any, ...]
     for row_number, key_tuple in key_rows:
         if key_tuple in seen:
             raise ExcelToolError(
-                f"Duplicate key found in Excel. First row={seen[key_tuple]}, duplicate row={row_number}, key={key_tuple!r}"
+                f"Excel 中发现重复唯一键：首次出现在第 {seen[key_tuple]} 行，重复出现在第 {row_number} 行，键值={key_tuple!r}"
             )
         seen[key_tuple] = row_number
 
@@ -324,24 +353,69 @@ def detect_existing_keys(cursor: Any, table_name: str, key_columns: Sequence[str
         row = cursor.fetchone()
         if row:
             existing_key = tuple(row[column] for column in key_columns)
-            raise ExcelToolError(f"Existing key found in database: {existing_key!r}")
+            raise ExcelToolError(f"数据库中已存在相同唯一键：{existing_key!r}")
 
 
-def insert_rows(cursor: Any, table_name: str, headers: Sequence[str], rows: Sequence[dict[str, Any]]) -> int:
+def validate_check_constraints(
+    cursor: Any,
+    table_name: str,
+    rows: Sequence[tuple[int, dict[str, Any]]],
+) -> None:
+    regex_constraints = fetch_regex_check_constraints(cursor, table_name)
+    if not regex_constraints:
+        return
+    compiled_constraints: list[tuple[str, str, re.Pattern[str]]] = []
+    for item in regex_constraints:
+        try:
+            compiled_constraints.append((item.name, item.column_name, re.compile(item.pattern)))
+        except re.error:
+            continue
+    for row_number, row in rows:
+        for constraint_name, column_name, pattern in compiled_constraints:
+            if column_name not in row:
+                continue
+            value = row[column_name]
+            if value is None:
+                continue
+            if pattern.fullmatch(str(value)):
+                continue
+            raise ValidationError(
+                row_number,
+                column_name,
+                value,
+                f"违反数据库检查约束 {constraint_name}，要求匹配 {pattern.pattern}",
+            )
+
+
+def insert_rows(
+    cursor: Any,
+    table_name: str,
+    headers: Sequence[str],
+    rows: Sequence[dict[str, Any]],
+    columns: dict[str, ColumnMeta],
+) -> int:
     if not rows:
         return 0
-    sql = (
-        f"INSERT INTO {quote_identifier(table_name)} "
-        f"({', '.join(quote_identifier(column) for column in headers)}) "
-        f"VALUES ({', '.join(['%s'] * len(headers))})"
-    )
     inserted = 0
-    for start in range(0, len(rows), INSERT_BATCH_SIZE):
-        batch = rows[start : start + INSERT_BATCH_SIZE]
-        params = [tuple(row.get(column) for column in headers) for row in batch]
-        cursor.executemany(sql, params)
-        inserted += len(batch)
-        print(f"[INFO] Inserted {inserted}/{len(rows)} rows")
+    batches: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        insert_columns = tuple(resolve_insert_columns(headers, row, columns))
+        if not insert_columns:
+            raise ExcelToolError("存在无法写入的空行，请检查 Excel 数据。")
+        batches.setdefault(insert_columns, []).append(row)
+
+    for insert_columns, grouped_rows in batches.items():
+        sql = (
+            f"INSERT INTO {quote_identifier(table_name)} "
+            f"({', '.join(quote_identifier(column) for column in insert_columns)}) "
+            f"VALUES ({', '.join(['%s'] * len(insert_columns))})"
+        )
+        for start in range(0, len(grouped_rows), INSERT_BATCH_SIZE):
+            batch = grouped_rows[start : start + INSERT_BATCH_SIZE]
+            params = [tuple(row.get(column) for column in insert_columns) for row in batch]
+            cursor.executemany(sql, params)
+            inserted += len(batch)
+            print(f"[INFO] 已插入 {inserted}/{len(rows)} 行")
     return inserted
 
 
@@ -364,11 +438,14 @@ def main() -> int:
             sheet = load_workbook(openpyxl, excel_path, args.sheet)
             headers = read_headers(sheet, args.header_row)
             validate_headers(headers, columns, key_columns)
+            system_managed_header_columns = [
+                name for name in headers if is_system_managed_column(columns[name])
+            ]
 
             unknown_forced = (forced_date_columns | forced_amount_columns | forced_text_columns) - set(headers)
             if unknown_forced:
                 raise ExcelToolError(
-                    "Forced validation columns are missing from Excel header: "
+                    "强制校验列未出现在 Excel 表头中："
                     + ", ".join(sorted(unknown_forced))
                 )
 
@@ -380,6 +457,7 @@ def main() -> int:
             } | forced_amount_columns
 
             normalized_rows: list[dict[str, Any]] = []
+            numbered_rows: list[tuple[int, dict[str, Any]]] = []
             excel_keys: list[tuple[int, tuple[Any, ...]]] = []
             total_rows = 0
             for row_number, row in enumerate(
@@ -402,31 +480,34 @@ def main() -> int:
                 key_tuple = build_key_tuple(normalized, key_columns, row_number)
                 excel_keys.append((row_number, key_tuple))
                 normalized_rows.append(normalized)
+                numbered_rows.append((row_number, normalized))
 
             if total_rows == 0:
-                raise ExcelToolError("No data rows found in Excel.")
+                raise ExcelToolError("Excel 中未找到可导入的数据行。")
 
             detect_duplicate_keys_in_excel(excel_keys)
             detect_existing_keys(cursor, args.table, key_columns, [item[1] for item in excel_keys])
+            validate_check_constraints(cursor, args.table, numbered_rows)
 
-            print(f"[INFO] Excel rows validated: {len(normalized_rows)}")
-            print(f"[INFO] Date columns: {sorted(date_columns)}")
-            print(f"[INFO] Amount columns: {sorted(amount_columns)}")
-            print(f"[INFO] Strict text columns: {sorted(forced_text_columns)}")
+            print(f"[INFO] Excel 校验通过行数：{len(normalized_rows)}")
+            print(f"[INFO] 日期列：{sorted(date_columns)}")
+            print(f"[INFO] 金额列：{sorted(amount_columns)}")
+            print(f"[INFO] 严格文本列：{sorted(forced_text_columns)}")
+            print(f"[INFO] 已自动忽略系统托管列（空值时不写入）：{sorted(system_managed_header_columns)}")
 
             if args.dry_run:
-                print("[INFO] Dry run succeeded. No rows written.")
+                print("[INFO] Dry-run 校验成功，未写入数据库。")
                 connection.rollback()
                 return 0
 
-            inserted = insert_rows(cursor, args.table, headers, normalized_rows)
+            inserted = insert_rows(cursor, args.table, headers, normalized_rows, columns)
             connection.commit()
-            print(f"[INFO] Import completed successfully. Inserted rows: {inserted}")
+            print(f"[INFO] 导入完成，成功写入 {inserted} 行。")
             return 0
     except ValidationError as exc:
         if connection is not None:
             connection.rollback()
-        print(f"[ERROR] Validation failed: {exc}", file=sys.stderr)
+        print(f"[ERROR] 校验失败：{exc}", file=sys.stderr)
         return 1
     except ExcelToolError as exc:
         if connection is not None:

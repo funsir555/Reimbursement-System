@@ -277,7 +277,7 @@ class ExpenseRelationWriteOffServiceTest {
         instance.setTemplateType(templateType);
         instance.setDocumentTitle(documentTitle);
         instance.setTemplateName(documentTitle + "-template");
-        instance.setStatus("APPROVED");
+        instance.setStatus("COMPLETED");
         instance.setSubmitterUserId(submitterUserId);
         instance.setTotalAmount(totalAmount);
         instance.setFinishedAt(LocalDateTime.of(2026, 4, 8, 18, 0));

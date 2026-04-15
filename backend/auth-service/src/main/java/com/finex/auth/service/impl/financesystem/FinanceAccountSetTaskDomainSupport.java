@@ -1,3 +1,8 @@
+// 业务域：财务系统管理
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 财务系统设置和账套相关接口，下游会继续协调 账套、同步任务和财务上下文基础数据。
+// 风险提醒：改坏后最容易影响 账套切换、基础数据同步和下游系统连接。
+
 package com.finex.auth.service.impl.financesystem;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -18,8 +23,16 @@ import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.impl.FinanceAccountSetTaskWorker;
 import com.finex.auth.support.AsyncTaskSupport;
 
+/**
+ * FinanceAccountSetTaskDomainSupport：领域规则支撑类。
+ * 承接 财务账户Set任务的核心业务规则。
+ * 改这里时，要特别关注 账套切换、基础数据同步和下游系统连接是否会被一起带坏。
+ */
 public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemManagementSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public FinanceAccountSetTaskDomainSupport(
             FinanceAccountSetMapper financeAccountSetMapper,
             FinanceAccountSetCodeRuleMapper financeAccountSetCodeRuleMapper,
@@ -44,6 +57,9 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
         );
     }
 
+    /**
+     * 提交创建任务。
+     */
     public FinanceAccountSetTaskStatusVO submitCreateTask(Long currentUserId, FinanceAccountSetCreateDTO dto) {
         FinanceAccountSetTaskPayload payload = normalizePayload(dto);
         validateBeforeSubmit(payload);
@@ -66,6 +82,9 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
         return toTaskStatus(task, null);
     }
 
+    /**
+     * 获取任务Status。
+     */
     public FinanceAccountSetTaskStatusVO getTaskStatus(String taskNo) {
         String normalizedTaskNo = trimToNull(taskNo);
         if (normalizedTaskNo == null) {
@@ -95,6 +114,9 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
         return payload;
     }
 
+    /**
+     * 校验Before提交。
+     */
     private void validateBeforeSubmit(FinanceAccountSetTaskPayload payload) {
         requireEnabledCompany(payload.getTargetCompanyId());
         requireSupervisor(payload.getSupervisorUserId());
@@ -134,6 +156,9 @@ public class FinanceAccountSetTaskDomainSupport extends AbstractFinanceSystemMan
         validateScheme(payload.getSubjectCodeScheme());
     }
 
+    /**
+     * 校验模板。
+     */
     private void validateTemplate(String templateCode) {
         String normalizedTemplateCode = requireText(templateCode, "账套模板不能为空");
         FinanceAccountSetTemplate template = financeAccountSetTemplateMapper().selectById(normalizedTemplateCode);

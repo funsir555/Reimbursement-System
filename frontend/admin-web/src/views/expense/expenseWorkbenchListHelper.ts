@@ -69,7 +69,7 @@ export const EXPENSE_WORKBENCH_COLUMNS: ExpenseWorkbenchColumnDefinition[] = [
   { key: 'taskCreatedAt', label: '待办到达时间', width: 168 }
 ]
 
-export const EXPENSE_WORKBENCH_STATUS_OPTIONS = ['草稿', '审批中', '已通过', '已驳回', '流程异常', '待支付', '支付中', '支付完成', '支付异常']
+export const EXPENSE_WORKBENCH_STATUS_OPTIONS = ['草稿', '审批中', '已驳回', '流程异常', '待支付', '支付中', '已支付', '已完成', '支付异常']
 
 export const EXPENSE_WORKBENCH_DEFAULT_COLUMNS: Record<ExpenseWorkbenchPageKey, ExpenseWorkbenchColumnKey[]> = {
   list: ['documentCode', 'documentTitle', 'templateName', 'documentStatusLabel', 'currentNodeName', 'submittedAt', 'amount'],
@@ -377,7 +377,9 @@ export function getExpenseWorkbenchStatusType(status: string) {
     待支付: 'warning',
     支付中: 'warning',
     已通过: 'success',
+    已支付: 'success',
     支付完成: 'success',
+    已完成: 'success',
     已驳回: 'danger',
     支付异常: 'danger',
     流程异常: 'info',
@@ -391,7 +393,7 @@ export function isExpenseWorkbenchPendingLikeStatus(status: string) {
 }
 
 export function isExpenseWorkbenchCompletedLikeStatus(status: string) {
-  return ['已通过', '支付完成'].includes(status)
+  return ['已通过', '已支付', '支付完成', '已完成'].includes(status)
 }
 
 export function isExpenseWorkbenchExceptionLikeStatus(status: string) {

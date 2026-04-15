@@ -67,7 +67,12 @@
 
             <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <el-form-item label="单据名称" required>
-                <el-input v-model="form.templateName" placeholder="请输入单据名称" />
+                <el-input
+                  v-model="form.templateName"
+                  :maxlength="PM_NAME_MAX_LENGTH"
+                  show-word-limit
+                  placeholder="请输入单据名称"
+                />
               </el-form-item>
 
               <el-form-item label="所属分类" required>
@@ -447,6 +452,11 @@ import { hasPermission, readStoredUser } from '@/utils/permissions'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { compareMoney } from '@/utils/money'
 import ProcessWorkbenchSidebar from '@/components/process/ProcessWorkbenchSidebar.vue'
+import {
+  PM_NAME_MAX_LENGTH,
+  collectTemplateBindingIssues,
+  validateTemplateBindingValue
+} from '@/views/process/pmValidation'
 
 type SingleOptionField = 'formDesign' | 'expenseDetailDesign' | 'approvalFlow' | 'printMode' | 'paymentMode' | 'allocationForm'
 
@@ -579,6 +589,7 @@ const formDesignSummaryMap = computed(() => {
   return map
 })
 const selectedExpenseDetailType = computed(() => expenseDetailSummaryMap.value.get(form.expenseDetailDesign || '')?.detailType || '')
+const templateBindingIssues = computed(() => collectTemplateBindingIssues(form, options.value, isReportTemplate.value))
 const saveBlockers = computed(() => {
   const blockers: string[] = []
 
@@ -601,8 +612,48 @@ const saveBlockers = computed(() => {
     blockers.push('限定金额区间不合法，最小金额不能大于最大金额。')
   }
 
+  blockers.push(...templateBindingIssues.value)
+
   return blockers
 })
+
+function clearInvalidTemplateBindings(showMessage = false) {
+  if (!options.value) {
+    return false
+  }
+
+  const clearedLabels: string[] = []
+  const clearField = (field: 'formDesign' | 'approvalFlow' | 'expenseDetailDesign', label: string, optionList: Array<{ value?: string; detailCode?: string }> | string[]) => {
+    const currentValue = String(form[field] || '').trim()
+    if (!currentValue) {
+      return
+    }
+    const issue = validateTemplateBindingValue(currentValue, optionList as any, label)
+    if (!issue) {
+      return
+    }
+    form[field] = '' as never
+    if (field === 'expenseDetailDesign') {
+      form.expenseDetailModeDefault = ''
+    }
+    clearedLabels.push(label)
+  }
+
+  clearField('formDesign', '\u8868\u5355\u8bbe\u8ba1', options.value.formDesignOptions || [])
+  clearField('approvalFlow', '\u5ba1\u6279\u6d41\u7a0b', options.value.approvalFlows || [])
+  if (isReportTemplate.value) {
+    clearField('expenseDetailDesign', '\u8d39\u7528\u660e\u7ec6\u8868\u5355', options.value.expenseDetailDesignOptions || [])
+  } else if (form.expenseDetailDesign) {
+    form.expenseDetailDesign = ''
+    form.expenseDetailModeDefault = ''
+    clearedLabels.push('\u8d39\u7528\u660e\u7ec6\u8868\u5355')
+  }
+
+  if (showMessage && clearedLabels.length) {
+    ElMessage.warning(`${clearedLabels.join('\u3001')}\u5df2\u5931\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9`)
+  }
+  return clearedLabels.length > 0
+}
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
@@ -787,6 +838,7 @@ async function loadPage() {
     applyCreatedFlowCodeFromRoute()
     applyCreatedFormCodeFromRoute()
     applyCreatedExpenseDetailCodeFromRoute()
+    clearInvalidTemplateBindings(false)
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载模板配置页面失败'))
   }

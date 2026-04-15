@@ -279,8 +279,8 @@ describe('ExpenseDocumentsView', () => {
           currentNodeName: '',
           amount: 980,
           date: '2026-04-03',
-          status: '已通过',
-          documentStatusLabel: '已通过',
+          status: '待支付',
+          documentStatusLabel: '待支付',
           submittedAt: '2026-04-03 10:00',
           payeeName: '赵六'
         },
@@ -328,10 +328,12 @@ describe('ExpenseDocumentsView', () => {
     await flushPromises()
     expect(vm.filters.documentStatusLabel).toBe('审批中')
     expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001'])
+    expect(wrapper.get('[data-testid="expense-documents-stat-pending"]').classes()).toContain('expense-wb-stat-card--filterable')
+    expect(wrapper.get('[data-testid="expense-documents-stat-pending"]').classes()).toContain('expense-wb-stat-card--active')
 
-    await wrapper.get('[data-testid="expense-documents-stat-approved"]').trigger('click')
+    await wrapper.get('[data-testid="expense-documents-stat-pending-payment"]').trigger('click')
     await flushPromises()
-    expect(vm.filters.documentStatusLabel).toBe('已通过')
+    expect(vm.filters.documentStatusLabel).toBe('待支付')
     expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-003'])
 
     await wrapper.get('[data-testid="expense-documents-stat-exception"]').trigger('click')

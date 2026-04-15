@@ -1,7 +1,3 @@
-// 这里是 FinanceVoucherController 的后端接口入口。
-// 它主要负责接收请求、校验权限并调用下游 Service。
-// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
-
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceVoucherDetailVO;
@@ -35,11 +31,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/**
- * 这是 FinanceVoucherController 控制器。
- * 它主要负责接收请求、校验权限并调用下游 Service。
- * 具体业务规则以 Service 层为准。
- */
 @RestController
 @RequestMapping("/auth/finance/vouchers")
 @RequiredArgsConstructor
@@ -50,12 +41,17 @@ public class FinanceVoucherController {
     private static final String QUERY_VOUCHER_VIEW = "finance:general_ledger:query_voucher:view";
     private static final String QUERY_VOUCHER_EXPORT = "finance:general_ledger:query_voucher:export";
     private static final String QUERY_VOUCHER_EDIT = "finance:general_ledger:query_voucher:edit";
+
+    private static final String MESSAGE_SAVED = "\u51ed\u8bc1\u4fdd\u5b58\u6210\u529f";
+    private static final String MESSAGE_UPDATED = "\u51ed\u8bc1\u4fee\u6539\u6210\u529f";
+    private static final String MESSAGE_USER_MISSING = "\u672a\u83b7\u53d6\u5230\u5f53\u524d\u7528\u6237\u4fe1\u606f";
+    private static final String EXPORT_PREFIX = "\u51ed\u8bc1\u67e5\u8be2-";
+
     private static final DateTimeFormatter EXPORT_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final FinanceVoucherService financeVoucherService;
     private final AccessControlService accessControlService;
 
-    // 处理 list 请求。
     @GetMapping
     public Result<FinanceVoucherPageVO<FinanceVoucherSummaryVO>> list(
             @RequestParam String companyId,
@@ -83,7 +79,6 @@ public class FinanceVoucherController {
         return Result.success(financeVoucherService.queryVouchers(dto));
     }
 
-    // 处理 meta 请求。
     @GetMapping("/meta")
     public Result<FinanceVoucherMetaVO> meta(
             @RequestParam(required = false) String companyId,
@@ -104,7 +99,6 @@ public class FinanceVoucherController {
         );
     }
 
-    // 处理 export 请求。
     @GetMapping("/export")
     public ResponseEntity<ByteArrayResource> export(
             @RequestParam String companyId,
@@ -129,7 +123,7 @@ public class FinanceVoucherController {
 
         byte[] content = financeVoucherService.exportVouchers(dto);
         ContentDisposition disposition = ContentDisposition.attachment()
-                .filename("凭证查询-" + LocalDateTime.now().format(EXPORT_TIME_FORMATTER) + ".csv", StandardCharsets.UTF_8)
+                .filename(EXPORT_PREFIX + LocalDateTime.now().format(EXPORT_TIME_FORMATTER) + ".csv", StandardCharsets.UTF_8)
                 .build();
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
@@ -138,7 +132,6 @@ public class FinanceVoucherController {
                 .body(new ByteArrayResource(content));
     }
 
-    // 处理 detail 请求。
     @GetMapping("/{voucherNo}")
     public Result<FinanceVoucherDetailVO> detail(
             @PathVariable String voucherNo,
@@ -149,7 +142,6 @@ public class FinanceVoucherController {
         return Result.success(financeVoucherService.getDetail(companyId, voucherNo));
     }
 
-    // 处理 createVoucher 请求。
     @PostMapping
     public Result<FinanceVoucherSaveResultVO> createVoucher(
             @Valid @RequestBody FinanceVoucherSaveDTO dto,
@@ -158,12 +150,11 @@ public class FinanceVoucherController {
         Long currentUserId = getCurrentUserId(request);
         accessControlService.requirePermission(currentUserId, NEW_VOUCHER_CREATE);
         return Result.success(
-                "凭证保存成功",
+                MESSAGE_SAVED,
                 financeVoucherService.saveVoucher(dto, currentUserId, getCurrentUsername(request))
         );
     }
 
-    // 处理 updateVoucher 请求。
     @PutMapping("/{voucherNo}")
     public Result<FinanceVoucherSaveResultVO> updateVoucher(
             @PathVariable String voucherNo,
@@ -174,7 +165,7 @@ public class FinanceVoucherController {
         Long currentUserId = getCurrentUserId(request);
         accessControlService.requirePermission(currentUserId, QUERY_VOUCHER_EDIT);
         return Result.success(
-                "凭证更新成功",
+                MESSAGE_UPDATED,
                 financeVoucherService.updateVoucher(companyId, voucherNo, dto, currentUserId, getCurrentUsername(request))
         );
     }
@@ -187,7 +178,7 @@ public class FinanceVoucherController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("Missing current user id in request context");
+        throw new IllegalStateException(MESSAGE_USER_MISSING);
     }
 
     private String getCurrentUsername(HttpServletRequest request) {

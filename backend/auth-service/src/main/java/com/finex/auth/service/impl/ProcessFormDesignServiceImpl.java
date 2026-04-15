@@ -17,11 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +32,8 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
 
     private static final DateTimeFormatter CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final int PM_NAME_MAX_LENGTH = 64;
+    private static final int PM_FIELD_KEY_MAX_LENGTH = 64;
 
     private final ProcessFormDesignMapper processFormDesignMapper;
     private final ProcessDocumentTemplateMapper processDocumentTemplateMapper;
@@ -79,7 +84,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
                         .eq(ProcessDocumentTemplate::getFormDesignCode, formDesign.getFormCode())
         );
         if (referencedCount != null && referencedCount > 0) {
-            throw new IllegalStateException("褰撳墠琛ㄥ崟璁捐宸茶妯℃澘寮曠敤锛屼笉鑳藉垹闄?");
+            throw new IllegalStateException("\u5f53\u524d\u8868\u5355\u8bbe\u8ba1\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
         }
         processFormDesignMapper.deleteById(id);
         return Boolean.TRUE;
@@ -104,7 +109,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         if (normalizedCode == null) {
             List<ProcessFormOptionVO> options = listFormDesignOptions(templateType);
             if (options.isEmpty()) {
-                throw new IllegalArgumentException("鐠囧嘲鍘涢柅澶嬪鐞涖劌宕熺拋鎹愵吀");
+                throw new IllegalArgumentException("\u5f53\u524d\u6a21\u677f\u7c7b\u578b\u4e0b\u6ca1\u6709\u53ef\u7528\u7684\u8868\u5355\u8bbe\u8ba1");
             }
             return options.get(0).getValue();
         }
@@ -115,10 +120,10 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
                         .last("limit 1")
         );
         if (formDesign == null) {
-            throw new IllegalArgumentException("閹碘偓闁銆冮崡鏇☆啎鐠佲€茬瑝鐎涙ê婀?");
+            throw new IllegalArgumentException("\u8868\u5355\u8bbe\u8ba1\u4e0d\u5b58\u5728");
         }
         if (!Objects.equals(normalizeTemplateType(templateType), normalizeTemplateType(formDesign.getTemplateType()))) {
-            throw new IllegalArgumentException("閹碘偓闁銆冮崡鏇☆啎鐠佲€茬瑝鐏炵偘绨ぐ鎾冲濡剝婢樼猾璇茬€?");
+            throw new IllegalArgumentException("\u6240\u9009\u8868\u5355\u8bbe\u8ba1\u4e0e\u5f53\u524d\u6a21\u677f\u7c7b\u578b\u4e0d\u5339\u914d");
         }
         return normalizedCode;
     }
@@ -157,14 +162,48 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
 
     private void validateSave(ProcessFormDesignSaveDTO dto, ProcessFormDesign existing) {
         if (trimToNull(dto.getFormName()) == null) {
-            throw new IllegalArgumentException("鐞涖劌宕熼崥宥囆炴稉宥堝厴娑撹櫣鈹?");
+            throw new IllegalArgumentException("\u8868\u5355\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
         }
+        validatePmNameLength(dto.getFormName(), "\u8868\u5355\u540d\u79f0");
         if (trimToNull(dto.getTemplateType()) == null) {
-            throw new IllegalArgumentException("鐞涖劌宕熺猾璇茬€锋稉宥堝厴娑撹櫣鈹?");
+            throw new IllegalArgumentException("\u8868\u5355\u7c7b\u578b\u4e0d\u80fd\u4e3a\u7a7a");
         }
+        validateSchemaFieldKeys(dto.getSchema(), "\u8868\u5355");
         if (existing != null && isFormDesignReferenced(existing.getFormCode())
                 && !Objects.equals(normalizeTemplateType(existing.getTemplateType()), normalizeTemplateType(dto.getTemplateType()))) {
-            throw new IllegalStateException("褰撳墠琛ㄥ崟璁捐宸茶妯℃澘寮曠敤锛屼笉鑳戒慨鏀规ā鏉跨被鍨?");
+            throw new IllegalStateException("\u5f53\u524d\u8868\u5355\u8bbe\u8ba1\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u4fee\u6539\u6a21\u677f\u7c7b\u578b");
+        }
+    }
+
+    private void validateSchemaFieldKeys(Map<String, Object> schema, String subjectLabel) {
+        Object rawBlocks = schema == null ? null : schema.get("blocks");
+        if (!(rawBlocks instanceof Collection<?> blocks)) {
+            return;
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        int index = 0;
+        for (Object rawBlock : blocks) {
+            index++;
+            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
+                continue;
+            }
+            String fieldKey = trimToNull(stringValue(blockMap.get("fieldKey")));
+            if (fieldKey == null) {
+                throw new IllegalArgumentException(subjectLabel + "\u7b2c " + index + " \u4e2a\u5b57\u6bb5\u6807\u8bc6\u4e0d\u80fd\u4e3a\u7a7a");
+            }
+            if (fieldKey.length() > PM_FIELD_KEY_MAX_LENGTH) {
+                throw new IllegalArgumentException("\u5b57\u6bb5\u6807\u8bc6 " + fieldKey + " \u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
+            }
+            if (!seen.add(fieldKey)) {
+                throw new IllegalArgumentException(subjectLabel + "\u5b57\u6bb5\u6807\u8bc6 " + fieldKey + " \u4e0d\u80fd\u91cd\u590d");
+            }
+        }
+    }
+
+    private void validatePmNameLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > PM_NAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
         }
     }
 
@@ -179,7 +218,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
     private ProcessFormDesign requireFormDesign(Long id) {
         ProcessFormDesign formDesign = processFormDesignMapper.selectById(id);
         if (formDesign == null) {
-            throw new IllegalStateException("琛ㄥ崟璁捐涓嶅瓨鍦?");
+            throw new IllegalStateException("\u8868\u5355\u8bbe\u8ba1\u4e0d\u5b58\u5728");
         }
         return formDesign;
     }
@@ -201,7 +240,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         try {
             return objectMapper.readValue(schemaJson, objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class));
         } catch (Exception ex) {
-            throw new IllegalStateException("閸欏秴绨崚妤€瀵茬悰銊ュ礋鐠佹崘顓告径杈Е", ex);
+            throw new IllegalStateException("\u8bfb\u53d6\u8868\u5355\u8bbe\u8ba1\u5931\u8d25", ex);
         }
     }
 
@@ -209,7 +248,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         try {
             return objectMapper.writeValueAsString(schema == null || schema.isEmpty() ? defaultSchema() : schema);
         } catch (Exception ex) {
-            throw new IllegalStateException("搴忓垪鍖栬〃鍗曡璁″け璐?", ex);
+            throw new IllegalStateException("\u5e8f\u5217\u5316\u8868\u5355\u8bbe\u8ba1\u5931\u8d25", ex);
         }
     }
 
@@ -233,7 +272,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         return switch (normalizeTemplateType(templateType)) {
             case "application" -> "Application";
             case "loan" -> "Loan";
-            case "contract" -> "鍚堝悓鍗?";
+            case "contract" -> "\u5408\u540c\u5355";
             default -> "Expense";
         };
     }
@@ -248,6 +287,14 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     private ProcessFormOptionVO option(String label, String value) {

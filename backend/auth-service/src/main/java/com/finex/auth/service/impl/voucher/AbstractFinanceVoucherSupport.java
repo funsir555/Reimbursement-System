@@ -1,3 +1,8 @@
+// 业务域：财务凭证
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 凭证查询、新建、修改等接口，下游会继续协调 凭证主表、分录、上下文数据与报销关联。
+// 风险提醒：改坏后最容易影响 凭证金额、分录科目和与单据的对应关系。
+
 package com.finex.auth.service.impl.voucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -52,6 +57,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * AbstractFinanceVoucherSupport：通用支撑类。
+ * 封装 财务凭证这块可复用的业务能力。
+ * 改这里时，要特别关注 凭证金额、分录科目和与单据的对应关系是否会被一起带坏。
+ */
 @RequiredArgsConstructor
 public abstract class AbstractFinanceVoucherSupport {
 
@@ -94,6 +104,9 @@ public abstract class AbstractFinanceVoucherSupport {
 
     protected final ConcurrentHashMap<String, Object> voucherNoLocks = new ConcurrentHashMap<>();
 
+    /**
+     * 获取元数据。
+     */
     protected FinanceVoucherMetaVO getMeta(
             Long currentUserId,
             String currentUsername,
@@ -131,11 +144,17 @@ public abstract class AbstractFinanceVoucherSupport {
         return meta;
     }
 
+    /**
+     * 查询凭证。
+     */
     protected FinanceVoucherPageVO<FinanceVoucherSummaryVO> queryVouchers(FinanceVoucherQueryDTO dto) {
         List<FinanceVoucherSummaryVO> summaries = loadVoucherSummaries(dto);
         return buildPage(summaries, dto == null ? null : dto.getPage(), dto == null ? null : dto.getPageSize());
     }
 
+    /**
+     * 获取明细。
+     */
     protected FinanceVoucherDetailVO getDetail(String companyId, String voucherNo) {
         VoucherKey voucherKey = parseVoucherNo(voucherNo);
         validateVoucherCompany(companyId, voucherKey);
@@ -184,6 +203,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return detail;
     }
 
+    /**
+     * 保存凭证。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected FinanceVoucherSaveResultVO saveVoucher(FinanceVoucherSaveDTO dto, Long currentUserId, String currentUsername) {
         User currentUser = requireUser(currentUserId);
@@ -203,6 +225,7 @@ public abstract class AbstractFinanceVoucherSupport {
         Map<String, FinanceAccountSubject> accountSubjects = loadSelectableAccountMap(companyId);
 
         String makerName = resolveMakerName(currentUser, currentUsername);
+        validateHeaderLength(makerName, "\u5236\u5355\u4eba", 64);
         int attachedDocCount = dto.getIdoc() == null ? 0 : Math.max(dto.getIdoc(), 0);
         String lockKey = companyId + "#" + period + "#" + voucherType;
         Object lock = voucherNoLocks.computeIfAbsent(lockKey, unused -> new Object());
@@ -251,6 +274,9 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 更新凭证。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected FinanceVoucherSaveResultVO updateVoucher(
             String companyId,
@@ -295,6 +321,7 @@ public abstract class AbstractFinanceVoucherSupport {
         String makerName = trimToNull(headerRow.getCbill()) == null
                 ? resolveMakerName(requireUser(currentUserId), currentUsername)
                 : headerRow.getCbill();
+        validateHeaderLength(makerName, "\u5236\u5355\u4eba", 64);
         int attachedDocCount = dto.getIdoc() == null ? 0 : Math.max(dto.getIdoc(), 0);
         LocalDateTime billDateTime = billDate.atStartOfDay();
         int signSeq = resolveVoucherTypeSequence(voucherKey.csign());
@@ -338,6 +365,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return result;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected byte[] exportVouchers(FinanceVoucherQueryDTO dto) {
         List<FinanceVoucherSummaryVO> rows = loadVoucherSummaries(dto);
         if (rows.isEmpty()) {
@@ -363,6 +393,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return builder.toString().getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * 加载EnabledCompanies。
+     */
     protected List<SystemCompany> loadEnabledCompanies() {
         return systemCompanyMapper.selectList(
                 Wrappers.<SystemCompany>lambdaQuery()
@@ -371,16 +404,25 @@ public abstract class AbstractFinanceVoucherSupport {
         );
     }
 
+    /**
+     * 加载账户选项。
+     */
     protected List<FinanceVoucherOptionVO> loadAccountOptions(String companyId) {
         return loadSelectableAccountMap(companyId).values().stream()
                 .map(item -> option(item.getSubjectCode(), item.getSubjectCode(), item.getSubjectName()))
                 .toList();
     }
 
+    /**
+     * 加载账户编码Set。
+     */
     protected Set<String> loadAccountCodeSet(String companyId) {
         return loadSelectableAccountMap(companyId).keySet();
     }
 
+    /**
+     * 加载Selectable账户映射。
+     */
     protected Map<String, FinanceAccountSubject> loadSelectableAccountMap(String companyId) {
         String normalizedCompanyId = trimToNull(companyId);
         if (normalizedCompanyId == null) {
@@ -402,6 +444,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 ));
     }
 
+    /**
+     * 加载账户Name映射。
+     */
     protected Map<String, String> loadAccountNameMap(String companyId) {
         return loadSelectableAccountMap(companyId).values().stream()
                 .collect(Collectors.toMap(
@@ -412,12 +457,18 @@ public abstract class AbstractFinanceVoucherSupport {
                 ));
     }
 
+    /**
+     * 加载客户选项。
+     */
     protected List<FinanceVoucherOptionVO> loadCustomerOptions(String companyId) {
         return loadEnabledCustomerMap(companyId).values().stream()
                 .map(item -> option(item.getCCusCode(), item.getCCusCode(), resolveCustomerName(item)))
                 .toList();
     }
 
+    /**
+     * 加载Enabled客户映射。
+     */
     protected Map<String, FinanceCustomer> loadEnabledCustomerMap(String companyId) {
         String normalizedCompanyId = trimToNull(companyId);
         if (normalizedCompanyId == null) {
@@ -438,12 +489,18 @@ public abstract class AbstractFinanceVoucherSupport {
                 ));
     }
 
+    /**
+     * 加载Supplier选项。
+     */
     protected List<FinanceVoucherOptionVO> loadSupplierOptions(String companyId) {
         return loadEnabledSupplierMap(companyId).values().stream()
                 .map(item -> option(item.getCVenCode(), item.getCVenCode(), resolveVendorName(item)))
                 .toList();
     }
 
+    /**
+     * 加载EnabledSupplier映射。
+     */
     protected Map<String, FinanceVendor> loadEnabledSupplierMap(String companyId) {
         String normalizedCompanyId = trimToNull(companyId);
         if (normalizedCompanyId == null) {
@@ -464,6 +521,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 ));
     }
 
+    /**
+     * 加载项目Class选项。
+     */
     protected List<FinanceVoucherOptionVO> loadProjectClassOptions(String companyId) {
         String normalizedCompanyId = trimToNull(companyId);
         if (normalizedCompanyId == null) {
@@ -479,6 +539,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 .toList();
     }
 
+    /**
+     * 加载Enabled项目Class映射。
+     */
     protected Map<String, FinanceProjectClass> loadEnabledProjectClassMap(String companyId) {
         String normalizedCompanyId = trimToNull(companyId);
         if (normalizedCompanyId == null) {
@@ -497,6 +560,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 ));
     }
 
+    /**
+     * 加载项目选项。
+     */
     protected List<FinanceVoucherOptionVO> loadProjectOptions(String companyId) {
         Map<String, FinanceProjectClass> classMap = loadEnabledProjectClassMap(companyId);
         if (classMap.isEmpty()) {
@@ -508,6 +574,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 .toList();
     }
 
+    /**
+     * 加载Selectable项目。
+     */
     protected Map<String, FinanceProjectArchive> loadSelectableProjects(String companyId) {
         String normalizedCompanyId = trimToNull(companyId);
         if (normalizedCompanyId == null) {
@@ -528,6 +597,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 ));
     }
 
+    /**
+     * 加载EnabledDepartments。
+     */
     protected List<SystemDepartment> loadEnabledDepartments() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
@@ -536,6 +608,9 @@ public abstract class AbstractFinanceVoucherSupport {
         );
     }
 
+    /**
+     * 加载Enabled用户。
+     */
     protected List<User> loadEnabledUsers() {
         return userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
@@ -544,6 +619,9 @@ public abstract class AbstractFinanceVoucherSupport {
         );
     }
 
+    /**
+     * 加载凭证Summaries。
+     */
     protected List<FinanceVoucherSummaryVO> loadVoucherSummaries(FinanceVoucherQueryDTO dto) {
         FinanceVoucherQueryDTO normalizedDto = dto == null ? new FinanceVoucherQueryDTO() : dto;
         String companyId = normalize(normalizedDto.getCompanyId(), null);
@@ -586,6 +664,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 .toList();
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherSummaryVO toSummaryVO(List<GlAccvouch> rows) {
         GlAccvouch headerRow = rows.get(0);
         FinanceVoucherSummaryVO summary = new FinanceVoucherSummaryVO();
@@ -610,6 +691,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return summary;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherOptionVO toCompanyOption(SystemCompany company) {
         String companyCode = trimToNull(company.getCompanyCode());
         String companyName = trimToNull(company.getCompanyName());
@@ -619,33 +703,54 @@ public abstract class AbstractFinanceVoucherSupport {
         return option(company.getCompanyId(), companyCode, companyName);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherOptionVO toDepartmentOption(SystemDepartment department) {
         String deptCode = trimToNull(department.getDeptCode());
         String deptName = trimToNull(department.getDeptName());
         return option(String.valueOf(department.getId()), normalize(deptCode, String.valueOf(department.getId())), deptName);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherOptionVO toEmployeeOption(User user) {
         String displayName = trimToNull(user.getName()) == null ? normalize(user.getUsername(), "未命名员工") : user.getName();
         return option(String.valueOf(user.getId()), String.valueOf(user.getId()), displayName);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected List<FinanceVoucherOptionVO> toOptions(List<OptionSeed> seeds) {
         return seeds.stream().map(seed -> option(seed.value(), seed.label())).toList();
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherOptionVO option(String value, String label) {
         return option(value, null, null, label, null);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherOptionVO option(String value, String code, String name) {
         return option(value, code, name, null, null);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherOptionVO option(String value, String code, String name, String parentValue) {
         return option(value, code, name, null, parentValue);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherOptionVO option(String value, String code, String name, String explicitLabel, String parentValue) {
         FinanceVoucherOptionVO option = new FinanceVoucherOptionVO();
         option.setValue(value);
@@ -656,6 +761,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return option;
     }
 
+    /**
+     * 组装选项Label。
+     */
     protected String buildOptionLabel(String code, String name, String explicitLabel, String fallbackValue) {
         if (trimToNull(explicitLabel) != null) {
             return explicitLabel;
@@ -672,6 +780,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return normalize(fallbackValue, "");
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected User requireUser(Long currentUserId) {
         User user = userMapper.selectById(currentUserId);
         if (user == null) {
@@ -680,6 +791,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return user;
     }
 
+    /**
+     * 解析默认公司Id。
+     */
     protected String resolveDefaultCompanyId(String companyId, User currentUser, List<SystemCompany> companies) {
         String normalizedCompanyId = trimToNull(companyId);
         Set<String> companyIds = companies.stream().map(SystemCompany::getCompanyId).collect(Collectors.toCollection(LinkedHashSet::new));
@@ -693,6 +807,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return companies.isEmpty() ? null : companies.get(0).getCompanyId();
     }
 
+    /**
+     * 组装Page。
+     */
     protected <T> FinanceVoucherPageVO<T> buildPage(List<T> rows, Integer page, Integer pageSize) {
         int safePage = page == null || page < 1 ? DEFAULT_PAGE : page;
         int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
@@ -708,6 +825,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return result;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected int nextVoucherNo(String companyId, Integer period, String voucherType) {
         if (trimToNull(companyId) == null || period == null || trimToNull(voucherType) == null) {
             return 1;
@@ -727,6 +847,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return ((Number) values.get(0)).intValue() + 1;
     }
 
+    /**
+     * 组装凭证Row。
+     */
     protected GlAccvouch buildVoucherRow(
             String companyId,
             Integer period,
@@ -760,7 +883,11 @@ public abstract class AbstractFinanceVoucherSupport {
         row.setCtext2(trimToNull(dto.getCtext2()));
         row.setCdigest(trimToNull(entry.getCdigest()));
         row.setCcode(trimToNull(entry.getCcode()));
-        row.setCcodeName(accountSubject == null ? null : trimToNull(accountSubject.getSubjectName()));
+        String accountName = accountSubject == null ? null : trimToNull(accountSubject.getSubjectName());
+        if (accountName != null && accountName.length() > 128) {
+            throw new IllegalArgumentException("\u79d1\u76ee\u3010" + trimToNull(entry.getCcode()) + "\u3011\u540d\u79f0\u957f\u5ea6\u8d85\u8fc7 128\uff0c\u8bf7\u5148\u7ef4\u62a4\u4f1a\u8ba1\u79d1\u76ee\u6863\u6848");
+        }
+        row.setCcodeName(accountName);
         row.setCdeptId(trimToNull(entry.getCdeptId()));
         row.setCpersonId(trimToNull(entry.getCpersonId()));
         row.setCcusId(trimToNull(entry.getCcusId()));
@@ -778,6 +905,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return row;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected VoucherKey parseVoucherNo(String voucherNo) {
         String normalizedVoucherNo = trimToNull(voucherNo);
         if (normalizedVoucherNo == null) {
@@ -794,15 +924,24 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 组装凭证No。
+     */
     protected String buildVoucherNo(String companyId, Integer period, String voucherType, Integer inoId) {
         return companyId + VOUCHER_NO_SEPARATOR + period + VOUCHER_NO_SEPARATOR + voucherType + VOUCHER_NO_SEPARATOR + inoId;
     }
 
+    /**
+     * 组装Display凭证No。
+     */
     protected String buildDisplayVoucherNo(String voucherType, Integer inoId) {
         int number = inoId == null ? 0 : inoId;
         return normalize(voucherType, DEFAULT_VOUCHER_TYPE) + "-" + String.format("%04d", Math.max(number, 0));
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected FinanceVoucherEntryVO toEntryVO(GlAccvouch row, Map<String, String> accountNameMap) {
         FinanceVoucherEntryVO entry = new FinanceVoucherEntryVO();
         entry.setInid(row.getInid());
@@ -824,6 +963,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return entry;
     }
 
+    /**
+     * 解析Status。
+     */
     protected String resolveStatus(GlAccvouch row) {
         if (Objects.equals(row.getIbook(), 1)) {
             return STATUS_POSTED;
@@ -834,6 +976,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return STATUS_UNPOSTED;
     }
 
+    /**
+     * 解析StatusLabel。
+     */
     protected String resolveStatusLabel(String status) {
         return switch (normalize(status, STATUS_UNPOSTED)) {
             case STATUS_POSTED -> "已记账";
@@ -842,10 +987,16 @@ public abstract class AbstractFinanceVoucherSupport {
         };
     }
 
+    /**
+     * 判断EditableStatus是否成立。
+     */
     protected boolean isEditableStatus(String status) {
         return Objects.equals(normalize(status, STATUS_UNPOSTED), STATUS_UNPOSTED);
     }
 
+    /**
+     * 解析凭证类型Label。
+     */
     protected String resolveVoucherTypeLabel(String voucherType) {
         return VOUCHER_TYPE_SEEDS.stream()
                 .filter(item -> Objects.equals(item.value(), voucherType))
@@ -854,6 +1005,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 .orElse(normalize(voucherType, DEFAULT_VOUCHER_TYPE));
     }
 
+    /**
+     * 解析凭证汇总。
+     */
     protected String resolveVoucherSummary(List<GlAccvouch> rows) {
         List<String> digests = rows.stream()
                 .map(GlAccvouch::getCdigest)
@@ -870,6 +1024,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return digests.get(0) + " 等" + digests.size() + "条分录";
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected boolean containsSummary(List<GlAccvouch> rows, String keyword) {
         return rows.stream()
                 .map(GlAccvouch::getCdigest)
@@ -879,6 +1036,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 .anyMatch(item -> item.contains(keyword));
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected BigDecimal sumAmount(List<GlAccvouch> rows, boolean debit) {
         return rows.stream()
                 .map(item -> debit ? item.getMd() : item.getMc())
@@ -886,6 +1046,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 .reduce(ZERO, BigDecimal::add);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected BigDecimal sumAmount(List<FinanceVoucherEntryDTO> rows, AmountGetter getter) {
         return rows.stream()
                 .map(getter::get)
@@ -893,6 +1056,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 .reduce(ZERO, BigDecimal::add);
     }
 
+    /**
+     * 校验公司。
+     */
     protected void validateCompany(String companyId) {
         Long count = systemCompanyMapper.selectCount(
                 Wrappers.<SystemCompany>lambdaQuery()
@@ -904,12 +1070,18 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 校验凭证类型。
+     */
     protected void validateVoucherType(String voucherType) {
         if (VOUCHER_TYPE_SEEDS.stream().noneMatch(item -> Objects.equals(item.value(), voucherType))) {
             throw new IllegalArgumentException("凭证类别不合法");
         }
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected List<FinanceVoucherEntryDTO> normalizeEntries(List<FinanceVoucherEntryDTO> entries) {
         if (entries == null) {
             return List.of();
@@ -940,6 +1112,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return normalizedEntries;
     }
 
+    /**
+     * 判断EmptyEntry是否成立。
+     */
     protected boolean isEmptyEntry(FinanceVoucherEntryDTO entry) {
         return trimToNull(entry.getCdigest()) == null
                 && trimToNull(entry.getCcode()) == null
@@ -957,9 +1132,12 @@ public abstract class AbstractFinanceVoucherSupport {
                 && isNullOrZero(entry.getNcS());
     }
 
+    /**
+     * 校验Entries。
+     */
     protected void validateEntries(String companyId, List<FinanceVoucherEntryDTO> entries) {
         if (entries.size() < 2) {
-            throw new IllegalArgumentException("至少需要两条有效分录");
+            throw new IllegalArgumentException("\u81f3\u5c11\u9700\u8981\u4e24\u6761\u6709\u6548\u5206\u5f55");
         }
 
         Map<String, String> departments = loadEnabledDepartments().stream()
@@ -978,46 +1156,55 @@ public abstract class AbstractFinanceVoucherSupport {
         for (int index = 0; index < entries.size(); index++) {
             FinanceVoucherEntryDTO entry = entries.get(index);
             int rowNo = index + 1;
+            validateEntryLength(entry.getCdigest(), "\u6458\u8981", 255, rowNo);
+            validateEntryLength(entry.getCcode(), "\u79d1\u76ee\u7f16\u7801", 64, rowNo);
+            validateEntryLength(entry.getCdeptId(), "\u90e8\u95e8\u6807\u8bc6", 64, rowNo);
+            validateEntryLength(entry.getCpersonId(), "\u4eba\u5458\u6807\u8bc6", 64, rowNo);
+            validateEntryLength(entry.getCcusId(), "\u5ba2\u6237\u6807\u8bc6", 64, rowNo);
+            validateEntryLength(entry.getCsupId(), "\u4f9b\u5e94\u5546\u6807\u8bc6", 64, rowNo);
+            validateEntryLength(entry.getCitemClass(), "\u9879\u76ee\u5206\u7c7b", 2, rowNo);
+            validateEntryLength(entry.getCitemId(), "\u9879\u76ee\u7f16\u7801", 6, rowNo);
+            validateEntryLength(entry.getCexchName(), "\u5e01\u79cd\u540d\u79f0", 32, rowNo);
             if (trimToNull(entry.getCdigest()) == null) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行摘要不能为空");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6458\u8981\u4e0d\u80fd\u4e3a\u7a7a");
             }
             if (trimToNull(entry.getCcode()) == null || !accounts.contains(entry.getCcode())) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行科目不存在");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u79d1\u76ee\u4e0d\u5b58\u5728");
             }
-            validateSelectable(entry.getCdeptId(), departments.keySet(), "部门", rowNo);
-            validateSelectable(entry.getCpersonId(), employees.keySet(), "人员", rowNo);
-            validateSelectable(entry.getCcusId(), customers, "客户", rowNo);
-            validateSelectable(entry.getCsupId(), suppliers, "供应商", rowNo);
-            validateSelectable(entry.getCitemClass(), projectClasses.keySet(), "项目分类", rowNo);
-            validateSelectable(entry.getCitemId(), projects.keySet(), "项目", rowNo);
+            validateSelectable(entry.getCdeptId(), departments.keySet(), "\u90e8\u95e8", rowNo);
+            validateSelectable(entry.getCpersonId(), employees.keySet(), "\u4eba\u5458", rowNo);
+            validateSelectable(entry.getCcusId(), customers, "\u5ba2\u6237", rowNo);
+            validateSelectable(entry.getCsupId(), suppliers, "\u4f9b\u5e94\u5546", rowNo);
+            validateSelectable(entry.getCitemClass(), projectClasses.keySet(), "\u9879\u76ee\u5206\u7c7b", rowNo);
+            validateSelectable(entry.getCitemId(), projects.keySet(), "\u9879\u76ee", rowNo);
             validateProjectSelection(entry, projectClasses, projects, rowNo);
 
             if (!currencies.contains(normalize(entry.getCexchName(), DEFAULT_CURRENCY))) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行币种不合法");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u5e01\u79cd\u4e0d\u5408\u6cd5");
             }
             if (defaultDecimal(entry.getNfrat(), DEFAULT_RATE).compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行汇率必须大于 0");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6c47\u7387\u5fc5\u987b\u5927\u4e8e 0");
             }
 
             BigDecimal debit = normalizeAmount(entry.getMd());
             BigDecimal credit = normalizeAmount(entry.getMc());
             if (debit.compareTo(BigDecimal.ZERO) > 0 && credit.compareTo(BigDecimal.ZERO) > 0) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行借贷不能同时填写");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u501f\u8d37\u4e0d\u80fd\u540c\u65f6\u586b\u5199");
             }
             if (debit.compareTo(BigDecimal.ZERO) == 0 && credit.compareTo(BigDecimal.ZERO) == 0) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行借方或贷方至少填写一项");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u501f\u65b9\u6216\u8d37\u65b9\u81f3\u5c11\u586b\u5199\u4e00\u9879");
             }
 
             BigDecimal qtyDebit = normalizeNullableQuantity(entry.getNdS());
             BigDecimal qtyCredit = normalizeNullableQuantity(entry.getNcS());
             if (qtyDebit != null && qtyDebit.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行数量借方不能为负数");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6570\u91cf\u501f\u65b9\u4e0d\u80fd\u4e3a\u8d1f\u6570");
             }
             if (qtyCredit != null && qtyCredit.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行数量贷方不能为负数");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6570\u91cf\u8d37\u65b9\u4e0d\u80fd\u4e3a\u8d1f\u6570");
             }
             if (qtyDebit != null && qtyCredit != null && qtyDebit.compareTo(BigDecimal.ZERO) > 0 && qtyCredit.compareTo(BigDecimal.ZERO) > 0) {
-                throw new IllegalArgumentException("第 " + rowNo + " 行数量借贷不能同时填写");
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6570\u91cf\u501f\u8d37\u4e0d\u80fd\u540c\u65f6\u586b\u5199");
             }
 
             totalDebit = totalDebit.add(debit);
@@ -1025,20 +1212,26 @@ public abstract class AbstractFinanceVoucherSupport {
         }
 
         if (totalDebit.compareTo(totalCredit) != 0) {
-            throw new IllegalArgumentException("凭证借贷不平衡，无法保存");
+            throw new IllegalArgumentException("\u51ed\u8bc1\u501f\u8d37\u4e0d\u5e73\u8861\uff0c\u65e0\u6cd5\u4fdd\u5b58");
         }
     }
 
+    /**
+     * 校验Selectable。
+     */
     protected void validateSelectable(String value, Collection<String> validValues, String fieldName, int rowNo) {
         String normalizedValue = trimToNull(value);
         if (normalizedValue == null) {
             return;
         }
         if (!validValues.contains(normalizedValue)) {
-            throw new IllegalArgumentException("第 " + rowNo + " 行" + fieldName + "不存在或当前不可用");
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c" + fieldName + "\u4e0d\u5b58\u5728\u6216\u5f53\u524d\u4e0d\u53ef\u7528");
         }
     }
 
+    /**
+     * 校验项目Selection。
+     */
     protected void validateProjectSelection(
             FinanceVoucherEntryDTO entry,
             Map<String, FinanceProjectClass> projectClasses,
@@ -1051,24 +1244,44 @@ public abstract class AbstractFinanceVoucherSupport {
             return;
         }
         if (projectClassCode == null) {
-            throw new IllegalArgumentException("第 " + rowNo + " 行选择项目时必须同时选择项目分类");
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u9009\u62e9\u9879\u76ee\u65f6\u5fc5\u987b\u540c\u65f6\u9009\u62e9\u9879\u76ee\u5206\u7c7b");
         }
         FinanceProjectArchive project = projects.get(projectCode);
         if (project == null) {
-            throw new IllegalArgumentException("第 " + rowNo + " 行项目不存在");
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u9879\u76ee\u4e0d\u5b58\u5728");
         }
         if (!projectClasses.containsKey(projectClassCode)) {
-            throw new IllegalArgumentException("第 " + rowNo + " 行项目分类不存在");
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u9879\u76ee\u5206\u7c7b\u4e0d\u5b58\u5728");
         }
         if (!Objects.equals(trimToNull(project.getCitemccode()), projectClassCode)) {
-            throw new IllegalArgumentException("第 " + rowNo + " 行项目分类与项目归属不匹配");
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u9879\u76ee\u5206\u7c7b\u4e0e\u9879\u76ee\u5f52\u5c5e\u4e0d\u5339\u914d");
         }
     }
 
+    protected void validateEntryLength(String value, String fieldName, int maxLength, int rowNo) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > maxLength) {
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c" + fieldName + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 " + maxLength + " \u4e2a\u5b57\u7b26");
+        }
+    }
+
+    protected void validateHeaderLength(String value, String fieldName, int maxLength) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > maxLength) {
+            throw new IllegalArgumentException(fieldName + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 " + maxLength + " \u4e2a\u5b57\u7b26");
+        }
+    }
+
+    /**
+     * 解析用户Name。
+     */
     protected String resolveUserName(User user) {
         return trimToNull(user.getName()) == null ? normalize(user.getUsername(), "未命名员工") : user.getName();
     }
 
+    /**
+     * 解析客户Name。
+     */
     protected String resolveCustomerName(FinanceCustomer customer) {
         if (trimToNull(customer.getCCusName()) != null) {
             return customer.getCCusName().trim();
@@ -1076,6 +1289,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return normalize(customer.getCCusAbbName(), customer.getCCusCode());
     }
 
+    /**
+     * 解析供应商Name。
+     */
     protected String resolveVendorName(FinanceVendor vendor) {
         if (trimToNull(vendor.getCVenName()) != null) {
             return vendor.getCVenName().trim();
@@ -1083,6 +1299,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return normalize(vendor.getCVenAbbName(), vendor.getCVenCode());
     }
 
+    /**
+     * 解析MakerName。
+     */
     protected String resolveMakerName(User currentUser, String currentUsername) {
         if (trimToNull(currentUser.getName()) != null) {
             return currentUser.getName().trim();
@@ -1090,6 +1309,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return normalize(currentUsername, "财务制单员");
     }
 
+    /**
+     * 校验凭证公司。
+     */
     protected void validateVoucherCompany(String companyId, VoucherKey voucherKey) {
         String normalizedCompanyId = normalize(companyId, null);
         if (normalizedCompanyId == null) {
@@ -1100,6 +1322,9 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 校验ImmutableHeader。
+     */
     protected void validateImmutableHeader(FinanceVoucherSaveDTO dto, VoucherKey voucherKey) {
         if (dto == null) {
             throw new IllegalArgumentException("凭证数据不能为空");
@@ -1122,6 +1347,9 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected LocalDate parseDateOrDefault(String value, LocalDate defaultValue) {
         if (trimToNull(value) == null) {
             return defaultValue;
@@ -1133,6 +1361,9 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected LocalDate parseDateOrThrow(String value) {
         if (trimToNull(value) == null) {
             throw new IllegalArgumentException("制单日期不能为空");
@@ -1144,6 +1375,9 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected YearMonth parseMonthOrThrow(String value, String fieldName) {
         String normalizedValue = trimToNull(value);
         if (normalizedValue == null) {
@@ -1156,6 +1390,9 @@ public abstract class AbstractFinanceVoucherSupport {
         }
     }
 
+    /**
+     * 解析MonthRange。
+     */
     protected MonthRange resolveMonthRange(FinanceVoucherQueryDTO dto) {
         if (dto == null) {
             return null;
@@ -1177,6 +1414,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return new MonthRange(startMonth.atDay(1).atStartOfDay(), endMonth.plusMonths(1).atDay(1).atStartOfDay());
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected Integer normalizePeriod(Integer period) {
         if (period == null || period < 1 || period > 12) {
             throw new IllegalArgumentException("会计期间必须在 1 到 12 之间");
@@ -1184,6 +1424,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return period;
     }
 
+    /**
+     * 解析凭证类型Sequence。
+     */
     protected int resolveVoucherTypeSequence(String voucherType) {
         for (int index = 0; index < VOUCHER_TYPE_SEEDS.size(); index++) {
             if (Objects.equals(VOUCHER_TYPE_SEEDS.get(index).value(), voucherType)) {
@@ -1193,6 +1436,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return 1;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected BigDecimal normalizeAmount(BigDecimal value) {
         if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
             return ZERO;
@@ -1200,6 +1446,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected BigDecimal normalizeNullableAmount(BigDecimal value) {
         if (value == null || value.compareTo(BigDecimal.ZERO) == 0) {
             return null;
@@ -1210,6 +1459,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected BigDecimal normalizeNullableQuantity(BigDecimal value) {
         if (value == null || value.compareTo(BigDecimal.ZERO) == 0) {
             return null;
@@ -1217,6 +1469,9 @@ public abstract class AbstractFinanceVoucherSupport {
         return value.setScale(6, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected BigDecimal defaultDecimal(BigDecimal value, BigDecimal defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -1224,19 +1479,31 @@ public abstract class AbstractFinanceVoucherSupport {
         return value;
     }
 
+    /**
+     * 判断NullOrZero是否成立。
+     */
     protected boolean isNullOrZero(BigDecimal value) {
         return value == null || value.compareTo(BigDecimal.ZERO) == 0;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected String normalize(String value, String defaultValue) {
         String normalizedValue = trimToNull(value);
         return normalizedValue == null ? defaultValue : normalizedValue;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected String lower(String value) {
         return value == null ? null : value.toLowerCase();
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected String trimToNull(String value) {
         if (value == null) {
             return null;
@@ -1245,11 +1512,17 @@ public abstract class AbstractFinanceVoucherSupport {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected String csvValue(String value) {
         String safeValue = value == null ? "" : value;
         return "\"" + safeValue.replace("\"", "\"\"") + "\"";
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected String formatDate(LocalDateTime value) {
         if (value == null) {
             return "";
@@ -1257,11 +1530,16 @@ public abstract class AbstractFinanceVoucherSupport {
         return value.toLocalDate().format(DATE_FORMATTER);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected String formatAmountText(BigDecimal value) {
         return normalizeAmount(value).toPlainString();
     }
 
-    // Placeholder for the future posting pipeline.
+    /**
+     * 处理财务凭证中的这一步。
+     */
     protected void postVoucher(String companyId, Integer period, String voucherType, Integer inoId) {
         // Intentionally left blank in phase one.
     }

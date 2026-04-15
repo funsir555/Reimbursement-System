@@ -100,7 +100,12 @@
                   class="!mb-0"
                   :class="field.span === 2 ? 'xl:col-span-2' : field.span === 3 ? 'xl:col-span-3' : ''"
                 >
-                  <el-input v-if="field.type === 'text'" v-model="vendorForm[field.key]" :placeholder="`请输入${field.label}`" />
+                  <el-input
+                    v-if="field.type === 'text'"
+                    v-model="vendorForm[field.key]"
+                    :placeholder="`请输入${field.label}`"
+                    :maxlength="field.maxLength"
+                  />
                   <el-input
                     v-else-if="field.type === 'textarea'"
                     v-model="vendorForm[field.key]"
@@ -168,6 +173,34 @@ type VendorFieldConfig = {
   label: string
   type: VendorFieldType
   span?: 1 | 2 | 3
+  maxLength?: number
+}
+
+const VENDOR_FIELD_MAX_LENGTH: Record<string, number> = {
+  cVenCode: 64,
+  cVenName: 128,
+  cVenAbbName: 64,
+  cVCCode: 64,
+  cVenBank: 128,
+  cVenAccount: 64,
+  cVenBankNub: 64,
+  receiptAccountName: 128,
+  receiptBranchName: 128,
+  cVenPerson: 64,
+  cVenPhone: 32,
+  cVenHand: 32,
+  cVenBP: 32,
+  cVenFax: 32,
+  cVenLPerson: 64,
+  cVenPostCode: 16,
+  cVenPPerson: 64,
+  cDCCode: 64,
+  cRelCustomer: 64,
+  cVenBankCode: 64,
+  cVenHeadCode: 64,
+  cVenPayCond: 64,
+  cVenTradeCCode: 64,
+  cVenWhCode: 64
 }
 
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
@@ -196,10 +229,10 @@ const vendorSections: Array<{ key: string; label: string; fields: VendorFieldCon
     key: 'basic',
     label: '基础信息',
     fields: [
-      { key: 'cVenCode', label: '供应商编码', type: 'text' },
-      { key: 'cVenName', label: '供应商名称', type: 'text' },
-      { key: 'cVenAbbName', label: '供应商简称', type: 'text' },
-      { key: 'cVCCode', label: '分类编码', type: 'text' },
+      { key: 'cVenCode', label: '供应商编码', type: 'text', maxLength: 64 },
+      { key: 'cVenName', label: '供应商名称', type: 'text', maxLength: 128 },
+      { key: 'cVenAbbName', label: '供应商简称', type: 'text', maxLength: 64 },
+      { key: 'cVCCode', label: '分类编码', type: 'text', maxLength: 64 },
       { key: 'cTrade', label: '行业', type: 'text' },
       { key: 'cVenRegCode', label: '工商注册号', type: 'text' },
       { key: 'cBarCode', label: '条形码', type: 'text' },
@@ -210,17 +243,17 @@ const vendorSections: Array<{ key: string; label: string; fields: VendorFieldCon
     key: 'contact',
     label: '联系信息',
     fields: [
-      { key: 'cVenPerson', label: '联系人', type: 'text' },
-      { key: 'cVenPhone', label: '联系电话', type: 'text' },
-      { key: 'cVenHand', label: '手机', type: 'text' },
+      { key: 'cVenPerson', label: '\u8054\u7cfb\u4eba', type: 'text', maxLength: 64 },
+      { key: 'cVenPhone', label: '\u8054\u7cfb\u7535\u8bdd', type: 'text', maxLength: 32 },
+      { key: 'cVenHand', label: '\u624b\u673a', type: 'text', maxLength: 32 },
       { key: 'cVenEmail', label: '电子邮箱', type: 'text' },
       { key: 'cVenAddress', label: '联系地址', type: 'text', span: 2 },
       { key: 'cVenIAddress', label: '开票地址', type: 'text', span: 2 },
-      { key: 'cVenPostCode', label: '邮政编码', type: 'text' },
-      { key: 'cVenBP', label: '邮箱/邮编', type: 'text' },
-      { key: 'cVenFax', label: '传真', type: 'text' },
-      { key: 'cVenLPerson', label: '法人代表', type: 'text' },
-      { key: 'cVenPPerson', label: '采购联系人', type: 'text' },
+      { key: 'cVenPostCode', label: '\u90ae\u653f\u7f16\u7801', type: 'text', maxLength: 16 },
+      { key: 'cVenBP', label: '\u547c\u673a', type: 'text', maxLength: 32 },
+      { key: 'cVenFax', label: '\u4f20\u771f', type: 'text', maxLength: 32 },
+      { key: 'cVenLPerson', label: '\u6cd5\u4eba\u4ee3\u8868', type: 'text', maxLength: 64 },
+      { key: 'cVenPPerson', label: '\u91c7\u8d2d\u8054\u7cfb\u4eba', type: 'text', maxLength: 64 },
       { key: 'cVenDepart', label: '所属部门', type: 'text' }
     ]
   },
@@ -258,10 +291,10 @@ const vendorSections: Array<{ key: string; label: string; fields: VendorFieldCon
       { key: 'iFrequency', label: '交易频次', type: 'number' },
       { key: 'iGradeABC', label: 'ABC 分类', type: 'number' },
       { key: 'iId', label: '内部编号', type: 'number' },
-      { key: 'cRelCustomer', label: '关联客户', type: 'text' },
-      { key: 'cVenHeadCode', label: '上级供应商编码', type: 'text' },
-      { key: 'cDCCode', label: '地区编码', type: 'text' },
-      { key: 'cVenTradeCCode', label: '行业分类', type: 'text' },
+      { key: 'cRelCustomer', label: '关联客户', type: 'text', maxLength: 64 },
+      { key: 'cVenHeadCode', label: '上级供应商编码', type: 'text', maxLength: 64 },
+      { key: 'cDCCode', label: '地区编码', type: 'text', maxLength: 64 },
+      { key: 'cVenTradeCCode', label: '行业分类', type: 'text', maxLength: 64 },
       { key: 'cVenDefine3', label: '自定义项3', type: 'text' },
       { key: 'cVenDefine4', label: '自定义项4', type: 'text' },
       { key: 'cVenDefine5', label: '自定义项5', type: 'text' },
@@ -297,6 +330,36 @@ const defaultSwitchFields = vendorSections
   .flatMap((section) => section.fields)
   .filter((field) => field.type === 'switch')
   .map((field) => field.key)
+const paymentFieldKeys = [
+  'receiptAccountName',
+  'cVenBankCode',
+  'cVenBank',
+  'cVenAccount',
+  'receiptBankProvince',
+  'receiptBankCity',
+  'receiptBranchCode',
+  'receiptBranchName',
+  'cVenBankNub'
+] as const
+const allowedVendorFieldKeys = new Set([
+  ...vendorSections.flatMap((section) => section.fields.map((field) => field.key)),
+  ...paymentFieldKeys
+])
+const vendorFieldLabels = {
+  ...vendorSections.flatMap((section) => section.fields).reduce<Record<string, string>>((acc, field) => {
+    acc[field.key] = field.label
+    return acc
+  }, {}),
+  receiptAccountName: '开户名',
+  cVenBankCode: '开户银行编码',
+  cVenBank: '开户银行',
+  cVenAccount: '银行账号',
+  receiptBankProvince: '开户省',
+  receiptBankCity: '开户市',
+  receiptBranchCode: '分支行编码',
+  receiptBranchName: '分支行',
+  cVenBankNub: '联行号'
+}
 
 resetVendorForm()
 onMounted(registerCompanySwitchGuard)
@@ -366,6 +429,9 @@ function resetVendorForm() {
       vendorForm[field.key] = field.type === 'switch' ? 0 : undefined
     })
   })
+  paymentFieldKeys.forEach((key) => {
+    vendorForm[key] = undefined
+  })
 }
 
 function openCreateDialog() {
@@ -388,7 +454,9 @@ async function openEditDialog(vendorCode: string) {
   try {
     const res = await financeArchiveApi.getSupplierDetail(currentCompanyId.value, vendorCode)
     Object.entries(res.data).forEach(([key, value]) => {
-      vendorForm[key] = value as string | number | undefined
+      if (allowedVendorFieldKeys.has(key)) {
+        vendorForm[key] = value as string | number | undefined
+      }
     })
     defaultSwitchFields.forEach((key) => {
       vendorForm[key] = Number(vendorForm[key] || 0)
@@ -401,10 +469,7 @@ async function openEditDialog(vendorCode: string) {
 }
 
 async function saveSupplier() {
-  if (!String(vendorForm.cVenName || '').trim()) {
-    ElMessage.warning('请先填写供应商名称')
-    return
-  }
+  if (!validateVendorForm()) return
   saving.value = true
   try {
     const payload = buildVendorPayload()
@@ -448,33 +513,54 @@ async function disableSupplier(vendorCode: string) {
   }
 }
 
+function validateVendorForm() {
+  if (!String(vendorForm.cVenName || '').trim()) {
+    ElMessage.warning('请先填写供应商名称')
+    return false
+  }
+  for (const [fieldKey, maxLength] of Object.entries(VENDOR_FIELD_MAX_LENGTH)) {
+    const value = vendorForm[fieldKey]
+    if (typeof value !== 'string') {
+      continue
+    }
+    const normalized = value.trim()
+    if (normalized && normalized.length > maxLength) {
+      ElMessage.warning(`${vendorFieldLabels[fieldKey] || fieldKey}最多 ${maxLength} 个字符`)
+      return false
+    }
+  }
+  return true
+}
+
 function buildVendorPayload(): FinanceVendorSavePayload {
   const payload: Record<string, unknown> = {
     companyId: currentCompanyId.value
   }
-  Object.entries(vendorForm).forEach(([key, value]) => {
+  Array.from(allowedVendorFieldKeys).forEach((key) => {
+    const value = vendorForm[key]
+    const normalizedValue = typeof value === 'string' ? value.trim() : value
     if (key === 'companyId') {
       return
     }
-    if (value === undefined || value === null || value === '') {
+    if (normalizedValue === undefined || normalizedValue === null || normalizedValue === '') {
       return
     }
     if (moneyFields.has(key)) {
-      payload[key] = String(value)
+      payload[key] = String(normalizedValue)
       return
     }
     if (numericFields.has(key)) {
-      const numericValue = Number(value)
+      const numericValue = Number(normalizedValue)
       if (!Number.isNaN(numericValue)) {
         payload[key] = numericValue
       }
       return
     }
     if (dateFields.has(key)) {
-      payload[key] = String(value)
+      payload[key] = String(normalizedValue)
       return
     }
-    payload[key] = value
+    payload[key] = normalizedValue
   })
   return payload as FinanceVendorSavePayload
 }

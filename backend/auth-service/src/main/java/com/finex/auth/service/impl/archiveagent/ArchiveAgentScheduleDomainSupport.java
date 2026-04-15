@@ -1,3 +1,8 @@
+// 业务域：档案代理与归档任务
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 档案代理配置接口和后台调度，下游会继续协调 归档规则、执行记录和调度计划。
+// 风险提醒：改坏后最容易影响 档案归集效果、执行漏掉和后续追溯。
+
 package com.finex.auth.service.impl.archiveagent;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -12,12 +17,23 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * ArchiveAgentScheduleDomainSupport：领域规则支撑类。
+ * 承接 档案代理调度的核心业务规则。
+ * 改这里时，要特别关注 档案归集效果、执行漏掉和后续追溯是否会被一起带坏。
+ */
 public class ArchiveAgentScheduleDomainSupport extends AbstractArchiveAgentSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ArchiveAgentScheduleDomainSupport(Dependencies dependencies) {
         super(dependencies);
     }
 
+    /**
+     * 执行Due调度。
+     */
     public void runDueSchedules() {
         LocalDateTime now = LocalDateTime.now();
         List<ArchiveAgentSchedule> schedules = archiveAgentScheduleMapper.selectList(

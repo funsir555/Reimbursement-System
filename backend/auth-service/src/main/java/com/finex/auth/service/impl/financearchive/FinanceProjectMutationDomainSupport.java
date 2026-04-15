@@ -1,3 +1,8 @@
+// 业务域：财务档案
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 供应商、客户、项目、科目等档案页面接口，下游会继续协调 档案主数据、下拉选项和与凭证、报销单的基础对应。
+// 风险提醒：改坏后最容易影响 基础档案错配、下游选项错误和历史单据对应失效。
+
 package com.finex.auth.service.impl.financearchive;
 
 import com.finex.auth.dto.FinanceProjectCloseDTO;
@@ -14,8 +19,16 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
+/**
+ * FinanceProjectMutationDomainSupport：领域规则支撑类。
+ * 承接 财务项目的核心业务规则。
+ * 改这里时，要特别关注 基础档案错配、下游选项错误和历史单据对应失效是否会被一起带坏。
+ */
 public class FinanceProjectMutationDomainSupport extends AbstractFinanceProjectArchiveSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public FinanceProjectMutationDomainSupport(
             FinanceProjectClassMapper financeProjectClassMapper,
             FinanceProjectArchiveMapper financeProjectArchiveMapper,
@@ -25,6 +38,9 @@ public class FinanceProjectMutationDomainSupport extends AbstractFinanceProjectA
         super(financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, glAccvouchMapper);
     }
 
+    /**
+     * 创建项目。
+     */
     public FinanceProjectDetailVO createProject(String companyId, FinanceProjectSaveDTO dto, String operatorName) {
         validateProjectPayload(dto);
         String normalizedCompanyId = requireCompanyId(companyId);
@@ -55,6 +71,9 @@ public class FinanceProjectMutationDomainSupport extends AbstractFinanceProjectA
         return toProjectDetail(requireProject(normalizedCompanyId, projectCode), projectClass.getProjectClassName());
     }
 
+    /**
+     * 更新项目。
+     */
     public FinanceProjectDetailVO updateProject(String companyId, String projectCode, FinanceProjectSaveDTO dto, String operatorName) {
         validateProjectPayload(dto);
         FinanceProjectArchive existing = requireProject(companyId, projectCode);
@@ -83,6 +102,9 @@ public class FinanceProjectMutationDomainSupport extends AbstractFinanceProjectA
         return toProjectDetail(requireProject(existing.getCompanyId(), existing.getCitemcode()), targetClass.getProjectClassName());
     }
 
+    /**
+     * 更新项目Status。
+     */
     public Boolean updateProjectStatus(String companyId, String projectCode, FinanceProjectStatusDTO dto, String operatorName) {
         FinanceProjectArchive existing = requireProject(companyId, projectCode);
         int nextStatus = normalizeFlag(dto == null ? null : dto.getStatus(), 1);
@@ -96,6 +118,9 @@ public class FinanceProjectMutationDomainSupport extends AbstractFinanceProjectA
         return Boolean.TRUE;
     }
 
+    /**
+     * 更新项目CloseStatus。
+     */
     public Boolean updateProjectCloseStatus(String companyId, String projectCode, FinanceProjectCloseDTO dto, String operatorName) {
         FinanceProjectArchive existing = requireProject(companyId, projectCode);
         int nextClose = normalizeFlag(dto == null ? null : dto.getBclose(), 0);

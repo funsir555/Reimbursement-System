@@ -220,6 +220,67 @@ export interface FinanceProjectStatusPayload {
   bclose?: number
 }
 
+export interface FinanceDepartmentArchiveOption {
+  value: string
+  label: string
+}
+
+export interface FinanceDepartmentTreeNode {
+  id: number
+  companyId?: string
+  deptCode: string
+  leaderUserId?: number
+  leaderName?: string
+  deptName: string
+  parentId?: number
+  statDepartmentBelong?: string
+  statRegionBelong?: string
+  statAreaBelong?: string
+  syncSource: string
+  syncManaged: boolean
+  syncEnabled: boolean
+  syncStatus?: string
+  syncRemark?: string
+  status: number
+  sortOrder: number
+  lastSyncAt?: string
+  children: FinanceDepartmentTreeNode[]
+}
+
+export interface FinanceDepartmentArchiveMeta {
+  departments: FinanceDepartmentTreeNode[]
+  statusOptions: FinanceDepartmentArchiveOption[]
+}
+
+export interface FinanceDepartmentQueryPayload {
+  keyword?: string
+  parentId?: number
+  status?: number
+}
+
+export interface FinanceDepartmentSummary {
+  id: number
+  deptCode: string
+  deptName: string
+  parentId?: number
+  parentDeptName?: string
+  companyId?: string
+  companyName?: string
+  leaderUserId?: number
+  leaderName?: string
+  status: number
+  syncSource?: string
+  syncManaged?: boolean
+  syncEnabled?: boolean
+  syncStatus?: string
+  syncRemark?: string
+  sortOrder?: number
+  lastSyncAt?: string
+  statDepartmentBelong?: string
+  statRegionBelong?: string
+  statAreaBelong?: string
+}
+
 export interface FinanceVendorSummary {
   cVenCode: string
   cVenName: string

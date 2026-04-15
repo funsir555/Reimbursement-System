@@ -324,7 +324,7 @@ export const routeCatalog: AppRouteDefinition[] = [
       {
         path: 'finance/archives/departments',
         name: 'finance-archives-departments',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceDepartmentArchiveView.vue'),
         metaKey: 'finance-archives-departments'
       },
       {

@@ -34,6 +34,16 @@ public class GlobalExceptionHandler {
             log.warn("Finance-system business exception on {}: {}", request.getRequestURI(), financeSystemMessage, ex);
             return Result.error(financeSystemMessage);
         }
+        String glMessage = resolveGlBusinessMessage(ex, request);
+        if (glMessage != null) {
+            log.warn("GL business exception on {}: {}", request.getRequestURI(), glMessage, ex);
+            return Result.error(glMessage);
+        }
+        String pmMessage = resolvePmBusinessMessage(ex, request);
+        if (pmMessage != null) {
+            log.warn("PM business exception on {}: {}", request.getRequestURI(), pmMessage, ex);
+            return Result.error(pmMessage);
+        }
         String message = resolveBusinessStateMessage(ex);
         if (message == null) {
             return handleException(ex, request);
@@ -165,10 +175,61 @@ public class GlobalExceptionHandler {
         return null;
     }
 
+    private String resolveGlBusinessMessage(IllegalStateException ex, HttpServletRequest request) {
+        if (!isGlRequest(request)) {
+            return null;
+        }
+        String message = trimToNull(ex.getMessage());
+        if (message == null || message.startsWith("Failed to ")) {
+            return null;
+        }
+        return containsChinese(message) ? message : null;
+    }
+
+    private String resolvePmBusinessMessage(IllegalStateException ex, HttpServletRequest request) {
+        if (!isPmRequest(request)) {
+            return null;
+        }
+        String message = trimToNull(ex.getMessage());
+        if (message == null || message.startsWith("Failed to ")) {
+            return null;
+        }
+        return containsChinese(message) ? message : null;
+    }
+
     private boolean isFinanceSystemRequest(HttpServletRequest request) {
         return request != null
                 && request.getRequestURI() != null
                 && request.getRequestURI().startsWith("/auth/finance/system-management/");
+    }
+
+    private boolean isGlRequest(HttpServletRequest request) {
+        if (request == null || request.getRequestURI() == null) {
+            return false;
+        }
+        String uri = request.getRequestURI();
+        return uri.startsWith("/auth/finance/archives/customers")
+                || uri.startsWith("/auth/finance/archives/suppliers")
+                || uri.startsWith("/auth/finance/vouchers");
+    }
+
+    private boolean isPmRequest(HttpServletRequest request) {
+        if (request == null || request.getRequestURI() == null) {
+            return false;
+        }
+        String uri = request.getRequestURI();
+        return uri.startsWith("/auth/process-management/")
+                || uri.startsWith("/auth/expense/documents")
+                || uri.startsWith("/auth/expense-approval/tasks/");
+    }
+
+    private boolean containsChinese(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        return value.codePoints().anyMatch(codePoint ->
+                Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN
+        );
     }
 
     private boolean isExpenseCreateInitializationMissing(String message) {

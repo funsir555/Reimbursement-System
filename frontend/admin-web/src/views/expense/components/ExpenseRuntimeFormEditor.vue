@@ -23,6 +23,8 @@
           <el-input
             v-if="controlType(block) === 'TEXT'"
             v-model="formData[block.fieldKey]"
+            :maxlength="documentTitleMaxLength(block)"
+            :show-word-limit="Boolean(documentTitleMaxLength(block))"
             :placeholder="placeholderOf(block)"
             :readonly="isReadOnly(block)"
           />
@@ -31,6 +33,8 @@
             v-model="formData[block.fieldKey]"
             type="textarea"
             :rows="4"
+            :maxlength="documentTitleMaxLength(block)"
+            :show-word-limit="Boolean(documentTitleMaxLength(block))"
             :placeholder="placeholderOf(block)"
             :readonly="isReadOnly(block)"
           />
@@ -420,19 +424,19 @@
       <div class="space-y-5">
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <el-form-item label="供应商名称" required class="!mb-0">
-            <el-input v-model="vendorDraft.cVenName" placeholder="请输入供应商名称" />
+            <el-input v-model="vendorDraft.cVenName" maxlength="128" placeholder="请输入供应商名称" />
           </el-form-item>
           <el-form-item label="供应商简称" class="!mb-0">
-            <el-input v-model="vendorDraft.cVenAbbName" placeholder="请输入供应商简称" />
+            <el-input v-model="vendorDraft.cVenAbbName" maxlength="64" placeholder="请输入供应商简称" />
           </el-form-item>
           <el-form-item label="工商注册号" class="!mb-0">
             <el-input v-model="vendorDraft.cVenRegCode" placeholder="请输入工商注册号" />
           </el-form-item>
           <el-form-item label="联系人" class="!mb-0">
-            <el-input v-model="vendorDraft.cVenPerson" placeholder="请输入联系人" />
+            <el-input v-model="vendorDraft.cVenPerson" maxlength="64" placeholder="请输入联系人" />
           </el-form-item>
           <el-form-item label="联系电话" class="!mb-0">
-            <el-input v-model="vendorDraft.cVenPhone" placeholder="请输入联系电话" />
+            <el-input v-model="vendorDraft.cVenPhone" maxlength="32" placeholder="请输入联系电话" />
           </el-form-item>
           <el-form-item label="联系地址" class="!mb-0">
             <el-input v-model="vendorDraft.cVenAddress" placeholder="请输入联系地址" />
@@ -580,6 +584,7 @@ import {
   isExpenseDetailBlockReadOnly,
   isExpenseDetailBlockVisible
 } from '@/views/expense/expenseDetailRuntime'
+import { documentTitleMaxLength, validateRuntimeTitleValues } from '@/views/process/pmValidation'
 
 const formData = defineModel<Record<string, unknown>>({ required: true })
 
@@ -628,6 +633,17 @@ const props = withDefaults(defineProps<{
 })
 
 const blocks = computed(() => props.schema?.blocks || [])
+
+function validateBeforeSubmit() {
+  const issues = validateRuntimeTitleValues(props.schema, formData.value || {})
+  if (issues.length) {
+    ElMessage.warning(issues[0])
+    return false
+  }
+  return true
+}
+
+defineExpose({ validateBeforeSubmit })
 const visibleBlocks = computed(() => (
   props.detailType
     ? blocks.value.filter((block) => isVisible(block))
@@ -666,6 +682,17 @@ const documentPickerDialog = reactive<{
 const vendorDialogVisible = ref(false)
 const vendorDialogFieldKey = ref('')
 const vendorSaving = ref(false)
+const EXPENSE_VENDOR_FIELD_MAX_LENGTH: Record<string, number> = {
+  cVenName: 128,
+  cVenAbbName: 64,
+  cVenPerson: 64,
+  cVenPhone: 32,
+  receiptAccountName: 128,
+  cVenBank: 128,
+  cVenAccount: 64,
+  cVenBankNub: 64,
+  receiptBranchName: 128
+}
 const emptyVendorDraft = (): FinanceVendorSavePayload => ({
   cVenName: '',
   cVenAbbName: '',
@@ -1253,6 +1280,23 @@ function validateVendorDraft() {
   }
   if (!String(vendorDraft.receiptBranchName || '').trim()) {
     return '请先选择分支行'
+  }
+  const lengthRules = [
+    { key: 'cVenName', label: '供应商名称', max: 128 },
+    { key: 'cVenAbbName', label: '供应商简称', max: 64 },
+    { key: 'cVenPerson', label: '联系人', max: 64 },
+    { key: 'cVenPhone', label: '联系电话', max: 32 },
+    { key: 'receiptAccountName', label: '开户名', max: 128 },
+    { key: 'cVenBank', label: '开户银行', max: 128 },
+    { key: 'cVenAccount', label: '银行账号', max: 64 },
+    { key: 'cVenBankNub', label: '联行号', max: 64 },
+    { key: 'receiptBranchName', label: '分支行名称', max: 128 }
+  ] as const
+  for (const rule of lengthRules) {
+    const value = String(vendorDraft[rule.key] || '').trim()
+    if (value.length > rule.max) {
+      return `${rule.label}最多 ${rule.max} 个字符`
+    }
   }
   return ''
 }

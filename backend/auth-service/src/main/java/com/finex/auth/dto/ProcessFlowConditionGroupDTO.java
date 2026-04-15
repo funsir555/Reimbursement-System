@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import jakarta.validation.Valid;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -10,5 +11,6 @@ public class ProcessFlowConditionGroupDTO {
 
     private Integer groupNo;
 
+    @Valid
     private List<ProcessFlowConditionDTO> conditions = new ArrayList<>();
 }

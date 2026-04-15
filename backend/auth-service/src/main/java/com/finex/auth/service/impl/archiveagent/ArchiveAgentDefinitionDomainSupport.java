@@ -1,3 +1,8 @@
+// 业务域：档案代理与归档任务
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 档案代理配置接口和后台调度，下游会继续协调 归档规则、执行记录和调度计划。
+// 风险提醒：改坏后最容易影响 档案归集效果、执行漏掉和后续追溯。
+
 package com.finex.auth.service.impl.archiveagent;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -21,12 +26,23 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * ArchiveAgentDefinitionDomainSupport：领域规则支撑类。
+ * 承接 档案代理定义的核心业务规则。
+ * 改这里时，要特别关注 档案归集效果、执行漏掉和后续追溯是否会被一起带坏。
+ */
 public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ArchiveAgentDefinitionDomainSupport(Dependencies dependencies) {
         super(dependencies);
     }
 
+    /**
+     * 查询代理列表。
+     */
     public List<ArchiveAgentSummaryVO> listAgents(Long ownerUserId, String keyword, String status) {
         String normalizedKeyword = trimToNull(keyword);
         String normalizedStatus = trimToNull(status);
@@ -77,10 +93,16 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return result;
     }
 
+    /**
+     * 获取代理明细。
+     */
     public ArchiveAgentDetailVO getAgentDetail(Long ownerUserId, Long id) {
         return buildDetail(requireOwnedAgent(ownerUserId, id));
     }
 
+    /**
+     * 创建代理。
+     */
     public ArchiveAgentDetailVO createAgent(Long ownerUserId, String operatorName, ArchiveAgentSaveDTO dto) {
         validateSavePayload(dto);
         ArchiveAgentDefinition definition = new ArchiveAgentDefinition();
@@ -102,6 +124,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return buildDetail(requireOwnedAgent(ownerUserId, definition.getId()));
     }
 
+    /**
+     * 更新代理。
+     */
     public ArchiveAgentDetailVO updateAgent(Long ownerUserId, Long id, String operatorName, ArchiveAgentSaveDTO dto) {
         validateSavePayload(dto);
         ArchiveAgentDefinition definition = requireOwnedAgent(ownerUserId, id);
@@ -120,6 +145,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return buildDetail(requireOwnedAgent(ownerUserId, id));
     }
 
+    /**
+     * 发布代理。
+     */
     public ArchiveAgentDetailVO publishAgent(Long ownerUserId, Long id, String operatorName) {
         ArchiveAgentDefinition definition = requireOwnedAgent(ownerUserId, id);
         ArchiveAgentVersion latestVersion = requireLatestVersion(id);
@@ -140,6 +168,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return buildDetail(requireOwnedAgent(ownerUserId, id));
     }
 
+    /**
+     * 更新代理Status。
+     */
     public ArchiveAgentDetailVO updateAgentStatus(Long ownerUserId, Long id, String status) {
         ArchiveAgentDefinition definition = requireOwnedAgent(ownerUserId, id);
         String normalizedStatus = ArchiveAgentSupport.normalizeStatus(status);
@@ -157,6 +188,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return buildDetail(requireOwnedAgent(ownerUserId, id));
     }
 
+    /**
+     * 组装明细。
+     */
     private ArchiveAgentDetailVO buildDetail(ArchiveAgentDefinition definition) {
         ArchiveAgentVersion latestVersion = requireLatestVersion(definition.getId());
         Map<String, Object> config = readMap(latestVersion.getConfigJson());
@@ -189,6 +223,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return detail;
     }
 
+    /**
+     * 创建Version。
+     */
     private ArchiveAgentVersion createVersion(
             ArchiveAgentDefinition definition,
             int versionNo,
@@ -208,6 +245,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return version;
     }
 
+    /**
+     * 组装Config映射。
+     */
     private Map<String, Object> buildConfigMap(ArchiveAgentDefinition definition, ArchiveAgentSaveDTO dto) {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("agentCode", definition.getAgentCode());
@@ -229,6 +269,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         return config;
     }
 
+    /**
+     * 同步Bindings。
+     */
     private void syncBindings(Long agentId, ArchiveAgentSaveDTO dto) {
         archiveAgentTriggerMapper.delete(Wrappers.<ArchiveAgentTrigger>lambdaQuery().eq(ArchiveAgentTrigger::getAgentId, agentId));
         archiveAgentToolBindingMapper.delete(Wrappers.<ArchiveAgentToolBinding>lambdaQuery().eq(ArchiveAgentToolBinding::getAgentId, agentId));
@@ -272,6 +315,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         }
     }
 
+    /**
+     * 刷新调度State。
+     */
     private void refreshScheduleState(Long agentId, String agentStatus) {
         List<ArchiveAgentSchedule> schedules = archiveAgentScheduleMapper.selectList(
                 Wrappers.<ArchiveAgentSchedule>lambdaQuery().eq(ArchiveAgentSchedule::getAgentId, agentId)
@@ -303,6 +349,9 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         }
     }
 
+    /**
+     * 校验SavePayload。
+     */
     private void validateSavePayload(ArchiveAgentSaveDTO dto) {
         if (dto == null) {
             throw new IllegalArgumentException("Agent 閰嶇疆涓嶈兘涓虹┖");

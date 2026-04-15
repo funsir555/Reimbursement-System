@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS sys_bank_branch_catalog (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='domestic bank branch catalog';
 
 ALTER TABLE gl_Vender
-    ADD COLUMN IF NOT EXISTS receipt_account_name VARCHAR(255) NULL COMMENT '收款开户名' AFTER cVenBankNub;
+    ADD COLUMN IF NOT EXISTS receipt_account_name VARCHAR(128) NULL COMMENT '收款开户名' AFTER cVenBankNub;
 
 ALTER TABLE gl_Vender
     ADD COLUMN IF NOT EXISTS receipt_bank_province VARCHAR(64) NULL COMMENT '收款开户省' AFTER receipt_account_name;
@@ -45,7 +45,7 @@ ALTER TABLE gl_Vender
     ADD COLUMN IF NOT EXISTS receipt_branch_code VARCHAR(64) NULL COMMENT '收款分支行编码' AFTER receipt_bank_city;
 
 ALTER TABLE gl_Vender
-    ADD COLUMN IF NOT EXISTS receipt_branch_name VARCHAR(255) NULL COMMENT '收款分支行名称' AFTER receipt_branch_code;
+    ADD COLUMN IF NOT EXISTS receipt_branch_name VARCHAR(128) NULL COMMENT '收款分支行名称' AFTER receipt_branch_code;
 
 INSERT INTO sys_bank_catalog (bank_code, bank_name, status, sort_order) VALUES
     ('ICBC', '中国工商银行', 1, 10),
@@ -80,26 +80,26 @@ ON DUPLICATE KEY UPDATE
 
 -- comment standardization begin
 ALTER TABLE gl_vender
-    MODIFY COLUMN cVenCode varchar(255) NOT NULL COMMENT '供应商编码',
-    MODIFY COLUMN cVenName varchar(255) NOT NULL COMMENT '供应商名称',
-    MODIFY COLUMN cVenAbbName varchar(255) NULL COMMENT '供应商简称',
-    MODIFY COLUMN cVCCode varchar(255) NULL COMMENT '供应商分类编码',
+    MODIFY COLUMN cVenCode varchar(64) NOT NULL COMMENT '供应商编码',
+    MODIFY COLUMN cVenName varchar(128) NOT NULL COMMENT '供应商名称',
+    MODIFY COLUMN cVenAbbName varchar(64) NULL COMMENT '供应商简称',
+    MODIFY COLUMN cVCCode varchar(64) NULL COMMENT '供应商分类编码',
     MODIFY COLUMN cTrade varchar(255) NULL COMMENT '所属行业',
     MODIFY COLUMN cVenAddress varchar(255) NULL COMMENT '地址',
     MODIFY COLUMN cVenRegCode varchar(255) NULL COMMENT '纳税人登记号',
-    MODIFY COLUMN cVenBank varchar(255) NULL COMMENT '开户银行',
-    MODIFY COLUMN cVenAccount varchar(255) NULL COMMENT '银行账号',
-    MODIFY COLUMN cVenBankNub varchar(255) NULL COMMENT '银行行号',
-    MODIFY COLUMN receipt_account_name varchar(255) NULL COMMENT '收款开户名',
+    MODIFY COLUMN cVenBank varchar(128) NULL COMMENT '开户银行',
+    MODIFY COLUMN cVenAccount varchar(64) NULL COMMENT '银行账号',
+    MODIFY COLUMN cVenBankNub varchar(64) NULL COMMENT '银行行号',
+    MODIFY COLUMN receipt_account_name varchar(128) NULL COMMENT '收款开户名',
     MODIFY COLUMN receipt_bank_province varchar(64) NULL COMMENT '收款开户省',
     MODIFY COLUMN receipt_bank_city varchar(64) NULL COMMENT '收款开户市',
     MODIFY COLUMN receipt_branch_code varchar(64) NULL COMMENT '收款分支行编码',
-    MODIFY COLUMN receipt_branch_name varchar(255) NULL COMMENT '收款分支行名称',
-    MODIFY COLUMN cVenPerson varchar(255) NULL COMMENT '联系人',
-    MODIFY COLUMN cVenPhone varchar(255) NULL COMMENT '电话',
-    MODIFY COLUMN cVenHand varchar(255) NULL COMMENT '手机',
+    MODIFY COLUMN receipt_branch_name varchar(128) NULL COMMENT '收款分支行名称',
+    MODIFY COLUMN cVenPerson varchar(64) NULL COMMENT '联系人',
+    MODIFY COLUMN cVenPhone varchar(32) NULL COMMENT '电话',
+    MODIFY COLUMN cVenHand varchar(32) NULL COMMENT '手机',
     MODIFY COLUMN cVenEmail varchar(255) NULL COMMENT 'Email地址',
-    MODIFY COLUMN company_id varchar(255) NULL COMMENT '公司主体编码',
+    MODIFY COLUMN company_id varchar(64) NULL COMMENT '公司主体编码',
     MODIFY COLUMN cMemo varchar(255) NULL COMMENT '备注',
     MODIFY COLUMN dEndDate datetime NULL COMMENT '停用日期',
     MODIFY COLUMN bBusinessDate tinyint NULL DEFAULT 0 COMMENT '经营许可证是否期限管理',
@@ -111,12 +111,12 @@ ALTER TABLE gl_vender
     MODIFY COLUMN bVenService tinyint NULL DEFAULT 0 COMMENT '是否服务',
     MODIFY COLUMN bVenTax tinyint NULL DEFAULT 0 COMMENT '单价是否含税',
     MODIFY COLUMN cBarCode varchar(255) NULL COMMENT '对应条形码',
-    MODIFY COLUMN cCreatePerson varchar(255) NULL COMMENT '建档人',
-    MODIFY COLUMN cDCCode varchar(255) NULL COMMENT '地区编码',
-    MODIFY COLUMN cModifyPerson varchar(255) NULL COMMENT '变更人',
-    MODIFY COLUMN cRelCustomer varchar(255) NULL COMMENT '对应客户',
-    MODIFY COLUMN cVenBankCode varchar(255) NULL COMMENT '所属银行编码',
-    MODIFY COLUMN cVenBP varchar(255) NULL COMMENT '呼机',
+    MODIFY COLUMN cCreatePerson varchar(64) NULL COMMENT '建档人',
+    MODIFY COLUMN cDCCode varchar(64) NULL COMMENT '地区编码',
+    MODIFY COLUMN cModifyPerson varchar(64) NULL COMMENT '变更人',
+    MODIFY COLUMN cRelCustomer varchar(64) NULL COMMENT '对应客户',
+    MODIFY COLUMN cVenBankCode varchar(64) NULL COMMENT '所属银行编码',
+    MODIFY COLUMN cVenBP varchar(32) NULL COMMENT '呼机',
     MODIFY COLUMN cVenDefine10 varchar(255) NULL COMMENT '供应商自定义项10',
     MODIFY COLUMN cVenDefine11 int NULL COMMENT '供应商自定义项11',
     MODIFY COLUMN cVenDefine12 int NULL COMMENT '供应商自定义项12',
@@ -132,16 +132,16 @@ ALTER TABLE gl_vender
     MODIFY COLUMN cVenDefine8 varchar(255) NULL COMMENT '供应商自定义项8',
     MODIFY COLUMN cVenDefine9 varchar(255) NULL COMMENT '供应商自定义项9',
     MODIFY COLUMN cVenDepart varchar(255) NULL COMMENT '分管部门',
-    MODIFY COLUMN cVenFax varchar(255) NULL COMMENT '传真',
-    MODIFY COLUMN cVenHeadCode varchar(255) NULL COMMENT '供应商总公司编码',
+    MODIFY COLUMN cVenFax varchar(32) NULL COMMENT '传真',
+    MODIFY COLUMN cVenHeadCode varchar(64) NULL COMMENT '供应商总公司编码',
     MODIFY COLUMN cVenIAddress varchar(255) NULL COMMENT '到货地址',
     MODIFY COLUMN cVenIType varchar(255) NULL COMMENT '到货方式',
-    MODIFY COLUMN cVenLPerson varchar(255) NULL COMMENT '法人',
-    MODIFY COLUMN cVenPayCond varchar(255) NULL COMMENT '付款条件编码',
-    MODIFY COLUMN cVenPostCode varchar(255) NULL COMMENT '邮政编码',
-    MODIFY COLUMN cVenPPerson varchar(255) NULL COMMENT '专营业务员',
-    MODIFY COLUMN cVenTradeCCode varchar(255) NULL COMMENT '行业编码',
-    MODIFY COLUMN cVenWhCode varchar(255) NULL COMMENT '到货仓库',
+    MODIFY COLUMN cVenLPerson varchar(64) NULL COMMENT '法人',
+    MODIFY COLUMN cVenPayCond varchar(64) NULL COMMENT '付款条件编码',
+    MODIFY COLUMN cVenPostCode varchar(16) NULL COMMENT '邮政编码',
+    MODIFY COLUMN cVenPPerson varchar(64) NULL COMMENT '专营业务员',
+    MODIFY COLUMN cVenTradeCCode varchar(64) NULL COMMENT '行业编码',
+    MODIFY COLUMN cVenWhCode varchar(64) NULL COMMENT '到货仓库',
     MODIFY COLUMN dBusinessEDate datetime NULL COMMENT '经营许可证到期日期',
     MODIFY COLUMN dBusinessSDate datetime NULL COMMENT '经营许可证生效日期',
     MODIFY COLUMN dLastDate datetime NULL COMMENT '最后交易日期',

@@ -106,13 +106,13 @@ class ExpenseVoucherMetaSupportTest {
 
         ProcessDocumentInstance pendingDoc = new ProcessDocumentInstance();
         pendingDoc.setDocumentCode("DOC-001");
-        pendingDoc.setStatus("APPROVED");
+        pendingDoc.setStatus("PENDING_PAYMENT");
         pendingDoc.setTotalAmount(new BigDecimal("100.00"));
         pendingDoc.setFinishedAt(LocalDateTime.of(2026, 4, 11, 9, 0));
 
         ProcessDocumentInstance pushedDoc = new ProcessDocumentInstance();
         pushedDoc.setDocumentCode("DOC-002");
-        pushedDoc.setStatus("APPROVED");
+        pushedDoc.setStatus("COMPLETED");
         pushedDoc.setTotalAmount(new BigDecimal("200.00"));
         pushedDoc.setFinishedAt(LocalDateTime.of(2026, 4, 11, 10, 0));
 

@@ -1,3 +1,8 @@
+// 业务域：个人中心与下载
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 个人中心页面、下载中心接口，下游会继续协调 个人信息、银行卡账户和下载记录。
+// 风险提醒：改坏后最容易影响 个人信息展示、银行卡维护和下载留痕。
+
 package com.finex.auth.service.impl.profile;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -13,8 +18,16 @@ import com.finex.auth.service.impl.DownloadStorageService;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * ProfileBankAccountDomainSupport：领域规则支撑类。
+ * 承接 个人中心银行账户的核心业务规则。
+ * 改这里时，要特别关注 个人信息展示、银行卡维护和下载留痕是否会被一起带坏。
+ */
 public final class ProfileBankAccountDomainSupport extends AbstractProfileDomainSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ProfileBankAccountDomainSupport(
             UserService userService,
             UserBankAccountMapper userBankAccountMapper,
@@ -24,11 +37,17 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         super(userService, userBankAccountMapper, downloadRecordMapper, downloadStorageService);
     }
 
+    /**
+     * 查询银行账户列表。
+     */
     public List<BankAccountVO> listBankAccounts(Long userId) {
         requireUser(userId);
         return loadBankAccounts(userId);
     }
 
+    /**
+     * 创建银行账户。
+     */
     public BankAccountVO createBankAccount(Long userId, UserBankAccountSaveDTO dto) {
         requireUser(userId);
         UserBankAccount account = new UserBankAccount();
@@ -41,6 +60,9 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         return findBankAccount(userId, account.getId());
     }
 
+    /**
+     * 更新银行账户。
+     */
     public BankAccountVO updateBankAccount(Long userId, Long accountId, UserBankAccountSaveDTO dto) {
         requireUser(userId);
         UserBankAccount account = requireBankAccount(userId, accountId);
@@ -52,6 +74,9 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         return findBankAccount(userId, accountId);
     }
 
+    /**
+     * 更新银行账户Status。
+     */
     public Boolean updateBankAccountStatus(Long userId, Long accountId, Integer status) {
         requireUser(userId);
         UserBankAccount account = requireBankAccount(userId, accountId);
@@ -63,6 +88,9 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         return Boolean.TRUE;
     }
 
+    /**
+     * 处理个人中心银行账户中的这一步。
+     */
     public Boolean setDefaultBankAccount(Long userId, Long accountId) {
         requireUser(userId);
         UserBankAccount account = requireBankAccount(userId, accountId);
@@ -75,6 +103,9 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         return Boolean.TRUE;
     }
 
+    /**
+     * 加载银行账户。
+     */
     List<BankAccountVO> loadBankAccounts(Long userId) {
         return userBankAccountMapper().selectList(
                 Wrappers.<UserBankAccount>lambdaQuery()
@@ -97,6 +128,9 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         return account;
     }
 
+    /**
+     * 查询银行账户。
+     */
     private BankAccountVO findBankAccount(Long userId, Long accountId) {
         return toBankAccount(requireBankAccount(userId, accountId));
     }
@@ -138,6 +172,9 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         account.setDefaultAccount(Integer.valueOf(1).equals(account.getStatus()) && normalizeFlag(dto.getDefaultAccount()) == 1 ? 1 : 0);
     }
 
+    /**
+     * 清理Other默认银行账户。
+     */
     private void clearOtherDefaultBankAccounts(Long userId, Long currentId) {
         List<UserBankAccount> accounts = userBankAccountMapper().selectList(
                 Wrappers.<UserBankAccount>lambdaQuery()

@@ -1,3 +1,8 @@
+// 业务域：报销凭证生成与推送
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 报销单凭证生成接口和财务操作入口，下游会继续协调 凭证映射、推送记录和报销单凭证状态。
+// 风险提醒：改坏后最容易影响 重复生成凭证、凭证内容错误和推送记录不一致。
+
 package com.finex.auth.service.impl.expensevoucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -12,12 +17,23 @@ import com.finex.auth.entity.ExpVoucherTemplatePolicy;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * ExpenseVoucherMappingDomainSupport：领域规则支撑类。
+ * 承接 报销单凭证映射的核心业务规则。
+ * 改这里时，要特别关注 重复生成凭证、凭证内容错误和推送记录不一致是否会被一起带坏。
+ */
 public class ExpenseVoucherMappingDomainSupport extends AbstractExpenseVoucherGenerationSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ExpenseVoucherMappingDomainSupport(Dependencies dependencies) {
         super(dependencies);
     }
 
+    /**
+     * 获取模板Policies。
+     */
     public ExpenseVoucherPageVO<ExpenseVoucherTemplatePolicyVO> getTemplatePolicies(String companyId, String templateCode, Integer enabled, Integer page, Integer pageSize) {
         Map<String, String> companyMap = companyNameMap();
         List<ExpenseVoucherTemplatePolicyVO> rows = templatePolicyMapper.selectList(
@@ -32,6 +48,9 @@ public class ExpenseVoucherMappingDomainSupport extends AbstractExpenseVoucherGe
         return buildPage(rows, page, pageSize);
     }
 
+    /**
+     * 获取科目映射。
+     */
     public ExpenseVoucherPageVO<ExpenseVoucherSubjectMappingVO> getSubjectMappings(String companyId, String templateCode, String expenseTypeCode, Integer enabled, Integer page, Integer pageSize) {
         Map<String, String> companyMap = companyNameMap();
         List<ExpenseVoucherSubjectMappingVO> rows = subjectMappingMapper.selectList(
@@ -47,6 +66,9 @@ public class ExpenseVoucherMappingDomainSupport extends AbstractExpenseVoucherGe
         return buildPage(rows, page, pageSize);
     }
 
+    /**
+     * 创建模板Policy。
+     */
     public ExpenseVoucherTemplatePolicyVO createTemplatePolicy(ExpenseVoucherTemplatePolicySaveDTO dto, Long currentUserId, String currentUsername) {
         validateTemplatePolicy(dto, null);
         ExpVoucherTemplatePolicy entity = new ExpVoucherTemplatePolicy();
@@ -56,6 +78,9 @@ public class ExpenseVoucherMappingDomainSupport extends AbstractExpenseVoucherGe
         return toTemplatePolicyVO(entity, companyNameMap());
     }
 
+    /**
+     * 更新模板Policy。
+     */
     public ExpenseVoucherTemplatePolicyVO updateTemplatePolicy(Long id, ExpenseVoucherTemplatePolicySaveDTO dto, Long currentUserId, String currentUsername) {
         ExpVoucherTemplatePolicy entity = requireTemplatePolicy(id);
         validateTemplatePolicy(dto, id);
@@ -64,6 +89,9 @@ public class ExpenseVoucherMappingDomainSupport extends AbstractExpenseVoucherGe
         return toTemplatePolicyVO(entity, companyNameMap());
     }
 
+    /**
+     * 创建科目映射。
+     */
     public ExpenseVoucherSubjectMappingVO createSubjectMapping(ExpenseVoucherSubjectMappingSaveDTO dto, Long currentUserId, String currentUsername) {
         validateSubjectMapping(dto, null);
         ExpVoucherSubjectMapping entity = new ExpVoucherSubjectMapping();
@@ -73,6 +101,9 @@ public class ExpenseVoucherMappingDomainSupport extends AbstractExpenseVoucherGe
         return toSubjectMappingVO(entity, companyNameMap());
     }
 
+    /**
+     * 更新科目映射。
+     */
     public ExpenseVoucherSubjectMappingVO updateSubjectMapping(Long id, ExpenseVoucherSubjectMappingSaveDTO dto, Long currentUserId, String currentUsername) {
         ExpVoucherSubjectMapping entity = requireSubjectMapping(id);
         validateSubjectMapping(dto, id);

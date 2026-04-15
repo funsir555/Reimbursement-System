@@ -20,7 +20,7 @@ DEALLOCATE PREPARE stmt;
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
-        'ALTER TABLE pm_document_instance ADD COLUMN current_node_name VARCHAR(100) NULL COMMENT ''当前节点名称'' AFTER current_node_key',
+        'ALTER TABLE pm_document_instance ADD COLUMN current_node_name VARCHAR(64) NULL COMMENT ''当前节点名称'' AFTER current_node_key',
         'SELECT 1'
     )
     FROM information_schema.COLUMNS
@@ -66,10 +66,10 @@ CREATE TABLE IF NOT EXISTS pm_document_task (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '审批任务ID',
     document_code VARCHAR(64) NOT NULL COMMENT '单据编码',
     node_key VARCHAR(64) NOT NULL COMMENT '节点key',
-    node_name VARCHAR(100) NULL COMMENT '节点名称',
+    node_name VARCHAR(64) NULL COMMENT '节点名称',
     node_type VARCHAR(32) NOT NULL COMMENT '节点类型',
     assignee_user_id BIGINT NOT NULL COMMENT '处理人用户ID',
-    assignee_name VARCHAR(100) NULL COMMENT '处理人姓名',
+    assignee_name VARCHAR(64) NULL COMMENT '处理人姓名',
     status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态',
     task_batch_no VARCHAR(64) NOT NULL COMMENT '同节点同批次任务号',
     approval_mode VARCHAR(32) NULL COMMENT '审批模式',
@@ -85,10 +85,10 @@ CREATE TABLE IF NOT EXISTS pm_document_action_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '轨迹日志ID',
     document_code VARCHAR(64) NOT NULL COMMENT '单据编码',
     node_key VARCHAR(64) NULL COMMENT '节点key',
-    node_name VARCHAR(100) NULL COMMENT '节点名称',
+    node_name VARCHAR(64) NULL COMMENT '节点名称',
     action_type VARCHAR(32) NOT NULL COMMENT '动作类型',
     actor_user_id BIGINT NULL COMMENT '操作人用户ID',
-    actor_name VARCHAR(100) NULL COMMENT '操作人姓名',
+    actor_name VARCHAR(64) NULL COMMENT '操作人姓名',
     action_comment VARCHAR(500) NULL COMMENT '动作说明/意见',
     payload_json LONGTEXT NULL COMMENT '扩展载荷',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -101,10 +101,10 @@ ALTER TABLE pm_document_task
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '审批任务ID',
     MODIFY COLUMN document_code varchar(64) NOT NULL COMMENT '单据编码',
     MODIFY COLUMN node_key varchar(64) NOT NULL COMMENT '节点key',
-    MODIFY COLUMN node_name varchar(100) NULL COMMENT '节点名称',
+    MODIFY COLUMN node_name varchar(64) NULL COMMENT '节点名称',
     MODIFY COLUMN node_type varchar(32) NOT NULL COMMENT '节点类型',
     MODIFY COLUMN assignee_user_id bigint NOT NULL COMMENT '处理人用户ID',
-    MODIFY COLUMN assignee_name varchar(100) NULL COMMENT '处理人姓名',
+    MODIFY COLUMN assignee_name varchar(64) NULL COMMENT '处理人姓名',
     MODIFY COLUMN status varchar(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态',
     MODIFY COLUMN task_batch_no varchar(64) NOT NULL COMMENT '同节点同批次任务号',
     MODIFY COLUMN approval_mode varchar(32) NULL COMMENT '审批模式',

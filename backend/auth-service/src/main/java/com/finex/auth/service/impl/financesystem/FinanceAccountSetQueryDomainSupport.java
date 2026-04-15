@@ -1,3 +1,8 @@
+// 业务域：财务系统管理
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 财务系统设置和账套相关接口，下游会继续协调 账套、同步任务和财务上下文基础数据。
+// 风险提醒：改坏后最容易影响 账套切换、基础数据同步和下游系统连接。
+
 package com.finex.auth.service.impl.financesystem;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,8 +27,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * FinanceAccountSetQueryDomainSupport：领域规则支撑类。
+ * 承接 财务账户Set的核心业务规则。
+ * 改这里时，要特别关注 账套切换、基础数据同步和下游系统连接是否会被一起带坏。
+ */
 public class FinanceAccountSetQueryDomainSupport extends AbstractFinanceSystemManagementSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public FinanceAccountSetQueryDomainSupport(
             FinanceAccountSetMapper financeAccountSetMapper,
             FinanceAccountSetCodeRuleMapper financeAccountSetCodeRuleMapper,
@@ -48,6 +61,9 @@ public class FinanceAccountSetQueryDomainSupport extends AbstractFinanceSystemMa
         );
     }
 
+    /**
+     * 查询账户Sets列表。
+     */
     public List<FinanceAccountSetSummaryVO> listAccountSets() {
         List<FinanceAccountSet> accountSets = loadAccountSets();
         Map<String, SystemCompany> companyMap = loadCompanyMap();

@@ -1,3 +1,8 @@
+// 业务域：财务档案
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 供应商、客户、项目、科目等档案页面接口，下游会继续协调 档案主数据、下拉选项和与凭证、报销单的基础对应。
+// 风险提醒：改坏后最容易影响 基础档案错配、下游选项错误和历史单据对应失效。
+
 package com.finex.auth.service.impl.financearchive;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -13,8 +18,16 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 
 import java.util.Objects;
 
+/**
+ * FinanceAccountSubjectMutationDomainSupport：领域规则支撑类。
+ * 承接 财务账户科目的核心业务规则。
+ * 改这里时，要特别关注 基础档案错配、下游选项错误和历史单据对应失效是否会被一起带坏。
+ */
 public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceAccountSubjectArchiveSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public FinanceAccountSubjectMutationDomainSupport(
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
             SystemCompanyMapper systemCompanyMapper,
@@ -24,6 +37,9 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
         super(financeAccountSubjectMapper, systemCompanyMapper, glAccvouchMapper, objectMapper);
     }
 
+    /**
+     * 创建科目。
+     */
     public FinanceAccountSubjectDetailVO createSubject(String companyId, FinanceAccountSubjectSaveDTO dto, String operatorName) {
         validateSavePayload(dto);
         String normalizedCompanyId = requireCompanyId(companyId);
@@ -70,6 +86,9 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
         return toDetail(requireSubject(normalizedCompanyId, subjectCode));
     }
 
+    /**
+     * 更新科目。
+     */
     public FinanceAccountSubjectDetailVO updateSubject(String companyId, String subjectCode, FinanceAccountSubjectSaveDTO dto, String operatorName) {
         validateSavePayload(dto);
         String normalizedCompanyId = requireCompanyId(companyId);
@@ -98,6 +117,9 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
         return toDetail(requireSubject(normalizedCompanyId, normalizedSubjectCode));
     }
 
+    /**
+     * 更新Status。
+     */
     public Boolean updateStatus(String companyId, String subjectCode, FinanceAccountSubjectStatusDTO dto, String operatorName) {
         FinanceAccountSubject subject = requireSubject(companyId, subjectCode);
         int nextStatus = normalizeFlag(dto == null ? null : dto.getStatus(), 1);
@@ -111,6 +133,9 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
         return Boolean.TRUE;
     }
 
+    /**
+     * 更新CloseStatus。
+     */
     public Boolean updateCloseStatus(String companyId, String subjectCode, FinanceAccountSubjectCloseDTO dto, String operatorName) {
         FinanceAccountSubject subject = requireSubject(companyId, subjectCode);
         int nextClose = normalizeFlag(dto == null ? null : dto.getBclose(), 0);

@@ -126,7 +126,13 @@
                 <div class="voucher-cell voucher-cell-digest">
                   <div class="voucher-inline-field">
                     <div class="voucher-row-index">{{ index + 1 }}</div>
-                    <el-input v-model="row.cdigest" placeholder="请输入摘要" :readonly="isReadonlyMode" @focus="selectRow(index)" />
+                    <el-input
+                      v-model="row.cdigest"
+                      placeholder="请输入摘要"
+                      :readonly="isReadonlyMode"
+                      :maxlength="255"
+                      @focus="selectRow(index)"
+                    />
                   </div>
                 </div>
                 <div class="voucher-cell">
@@ -273,6 +279,28 @@ interface ToolbarAction {
 const DRAFT_STORAGE_KEY = 'finance-new-voucher-draft'
 const MIN_ENTRY_ROWS = 8
 const COMPANY_SWITCH_GUARD_KEY = 'finance-new-voucher'
+const ENTRY_FIELD_MAX_LENGTH: Record<'cdigest' | 'ccode' | 'cdeptId' | 'cpersonId' | 'ccusId' | 'csupId' | 'citemClass' | 'citemId' | 'cexchName', number> = {
+  cdigest: 255,
+  ccode: 64,
+  cdeptId: 64,
+  cpersonId: 64,
+  ccusId: 64,
+  csupId: 64,
+  citemClass: 2,
+  citemId: 6,
+  cexchName: 32
+}
+const ENTRY_FIELD_LABELS: Record<keyof typeof ENTRY_FIELD_MAX_LENGTH, string> = {
+  cdigest: '摘要',
+  ccode: '科目',
+  cdeptId: '部门',
+  cpersonId: '人员',
+  ccusId: '客户',
+  csupId: '供应商',
+  citemClass: '项目分类',
+  citemId: '项目',
+  cexchName: '币种名称'
+}
 
 const props = withDefaults(defineProps<{ pageMode?: VoucherPageMode; voucherNo?: string }>(), {
   pageMode: 'create',
@@ -719,6 +747,71 @@ function buildPayload(includeBlankRows = false): FinanceVoucherSavePayload {
   }
 }
 
+function buildOptionValueSet(options?: FinanceVoucherOption[]) {
+  return new Set((options || []).map((item) => item.value).filter((value): value is string => Boolean(value)))
+}
+
+function validateEntryLength(row: VoucherEntryRow, rowNo: number, errors: string[]) {
+  ;(Object.entries(ENTRY_FIELD_MAX_LENGTH) as Array<[keyof typeof ENTRY_FIELD_MAX_LENGTH, number]>).forEach(([fieldKey, maxLength]) => {
+    const value = row[fieldKey]
+    if (typeof value !== 'string') {
+      return
+    }
+    const normalized = value.trim()
+    if (normalized.length > maxLength) {
+      errors.push(`第 ${rowNo} 行${ENTRY_FIELD_LABELS[fieldKey]}最多 ${maxLength} 个字符`)
+    }
+  })
+}
+
+function validateEntrySelection(row: VoucherEntryRow, rowNo: number, errors: string[]) {
+  const meta = voucherMeta.value
+  if (!meta) {
+    return
+  }
+
+  const accountValues = buildOptionValueSet(meta.accountOptions)
+  const departmentValues = buildOptionValueSet(meta.departmentOptions)
+  const employeeValues = buildOptionValueSet(meta.employeeOptions)
+  const customerValues = buildOptionValueSet(meta.customerOptions)
+  const supplierValues = buildOptionValueSet(meta.supplierOptions)
+  const projectClassValues = buildOptionValueSet(meta.projectClassOptions)
+  const projectMap = new Map((meta.projectOptions || []).map((item) => [item.value, item] as const))
+
+  if (row.ccode && !accountValues.has(row.ccode)) {
+    errors.push(`第 ${rowNo} 行科目不存在或当前不可用`)
+  }
+  if (row.cdeptId && !departmentValues.has(row.cdeptId)) {
+    errors.push(`第 ${rowNo} 行部门不存在或当前不可用`)
+  }
+  if (row.cpersonId && !employeeValues.has(row.cpersonId)) {
+    errors.push(`第 ${rowNo} 行人员不存在或当前不可用`)
+  }
+  if (row.ccusId && !customerValues.has(row.ccusId)) {
+    errors.push(`第 ${rowNo} 行客户不存在或当前不可用`)
+  }
+  if (row.csupId && !supplierValues.has(row.csupId)) {
+    errors.push(`第 ${rowNo} 行供应商不存在或当前不可用`)
+  }
+  if (row.citemClass && !projectClassValues.has(row.citemClass)) {
+    errors.push(`第 ${rowNo} 行项目分类不存在或当前不可用`)
+  }
+  if (row.citemId) {
+    if (!row.citemClass) {
+      errors.push(`第 ${rowNo} 行选择项目时必须同时选择项目分类`)
+      return
+    }
+    const project = projectMap.get(row.citemId)
+    if (!project) {
+      errors.push(`第 ${rowNo} 行项目不存在或当前不可用`)
+      return
+    }
+    if (project.parentValue && project.parentValue !== row.citemClass) {
+      errors.push(`第 ${rowNo} 行项目分类与项目归属不匹配`)
+    }
+  }
+}
+
 function validateVoucher(showToast = false) {
   const errors: string[] = []
   const entries = effectiveRows.value
@@ -735,6 +828,8 @@ function validateVoucher(showToast = false) {
     const credit = normalizeMoneyField(row.mc)
     if (!row.cdigest.trim()) errors.push(`第 ${rowNo} 行摘要不能为空`)
     if (!row.ccode) errors.push(`第 ${rowNo} 行请选择科目`)
+    validateEntryLength(row, rowNo, errors)
+    validateEntrySelection(row, rowNo, errors)
     if (debit && credit) errors.push(`第 ${rowNo} 行借贷不能同时填写`)
     if (!debit && !credit) errors.push(`第 ${rowNo} 行借方或贷方至少填写一项`)
     if ((row.nfrat ?? 1) <= 0) errors.push(`第 ${rowNo} 行汇率必须大于 0`)

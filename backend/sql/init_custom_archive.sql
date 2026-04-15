@@ -5,7 +5,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS pm_custom_archive_design (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自定义档案ID',
     archive_code VARCHAR(64) NOT NULL COMMENT '档案编码',
-    archive_name VARCHAR(100) NOT NULL COMMENT '档案名称',
+    archive_name VARCHAR(64) NOT NULL COMMENT '档案名称',
     archive_type VARCHAR(32) NOT NULL COMMENT '档案类型:SELECT可选档案/AUTO_RULE自动划分',
     archive_description VARCHAR(255) NULL COMMENT '档案说明',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS pm_custom_archive_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '档案结果项ID',
     archive_id BIGINT NOT NULL COMMENT '所属档案ID',
     item_code VARCHAR(64) NOT NULL COMMENT '结果项编码',
-    item_name VARCHAR(100) NOT NULL COMMENT '结果项名称',
+    item_name VARCHAR(64) NOT NULL COMMENT '结果项名称',
     priority INT NULL DEFAULT 1 COMMENT '优先级，值越小越靠前',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

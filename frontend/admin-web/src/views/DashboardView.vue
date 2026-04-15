@@ -45,7 +45,9 @@
         <div class="expense-wb-table-shell__header !p-0 !border-0">
           <div>
             <p class="expense-wb-table-shell__title">最近常用模块</p>
-            <p class="expense-wb-table-shell__desc">自动记录最近访问的业务模块，方便快速回到常用入口。</p>
+            <p class="expense-wb-table-shell__desc">
+              自动记录最近访问的业务模块，方便快速回到常用入口。
+            </p>
           </div>
         </div>
       </template>
@@ -82,7 +84,9 @@
         <div class="expense-wb-table-shell__header !p-0 !border-0">
           <div>
             <p class="expense-wb-table-shell__title">最近报销单</p>
-            <p class="expense-wb-table-shell__desc">优先展示你最近提交或更新的报销单，方便继续追踪进度。</p>
+            <p class="expense-wb-table-shell__desc">
+              优先展示你最近提交或更新的报销单，方便继续跟踪进度。
+            </p>
           </div>
           <el-button text type="primary" @click="openPath('/expense/list')">
             查看全部 <el-icon><ArrowRight /></el-icon>
@@ -93,7 +97,11 @@
       <el-table :data="dashboard?.recentExpenses || []" style="width: 100%">
         <el-table-column prop="documentCode" label="单据编号" width="180" show-overflow-tooltip>
           <template #default="{ row }">
-            <button class="cursor-pointer font-medium text-blue-600 hover:underline" type="button" @click="openExpenseDetail(row.documentCode || row.no)">
+            <button
+              class="cursor-pointer font-medium text-blue-600 hover:underline"
+              type="button"
+              @click="openExpenseDetail(row.documentCode || row.no)"
+            >
               {{ row.documentCode || row.no }}
             </button>
           </template>
@@ -102,18 +110,22 @@
         <el-table-column prop="templateName" label="模板名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="documentStatusLabel" label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.documentStatusLabel || row.status)">{{ row.documentStatusLabel || row.status || '-' }}</el-tag>
+            <el-tag :type="statusTagType(row.documentStatusLabel || row.status)">
+              {{ row.documentStatusLabel || row.status || '-' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="submittedAt" label="提交日期" width="168" show-overflow-tooltip />
         <el-table-column prop="amount" label="金额" width="140">
           <template #default="{ row }">
-            <span class="font-semibold text-slate-800">¥ {{ formatAmount(row.amount) }}</span>
+            <span class="font-semibold text-slate-800">&yen; {{ formatAmount(row.amount) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openExpenseDetail(row.documentCode || row.no)">查看</el-button>
+            <el-button link type="primary" size="small" @click="openExpenseDetail(row.documentCode || row.no)">
+              查看
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -183,7 +195,7 @@ const statCards = computed(() => [
     key: 'repayment',
     label: '待还款',
     value: dashboard.value?.pendingRepaymentCount || 0,
-    tip: '查看借款单待核销余额并发起欠款核销',
+    tip: '查看借款单待核销余额并发起还款核销',
     icon: Wallet,
     tone: 'amber',
     path: '/dashboard/pending-repayments'
@@ -245,11 +257,16 @@ function formatAmount(value?: string) {
 
 function statusTagType(status?: string) {
   const map: Record<string, string> = {
-    审批中: 'warning',
-    已通过: 'success',
-    已驳回: 'danger',
-    草稿: 'info',
-    流程异常: 'info'
+    '审批中': 'warning',
+    '待支付': 'warning',
+    '支付中': 'warning',
+    '已通过': 'success',
+    '已支付': 'success',
+    '已完成': 'success',
+    '已驳回': 'danger',
+    '支付异常': 'danger',
+    '草稿': 'info',
+    '流程异常': 'info'
   }
   return map[status || ''] || 'info'
 }

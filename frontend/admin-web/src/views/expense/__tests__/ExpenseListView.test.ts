@@ -257,6 +257,7 @@ describe('ExpenseListView', () => {
     await flushPromises()
     expect(vm.filters.documentStatusLabel).toBe('草稿')
     expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-002'])
+    expect(wrapper.get('[data-testid="expense-list-stat-draft"]').classes()).toContain('expense-wb-stat-card--filterable')
     expect(wrapper.get('[data-testid="expense-list-stat-draft"]').classes()).toContain('expense-wb-stat-card--active')
 
     await wrapper.get('[data-testid="expense-list-stat-pending"]').trigger('click')
@@ -264,10 +265,10 @@ describe('ExpenseListView', () => {
     expect(vm.filters.documentStatusLabel).toBe('审批中')
     expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001'])
 
-    vm.filters.documentStatusLabel = '已通过'
+    vm.filters.documentStatusLabel = '待支付'
     vm.currentPage = 2
     await flushPromises()
-    expect(wrapper.get('[data-testid="expense-list-stat-approved"]').classes()).toContain('expense-wb-stat-card--active')
+    expect(wrapper.get('[data-testid="expense-list-stat-pending-payment"]').classes()).toContain('expense-wb-stat-card--active')
 
     await wrapper.get('[data-testid="expense-list-stat-all"]').trigger('click')
     await flushPromises()

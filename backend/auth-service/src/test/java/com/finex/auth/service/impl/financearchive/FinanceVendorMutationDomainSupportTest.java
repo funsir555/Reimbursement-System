@@ -118,6 +118,20 @@ class FinanceVendorMutationDomainSupportTest {
     }
 
     @Test
+    void createVendorRejectsOverlongBankField() {
+        FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
+        dto.setCVenName("Vendor A");
+        dto.setCVenBank("B".repeat(129));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> support.createVendor("COMPANY_A", dto, "tester", false)
+        );
+
+        assertEquals("\u5f00\u6237\u94f6\u884c\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 128 \u4e2a\u5b57\u7b26", exception.getMessage());
+    }
+
+    @Test
     void disableVendorWritesSoftDeleteFields() {
         FinanceVendor existing = new FinanceVendor();
         existing.setCVenCode("VEN001");
@@ -145,6 +159,20 @@ class FinanceVendorMutationDomainSupportTest {
                 () -> support.createVendor("COMPANY_A", dto, "tester", true)
         );
 
-        assertEquals("Bank account number is required", exception.getMessage());
+        assertEquals("银行账号不能为空", exception.getMessage());
+    }
+
+    @Test
+    void createVendorRejectsOverlongTightenedField() {
+        FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
+        dto.setCVenName("Vendor A");
+        dto.setCVenCode("V".repeat(65));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> support.createVendor("COMPANY_A", dto, "tester", false)
+        );
+
+        assertEquals("供应商编码长度不能超过 64 个字符", exception.getMessage());
     }
 }

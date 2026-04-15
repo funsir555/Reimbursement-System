@@ -35,6 +35,9 @@ const mocks = vi.hoisted(() => ({
   },
   elMessageBox: {
     confirm: vi.fn()
+  },
+  runtimeEditor: {
+    validateBeforeSubmit: vi.fn()
   }
 }))
 
@@ -109,6 +112,15 @@ const EmptyStub = defineComponent({
   template: '<div>{{ description }}</div>'
 })
 
+const ExpenseRuntimeFormEditorStub = defineComponent({
+  setup(_, { expose }) {
+    expose({
+      validateBeforeSubmit: mocks.runtimeEditor.validateBeforeSubmit
+    })
+    return () => null
+  }
+})
+
 const globalStubs = {
   'el-card': SimpleContainer,
   'el-icon': SimpleContainer,
@@ -116,7 +128,7 @@ const globalStubs = {
   'el-button': ButtonStub,
   'el-input': InputStub,
   'el-empty': EmptyStub,
-  'expense-runtime-form-editor': true
+  'expense-runtime-form-editor': ExpenseRuntimeFormEditorStub
 }
 
 function buildTemplateSummary(
@@ -247,6 +259,7 @@ describe('ExpenseCreateView', () => {
     mocks.expenseApi.resubmit.mockResolvedValue({ data: { documentCode: 'DOC-002' } })
     mocks.expenseApprovalApi.getModifyContext.mockResolvedValue({ data: null })
     mocks.expenseApprovalApi.modify.mockResolvedValue({ data: { documentCode: 'DOC-003' } })
+    mocks.runtimeEditor.validateBeforeSubmit.mockReturnValue(true)
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
       x: 80,
       y: 0,
@@ -598,5 +611,36 @@ describe('ExpenseCreateView', () => {
       },
       expenseDetails: []
     })
+  })
+
+  it('blocks submit when relation fieldKey exceeds 64 characters', async () => {
+    mocks.route.query = { templateCode: 'TPL-001', draftKey: 'draft-001' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-001&draftKey=draft-001'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: buildTemplateDetail('TPL-001', '差旅报销模板', 'report', '报销单', {
+        blocks: [
+          {
+            blockId: 'relation-1',
+            fieldKey: 'r'.repeat(65),
+            label: '关联单据',
+            kind: 'BUSINESS_COMPONENT',
+            props: {
+              componentCode: 'related-document'
+            }
+          }
+        ]
+      })
+    })
+
+    const wrapper = await mountView()
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+
+    expect(submitButton).toBeTruthy()
+
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith(`字段标识 ${'r'.repeat(65)}最多 64 个字符`)
   })
 })

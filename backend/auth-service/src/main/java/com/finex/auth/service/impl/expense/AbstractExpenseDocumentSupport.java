@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import cn.hutool.core.util.StrUtil;
@@ -126,6 +131,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * AbstractExpenseDocumentSupport：通用支撑类。
+ * 封装 报销单单据这块可复用的业务能力。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -134,6 +144,9 @@ class AbstractExpenseDocumentSupport {
     private static final DateTimeFormatter CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final int PM_NAME_MAX_LENGTH = 64;
+    private static final int PM_TITLE_MAX_LENGTH = 128;
+    private static final int PM_FIELD_KEY_MAX_LENGTH = 64;
 
     private static final String UNDERTAKE_DEPARTMENT_COMPONENT_CODE = "undertake-department";
     private static final String PAYMENT_COMPANY_COMPONENT_CODE = "payment-company";
@@ -189,6 +202,7 @@ class AbstractExpenseDocumentSupport {
 
     private static final String DOCUMENT_STATUS_PENDING = "PENDING_APPROVAL";
     private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
     private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
     private static final String DOCUMENT_STATUS_DRAFT = "DRAFT";
@@ -271,6 +285,9 @@ class AbstractExpenseDocumentSupport {
     private final ObjectMapper objectMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
 
+    /**
+     * 查询可用模板列表。
+     */
     List<ExpenseCreateTemplateSummaryVO> listAvailableTemplates() {
         return templateMapper.selectList(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
@@ -282,11 +299,17 @@ class AbstractExpenseDocumentSupport {
                 .toList();
     }
 
+    /**
+     * 获取模板明细。
+     */
     ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode) {
         ProcessDocumentTemplate template = requireTemplate(templateCode);
         return buildTemplateDetail(userId, template);
     }
 
+    /**
+     * 组装模板明细。
+     */
     private ExpenseCreateTemplateDetailVO buildTemplateDetail(Long userId, ProcessDocumentTemplate template) {
         ExpenseCreateTemplateDetailVO detail = new ExpenseCreateTemplateDetailVO();
         detail.setTemplateCode(template.getTemplateCode());
@@ -339,10 +362,16 @@ class AbstractExpenseDocumentSupport {
         return detail;
     }
 
+    /**
+     * 查询供应商选项。
+     */
     List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
         return financeVendorService.listActiveVendorOptions(requireCurrentUserCompanyId(userId), keyword, includeDisabled);
     }
 
+    /**
+     * 查询收款方选项。
+     */
     List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly) {
         String normalizedKeyword = trimToNull(keyword);
         if (Boolean.TRUE.equals(personalOnly)) {
@@ -380,6 +409,9 @@ class AbstractExpenseDocumentSupport {
         return options;
     }
 
+    /**
+     * 查询收款方账户选项。
+     */
     List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
             Long userId,
             String keyword,
@@ -474,6 +506,9 @@ class AbstractExpenseDocumentSupport {
         return options;
     }
 
+    /**
+     * 查询个人收款方选项。
+     */
     private List<ExpenseCreatePayeeOptionVO> listPersonalPayeeOptions(Long userId, String normalizedKeyword) {
         List<UserBankAccount> accounts = userBankAccountMapper.selectList(
                 Wrappers.<UserBankAccount>lambdaQuery()
@@ -504,6 +539,9 @@ class AbstractExpenseDocumentSupport {
         return new ArrayList<>(options.values());
     }
 
+    /**
+     * 查询个人收款方账户选项。
+     */
     private List<ExpenseCreatePayeeAccountOptionVO> listPersonalPayeeAccountOptions(
             Long userId,
             String normalizedKeyword,
@@ -542,6 +580,9 @@ class AbstractExpenseDocumentSupport {
                 .toList();
     }
 
+    /**
+     * 查询Counterparty收款方账户选项。
+     */
     private List<ExpenseCreatePayeeAccountOptionVO> listCounterpartyPayeeAccountOptions(
             Long userId,
             String normalizedKeyword,
@@ -584,6 +625,9 @@ class AbstractExpenseDocumentSupport {
         return List.of(option);
     }
 
+    /**
+     * 提交单据。
+     */
     @Transactional(rollbackFor = Exception.class)
     ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         String templateCode = dto == null ? null : dto.getTemplateCode();
@@ -614,6 +658,10 @@ class AbstractExpenseDocumentSupport {
                     expenseDetails
             );
             String submitterDisplayName = resolveUserDisplayName(currentUser, username);
+            validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
+            validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
+            validatePmNameLength(submitterDisplayName, "\u63d0\u4ea4\u4eba\u59d3\u540d");
+            String documentTitle = resolveDocumentTitle(template, formData, username);
 
             ProcessDocumentInstance instance = new ProcessDocumentInstance();
             stage = "persist-document";
@@ -628,7 +676,7 @@ class AbstractExpenseDocumentSupport {
             instance.setFlowName(template.getFlowName());
             instance.setSubmitterUserId(userId);
             instance.setSubmitterName(submitterDisplayName);
-            instance.setDocumentTitle(resolveDocumentTitle(template, formData, username));
+            instance.setDocumentTitle(documentTitle);
             instance.setDocumentReason(resolveDocumentReason(template, formData));
             instance.setTotalAmount(resolveTotalAmount(formData));
             instance.setStatus(DOCUMENT_STATUS_PENDING);
@@ -680,6 +728,9 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    /**
+     * 查询报销单Summaries列表。
+     */
     List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
@@ -689,6 +740,9 @@ class AbstractExpenseDocumentSupport {
         return instances.isEmpty() ? Collections.emptyList() : toExpenseSummaries(instances);
     }
 
+    /**
+     * 查询查询单据Summaries列表。
+     */
     List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
@@ -698,6 +752,9 @@ class AbstractExpenseDocumentSupport {
         return instances.isEmpty() ? Collections.emptyList() : toExpenseSummaries(instances);
     }
 
+    /**
+     * 查询Outstanding单据列表。
+     */
     List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
         String normalizedKind = normalizeDashboardOutstandingKind(kind);
         String templateType = Objects.equals(normalizedKind, WRITEOFF_SOURCE_LOAN) ? "loan" : "report";
@@ -706,6 +763,8 @@ class AbstractExpenseDocumentSupport {
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
                                 DOCUMENT_STATUS_PAYMENT_COMPLETED,
                                 DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
@@ -742,6 +801,9 @@ class AbstractExpenseDocumentSupport {
                 .toList();
     }
 
+    /**
+     * 获取单据明细。
+     */
     @Transactional(rollbackFor = Exception.class)
     ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
@@ -751,6 +813,9 @@ class AbstractExpenseDocumentSupport {
         return buildDocumentDetail(instance);
     }
 
+    /**
+     * 获取报销单明细。
+     */
     ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         if (!allowCrossView && !Objects.equals(instance.getSubmitterUserId(), userId)) {
@@ -760,6 +825,9 @@ class AbstractExpenseDocumentSupport {
         return toExpenseDetailDetailVO(detail);
     }
 
+    /**
+     * 获取单据Picker。
+     */
     ExpenseDocumentPickerVO getDocumentPicker(
             Long userId,
             String relationType,
@@ -781,6 +849,8 @@ class AbstractExpenseDocumentSupport {
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
                                 DOCUMENT_STATUS_PAYMENT_COMPLETED,
                                 DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
@@ -820,6 +890,9 @@ class AbstractExpenseDocumentSupport {
         return result;
     }
 
+    /**
+     * 获取首页看板写入OffSourceReportPicker。
+     */
     ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
             Long userId,
             String targetDocumentCode,
@@ -840,6 +913,8 @@ class AbstractExpenseDocumentSupport {
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
                                 DOCUMENT_STATUS_PAYMENT_COMPLETED,
                                 DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
@@ -956,12 +1031,15 @@ class AbstractExpenseDocumentSupport {
         return true;
     }
 
+    /**
+     * 重新提交单据。
+     */
     @Transactional(rollbackFor = Exception.class)
     ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆槸鍙噸鎻愯崏绋跨姸鎬?");
+            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u662f\u53ef\u91cd\u63d0\u8349\u7a3f\u72b6\u6001");
         }
         String submitterDisplayName = resolveUserDisplayName(userId, username);
         DocumentMutationContext mutation = buildMutationContext(instance, dto, true);
@@ -983,6 +1061,9 @@ class AbstractExpenseDocumentSupport {
         return result;
     }
 
+    /**
+     * 组装单据明细。
+     */
     ExpenseDocumentDetailVO buildDocumentDetail(ProcessDocumentInstance instance) {
         long totalStartedAt = System.nanoTime();
         String documentCode = instance.getDocumentCode();
@@ -1072,6 +1153,9 @@ class AbstractExpenseDocumentSupport {
         return detail;
     }
 
+    /**
+     * 组装RelatedGroup。
+     */
     private ExpenseDocumentPickerGroupVO buildRelatedGroup(
             String templateType,
             List<ProcessDocumentInstance> documents,
@@ -1085,6 +1169,9 @@ class AbstractExpenseDocumentSupport {
         return paginatePickerGroup(templateType, items, page, pageSize);
     }
 
+    /**
+     * 组装写入OffGroup。
+     */
     private ExpenseDocumentPickerGroupVO buildWriteOffGroup(
             String templateType,
             List<ProcessDocumentInstance> documents,
@@ -1170,6 +1257,9 @@ class AbstractExpenseDocumentSupport {
         return item;
     }
 
+    /**
+     * 加载PrepayReportAmount映射。
+     */
     private Map<String, BigDecimal> loadPrepayReportAmountMap(List<String> documentCodes) {
         if (documentCodes == null || documentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -1189,6 +1279,9 @@ class AbstractExpenseDocumentSupport {
         ));
     }
 
+    /**
+     * 加载Effective写入OffAmount映射。
+     */
     private Map<String, BigDecimal> loadEffectiveWriteOffAmountMap(List<String> targetDocumentCodes) {
         if (targetDocumentCodes == null || targetDocumentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -1208,6 +1301,9 @@ class AbstractExpenseDocumentSupport {
         ));
     }
 
+    /**
+     * 加载EffectiveSource写入OffAmount映射。
+     */
     private Map<String, BigDecimal> loadEffectiveSourceWriteOffAmountMap(List<String> sourceDocumentCodes) {
         if (sourceDocumentCodes == null || sourceDocumentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -1235,6 +1331,9 @@ class AbstractExpenseDocumentSupport {
         throw new IllegalArgumentException("涓嶆敮鎸佺殑寰呭鐞嗗崟鎹被鍨?");
     }
 
+    /**
+     * 解析OutstandingAmount。
+     */
     private BigDecimal resolveOutstandingAmount(
             ProcessDocumentInstance instance,
             String kind,
@@ -1249,6 +1348,9 @@ class AbstractExpenseDocumentSupport {
         return outstandingAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : outstandingAmount;
     }
 
+    /**
+     * 解析ReportSource可用Amount。
+     */
     private BigDecimal resolveReportSourceAvailableAmount(
             ProcessDocumentInstance sourceReport,
             Map<String, BigDecimal> sourceEffectiveAmountMap
@@ -1307,6 +1409,9 @@ class AbstractExpenseDocumentSupport {
         return "report";
     }
 
+    /**
+     * 判断模板可用For创建是否成立。
+     */
     private boolean isTemplateAvailableForCreate(ProcessDocumentTemplate template) {
         if (!Objects.equals(trimToNull(template.getTemplateType()), "report")) {
             return true;
@@ -1338,6 +1443,9 @@ class AbstractExpenseDocumentSupport {
         return normalized;
     }
 
+    /**
+     * 校验报销单明细提交。
+     */
     private void validateExpenseDetailSubmission(
             ProcessDocumentTemplate template,
             ProcessExpenseDetailDesign expenseDetailDesign,
@@ -1361,6 +1469,9 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    /**
+     * 校验提交上下文。
+     */
     private String validateSubmitContext(
             ProcessDocumentTemplate template,
             ProcessFormDesign formDesign,
@@ -1382,6 +1493,9 @@ class AbstractExpenseDocumentSupport {
         return validateFlowSnapshotForSubmit(template);
     }
 
+    /**
+     * 同步单据业务关联。
+     */
     private void syncDocumentBusinessRelations(
             String documentCode,
             ProcessFormDesign formDesign,
@@ -1433,13 +1547,14 @@ class AbstractExpenseDocumentSupport {
         LocalDateTime now = LocalDateTime.now();
 
         for (RelatedDocumentSelection selection : relatedSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "鍏宠仈鍗曟嵁");
+            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "\u5173\u8054\u5355\u636e");
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
-                throw new IllegalStateException("鍏宠仈鍗曟嵁绫诲瀷涓嶅湪褰撳墠缁勪欢鍏佽鑼冨洿鍐?");
+                throw new IllegalStateException("\u5173\u8054\u5355\u636e\u7c7b\u578b\u4e0e\u5f53\u524d\u7ec4\u4ef6\u914d\u7f6e\u4e0d\u5339\u914d\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9");
             }
             ProcessDocumentRelation relation = new ProcessDocumentRelation();
             relation.setSourceDocumentCode(documentCode);
+            validatePmFieldKeyLength(selection.fieldKey(), "\u5173\u8054\u5b57\u6bb5\u6807\u8bc6");
             relation.setSourceFieldKey(selection.fieldKey());
             relation.setTargetDocumentCode(selection.documentCode());
             relation.setTargetTemplateType(normalizedTemplateType);
@@ -1451,24 +1566,25 @@ class AbstractExpenseDocumentSupport {
         }
 
         for (WriteOffSelection selection : writeOffSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "鏍搁攢鍗曟嵁");
+            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "\u6838\u9500\u5355\u636e");
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
-                throw new IllegalStateException("鏍搁攢鍗曟嵁绫诲瀷涓嶅湪褰撳墠缁勪欢鍏佽鑼冨洿鍐?");
+                throw new IllegalStateException("\u6838\u9500\u5355\u636e\u7c7b\u578b\u4e0e\u5f53\u524d\u7ec4\u4ef6\u914d\u7f6e\u4e0d\u5339\u914d\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9");
             }
             String writeOffSourceKind = resolveWriteOffSourceKind(target, prepayAmountMap);
             BigDecimal availableAmount = resolveCurrentAvailableWriteOffAmount(target, writeOffSourceKind, prepayAmountMap, effectiveAmountMap);
             if (selection.requestedAmount().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalStateException("鏍搁攢閲戦蹇呴』澶т簬 0");
+                throw new IllegalStateException("\u6838\u9500\u91d1\u989d\u5fc5\u987b\u5927\u4e8e 0");
             }
             if (availableAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalStateException("褰撳墠鏍搁攢鍗曟嵁宸叉棤鍙牳閿€浣欓");
+                throw new IllegalStateException("\u5f53\u524d\u6838\u9500\u5355\u636e\u5df2\u65e0\u53ef\u7528\u6838\u9500\u4f59\u989d");
             }
             if (selection.requestedAmount().compareTo(availableAmount) > 0) {
-                throw new IllegalStateException("鏍搁攢閲戦涓嶈兘瓒呰繃褰撳墠鍙牳閿€浣欓");
+                throw new IllegalStateException("\u6838\u9500\u91d1\u989d\u4e0d\u80fd\u8d85\u8fc7\u5f53\u524d\u53ef\u7528\u6838\u9500\u4f59\u989d");
             }
             ProcessDocumentWriteOff writeOff = new ProcessDocumentWriteOff();
             writeOff.setSourceDocumentCode(documentCode);
+            validatePmFieldKeyLength(selection.fieldKey(), "\u6838\u9500\u5b57\u6bb5\u6807\u8bc6");
             writeOff.setSourceFieldKey(selection.fieldKey());
             writeOff.setTargetDocumentCode(selection.documentCode());
             writeOff.setTargetTemplateType(normalizedTemplateType);
@@ -1639,8 +1755,9 @@ class AbstractExpenseDocumentSupport {
                 continue;
             }
             if (Objects.equals(targetDocumentCode, documentCode)) {
-                throw new IllegalStateException("褰撳墠鍗曟嵁涓嶈兘鍏宠仈鑷繁");
+                throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u80fd\u5173\u8054\u81ea\u5df1");
             }
+            validatePmFieldKeyLength(binding.fieldKey(), "\u5173\u8054\u5b57\u6bb5\u6807\u8bc6");
             selections.add(new RelatedDocumentSelection(binding.fieldKey(), targetDocumentCode, binding.allowedTemplateTypes(), sortOrder++));
         }
         return selections;
@@ -1662,12 +1779,13 @@ class AbstractExpenseDocumentSupport {
                 continue;
             }
             if (Objects.equals(targetDocumentCode, documentCode)) {
-                throw new IllegalStateException("褰撳墠鍗曟嵁涓嶈兘鏍搁攢鑷繁");
+                throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u80fd\u6838\u9500\u81ea\u5df1");
             }
             BigDecimal requestedAmount = toBigDecimal(record.get("writeOffAmount"));
             if (requestedAmount == null) {
-                throw new IllegalStateException("鏍搁攢鍗曟嵁缂哄皯鏍搁攢閲戦");
+                throw new IllegalStateException("\u6838\u9500\u5355\u636e\u7f3a\u5c11\u6838\u9500\u91d1\u989d");
             }
+            validatePmFieldKeyLength(binding.fieldKey(), "\u6838\u9500\u5b57\u6bb5\u6807\u8bc6");
             selections.add(new WriteOffSelection(binding.fieldKey(), targetDocumentCode, binding.allowedTemplateTypes(), requestedAmount, sortOrder++));
         }
         return selections;
@@ -1709,11 +1827,14 @@ class AbstractExpenseDocumentSupport {
     ) {
         ProcessDocumentInstance target = targetDocumentMap.get(documentCode);
         if (target == null || !isEffectiveApprovedStatus(target.getStatus())) {
-            throw new IllegalStateException(actionName + "鐩爣涓嶅瓨鍦ㄦ垨鏈€氳繃瀹℃壒");
+            throw new IllegalStateException(actionName + "\u76ee\u6807\u4e0d\u5b58\u5728\u6216\u672a\u901a\u8fc7\u5ba1\u6279");
         }
         return target;
     }
 
+    /**
+     * 解析写入OffSourceKind。
+     */
     private String resolveWriteOffSourceKind(
             ProcessDocumentInstance target,
             Map<String, BigDecimal> prepayAmountMap
@@ -1726,9 +1847,12 @@ class AbstractExpenseDocumentSupport {
                 && defaultDecimal(prepayAmountMap.get(target.getDocumentCode())).compareTo(BigDecimal.ZERO) > 0) {
             return WRITEOFF_SOURCE_PREPAY_REPORT;
         }
-        throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆敮鎸佷綔涓烘牳閿€鐩爣");
+        throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u652f\u6301\u6838\u9500\u5199\u5165");
     }
 
+    /**
+     * 解析当前可用写入OffAmount。
+     */
     private BigDecimal resolveCurrentAvailableWriteOffAmount(
             ProcessDocumentInstance target,
             String writeOffSourceKind,
@@ -1743,6 +1867,9 @@ class AbstractExpenseDocumentSupport {
         return availableAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : availableAmount;
     }
 
+    /**
+     * 校验流程SnapshotFor提交。
+     */
     private String validateFlowSnapshotForSubmit(ProcessDocumentTemplate template) {
         String flowCode = trimToNull(template.getApprovalFlow());
         if (flowCode == null) {
@@ -1775,6 +1902,9 @@ class AbstractExpenseDocumentSupport {
         return snapshotJson;
     }
 
+    /**
+     * 组装提交Payload。
+     */
     private Map<String, Object> buildSubmitPayload(ProcessDocumentTemplate template) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("templateCode", template.getTemplateCode());
@@ -1782,6 +1912,9 @@ class AbstractExpenseDocumentSupport {
         return payload;
     }
 
+    /**
+     * 保存报销单明细Instances。
+     */
     private void saveExpenseDetailInstances(
             String documentCode,
             ProcessDocumentTemplate template,
@@ -1839,6 +1972,9 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    /**
+     * 加载报销单明细。
+     */
     List<ProcessDocumentExpenseDetail> loadExpenseDetails(String documentCode) {
         return processDocumentExpenseDetailMapper.selectList(
                 Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
@@ -1931,6 +2067,9 @@ class AbstractExpenseDocumentSupport {
         return dto;
     }
 
+    /**
+     * 组装Edit上下文。
+     */
     private ExpenseDocumentEditContextVO buildEditContext(Long userId, ProcessDocumentInstance instance, Long taskId, String editMode) {
         ProcessDocumentTemplate template = requireTemplateForDocument(instance.getTemplateCode());
         ExpenseCreateTemplateDetailVO templateDetail = buildTemplateDetail(userId, template);
@@ -1944,6 +2083,9 @@ class AbstractExpenseDocumentSupport {
         return context;
     }
 
+    /**
+     * 复制模板明细。
+     */
     private void copyTemplateDetail(ExpenseCreateTemplateDetailVO source, ExpenseDocumentEditContextVO target) {
         target.setTemplateCode(source.getTemplateCode());
         target.setTemplateName(source.getTemplateName());
@@ -1972,6 +2114,9 @@ class AbstractExpenseDocumentSupport {
         target.setCurrentUserDeptName(source.getCurrentUserDeptName());
     }
 
+    /**
+     * 组装变更上下文。
+     */
     DocumentMutationContext buildMutationContext(ProcessDocumentInstance instance, ExpenseDocumentUpdateDTO dto, boolean resetRuntime) {
         ProcessDocumentTemplate template = requireTemplateForDocument(instance.getTemplateCode());
         ProcessFormDesign formDesign = loadFormDesign(template.getFormDesignCode());
@@ -1992,6 +2137,10 @@ class AbstractExpenseDocumentSupport {
                         expenseDetails
                 )
                 : Collections.emptyMap();
+        validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
+        validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
+        validatePmNameLength(instance.getSubmitterName(), "\u63d0\u4ea4\u4eba\u59d3\u540d");
+        String documentTitle = resolveDocumentTitle(template, formData, instance.getSubmitterName());
         return new DocumentMutationContext(
                 template,
                 formDesign,
@@ -1999,7 +2148,7 @@ class AbstractExpenseDocumentSupport {
                 formData,
                 expenseDetails,
                 runtimeContext,
-                resolveDocumentTitle(template, formData, instance.getSubmitterName()),
+                documentTitle,
                 resolveDocumentReason(template, formData),
                 resolveTotalAmount(formData)
         );
@@ -2007,6 +2156,9 @@ class AbstractExpenseDocumentSupport {
 
     void applyDocumentMutation(ProcessDocumentInstance instance, DocumentMutationContext context, boolean resetRuntime) {
         LocalDateTime now = LocalDateTime.now();
+        validatePmNameLength(context.template().getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
+        validatePmNameLength(context.template().getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
+        validatePmTitleLength(context.documentTitle(), "\u5355\u636e\u6807\u9898");
         if (resetRuntime) {
             cancelOpenTasks(loadOpenTasks(instance.getDocumentCode()), null, now);
             instance.setStatus(DOCUMENT_STATUS_DRAFT);
@@ -2129,6 +2281,9 @@ class AbstractExpenseDocumentSupport {
         return item;
     }
 
+    /**
+     * 组装汇总Enrichment。
+     */
     private SummaryEnrichmentData buildSummaryEnrichment(List<ProcessDocumentInstance> instances) {
         if (instances == null || instances.isEmpty()) {
             return SummaryEnrichmentData.empty();
@@ -2279,6 +2434,9 @@ class AbstractExpenseDocumentSupport {
         return new SummaryEnrichmentData(metadataMap);
     }
 
+    /**
+     * 加载Tag档案编码按模板编码。
+     */
     private Map<String, String> loadTagArchiveCodeByTemplateCode(Map<String, ProcessDocumentTemplate> templateMap) {
         if (templateMap.isEmpty()) {
             return Collections.emptyMap();
@@ -2313,6 +2471,9 @@ class AbstractExpenseDocumentSupport {
                 ));
     }
 
+    /**
+     * 加载档案ItemLabel映射。
+     */
     private Map<String, Map<String, String>> loadArchiveItemLabelMap(Set<String> archiveCodes) {
         if (archiveCodes == null || archiveCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -2477,6 +2638,9 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    /**
+     * 解析付款公司Name。
+     */
     private String resolvePaymentCompanyName(String companyId, Map<String, SystemCompany> companyMap) {
         String normalized = trimToNull(companyId);
         if (normalized == null) {
@@ -2486,6 +2650,9 @@ class AbstractExpenseDocumentSupport {
         return company == null ? normalized : firstNonBlank(company.getCompanyName(), company.getCompanyCode(), normalized);
     }
 
+    /**
+     * 解析PartyName。
+     */
     private String resolvePartyName(String value, Map<Long, User> userMap, Map<String, FinanceVendor> vendorMap) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -2502,6 +2669,9 @@ class AbstractExpenseDocumentSupport {
         return resolveVendorName(normalized, vendorMap);
     }
 
+    /**
+     * 解析供应商Name。
+     */
     private String resolveVendorName(String value, Map<String, FinanceVendor> vendorMap) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -2517,6 +2687,9 @@ class AbstractExpenseDocumentSupport {
         return vendor == null ? normalized : firstNonBlank(vendor.getCVenName(), vendor.getCVenAbbName(), normalized);
     }
 
+    /**
+     * 解析DepartmentNames。
+     */
     private List<String> resolveDepartmentNames(List<String> departmentIds, Map<String, String> departmentNameMap) {
         if (departmentIds == null || departmentIds.isEmpty()) {
             return Collections.emptyList();
@@ -2532,6 +2705,9 @@ class AbstractExpenseDocumentSupport {
         return new ArrayList<>(names);
     }
 
+    /**
+     * 解析档案ItemNames。
+     */
     private List<String> resolveArchiveItemNames(
             String archiveCode,
             List<String> values,
@@ -2676,7 +2852,7 @@ class AbstractExpenseDocumentSupport {
 
     private void markDocumentApproved(ProcessDocumentInstance instance, String terminalStatus) {
         LocalDateTime now = LocalDateTime.now();
-        instance.setStatus(defaultText(trimToNull(terminalStatus), DOCUMENT_STATUS_APPROVED));
+        instance.setStatus(defaultText(trimToNull(terminalStatus), DOCUMENT_STATUS_COMPLETED));
         instance.setCurrentNodeKey(null);
         instance.setCurrentNodeName(null);
         instance.setCurrentTaskType(null);
@@ -2697,6 +2873,9 @@ class AbstractExpenseDocumentSupport {
         appendLog(instance.getDocumentCode(), node == null ? null : node.getNodeKey(), node == null ? null : node.getNodeName(), LOG_EXCEPTION, null, "SYSTEM", reason, Collections.emptyMap());
     }
 
+    /**
+     * 清理当前Node。
+     */
     private void clearCurrentNode(ProcessDocumentInstance instance) {
         instance.setCurrentNodeKey(null);
         instance.setCurrentNodeName(null);
@@ -2714,6 +2893,7 @@ class AbstractExpenseDocumentSupport {
             LocalDateTime finishedAt,
             LocalDateTime updatedAt
     ) {
+        validatePmNameLength(currentNodeName, "\u5f53\u524d\u8282\u70b9\u540d\u79f0");
         instance.setStatus(status);
         instance.setCurrentNodeKey(currentNodeKey);
         instance.setCurrentNodeName(currentNodeName);
@@ -2743,6 +2923,8 @@ class AbstractExpenseDocumentSupport {
             String actionComment,
             Map<String, Object> payload
     ) {
+        validatePmNameLength(nodeName, "\u8282\u70b9\u540d\u79f0");
+        validatePmNameLength(actorName, "\u64cd\u4f5c\u4eba\u59d3\u540d");
         ProcessDocumentActionLog log = new ProcessDocumentActionLog();
         log.setDocumentCode(documentCode);
         log.setNodeKey(nodeKey);
@@ -2801,6 +2983,9 @@ class AbstractExpenseDocumentSupport {
         return template;
     }
 
+    /**
+     * 加载模板按编码。
+     */
     private ProcessDocumentTemplate loadTemplateByCode(String templateCode, boolean enabledOnly) {
         String normalizedCode = trimToNull(templateCode);
         if (normalizedCode == null) {
@@ -2858,6 +3043,9 @@ class AbstractExpenseDocumentSupport {
         return task;
     }
 
+    /**
+     * 加载表单设计。
+     */
     private ProcessFormDesign loadFormDesign(String formDesignCode) {
         String normalizedCode = trimToNull(formDesignCode);
         if (normalizedCode == null) {
@@ -2870,6 +3058,9 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
+    /**
+     * 加载报销单明细设计。
+     */
     private ProcessExpenseDetailDesign loadExpenseDetailDesign(String detailDesignCode) {
         String normalizedCode = trimToNull(detailDesignCode);
         if (normalizedCode == null) {
@@ -2882,6 +3073,9 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
+    /**
+     * 组装运行时流程上下文。
+     */
     private Map<String, Object> buildRuntimeFlowContext(
             User currentUser,
             ProcessDocumentTemplate template,
@@ -2916,6 +3110,9 @@ class AbstractExpenseDocumentSupport {
         return context;
     }
 
+    /**
+     * 解析UndertakeDeptIds。
+     */
     private List<String> resolveUndertakeDeptIds(
             ProcessFormDesign formDesign,
             Map<String, Object> formData,
@@ -2933,6 +3130,9 @@ class AbstractExpenseDocumentSupport {
         return new ArrayList<>(deptIds);
     }
 
+    /**
+     * 解析UndertakeDeptIdsFromSnapshots。
+     */
     private List<String> resolveUndertakeDeptIdsFromSnapshots(
             Map<String, Object> mainSchema,
             Map<String, Object> mainFormData,
@@ -2981,6 +3181,9 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    /**
+     * 合并运行时表单数据。
+     */
     private Map<String, Object> mergeRuntimeFormData(Map<String, Object> formData, List<ExpenseDetailInstanceDTO> expenseDetails) {
         Map<String, Object> merged = formData == null ? new LinkedHashMap<>() : new LinkedHashMap<>(formData);
         if (expenseDetails == null || expenseDetails.isEmpty()) {
@@ -3030,6 +3233,9 @@ class AbstractExpenseDocumentSupport {
         return schema;
     }
 
+    /**
+     * 加载共享档案。
+     */
     private List<ProcessCustomArchiveDetailVO> loadSharedArchives(Map<String, Object> schema) {
         Set<String> archiveCodes = extractArchiveCodes(schema);
         if (archiveCodes.isEmpty()) {
@@ -3138,6 +3344,9 @@ class AbstractExpenseDocumentSupport {
         return snapshot;
     }
 
+    /**
+     * 解析流程SnapshotJson。
+     */
     private String resolveFlowSnapshotJson(ProcessDocumentTemplate template) {
         String flowCode = trimToNull(template.getApprovalFlow());
         if (flowCode == null) {
@@ -3161,6 +3370,9 @@ class AbstractExpenseDocumentSupport {
         return version == null ? null : version.getSnapshotJson();
     }
 
+    /**
+     * 加载Department选项。
+     */
     private List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
@@ -3174,6 +3386,9 @@ class AbstractExpenseDocumentSupport {
         }).toList();
     }
 
+    /**
+     * 加载Department选项For明细。
+     */
     private List<ProcessFormOptionVO> loadDepartmentOptionsForDetail(Map<String, Object> schema, Map<String, Object> formData) {
         List<String> departmentIds = resolveUndertakeDeptIdsFromSnapshots(schema, formData, Collections.emptyList());
         if (departmentIds.isEmpty()) {
@@ -3200,6 +3415,9 @@ class AbstractExpenseDocumentSupport {
         }).toList();
     }
 
+    /**
+     * 加载公司选项。
+     */
     private List<ProcessFormOptionVO> loadCompanyOptions() {
         return systemCompanyMapper.selectList(
                 Wrappers.<SystemCompany>lambdaQuery()
@@ -3213,6 +3431,9 @@ class AbstractExpenseDocumentSupport {
         }).toList();
     }
 
+    /**
+     * 加载公司选项For明细。
+     */
     private List<ProcessFormOptionVO> loadCompanyOptionsForDetail(Map<String, Object> schema, Map<String, Object> formData) {
         String companyId = extractFirstBusinessComponentValue(schema, formData, PAYMENT_COMPANY_COMPONENT_CODE);
         if (companyId == null) {
@@ -3231,6 +3452,9 @@ class AbstractExpenseDocumentSupport {
         }).toList();
     }
 
+    /**
+     * 加载Pending任务。
+     */
     private List<ProcessDocumentTask> loadPendingTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -3240,6 +3464,9 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
+    /**
+     * 加载开立任务。
+     */
     private List<ProcessDocumentTask> loadOpenTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -3249,6 +3476,9 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
+    /**
+     * 加载Node开立任务。
+     */
     private List<ProcessDocumentTask> loadNodeOpenTasks(String documentCode, String nodeKey) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -3259,6 +3489,9 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
+    /**
+     * 加载NodeBatch任务。
+     */
     private List<ProcessDocumentTask> loadNodeBatchTasks(String documentCode, String nodeKey, String batchNo) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -3281,6 +3514,9 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    /**
+     * 加载ActionLogs。
+     */
     private List<ProcessDocumentActionLog> loadActionLogs(String documentCode) {
         return processDocumentActionLogMapper.selectList(
                 Wrappers.<ProcessDocumentActionLog>lambdaQuery()
@@ -3289,18 +3525,25 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
+    /**
+     * 解析单据Title。
+     */
     private String resolveDocumentTitle(ProcessDocumentTemplate template, Map<String, Object> formData, String username) {
         String title = firstNonBlank(
                 stringValue(formData.get("__documentTitle")),
                 stringValue(formData.get("documentTitle")),
                 stringValue(formData.get("title"))
         );
-        if (title != null) {
-            return title;
-        }
-        return template.getTemplateName() + "-" + defaultUsername(username) + "-" + LocalDate.now().format(DATE_FORMATTER);
+        String resolved = title != null
+                ? title
+                : template.getTemplateName() + "-" + defaultUsername(username) + "-" + LocalDate.now().format(DATE_FORMATTER);
+        validatePmTitleLength(resolved, "\u5355\u636e\u6807\u9898");
+        return resolved;
     }
 
+    /**
+     * 解析单据Reason。
+     */
     private String resolveDocumentReason(ProcessDocumentTemplate template, Map<String, Object> formData) {
         String reason = firstNonBlank(
                 stringValue(formData.get("__documentReason")),
@@ -3312,6 +3555,9 @@ class AbstractExpenseDocumentSupport {
         return reason == null ? defaultReason(template.getTemplateName()) : reason;
     }
 
+    /**
+     * 解析TotalAmount。
+     */
     private BigDecimal resolveTotalAmount(Map<String, Object> formData) {
         BigDecimal directAmount = toBigDecimal(formData.get("__totalAmount"));
         if (directAmount != null) {
@@ -3453,6 +3699,9 @@ class AbstractExpenseDocumentSupport {
         return List.of(value);
     }
 
+    /**
+     * 组装单据编码。
+     */
     private String buildDocumentCode() {
         String prefix = "DOC" + LocalDate.now().format(CODE_DATE_FORMATTER);
         Long count = processDocumentInstanceMapper.selectCount(
@@ -3463,6 +3712,9 @@ class AbstractExpenseDocumentSupport {
         return prefix + String.format("%04d", next);
     }
 
+    /**
+     * 组装回执Content。
+     */
     private String buildReceiptContent(ProcessDocumentInstance instance, PmBankPaymentRecord record, SystemCompanyBankAccount account) {
         List<String> lines = new ArrayList<>();
         lines.add("招商银行云直连回单");
@@ -3476,10 +3728,16 @@ class AbstractExpenseDocumentSupport {
         return String.join(System.lineSeparator(), lines);
     }
 
+    /**
+     * 组装回执FileName。
+     */
     private String buildReceiptFileName(String documentCode) {
         return defaultText(documentCode, "document") + "-银行回单.txt";
     }
 
+    /**
+     * 加载Latest银行Record映射。
+     */
     private Map<String, PmBankPaymentRecord> loadLatestBankRecordMap(List<String> documentCodes) {
         if (documentCodes == null || documentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -3496,6 +3754,9 @@ class AbstractExpenseDocumentSupport {
         ));
     }
 
+    /**
+     * 加载Latest银行Record按账户Id。
+     */
     private Map<Long, PmBankPaymentRecord> loadLatestBankRecordByAccountId(Set<Long> companyBankAccountIds) {
         if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
             return Collections.emptyMap();
@@ -3512,6 +3773,9 @@ class AbstractExpenseDocumentSupport {
         ));
     }
 
+    /**
+     * 加载公司银行账户Name映射。
+     */
     private Map<Long, String> loadCompanyBankAccountNameMap(Set<Long> companyBankAccountIds) {
         if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
             return Collections.emptyMap();
@@ -3562,6 +3826,9 @@ class AbstractExpenseDocumentSupport {
         return List.of(item);
     }
 
+    /**
+     * 查询Latest银行付款Record。
+     */
     private PmBankPaymentRecord findLatestBankPaymentRecord(String documentCode) {
         if (trimToNull(documentCode) == null) {
             return null;
@@ -3600,6 +3867,9 @@ class AbstractExpenseDocumentSupport {
         return account;
     }
 
+    /**
+     * 解析CallbackSuccess。
+     */
     private boolean resolveCallbackSuccess(ExpenseBankCallbackDTO dto) {
         if (dto == null) {
             return false;
@@ -3611,6 +3881,9 @@ class AbstractExpenseDocumentSupport {
         return Set.of("SUCCESS", "ACCEPTED", "00", "200").contains(resultCode);
     }
 
+    /**
+     * 解析银行LinkStatusLabel。
+     */
     private String resolveBankLinkStatusLabel(SystemCompanyBankAccount account) {
         if (!isFlagEnabled(account.getDirectConnectEnabled())) {
             return "未启用";
@@ -3622,11 +3895,17 @@ class AbstractExpenseDocumentSupport {
         return "已启用";
     }
 
+    /**
+     * 解析银行Link同步Status。
+     */
     private String resolveBankLinkSyncStatus(SystemCompanyBankAccount account) {
         String status = trimToNull(account.getDirectConnectLastSyncStatus());
         return status == null ? "未推送" : status;
     }
 
+    /**
+     * 解析回执StatusLabel。
+     */
     private String resolveReceiptStatusLabel(PmBankPaymentRecord record) {
         if (record == null) {
             return "未生成";
@@ -3641,6 +3920,9 @@ class AbstractExpenseDocumentSupport {
         };
     }
 
+    /**
+     * 判断回执查询Enabled是否成立。
+     */
     private boolean isReceiptQueryEnabled(SystemCompanyBankAccount account) {
         if (account == null) {
             return false;
@@ -3655,6 +3937,9 @@ class AbstractExpenseDocumentSupport {
         return result;
     }
 
+    /**
+     * 组装公司银行账户Name。
+     */
     private String buildCompanyBankAccountName(SystemCompanyBankAccount account) {
         if (account == null) {
             return null;
@@ -3664,10 +3949,16 @@ class AbstractExpenseDocumentSupport {
         return account.getAccountName() + (suffix == null ? "" : "（尾号" + suffix + "）");
     }
 
+    /**
+     * 组装银行推送RequestNo。
+     */
     private String buildBankPushRequestNo(String documentCode) {
         return defaultText(documentCode, "DOC") + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 
+    /**
+     * 查询公司Name。
+     */
     private String findCompanyName(String companyId) {
         if (trimToNull(companyId) == null) {
             return "";
@@ -3680,6 +3971,9 @@ class AbstractExpenseDocumentSupport {
         return company == null ? companyId : defaultText(trimToNull(company.getCompanyName()), companyId);
     }
 
+    /**
+     * 组装公司Name映射。
+     */
     private Map<String, String> buildCompanyNameMap(Set<String> companyIds) {
         if (companyIds == null || companyIds.isEmpty()) {
             return Collections.emptyMap();
@@ -3701,6 +3995,9 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    /**
+     * 判断FlagEnabled是否成立。
+     */
     private boolean isFlagEnabled(Integer value) {
         return value != null && value == 1;
     }
@@ -3725,14 +4022,23 @@ class AbstractExpenseDocumentSupport {
         return defaultValue;
     }
 
+    /**
+     * 组装报销单明细No。
+     */
     private String buildExpenseDetailNo(String documentCode, int sortOrder) {
         return documentCode + "-D" + String.format("%02d", sortOrder);
     }
 
+    /**
+     * 组装任务BatchNo。
+     */
     private String buildTaskBatchNo(String documentCode, String nodeKey) {
         return documentCode + "-" + nodeKey + "-" + System.currentTimeMillis();
     }
 
+    /**
+     * 解析模板类型Label。
+     */
     private String resolveTemplateTypeLabel(String templateType, String currentLabel) {
         if (trimToNull(currentLabel) != null) {
             return currentLabel;
@@ -3745,13 +4051,21 @@ class AbstractExpenseDocumentSupport {
         };
     }
 
+    /**
+     * 判断EffectiveApprovedStatus是否成立。
+     */
     private boolean isEffectiveApprovedStatus(String status) {
         String normalized = trimToNull(status);
         return DOCUMENT_STATUS_APPROVED.equals(normalized)
+                || DOCUMENT_STATUS_COMPLETED.equals(normalized)
+                || DOCUMENT_STATUS_PENDING_PAYMENT.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
     }
 
+    /**
+     * 解析StatusLabel。
+     */
     private String resolveStatusLabel(String status) {
         return switch (trimToNull(status) == null ? "" : status.trim()) {
             case DOCUMENT_STATUS_PENDING_PAYMENT -> "\u5f85\u652f\u4ed8";
@@ -3759,7 +4073,7 @@ class AbstractExpenseDocumentSupport {
             case DOCUMENT_STATUS_PAYMENT_COMPLETED -> "\u5df2\u652f\u4ed8";
             case DOCUMENT_STATUS_PAYMENT_FINISHED -> "\u5df2\u5b8c\u6210";
             case DOCUMENT_STATUS_PAYMENT_EXCEPTION -> "\u652f\u4ed8\u5f02\u5e38";
-            case DOCUMENT_STATUS_APPROVED -> "\u5df2\u901a\u8fc7";
+            case DOCUMENT_STATUS_APPROVED, DOCUMENT_STATUS_COMPLETED -> "\u5df2\u5b8c\u6210";
             case DOCUMENT_STATUS_REJECTED -> "\u5df2\u9a73\u56de";
             case "DRAFT" -> "\u8349\u7a3f";
             case DOCUMENT_STATUS_EXCEPTION -> "\u6d41\u7a0b\u5f02\u5e38";
@@ -3767,6 +4081,9 @@ class AbstractExpenseDocumentSupport {
         };
     }
 
+    /**
+     * 解析报销单明细类型。
+     */
     private String resolveExpenseDetailType(ProcessDocumentTemplate template, ProcessExpenseDetailDesign expenseDetailDesign) {
         if (expenseDetailDesign != null && trimToNull(expenseDetailDesign.getDetailType()) != null) {
             return expenseDetailDesign.getDetailType();
@@ -3774,12 +4091,18 @@ class AbstractExpenseDocumentSupport {
         return DETAIL_TYPE_NORMAL;
     }
 
+    /**
+     * 解析报销单明细类型Label。
+     */
     private String resolveExpenseDetailTypeLabel(String detailType) {
         return Objects.equals(trimToNull(detailType), DETAIL_TYPE_ENTERPRISE)
                 ? "\u4f01\u4e1a\u5f80\u6765"
                 : "\u666e\u901a\u62a5\u9500";
     }
 
+    /**
+     * 解析EnterpriseModeForInstance。
+     */
     private String resolveEnterpriseModeForInstance(ProcessDocumentTemplate template, ProcessExpenseDetailDesign expenseDetailDesign, String runtimeMode) {
         if (!Objects.equals(resolveExpenseDetailType(template, expenseDetailDesign), DETAIL_TYPE_ENTERPRISE)) {
             return null;
@@ -3795,6 +4118,9 @@ class AbstractExpenseDocumentSupport {
         return normalizedMode;
     }
 
+    /**
+     * 解析EnterpriseModeLabel。
+     */
     private String resolveEnterpriseModeLabel(String enterpriseMode) {
         if (Objects.equals(trimToNull(enterpriseMode), ENTERPRISE_MODE_PREPAY_UNBILLED)) {
             return "\u9884\u4ed8\u672a\u5230\u7968";
@@ -3826,6 +4152,9 @@ class AbstractExpenseDocumentSupport {
         return normalized;
     }
 
+    /**
+     * 解析业务SceneModeForInstance。
+     */
     private String resolveBusinessSceneModeForInstance(
             String detailType,
             ProcessDocumentTemplate template,
@@ -3847,6 +4176,9 @@ class AbstractExpenseDocumentSupport {
         return businessSceneMode;
     }
 
+    /**
+     * 解析业务SceneMode。
+     */
     private String resolveBusinessSceneMode(String detailType, Object rawMode, String defaultBusinessSceneMode) {
         if (!Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
             return ENTERPRISE_MODE_INVOICE_FULL_PAYMENT;
@@ -3878,12 +4210,18 @@ class AbstractExpenseDocumentSupport {
         return toBigDecimal(formData.get(FIELD_PENDING_WRITE_OFF_AMOUNT));
     }
 
+    /**
+     * 组装账户Label。
+     */
     private String buildAccountLabel(String accountName, String bankName) {
         String left = firstNonBlank(accountName, bankName);
         String right = left != null && Objects.equals(left, trimToNull(bankName)) ? null : trimToNull(bankName);
         return right == null ? (left == null ? "\u672a\u547d\u540d\u8d26\u6237" : left) : left + " / " + right;
     }
 
+    /**
+     * 组装供应商账户Secondary。
+     */
     private String buildVendorAccountSecondary(FinanceVendor vendor) {
         List<String> parts = new ArrayList<>();
         if (trimToNull(vendor.getCVenBankNub()) != null) {
@@ -3952,6 +4290,9 @@ class AbstractExpenseDocumentSupport {
         return normalized == null ? "褰撳墠鐢ㄦ埛" : normalized;
     }
 
+    /**
+     * 加载全部Department映射。
+     */
     private Map<Long, SystemDepartment> loadAllDepartmentMap() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getStatus, 1)
@@ -3980,6 +4321,9 @@ class AbstractExpenseDocumentSupport {
         return companyId;
     }
 
+    /**
+     * 加载Active用户。
+     */
     private User loadActiveUser(Long userId) {
         if (userId == null) {
             return null;
@@ -3988,6 +4332,9 @@ class AbstractExpenseDocumentSupport {
         return user != null && Objects.equals(user.getStatus(), 1) ? user : null;
     }
 
+    /**
+     * 加载Active用户。
+     */
     private List<User> loadActiveUsers(List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Collections.emptyList();
@@ -4009,18 +4356,26 @@ class AbstractExpenseDocumentSupport {
 
     private String normalizeUserName(User user) {
         String name = trimToNull(user.getName());
-        return name != null ? name : defaultText(asText(user.getUsername()), "鏈懡鍚嶇敤鎴?");
+        if (name != null) {
+            return name;
+        }
+        return defaultText(asText(user.getUsername()), "\u672a\u547d\u540d\u7528\u6237");
     }
 
+    /**
+     * 解析用户DisplayName。
+     */
     private String resolveUserDisplayName(Long userId, String username) {
         return resolveUserDisplayName(loadActiveUser(userId), username);
     }
 
+    /**
+     * 解析用户DisplayName。
+     */
     private String resolveUserDisplayName(User user, String username) {
-        if (user != null) {
-            return normalizeUserName(user);
-        }
-        return defaultUsername(username);
+        String displayName = user != null ? normalizeUserName(user) : defaultUsername(username);
+        validatePmNameLength(displayName, "\u63d0\u4ea4\u4eba\u59d3\u540d");
+        return displayName;
     }
 
     private Map<String, Object> toObjectMap(Object value) {
@@ -4119,6 +4474,30 @@ class AbstractExpenseDocumentSupport {
 
     private long elapsedMillis(long startedAt) {
         return (System.nanoTime() - startedAt) / 1_000_000L;
+    }
+
+    private void validatePmNameLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > PM_NAME_MAX_LENGTH) {
+            throw new IllegalStateException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
+        }
+    }
+
+    private void validatePmTitleLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > PM_TITLE_MAX_LENGTH) {
+            throw new IllegalStateException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 128 \u4e2a\u5b57\u7b26");
+        }
+    }
+
+    private void validatePmFieldKeyLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            throw new IllegalStateException(label + "\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (normalized.length() > PM_FIELD_KEY_MAX_LENGTH) {
+            throw new IllegalStateException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
+        }
     }
 
     private String trimToNull(String value) {

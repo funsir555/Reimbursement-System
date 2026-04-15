@@ -1,3 +1,8 @@
+// 业务域：财务档案
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 供应商、客户、项目、科目等档案页面接口，下游会继续协调 档案主数据、下拉选项和与凭证、报销单的基础对应。
+// 风险提醒：改坏后最容易影响 基础档案错配、下游选项错误和历史单据对应失效。
+
 package com.finex.auth.service.impl.financearchive;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -23,16 +28,24 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+/**
+ * AbstractFinanceProjectArchiveSupport：通用支撑类。
+ * 封装 财务项目档案这块可复用的业务能力。
+ * 改这里时，要特别关注 基础档案错配、下游选项错误和历史单据对应失效是否会被一起带坏。
+ */
 public abstract class AbstractFinanceProjectArchiveSupport {
 
-    protected static final Pattern PROJECT_CLASS_CODE_PATTERN = Pattern.compile("^\\d{2}$");
-    protected static final Pattern PROJECT_CODE_PATTERN = Pattern.compile("^\\d{6}$");
+    protected static final Pattern PROJECT_CLASS_CODE_PATTERN = Pattern.compile("^\\d{1,2}$");
+    protected static final Pattern PROJECT_CODE_PATTERN = Pattern.compile("^\\d{1,6}$");
 
     protected final FinanceProjectClassMapper financeProjectClassMapper;
     protected final FinanceProjectArchiveMapper financeProjectArchiveMapper;
     protected final SystemCompanyMapper systemCompanyMapper;
     protected final GlAccvouchMapper glAccvouchMapper;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     protected AbstractFinanceProjectArchiveSupport(
             FinanceProjectClassMapper financeProjectClassMapper,
             FinanceProjectArchiveMapper financeProjectArchiveMapper,
@@ -45,6 +58,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         this.glAccvouchMapper = glAccvouchMapper;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected FinanceProjectClassSummaryVO toClassSummary(FinanceProjectClass entity) {
         FinanceProjectClassSummaryVO summary = new FinanceProjectClassSummaryVO();
         summary.setId(entity.getId());
@@ -61,6 +77,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return summary;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected FinanceProjectSummaryVO toProjectSummary(FinanceProjectArchive entity, String projectClassName) {
         FinanceProjectSummaryVO summary = new FinanceProjectSummaryVO();
         summary.setId(entity.getId());
@@ -82,6 +101,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return summary;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected FinanceProjectDetailVO toProjectDetail(FinanceProjectArchive entity, String projectClassName) {
         FinanceProjectDetailVO detail = new FinanceProjectDetailVO();
         detail.setId(entity.getId());
@@ -103,6 +125,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return detail;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected FinanceProjectClass requireProjectClass(String companyId, String projectClassCode) {
         FinanceProjectClass entity = findProjectClass(requireCompanyId(companyId), projectClassCode);
         if (entity == null) {
@@ -111,6 +136,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return entity;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected FinanceProjectClass requireEnabledProjectClass(String companyId, String projectClassCode) {
         FinanceProjectClass entity = requireProjectClass(companyId, projectClassCode);
         if (!Objects.equals(normalizeFlag(entity.getStatus(), 1), 1)) {
@@ -119,6 +147,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return entity;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected FinanceProjectArchive requireProject(String companyId, String projectCode) {
         FinanceProjectArchive entity = findProject(requireCompanyId(companyId), projectCode);
         if (entity == null) {
@@ -127,6 +158,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return entity;
     }
 
+    /**
+     * 查询项目Class。
+     */
     protected FinanceProjectClass findProjectClass(String companyId, String projectClassCode) {
         String normalizedCompanyId = requireCompanyId(companyId);
         String normalizedCode = requireText(projectClassCode, "项目分类编码不能为空");
@@ -138,6 +172,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         );
     }
 
+    /**
+     * 查询项目。
+     */
     protected FinanceProjectArchive findProject(String companyId, String projectCode) {
         String normalizedCompanyId = requireCompanyId(companyId);
         String normalizedCode = requireText(projectCode, "项目编码不能为空");
@@ -149,6 +186,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         );
     }
 
+    /**
+     * 判断是否拥有项目。
+     */
     protected boolean hasProjects(String companyId, String projectClassCode) {
         Long count = financeProjectArchiveMapper.selectCount(
                 Wrappers.<FinanceProjectArchive>lambdaQuery()
@@ -158,6 +198,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 判断是否拥有Active项目。
+     */
     protected boolean hasActiveProjects(String companyId, String projectClassCode) {
         Long count = financeProjectArchiveMapper.selectCount(
                 Wrappers.<FinanceProjectArchive>lambdaQuery()
@@ -169,6 +212,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 判断Referenced按凭证是否成立。
+     */
     protected boolean isReferencedByVoucher(String companyId, String projectCode) {
         Long count = glAccvouchMapper.selectCount(
                 Wrappers.<GlAccvouch>lambdaQuery()
@@ -178,10 +224,16 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected String requireCompanyId(String companyId) {
         return requireText(companyId, "公司主体不能为空");
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected void requireEnabledCompany(String companyId) {
         SystemCompany company = systemCompanyMapper.selectById(companyId);
         if (company == null || !Objects.equals(company.getStatus(), 1)) {
@@ -189,32 +241,41 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         }
     }
 
+    /**
+     * 校验项目ClassPayload。
+     */
     protected void validateProjectClassPayload(FinanceProjectClassSaveDTO dto) {
         if (dto == null) {
             throw new IllegalArgumentException("项目分类数据不能为空");
         }
         String projectClassCode = requireText(dto.getProjectClassCode(), "项目分类编码不能为空");
         if (!PROJECT_CLASS_CODE_PATTERN.matcher(projectClassCode).matches()) {
-            throw new IllegalArgumentException("项目分类编码必须为2位数字文本");
+            throw new IllegalArgumentException("\u9879\u76ee\u5206\u7c7b\u7f16\u7801\u5fc5\u987b\u4e3a1-2\u4f4d\u6570\u5b57\u6587\u672c");
         }
         requireText(dto.getProjectClassName(), "项目分类名称不能为空");
     }
 
+    /**
+     * 校验项目Payload。
+     */
     protected void validateProjectPayload(FinanceProjectSaveDTO dto) {
         if (dto == null) {
             throw new IllegalArgumentException("项目档案数据不能为空");
         }
         String projectCode = requireText(dto.getCitemcode(), "项目编码不能为空");
         if (!PROJECT_CODE_PATTERN.matcher(projectCode).matches()) {
-            throw new IllegalArgumentException("项目编码必须为6位数字文本");
+            throw new IllegalArgumentException("\u9879\u76ee\u7f16\u7801\u5fc5\u987b\u4e3a1-6\u4f4d\u6570\u5b57\u6587\u672c");
         }
         requireText(dto.getCitemname(), "项目名称不能为空");
         String projectClassCode = requireText(dto.getCitemccode(), "项目分类不能为空");
         if (!PROJECT_CLASS_CODE_PATTERN.matcher(projectClassCode).matches()) {
-            throw new IllegalArgumentException("项目分类编码必须为2位数字文本");
+            throw new IllegalArgumentException("\u9879\u76ee\u5206\u7c7b\u7f16\u7801\u5fc5\u987b\u4e3a1-2\u4f4d\u6570\u5b57\u6587\u672c");
         }
     }
 
+    /**
+     * 解析Next项目ClassSortOrder。
+     */
     protected int resolveNextProjectClassSortOrder(String companyId) {
         Long count = financeProjectClassMapper.selectCount(
                 Wrappers.<FinanceProjectClass>lambdaQuery()
@@ -223,6 +284,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return (count == null ? 0 : count.intValue()) + 1;
     }
 
+    /**
+     * 解析Next项目SortOrder。
+     */
     protected int resolveNextProjectSortOrder(String companyId) {
         Long count = financeProjectArchiveMapper.selectCount(
                 Wrappers.<FinanceProjectArchive>lambdaQuery()
@@ -231,6 +295,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return (count == null ? 0 : count.intValue()) + 1;
     }
 
+    /**
+     * 加载项目ClassName映射。
+     */
     protected Map<String, String> loadProjectClassNameMap(String companyId) {
         Map<String, String> result = new LinkedHashMap<>();
         financeProjectClassMapper.selectList(
@@ -240,6 +307,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return result;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected String requireText(String value, String message) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -248,6 +318,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return normalized;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected String trimToNull(String value) {
         if (value == null) {
             return null;
@@ -256,6 +329,9 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected int normalizeFlag(Integer value, int defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -263,15 +339,24 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return value == 0 ? 0 : 1;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected int normalizeNonNegative(Integer value) {
         return value == null ? 0 : Math.max(value, 0);
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected String normalize(String value, String defaultValue) {
         String normalized = trimToNull(value);
         return normalized == null ? defaultValue : normalized;
     }
 
+    /**
+     * 处理财务项目档案中的这一步。
+     */
     protected FinanceProjectArchiveOptionVO option(String value, String label) {
         FinanceProjectArchiveOptionVO option = new FinanceProjectArchiveOptionVO();
         option.setValue(value);
@@ -279,14 +364,23 @@ public abstract class AbstractFinanceProjectArchiveSupport {
         return option;
     }
 
+    /**
+     * 组装Status选项。
+     */
     protected List<FinanceProjectArchiveOptionVO> buildStatusOptions() {
         return List.of(option("1", "启用"), option("0", "停用"));
     }
 
+    /**
+     * 组装CloseStatus选项。
+     */
     protected List<FinanceProjectArchiveOptionVO> buildCloseStatusOptions() {
         return List.of(option("0", "未封存"), option("1", "已封存"));
     }
 
+    /**
+     * 创建元数据Container。
+     */
     protected FinanceProjectArchiveMetaVO createMetaContainer() {
         return new FinanceProjectArchiveMetaVO();
     }

@@ -1,3 +1,8 @@
+// 业务域：财务档案
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 供应商、客户、项目、科目等档案页面接口，下游会继续协调 档案主数据、下拉选项和与凭证、报销单的基础对应。
+// 风险提醒：改坏后最容易影响 基础档案错配、下游选项错误和历史单据对应失效。
+
 package com.finex.auth.service.impl.financearchive;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,8 +13,16 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 
 import java.util.List;
 
+/**
+ * FinanceAccountSubjectMetaSupport：通用支撑类。
+ * 封装 财务账户科目这块可复用的业务能力。
+ * 改这里时，要特别关注 基础档案错配、下游选项错误和历史单据对应失效是否会被一起带坏。
+ */
 public class FinanceAccountSubjectMetaSupport extends AbstractFinanceAccountSubjectArchiveSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public FinanceAccountSubjectMetaSupport(
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
             SystemCompanyMapper systemCompanyMapper,
@@ -19,6 +32,9 @@ public class FinanceAccountSubjectMetaSupport extends AbstractFinanceAccountSubj
         super(financeAccountSubjectMapper, systemCompanyMapper, glAccvouchMapper, objectMapper);
     }
 
+    /**
+     * 获取元数据。
+     */
     public FinanceAccountSubjectMetaVO getMeta() {
         FinanceAccountSubjectMetaVO meta = new FinanceAccountSubjectMetaVO();
         meta.setSubjectCategoryOptions(List.of(

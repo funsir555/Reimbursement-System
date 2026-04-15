@@ -7,7 +7,10 @@
         v-for="stat in listStats"
         :key="stat.label"
         class="expense-wb-stat-card expense-wb-stat-card--compact expense-wb-stat-card--dense"
-        :class="{ 'expense-wb-stat-card--active': activeStatFilter === stat.filterValue }"
+        :class="{
+          'expense-wb-stat-card--filterable': true,
+          'expense-wb-stat-card--active': activeStatFilter === stat.filterValue
+        }"
         :data-testid="`expense-documents-stat-${stat.filterKey}`"
         role="button"
         tabindex="0"
@@ -223,7 +226,6 @@ import {
   createExpenseWorkbenchFilters,
   filterExpenseWorkbenchRows,
   getExpenseWorkbenchStatusType,
-  isExpenseWorkbenchCompletedLikeStatus,
   isExpenseWorkbenchExceptionLikeStatus,
   isExpenseWorkbenchPendingLikeStatus,
   loadColumnOrder,
@@ -304,12 +306,12 @@ const listStats = computed(() => [
     filterValue: '审批中'
   },
   {
-    label: '已通过',
-    value: expenseList.value.filter((item) => isExpenseWorkbenchCompletedLikeStatus(resolveDocumentStatusLabel(item))).length,
+    label: '待支付',
+    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '待支付').length,
     icon: CircleCheckFilled,
-    tone: 'green',
-    filterKey: 'approved',
-    filterValue: '已通过'
+    tone: 'amber',
+    filterKey: 'pending-payment',
+    filterValue: '待支付'
   },
   {
     label: '流程异常',

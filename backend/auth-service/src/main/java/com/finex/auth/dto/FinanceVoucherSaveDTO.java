@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ public class FinanceVoucherSaveDTO {
 
     private Integer idoc;
 
+    @Size(max = 64, message = "\u5236\u5355\u4eba\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26")
     private String cbill;
 
     private String ctext1;

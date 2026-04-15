@@ -1,3 +1,8 @@
+// 业务域：财务凭证
+// 文件角色：service 入口实现
+// 上下游关系：上游通常来自 凭证查询、新建、修改等接口，下游会继续协调 凭证主表、分录、上下文数据与报销关联。
+// 风险提醒：改坏后最容易影响 凭证金额、分录科目和与单据的对应关系。
+
 package com.finex.auth.service.impl;
 
 import com.finex.auth.dto.FinanceVoucherDetailVO;
@@ -26,6 +31,11 @@ import com.finex.auth.service.impl.voucher.VoucherQueryDomainSupport;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * FinanceVoucherServiceImpl：service 入口实现。
+ * 接住上层请求，并把 财务凭证相关流程分发到更细的规则组件。
+ * 改这里时，要特别关注 凭证金额、分录科目和与单据的对应关系是否会被一起带坏。
+ */
 @Service
 public class FinanceVoucherServiceImpl implements FinanceVoucherService {
 
@@ -33,6 +43,9 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
     private final VoucherQueryDomainSupport voucherQueryDomainSupport;
     private final VoucherMutationDomainSupport voucherMutationDomainSupport;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public FinanceVoucherServiceImpl(
             GlAccvouchMapper glAccvouchMapper,
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
@@ -83,27 +96,42 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         );
     }
 
+    /**
+     * 获取元数据。
+     */
     @Override
     public FinanceVoucherMetaVO getMeta(Long currentUserId, String currentUsername, String companyId, String billDate, String csign) {
         return voucherMetaSupport.getMeta(currentUserId, currentUsername, companyId, billDate, csign);
     }
 
+    /**
+     * 查询凭证。
+     */
     @Override
     public FinanceVoucherPageVO<FinanceVoucherSummaryVO> queryVouchers(FinanceVoucherQueryDTO dto) {
         return voucherQueryDomainSupport.queryVouchers(dto);
     }
 
+    /**
+     * 获取明细。
+     */
     @Override
     public FinanceVoucherDetailVO getDetail(String companyId, String voucherNo) {
         return voucherQueryDomainSupport.getDetail(companyId, voucherNo);
     }
 
+    /**
+     * 保存凭证。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceVoucherSaveResultVO saveVoucher(FinanceVoucherSaveDTO dto, Long currentUserId, String currentUsername) {
         return voucherMutationDomainSupport.saveVoucher(dto, currentUserId, currentUsername);
     }
 
+    /**
+     * 更新凭证。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceVoucherSaveResultVO updateVoucher(
@@ -116,6 +144,9 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         return voucherMutationDomainSupport.updateVoucher(companyId, voucherNo, dto, currentUserId, currentUsername);
     }
 
+    /**
+     * 处理财务凭证中的这一步。
+     */
     @Override
     public byte[] exportVouchers(FinanceVoucherQueryDTO dto) {
         return voucherQueryDomainSupport.exportVouchers(dto);

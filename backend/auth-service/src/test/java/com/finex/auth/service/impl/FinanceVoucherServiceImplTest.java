@@ -134,8 +134,8 @@ class FinanceVoucherServiceImplTest {
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("1001", "库存现金")));
         when(financeCustomerMapper.selectList(any())).thenReturn(List.of(buildCustomer("C00001", "华南客户", "COMP-001")));
         when(financeVendorMapper.selectList(any())).thenReturn(List.of(buildVendor("V00001", "核心供应商", "COMP-001")));
-        when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("01", "市场项目", "COMP-001")));
-        when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of(buildProject("000001", "华南推广项目", "01", "COMP-001")));
+        when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("7", "Market Projects", "COMP-001")));
+        when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of(buildProject("2002", "South Campaign", "7", "COMP-001")));
         when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
 
         FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "记");
@@ -144,9 +144,46 @@ class FinanceVoucherServiceImplTest {
         assertEquals("C00001", meta.getCustomerOptions().get(0).getCode());
         assertEquals("华南客户", meta.getCustomerOptions().get(0).getName());
         assertEquals("V00001", meta.getSupplierOptions().get(0).getValue());
-        assertEquals("01", meta.getProjectClassOptions().get(0).getCode());
-        assertEquals("000001", meta.getProjectOptions().get(0).getCode());
-        assertEquals("01", meta.getProjectOptions().get(0).getParentValue());
+        assertEquals("7", meta.getProjectClassOptions().get(0).getCode());
+        assertEquals("2002", meta.getProjectOptions().get(0).getCode());
+        assertEquals("7", meta.getProjectOptions().get(0).getParentValue());
+    }
+
+    @Test
+    void saveVoucherAcceptsVariableLengthProjectCodes() {
+        List<GlAccvouch> insertedRows = new ArrayList<>();
+        doAnswer(invocation -> {
+            insertedRows.add(invocation.getArgument(0));
+            return 1;
+        }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
+
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "Management Expense"),
+                buildSubject("1002", "Bank Deposit")
+        ));
+        when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("7", "Market Projects", "COMP-001")));
+        when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of(buildProject("2002", "South Campaign", "7", "COMP-001")));
+        when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "5601", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "1002", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCitemClass("7");
+        dto.getEntries().get(0).setCitemId("2002");
+
+        service.saveVoucher(dto, 1L, "alice");
+
+        assertEquals(2, insertedRows.size());
+        assertEquals("7", insertedRows.get(0).getCitemClass());
+        assertEquals("2002", insertedRows.get(0).getCitemId());
     }
 
     @Test
@@ -197,6 +234,88 @@ class FinanceVoucherServiceImplTest {
         assertEquals(2, insertedRows.size());
         assertEquals("管理费用", insertedRows.get(0).getCcodeName());
         assertEquals("银行存款", insertedRows.get(1).getCcodeName());
+    }
+
+    @Test
+    void saveVoucherRejectsOverlongDigestBeforeWrite() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "管理费用"),
+                buildSubject("1002", "银行存款")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("记");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("A".repeat(256), "5601", "100.00", null),
+                buildSaveEntry("支付办公费用", "1002", null, "100.00")
+        ));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("第 1 行摘要长度不能超过 255 个字符", exception.getMessage());
+    }
+
+    @Test
+    void saveVoucherRejectsOversizedSubjectNameSnapshot() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "科".repeat(129)),
+                buildSubject("1002", "银行存款")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("记");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("办公费用", "5601", "100.00", null),
+                buildSaveEntry("支付办公费用", "1002", null, "100.00")
+        ));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("科目【5601】名称长度超过 128，请先维护会计科目档案", exception.getMessage());
+    }
+
+    @Test
+    void saveVoucherRejectsOverlongCurrencyNameBeforeWrite() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "100.00", null),
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCexchName("C".repeat(33));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u5e01\u79cd\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 32 \u4e2a\u5b57\u7b26", exception.getMessage());
     }
 
     @Test

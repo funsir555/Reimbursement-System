@@ -133,4 +133,46 @@ class GlobalExceptionHandlerTest {
 
         assertEquals("\u63d0\u4ea4\u5185\u5bb9\u8d85\u8fc7\u5b57\u6bb5\u957f\u5ea6\u9650\u5236\uff0c\u8bf7\u68c0\u67e5\u7f16\u7801\u3001\u540d\u79f0\u7b49\u8f93\u5165\u957f\u5ea6\u540e\u91cd\u8bd5", message);
     }
+
+    @Test
+    void handleIllegalStateReturnsChineseMessageDirectlyForGlRequests() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("客户编码已存在");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/finance/archives/customers")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("客户编码已存在", result.getMessage());
+    }
+
+    @Test
+    void handleIllegalStateReturnsChineseMessageDirectlyForPmRequests() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("当前单据不能核销自己");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/expense/documents/DOC-001/resubmit")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("当前单据不能核销自己", result.getMessage());
+    }
+
+    @Test
+    void handleIllegalStateReturnsChineseMessageDirectlyForProcessManagementRequests() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("模板名称长度不能超过 64 个字符");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/process-management/templates")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("模板名称长度不能超过 64 个字符", result.getMessage());
+    }
 }

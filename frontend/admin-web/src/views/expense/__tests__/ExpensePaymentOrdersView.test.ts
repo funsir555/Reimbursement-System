@@ -187,6 +187,25 @@ describe('ExpensePaymentOrdersView', () => {
     expect(wrapper.text()).toContain('付款单工作台')
     expect(wrapper.text()).toContain('DOC-PAY-001')
     expect(wrapper.text()).toContain('发起支付')
+    expect(wrapper.get('[data-testid="expense-payment-stat-pending"]').classes()).toContain('expense-wb-stat-card--filterable')
+    expect(wrapper.get('[data-testid="expense-payment-stat-pending"]').classes()).toContain('expense-wb-stat-card--active')
+  })
+
+  it('switches payment status cards with shared active styling', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-payment-stat-paid"]').trigger('click')
+
+    expect(mocks.router.replace).toHaveBeenCalledWith({
+      path: '/expense/payment/orders',
+      query: { tab: 'paid' }
+    })
+
+    mocks.route.query.tab = 'paid'
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="expense-payment-stat-paid"]').classes()).toContain('expense-wb-stat-card--active')
+    expect(wrapper.get('[data-testid="expense-payment-stat-pending"]').classes()).not.toContain('expense-wb-stat-card--active')
   })
 
   it('starts a bank payment task from the pending tab', async () => {

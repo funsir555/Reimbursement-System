@@ -88,6 +88,7 @@ class ExpenseSummaryAssemblerTest {
         var result = assembler.toExpenseSummaries(List.of(buildSummaryInstance("\u652f\u4ed8\u65e5\u671f")));
 
         assertEquals(1, result.size());
+        assertEquals("\u674e\u56db", result.get(0).getSubmitterName());
         assertEquals("2026-04-06", result.get(0).getPaymentDate());
     }
 
@@ -125,6 +126,7 @@ class ExpenseSummaryAssemblerTest {
         var result = assembler.toPendingItems(List.of(task), Map.of("DOC-001", buildSummaryInstance()));
 
         assertEquals(1, result.size());
+        assertEquals("\u674e\u56db", result.get(0).getSubmitterName());
         assertEquals("PENDING", result.get(0).getStatus());
         assertEquals("PENDING_APPROVAL", result.get(0).getDocumentStatus());
         assertEquals("\u5ba1\u6279\u4e2d", result.get(0).getDocumentStatusLabel());
@@ -264,7 +266,7 @@ class ExpenseSummaryAssemblerTest {
         instance.setDocumentTitle("report-title");
         instance.setDocumentReason("report-reason");
         instance.setSubmitterUserId(1L);
-        instance.setSubmitterName("\u5f20\u4e09");
+        instance.setSubmitterName("\u674e\u56db");
         instance.setCurrentNodeName("finance");
         instance.setStatus("PENDING_APPROVAL");
         instance.setTotalAmount(BigDecimal.valueOf(888.88));
@@ -302,7 +304,8 @@ class ExpenseSummaryAssemblerTest {
     private User buildSubmitterUser() {
         User user = new User();
         user.setId(1L);
-        user.setName("\u5f20\u4e09");
+        user.setUsername("lisi");
+        user.setName("\u674e\u56db");
         user.setDeptId(9L);
         return user;
     }

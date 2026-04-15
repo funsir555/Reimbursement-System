@@ -106,7 +106,7 @@ class ExpenseVoucherPushDomainSupportTest {
         document.setSubmitterUserId(1L);
         document.setSubmitterName("alice");
         document.setDocumentTitle("Travel request");
-        document.setStatus("APPROVED");
+        document.setStatus("COMPLETED");
         document.setTotalAmount(new BigDecimal("88.00"));
         document.setFinishedAt(LocalDateTime.of(2026, 4, 11, 9, 0));
         document.setFormDataJson("{\"payment-company-1\":\"COMPANY_A\"}");

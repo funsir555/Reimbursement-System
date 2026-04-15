@@ -1,3 +1,8 @@
+// 业务域：档案代理与归档任务
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 档案代理配置接口和后台调度，下游会继续协调 归档规则、执行记录和调度计划。
+// 风险提醒：改坏后最容易影响 档案归集效果、执行漏掉和后续追溯。
+
 package com.finex.auth.service.impl.archiveagent;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -15,12 +20,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * ArchiveAgentRunDomainSupport：领域规则支撑类。
+ * 承接 档案代理执行的核心业务规则。
+ * 改这里时，要特别关注 档案归集效果、执行漏掉和后续追溯是否会被一起带坏。
+ */
 public class ArchiveAgentRunDomainSupport extends AbstractArchiveAgentSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ArchiveAgentRunDomainSupport(Dependencies dependencies) {
         super(dependencies);
     }
 
+    /**
+     * 执行代理。
+     */
     public ArchiveAgentRunVO runAgent(Long ownerUserId, Long id, ArchiveAgentRunDTO dto) {
         ArchiveAgentDefinition definition = requireOwnedAgent(ownerUserId, id);
         if (ArchiveAgentSupport.AGENT_STATUS_DISABLED.equals(definition.getStatus())
@@ -41,6 +57,9 @@ public class ArchiveAgentRunDomainSupport extends AbstractArchiveAgentSupport {
         return toRunVo(run);
     }
 
+    /**
+     * 查询执行列表。
+     */
     public List<ArchiveAgentRunVO> listRuns(Long ownerUserId, Long agentId) {
         requireOwnedAgent(ownerUserId, agentId);
         return archiveAgentRunMapper.selectList(
@@ -52,6 +71,9 @@ public class ArchiveAgentRunDomainSupport extends AbstractArchiveAgentSupport {
         ).stream().map(this::toRunVo).toList();
     }
 
+    /**
+     * 获取执行明细。
+     */
     public ArchiveAgentRunDetailVO getRunDetail(Long ownerUserId, Long runId) {
         ArchiveAgentRun run = archiveAgentRunMapper.selectById(runId);
         if (run == null || !Objects.equals(run.getOwnerUserId(), ownerUserId)) {

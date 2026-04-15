@@ -1,3 +1,8 @@
+// 业务域：财务档案
+// 文件角色：service 入口实现
+// 上下游关系：上游通常来自 供应商、客户、项目、科目等档案页面接口，下游会继续协调 档案主数据、下拉选项和与凭证、报销单的基础对应。
+// 风险提醒：改坏后最容易影响 基础档案错配、下游选项错误和历史单据对应失效。
+
 package com.finex.auth.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -13,6 +18,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * FinanceBankCatalogServiceImpl：service 入口实现。
+ * 接住上层请求，并把 财务银行目录相关流程分发到更细的规则组件。
+ * 改这里时，要特别关注 基础档案错配、下游选项错误和历史单据对应失效是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class FinanceBankCatalogServiceImpl implements FinanceBankCatalogService {
@@ -20,6 +30,9 @@ public class FinanceBankCatalogServiceImpl implements FinanceBankCatalogService 
     private final SystemBankCatalogMapper systemBankCatalogMapper;
     private final SystemBankBranchCatalogMapper systemBankBranchCatalogMapper;
 
+    /**
+     * 查询银行列表。
+     */
     @Override
     public List<FinanceBankOptionVO> listBanks(String keyword) {
         QueryWrapper<SystemBankCatalog> query = new QueryWrapper<>();
@@ -35,6 +48,9 @@ public class FinanceBankCatalogServiceImpl implements FinanceBankCatalogService 
         return systemBankCatalogMapper.selectList(query).stream().map(this::toBankOption).toList();
     }
 
+    /**
+     * 查询银行Branches列表。
+     */
     @Override
     public List<FinanceBankBranchVO> listBankBranches(String bankCode, String province, String city, String keyword) {
         QueryWrapper<SystemBankBranchCatalog> query = new QueryWrapper<>();
@@ -69,6 +85,9 @@ public class FinanceBankCatalogServiceImpl implements FinanceBankCatalogService 
         return systemBankBranchCatalogMapper.selectList(query).stream().map(this::toBranchOption).toList();
     }
 
+    /**
+     * 处理财务银行目录中的这一步。
+     */
     @Override
     public FinanceBankBranchVO lookupBranchByCnaps(String cnapsCode) {
         String normalizedCnapsCode = trimToNull(cnapsCode);
@@ -105,6 +124,9 @@ public class FinanceBankCatalogServiceImpl implements FinanceBankCatalogService 
         return option;
     }
 
+    /**
+     * 组装BranchLabel。
+     */
     private String buildBranchLabel(SystemBankBranchCatalog branch) {
         String area = List.of(branch.getProvince(), branch.getCity()).stream()
                 .map(this::trimToNull)

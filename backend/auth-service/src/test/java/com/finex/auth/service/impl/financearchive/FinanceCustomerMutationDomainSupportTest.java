@@ -79,6 +79,34 @@ class FinanceCustomerMutationDomainSupportTest {
     }
 
     @Test
+    void createCustomerRejectsOverlongTightenedField() {
+        FinanceCustomerSaveDTO dto = new FinanceCustomerSaveDTO();
+        dto.setCCusName("客户A");
+        dto.setCCusCode("C".repeat(65));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> support.createCustomer("COMPANY_A", dto, "tester")
+        );
+
+        assertEquals("客户编码长度不能超过 64 个字符", exception.getMessage());
+    }
+
+    @Test
+    void createCustomerRejectsOverlongBankField() {
+        FinanceCustomerSaveDTO dto = new FinanceCustomerSaveDTO();
+        dto.setCCusName("\u5ba2\u6237A");
+        dto.setCCusBank("B".repeat(129));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> support.createCustomer("COMPANY_A", dto, "tester")
+        );
+
+        assertEquals("\u5f00\u6237\u94f6\u884c\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 128 \u4e2a\u5b57\u7b26", exception.getMessage());
+    }
+
+    @Test
     void updateCustomerKeepsCompanyIdStable() {
         FinanceCustomer existing = new FinanceCustomer();
         existing.setCCusCode("CUS001");

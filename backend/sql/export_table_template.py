@@ -33,7 +33,9 @@ from excel_mysql_common import (
     DEFAULT_APP_YML,
     ExcelToolError,
     fetch_columns,
+    filter_user_editable_columns,
     format_column_constraint,
+    is_system_managed_column,
     open_connection,
 )
 
@@ -168,8 +170,11 @@ def main() -> int:
         connection = open_connection(pymysql, app_yml_path)
         with connection.cursor() as cursor:
             columns = fetch_columns(cursor, args.table)
-        write_template(openpyxl, args.table, columns, output_path, args.include_meta)
+        omitted_columns = [name for name, meta in columns.items() if is_system_managed_column(meta)]
+        editable_columns = filter_user_editable_columns(columns)
+        write_template(openpyxl, args.table, editable_columns, output_path, args.include_meta)
         print(f"[INFO] Exported template: {output_path}")
+        print(f"[INFO] 已隐藏系统托管列：{omitted_columns}")
         print("[INFO] Row 1=field names, row 2=comments, row 3=constraints, row 4+=data")
         return 0
     except ExcelToolError as exc:

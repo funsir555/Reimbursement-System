@@ -98,7 +98,12 @@
                   class="!mb-0"
                   :class="field.span === 2 ? 'xl:col-span-2' : field.span === 3 ? 'xl:col-span-3' : ''"
                 >
-                  <el-input v-if="field.type === 'text'" v-model="customerForm[field.key]" :placeholder="`请输入${field.label}`" />
+                  <el-input
+                    v-if="field.type === 'text'"
+                    v-model="customerForm[field.key]"
+                    :placeholder="`请输入${field.label}`"
+                    :maxlength="field.maxLength"
+                  />
                   <el-input
                     v-else-if="field.type === 'textarea'"
                     v-model="customerForm[field.key]"
@@ -179,6 +184,27 @@ type CustomerFieldConfig = {
   label: string
   type: CustomerFieldType
   span?: 1 | 2 | 3
+  maxLength?: number
+}
+
+const CUSTOMER_FIELD_MAX_LENGTH: Record<string, number> = {
+  cCusCode: 64,
+  cCusName: 128,
+  cCusAbbName: 64,
+  cCCCode: 64,
+  cDCCode: 64,
+  cCusTradeCCode: 64,
+  cCusPostCode: 16,
+  cCusBank: 128,
+  cCusAccount: 64,
+  cCusLPerson: 64,
+  cCusPerson: 64,
+  cCusHand: 32,
+  cCusHeadCode: 64,
+  cCusWhCode: 64,
+  cCusDepart: 64,
+  cCusBankCode: 64,
+  customerKCode: 64
 }
 
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
@@ -207,10 +233,10 @@ const customerSections: Array<{ key: string; label: string; fields: CustomerFiel
     key: 'basic',
     label: '基础信息',
     fields: [
-      { key: 'cCusCode', label: '客户编码', type: 'text' },
-      { key: 'cCusName', label: '客户名称', type: 'text' },
-      { key: 'cCusAbbName', label: '客户简称', type: 'text' },
-      { key: 'cCCCode', label: '分类编码', type: 'text' },
+      { key: 'cCusCode', label: '客户编码', type: 'text', maxLength: 64 },
+      { key: 'cCusName', label: '客户名称', type: 'text', maxLength: 128 },
+      { key: 'cCusAbbName', label: '客户简称', type: 'text', maxLength: 64 },
+      { key: 'cCCCode', label: '分类编码', type: 'text', maxLength: 64 },
       { key: 'cTrade', label: '所属行业', type: 'text' },
       { key: 'cCusRegCode', label: '纳税人登记号', type: 'text' },
       { key: 'cMemo', label: '备注', type: 'textarea', span: 3 }
@@ -220,28 +246,28 @@ const customerSections: Array<{ key: string; label: string; fields: CustomerFiel
     key: 'contact',
     label: '联系与发运',
     fields: [
-      { key: 'cCusPerson', label: '联系人', type: 'text' },
-      { key: 'cCusHand', label: '手机', type: 'text' },
+      { key: 'cCusPerson', label: '\u8054\u7cfb\u4eba', type: 'text', maxLength: 64 },
+      { key: 'cCusHand', label: '\u624b\u673a', type: 'text', maxLength: 32 },
       { key: 'cCusAddress', label: '联系地址', type: 'text', span: 2 },
-      { key: 'cCusPostCode', label: '邮政编码', type: 'text' },
+      { key: 'cCusPostCode', label: '\u90ae\u653f\u7f16\u7801', type: 'text', maxLength: 16 },
       { key: 'cCusOAddress', label: '发货地址', type: 'text', span: 2 },
       { key: 'cCusOType', label: '发运方式', type: 'text' },
-      { key: 'cCusDepart', label: '分管部门', type: 'text' },
-      { key: 'cCusWhCode', label: '发货仓库', type: 'text' },
-      { key: 'cCusHeadCode', label: '客户总公司编码', type: 'text' },
-      { key: 'cCusTradeCCode', label: '行业编码', type: 'text' },
-      { key: 'cDCCode', label: '地区编码', type: 'text' }
+      { key: 'cCusDepart', label: '分管部门', type: 'text', maxLength: 64 },
+      { key: 'cCusWhCode', label: '发货仓库', type: 'text', maxLength: 64 },
+      { key: 'cCusHeadCode', label: '客户总公司编码', type: 'text', maxLength: 64 },
+      { key: 'cCusTradeCCode', label: '行业编码', type: 'text', maxLength: 64 },
+      { key: 'cDCCode', label: '地区编码', type: 'text', maxLength: 64 }
     ]
   },
   {
     key: 'bank',
     label: '银行与开票',
     fields: [
-      { key: 'cCusBank', label: '开户银行', type: 'text' },
-      { key: 'cCusAccount', label: '银行账号', type: 'text' },
-      { key: 'cCusBankCode', label: '所属银行编码', type: 'text' },
+      { key: 'cCusBank', label: '\u5f00\u6237\u94f6\u884c', type: 'text', maxLength: 128 },
+      { key: 'cCusAccount', label: '\u94f6\u884c\u8d26\u53f7', type: 'text', maxLength: 64 },
+      { key: 'cCusBankCode', label: '所属银行编码', type: 'text', maxLength: 64 },
       { key: 'cInvoiceCompany', label: '开票单位', type: 'text' },
-      { key: 'cCusLPerson', label: '法人代表', type: 'text' }
+      { key: 'cCusLPerson', label: '\u6cd5\u4eba\u4ee3\u8868', type: 'text', maxLength: 64 }
     ]
   },
   {
@@ -261,7 +287,7 @@ const customerSections: Array<{ key: string; label: string; fields: CustomerFiel
       { key: 'bCreditByHead', label: '按总公司控信', type: 'switch' },
       { key: 'fCommisionRate', label: '佣金比率(%)', type: 'decimal' },
       { key: 'fInsueRate', label: '保险费率(%)', type: 'decimal' },
-      { key: 'customerKCode', label: '客户级别编码', type: 'text' },
+      { key: 'customerKCode', label: '客户级别编码', type: 'text', maxLength: 64 },
       { key: 'bCusState', label: '是否成交', type: 'switch' },
       { key: 'cCusDefine1', label: '自定义项1', type: 'text' },
       { key: 'cCusDefine2', label: '自定义项2', type: 'text' },
@@ -299,6 +325,10 @@ const defaultSwitchFields = customerSections
   .filter((field) => field.type === 'switch')
   .map((field) => field.key)
 const allowedFormFieldKeys = new Set(customerSections.flatMap((section) => section.fields.map((field) => field.key)))
+const customerFieldLabels = customerSections.flatMap((section) => section.fields).reduce<Record<string, string>>((acc, field) => {
+  acc[field.key] = field.label
+  return acc
+}, {})
 
 resetCustomerForm()
 onMounted(registerCompanySwitchGuard)
@@ -405,10 +435,7 @@ async function openEditDialog(customerCode: string) {
 }
 
 async function saveCustomer() {
-  if (!String(customerForm.cCusName || '').trim()) {
-    ElMessage.warning('请先填写客户名称')
-    return
-  }
+  if (!validateCustomerForm()) return
   saving.value = true
   try {
     const payload = buildCustomerPayload()
@@ -452,12 +479,32 @@ async function disableCustomer(customerCode: string) {
   }
 }
 
+function validateCustomerForm() {
+  if (!String(customerForm.cCusName || '').trim()) {
+    ElMessage.warning('请先填写客户名称')
+    return false
+  }
+  for (const [fieldKey, maxLength] of Object.entries(CUSTOMER_FIELD_MAX_LENGTH)) {
+    const value = customerForm[fieldKey]
+    if (typeof value !== 'string') {
+      continue
+    }
+    const normalized = value.trim()
+    if (normalized && normalized.length > maxLength) {
+      ElMessage.warning(`${customerFieldLabels[fieldKey] || fieldKey}最多 ${maxLength} 个字符`)
+      return false
+    }
+  }
+  return true
+}
+
 function buildCustomerPayload(): FinanceCustomerSavePayload {
   const payload: Record<string, unknown> = {
     companyId: currentCompanyId.value
   }
   Array.from(allowedFormFieldKeys).forEach((key) => {
-    const value = customerForm[key]
+    const rawValue = customerForm[key]
+    const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue
     if (key === 'companyId') {
       return
     }

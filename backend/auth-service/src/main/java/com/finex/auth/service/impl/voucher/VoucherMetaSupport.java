@@ -1,3 +1,8 @@
+// 业务域：财务凭证
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 凭证查询、新建、修改等接口，下游会继续协调 凭证主表、分录、上下文数据与报销关联。
+// 风险提醒：改坏后最容易影响 凭证金额、分录科目和与单据的对应关系。
+
 package com.finex.auth.service.impl.voucher;
 
 import com.finex.auth.dto.FinanceContextCompanyOptionVO;
@@ -19,10 +24,18 @@ import java.time.LocalDate;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * VoucherMetaSupport：通用支撑类。
+ * 封装 凭证这块可复用的业务能力。
+ * 改这里时，要特别关注 凭证金额、分录科目和与单据的对应关系是否会被一起带坏。
+ */
 public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
 
     private final VoucherContextSupport voucherContextSupport;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public VoucherMetaSupport(
             GlAccvouchMapper glAccvouchMapper,
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
@@ -39,6 +52,9 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
         this.voucherContextSupport = voucherContextSupport;
     }
 
+    /**
+     * 获取元数据。
+     */
     public FinanceVoucherMetaVO getMeta(
             Long currentUserId,
             String currentUsername,
@@ -74,6 +90,9 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
         return meta;
     }
 
+    /**
+     * 解析Effective公司Id。
+     */
     private String resolveEffectiveCompanyId(String companyId, FinanceContextMetaVO contextMeta) {
         String normalizedCompanyId = trimToNull(companyId);
         Set<String> availableCompanyIds = contextMeta.getCompanyOptions().stream()

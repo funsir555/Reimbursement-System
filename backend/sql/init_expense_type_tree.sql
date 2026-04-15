@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS pm_expense_type (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '费用类型ID',
     parent_id BIGINT NULL COMMENT '上级费用类型ID',
     expense_code VARCHAR(8) NOT NULL COMMENT '完整费用类型编码',
-    expense_name VARCHAR(100) NOT NULL COMMENT '费用类型名称',
+    expense_name VARCHAR(64) NOT NULL COMMENT '费用类型名称',
     expense_description VARCHAR(255) NULL COMMENT '费用类型说明',
     code_level TINYINT NOT NULL COMMENT '编码层级:1一级 2二级',
     code_prefix VARCHAR(4) NOT NULL COMMENT '编码前四位归组标识',

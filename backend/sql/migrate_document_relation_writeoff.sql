@@ -5,7 +5,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS pm_document_relation (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'column comment',
     source_document_code VARCHAR(64) NOT NULL COMMENT 'column comment',
-    source_field_key VARCHAR(128) NOT NULL COMMENT 'column comment',
+    source_field_key VARCHAR(64) NOT NULL COMMENT 'column comment',
     target_document_code VARCHAR(64) NOT NULL COMMENT 'column comment',
     target_template_type VARCHAR(32) NOT NULL COMMENT 'column comment',
     sort_order INT NOT NULL DEFAULT 1 COMMENT 'column comment',
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS pm_document_relation (
 CREATE TABLE IF NOT EXISTS pm_document_write_off (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'column comment',
     source_document_code VARCHAR(64) NOT NULL COMMENT 'column comment',
-    source_field_key VARCHAR(128) NOT NULL COMMENT 'column comment',
+    source_field_key VARCHAR(64) NOT NULL COMMENT 'column comment',
     target_document_code VARCHAR(64) NOT NULL COMMENT 'column comment',
     target_template_type VARCHAR(32) NOT NULL COMMENT 'column comment',
     writeoff_source_kind VARCHAR(32) NOT NULL COMMENT 'column comment',
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS pm_document_write_off (
 ALTER TABLE pm_document_relation
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     MODIFY COLUMN source_document_code varchar(64) NOT NULL COMMENT '源单据编码',
-    MODIFY COLUMN source_field_key varchar(128) NOT NULL COMMENT '源字段标识',
+    MODIFY COLUMN source_field_key varchar(64) NOT NULL COMMENT '源字段标识',
     MODIFY COLUMN target_document_code varchar(64) NOT NULL COMMENT '目标单据编码',
     MODIFY COLUMN target_template_type varchar(32) NOT NULL COMMENT '目标模板类型',
     MODIFY COLUMN sort_order int NOT NULL DEFAULT 1 COMMENT '排序号',
@@ -54,7 +54,7 @@ ALTER TABLE pm_document_relation
 ALTER TABLE pm_document_write_off
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     MODIFY COLUMN source_document_code varchar(64) NOT NULL COMMENT '源单据编码',
-    MODIFY COLUMN source_field_key varchar(128) NOT NULL COMMENT '源字段标识',
+    MODIFY COLUMN source_field_key varchar(64) NOT NULL COMMENT '源字段标识',
     MODIFY COLUMN target_document_code varchar(64) NOT NULL COMMENT '目标单据编码',
     MODIFY COLUMN target_template_type varchar(32) NOT NULL COMMENT '目标模板类型',
     MODIFY COLUMN writeoff_source_kind varchar(32) NOT NULL COMMENT '核销来源类型',

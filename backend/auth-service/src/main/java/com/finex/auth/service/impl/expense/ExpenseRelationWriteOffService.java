@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：业务支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -30,6 +35,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * ExpenseRelationWriteOffService：业务支撑类。
+ * 封装 报销单关联写入Off这块可复用的业务能力。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class ExpenseRelationWriteOffService {
@@ -48,6 +58,7 @@ public class ExpenseRelationWriteOffService {
     private static final String DASHBOARD_WRITEOFF_SOURCE_FIELD_KEY = "dashboard-writeoff";
     private static final String ENTERPRISE_MODE_PREPAY_UNBILLED = "PREPAY_UNBILLED";
     private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
     private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
     private static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
@@ -64,6 +75,9 @@ public class ExpenseRelationWriteOffService {
     private final ProcessDocumentWriteOffMapper processDocumentWriteOffMapper;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 组装OutstandingAmount映射。
+     */
     public Map<String, BigDecimal> buildOutstandingAmountMap(List<ProcessDocumentInstance> instances, String kind) {
         if (instances == null || instances.isEmpty()) {
             return Collections.emptyMap();
@@ -85,6 +99,9 @@ public class ExpenseRelationWriteOffService {
         return outstandingAmountMap;
     }
 
+/**
+ * 获取单据Picker。
+ */
 public ExpenseDocumentPickerVO getDocumentPicker(
             Long userId,
             String relationType,
@@ -106,6 +123,8 @@ public ExpenseDocumentPickerVO getDocumentPicker(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
                                 DOCUMENT_STATUS_PAYMENT_COMPLETED,
                                 DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
@@ -145,6 +164,9 @@ public ExpenseDocumentPickerVO getDocumentPicker(
         return result;
     }
 
+/**
+ * 获取首页看板写入OffSourceReportPicker。
+ */
 public ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
             Long userId,
             String targetDocumentCode,
@@ -165,6 +187,8 @@ public ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
                                 DOCUMENT_STATUS_PAYMENT_COMPLETED,
                                 DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
@@ -220,6 +244,9 @@ public ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
         return result;
     }
 
+/**
+ * 处理报销单关联写入Off中的这一步。
+ */
 public boolean bindDashboardWriteOff(Long userId, String targetDocumentCode, String sourceReportDocumentCode) {
         ProcessDocumentInstance target = requireDocument(targetDocumentCode);
         ProcessDocumentInstance sourceReport = requireDocument(sourceReportDocumentCode);
@@ -280,6 +307,9 @@ public boolean bindDashboardWriteOff(Long userId, String targetDocumentCode, Str
         return true;
     }
 
+/**
+ * 同步单据业务关联。
+ */
 public void syncDocumentBusinessRelations(
             String documentCode,
             ProcessFormDesign formDesign,
@@ -384,6 +414,9 @@ public void syncDocumentBusinessRelations(
         }
     }
 
+/**
+ * 处理报销单关联写入Off中的这一步。
+ */
 public void finalizeEffectiveWriteOffs(String documentCode) {
         List<ProcessDocumentWriteOff> pendingWriteOffs = processDocumentWriteOffMapper.selectList(
                 Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
@@ -438,6 +471,9 @@ public void finalizeEffectiveWriteOffs(String documentCode) {
         }
     }
 
+/**
+ * 处理报销单关联写入Off中的这一步。
+ */
 public void voidActiveRelations(String documentCode) {
         List<ProcessDocumentRelation> relations = processDocumentRelationMapper.selectList(
                 Wrappers.<ProcessDocumentRelation>lambdaQuery()
@@ -455,6 +491,9 @@ public void voidActiveRelations(String documentCode) {
         }
     }
 
+/**
+ * 处理报销单关联写入Off中的这一步。
+ */
 public void voidPendingWriteOffs(String documentCode) {
         List<ProcessDocumentWriteOff> writeOffs = processDocumentWriteOffMapper.selectList(
                 Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
@@ -472,6 +511,9 @@ public void voidPendingWriteOffs(String documentCode) {
         }
     }
 
+/**
+ * 组装RelatedGroup。
+ */
 private ExpenseDocumentPickerGroupVO buildRelatedGroup(
             String templateType,
             List<ProcessDocumentInstance> documents,
@@ -485,6 +527,9 @@ private ExpenseDocumentPickerGroupVO buildRelatedGroup(
         return paginatePickerGroup(templateType, items, page, pageSize);
     }
 
+/**
+ * 组装写入OffGroup。
+ */
 private ExpenseDocumentPickerGroupVO buildWriteOffGroup(
             String templateType,
             List<ProcessDocumentInstance> documents,
@@ -570,6 +615,9 @@ private ExpenseDocumentPickerItemVO toPickerItem(ProcessDocumentInstance instanc
         return item;
     }
 
+/**
+ * 加载PrepayReportAmount映射。
+ */
 public Map<String, BigDecimal> loadPrepayReportAmountMap(List<String> documentCodes) {
         if (documentCodes == null || documentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -589,6 +637,9 @@ public Map<String, BigDecimal> loadPrepayReportAmountMap(List<String> documentCo
         ));
     }
 
+/**
+ * 加载Effective写入OffAmount映射。
+ */
 public Map<String, BigDecimal> loadEffectiveWriteOffAmountMap(List<String> targetDocumentCodes) {
         if (targetDocumentCodes == null || targetDocumentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -608,6 +659,9 @@ public Map<String, BigDecimal> loadEffectiveWriteOffAmountMap(List<String> targe
         ));
     }
 
+/**
+ * 加载EffectiveSource写入OffAmount映射。
+ */
 private Map<String, BigDecimal> loadEffectiveSourceWriteOffAmountMap(List<String> sourceDocumentCodes) {
         if (sourceDocumentCodes == null || sourceDocumentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -635,6 +689,9 @@ private String normalizeDashboardOutstandingKind(String kind) {
         throw new IllegalArgumentException("涓嶆敮鎸佺殑寰呭鐞嗗崟鎹被鍨?");
     }
 
+/**
+ * 解析OutstandingAmount。
+ */
 private BigDecimal resolveOutstandingAmount(
             ProcessDocumentInstance instance,
             String kind,
@@ -649,6 +706,9 @@ private BigDecimal resolveOutstandingAmount(
         return outstandingAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : outstandingAmount;
     }
 
+/**
+ * 解析ReportSource可用Amount。
+ */
 private BigDecimal resolveReportSourceAvailableAmount(
             ProcessDocumentInstance sourceReport,
             Map<String, BigDecimal> sourceEffectiveAmountMap
@@ -847,6 +907,9 @@ private ProcessDocumentInstance requireApprovedTargetDocument(
         return target;
     }
 
+/**
+ * 解析写入OffSourceKind。
+ */
 public String resolveWriteOffSourceKind(
             ProcessDocumentInstance target,
             Map<String, BigDecimal> prepayAmountMap
@@ -862,6 +925,9 @@ public String resolveWriteOffSourceKind(
         throw new IllegalStateException("褰撳墠鍗曟嵁涓嶆敮鎸佷綔涓烘牳閿€鐩爣");
     }
 
+/**
+ * 解析当前可用写入OffAmount。
+ */
 public BigDecimal resolveCurrentAvailableWriteOffAmount(
             ProcessDocumentInstance target,
             String writeOffSourceKind,
@@ -938,9 +1004,14 @@ private BigDecimal toBigDecimal(Object value) {
         }
     }
 
+/**
+ * 判断EffectiveApprovedStatus是否成立。
+ */
 private boolean isEffectiveApprovedStatus(String status) {
         String normalized = trimToNull(status);
         return DOCUMENT_STATUS_APPROVED.equals(normalized)
+                || DOCUMENT_STATUS_COMPLETED.equals(normalized)
+                || DOCUMENT_STATUS_PENDING_PAYMENT.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
     }
@@ -957,6 +1028,9 @@ private boolean matchesKeyword(String keyword, String... values) {
         return false;
     }
 
+/**
+ * 解析模板类型Label。
+ */
 private String resolveTemplateTypeLabel(String templateType, String currentLabel) {
         if (trimToNull(currentLabel) != null) {
             return currentLabel;
@@ -969,6 +1043,9 @@ private String resolveTemplateTypeLabel(String templateType, String currentLabel
         };
     }
 
+/**
+ * 解析StatusLabel。
+ */
 private String resolveStatusLabel(String status) {
         return switch (trimToNull(status) == null ? "" : status.trim()) {
             case DOCUMENT_STATUS_PENDING_PAYMENT -> "\u5f85\u652f\u4ed8";
@@ -976,7 +1053,7 @@ private String resolveStatusLabel(String status) {
             case DOCUMENT_STATUS_PAYMENT_COMPLETED -> "\u5df2\u652f\u4ed8";
             case DOCUMENT_STATUS_PAYMENT_FINISHED -> "\u5df2\u5b8c\u6210";
             case DOCUMENT_STATUS_PAYMENT_EXCEPTION -> "\u652f\u4ed8\u5f02\u5e38";
-            case DOCUMENT_STATUS_APPROVED -> "\u5df2\u901a\u8fc7";
+            case DOCUMENT_STATUS_APPROVED, DOCUMENT_STATUS_COMPLETED -> "\u5df2\u5b8c\u6210";
             case DOCUMENT_STATUS_REJECTED -> "\u5df2\u9a73\u56de";
             case "DRAFT" -> "\u8349\u7a3f";
             case DOCUMENT_STATUS_EXCEPTION -> "\u6d41\u7a0b\u5f02\u5e38";

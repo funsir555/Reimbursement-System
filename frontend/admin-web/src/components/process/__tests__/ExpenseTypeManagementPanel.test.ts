@@ -169,4 +169,20 @@ describe('ExpenseTypeManagementPanel', () => {
     expect(summaryGrid.text()).toContain('1')
     expect(wrapper.findAll('button').some((item) => item.text().includes('新增费用类型'))).toBe(true)
   })
+
+  it('blocks save when expense name exceeds 64 characters', async () => {
+    const wrapper = await mountView()
+    const nameInput = wrapper.findAll('input').find((item) => (item.element as HTMLInputElement).value === '差旅费')
+
+    expect(nameInput).toBeTruthy()
+    await nameInput!.setValue('A'.repeat(65))
+
+    const saveButton = wrapper.findAll('button').find((item) => item.text().includes('保存'))
+    expect(saveButton).toBeTruthy()
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateExpenseType).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('费用类型名称最多 64 个字符')
+  })
 })

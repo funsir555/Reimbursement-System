@@ -1,3 +1,8 @@
+// 业务域：固定资产
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 固定资产卡片、变更处置、折旧期间等接口，下游会继续协调 资产卡片、折旧期间、凭证查询和分类元数据。
+// 风险提醒：改坏后最容易影响 资产台账、折旧计提和资产凭证对应。
+
 package com.finex.auth.service.impl.fixedasset;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -81,6 +86,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * AbstractFixedAssetSupport：通用支撑类。
+ * 封装 固定资产这块可复用的业务能力。
+ * 改这里时，要特别关注 资产台账、折旧计提和资产凭证对应是否会被一起带坏。
+ */
 public abstract class AbstractFixedAssetSupport {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -139,6 +149,9 @@ public abstract class AbstractFixedAssetSupport {
 
     private final ConcurrentHashMap<String, Object> voucherNoLocks = new ConcurrentHashMap<>();
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     protected AbstractFixedAssetSupport(
             FaAssetCategoryMapper faAssetCategoryMapper,
             FaAssetAccountPolicyMapper faAssetAccountPolicyMapper,
@@ -176,6 +189,9 @@ public abstract class AbstractFixedAssetSupport {
         this.systemDepartmentMapper = systemDepartmentMapper;
         this.userMapper = userMapper;
     }
+    /**
+     * 获取元数据。
+     */
     public FixedAssetMetaVO getMeta(Long currentUserId, String currentUsername, String companyId, Integer fiscalYear, Integer fiscalPeriod) {
         User currentUser = currentUserId == null ? null : userMapper.selectById(currentUserId);
         List<SystemCompany> companies = loadEnabledCompanies();
@@ -219,6 +235,9 @@ public abstract class AbstractFixedAssetSupport {
         meta.setCurrentPeriodDepreciationAmount(currentPeriodDepreciationAmount(effectiveCompanyId, bookCode, effectiveYear, effectivePeriod));
         return meta;
     }
+    /**
+     * 查询Categories列表。
+     */
     public List<FixedAssetCategoryVO> listCategories(String companyId) {
         String effectiveCompanyId = requireCompanyId(companyId);
         List<FaAssetCategory> categories = listAccessibleCategories(effectiveCompanyId);
@@ -227,6 +246,9 @@ public abstract class AbstractFixedAssetSupport {
                 .map(category -> toCategoryVO(category, policyMap.get(policyKey(category.getCompanyId(), category.getId(), BOOK_CODE_FINANCE))))
                 .toList();
     }
+        /**
+         * 创建分类。
+         */
         public FixedAssetCategoryVO createCategory(FixedAssetCategorySaveDTO dto, String operatorName) {
         validateCategorySave(dto);
         if (findCategoryByCode(dto.getCompanyId(), dto.getCategoryCode()) != null) {
@@ -242,6 +264,9 @@ public abstract class AbstractFixedAssetSupport {
         faAssetAccountPolicyMapper.insert(policy);
         return toCategoryVO(category, policy);
     }
+        /**
+         * 更新分类。
+         */
         public FixedAssetCategoryVO updateCategory(Long id, FixedAssetCategorySaveDTO dto, String operatorName) {
         FaAssetCategory existing = requireCategory(id);
         validateCategorySave(dto);
@@ -268,6 +293,9 @@ public abstract class AbstractFixedAssetSupport {
         }
         return toCategoryVO(existing, policy);
     }
+    /**
+     * 查询卡片列表。
+     */
     public List<FixedAssetCardVO> listCards(String companyId, String bookCode, String keyword, Long categoryId, String status) {
         String effectiveCompanyId = requireCompanyId(companyId);
         QueryWrapper<FaAssetCard> query = new QueryWrapper<>();
@@ -286,9 +314,15 @@ public abstract class AbstractFixedAssetSupport {
         query.orderByDesc("updated_at").orderByAsc("asset_code");
         return mapCards(faAssetCardMapper.selectList(query));
     }
+    /**
+     * 获取卡片。
+     */
     public FixedAssetCardVO getCard(Long id) {
         return mapCard(requireCard(id));
     }
+        /**
+         * 创建卡片。
+         */
         public FixedAssetCardVO createCard(FixedAssetCardSaveDTO dto, String operatorName) {
         validateCardSave(dto, null);
         if (findCardByCode(dto.getCompanyId(), dto.getAssetCode()) != null) {
@@ -301,6 +335,9 @@ public abstract class AbstractFixedAssetSupport {
         faAssetCardMapper.insert(card);
         return mapCard(requireCard(card.getId()));
     }
+        /**
+         * 更新卡片。
+         */
         public FixedAssetCardVO updateCard(Long id, FixedAssetCardSaveDTO dto, String operatorName) {
         FaAssetCard existing = requireCard(id);
         validateCardSave(dto, existing);
@@ -313,6 +350,9 @@ public abstract class AbstractFixedAssetSupport {
         faAssetCardMapper.updateById(existing);
         return mapCard(requireCard(id));
     }
+    /**
+     * 获取启用模板。
+     */
     public FixedAssetTemplateVO getOpeningTemplate(String companyId, String bookCode, Integer fiscalYear, Integer fiscalPeriod) {
         String effectiveCompanyId = requireCompanyId(companyId);
         int year = fiscalYear == null ? LocalDate.now().getYear() : fiscalYear;
@@ -327,6 +367,9 @@ public abstract class AbstractFixedAssetSupport {
         template.setTemplateContent(sample);
         return template;
     }
+        /**
+         * 处理固定资产中的这一步。
+         */
         public FixedAssetOpeningImportResultVO importOpening(FixedAssetOpeningImportDTO dto, String operatorName) {
         String companyId = requireCompanyId(dto.getCompanyId());
         String bookCode = defaultBookCode(dto.getBookCode());
@@ -397,6 +440,9 @@ public abstract class AbstractFixedAssetSupport {
 
         return getOpeningImportResult(batch.getId());
     }
+    /**
+     * 获取启用ImportResult。
+     */
     public FixedAssetOpeningImportResultVO getOpeningImportResult(Long batchId) {
         FaAssetOpeningImport batch = faAssetOpeningImportMapper.selectById(batchId);
         if (batch == null) {
@@ -421,6 +467,9 @@ public abstract class AbstractFixedAssetSupport {
         result.setLines(lines.stream().map(this::toOpeningLineVO).toList());
         return result;
     }
+    /**
+     * 查询变更Bills列表。
+     */
     public List<FixedAssetChangeBillVO> listChangeBills(String companyId, String bookCode, Integer fiscalYear, Integer fiscalPeriod) {
         String effectiveCompanyId = requireCompanyId(companyId);
         QueryWrapper<FaAssetChangeBill> query = new QueryWrapper<>();
@@ -435,6 +484,9 @@ public abstract class AbstractFixedAssetSupport {
         query.orderByDesc("created_at");
         return faAssetChangeBillMapper.selectList(query).stream().map(this::mapChangeBill).toList();
     }
+    /**
+     * 创建变更Bill。
+     */
     public FixedAssetChangeBillVO createChangeBill(FixedAssetChangeBillSaveDTO dto, String operatorName) {
         String companyId = requireCompanyId(dto.getCompanyId());
         String bookCode = defaultBookCode(dto.getBookCode());
@@ -464,6 +516,9 @@ public abstract class AbstractFixedAssetSupport {
         }
         return mapChangeBill(bill);
     }
+        /**
+         * 处理固定资产中的这一步。
+         */
         public FixedAssetChangeBillVO postChangeBill(Long id, String operatorName) {
         FaAssetChangeBill bill = requireChangeBill(id);
         if (!Objects.equals(bill.getStatus(), STATUS_DRAFT)) {
@@ -500,6 +555,9 @@ public abstract class AbstractFixedAssetSupport {
         }
         return mapChangeBill(bill);
     }
+    /**
+     * 处理固定资产中的这一步。
+     */
     public FixedAssetDeprRunVO previewDepreciation(FixedAssetDeprPreviewDTO dto) {
         String companyId = requireCompanyId(dto.getCompanyId());
         String bookCode = defaultBookCode(dto.getBookCode());
@@ -534,6 +592,9 @@ public abstract class AbstractFixedAssetSupport {
         preview.setLines(lines);
         return preview;
     }
+    /**
+     * 查询折旧执行列表。
+     */
     public List<FixedAssetDeprRunVO> listDepreciationRuns(String companyId, String bookCode, Integer fiscalYear, Integer fiscalPeriod) {
         String effectiveCompanyId = requireCompanyId(companyId);
         QueryWrapper<FaAssetDeprRun> query = new QueryWrapper<>();
@@ -548,6 +609,9 @@ public abstract class AbstractFixedAssetSupport {
         query.orderByDesc("created_at");
         return faAssetDeprRunMapper.selectList(query).stream().map(this::mapDeprRun).toList();
     }
+        /**
+         * 创建折旧执行。
+         */
         public FixedAssetDeprRunVO createDepreciationRun(FixedAssetDeprPreviewDTO dto, String operatorName) {
         FixedAssetDeprRunVO preview = previewDepreciation(dto);
         if (preview.getLines().isEmpty()) {
@@ -589,6 +653,9 @@ public abstract class AbstractFixedAssetSupport {
         }
         return mapDeprRun(run);
     }
+        /**
+         * 处理固定资产中的这一步。
+         */
         public FixedAssetDeprRunVO postDepreciationRun(Long id, String operatorName) {
         FaAssetDeprRun run = requireDeprRun(id);
         if (!Objects.equals(run.getStatus(), STATUS_DRAFT)) {
@@ -651,6 +718,9 @@ public abstract class AbstractFixedAssetSupport {
         }
         return mapDeprRun(run);
     }
+    /**
+     * 查询处置Bills列表。
+     */
     public List<FixedAssetDisposalBillVO> listDisposalBills(String companyId, String bookCode, Integer fiscalYear, Integer fiscalPeriod) {
         String effectiveCompanyId = requireCompanyId(companyId);
         QueryWrapper<FaAssetDisposalBill> query = new QueryWrapper<>();
@@ -665,6 +735,9 @@ public abstract class AbstractFixedAssetSupport {
         query.orderByDesc("created_at");
         return faAssetDisposalBillMapper.selectList(query).stream().map(this::mapDisposalBill).toList();
     }
+    /**
+     * 创建处置Bill。
+     */
     public FixedAssetDisposalBillVO createDisposalBill(FixedAssetDisposalBillSaveDTO dto, String operatorName) {
         String companyId = requireCompanyId(dto.getCompanyId());
         String bookCode = defaultBookCode(dto.getBookCode());
@@ -720,6 +793,9 @@ public abstract class AbstractFixedAssetSupport {
         faAssetDisposalBillMapper.updateById(bill);
         return mapDisposalBill(bill);
     }
+        /**
+         * 处理固定资产中的这一步。
+         */
         public FixedAssetDisposalBillVO postDisposalBill(Long id, String operatorName) {
         FaAssetDisposalBill bill = requireDisposalBill(id);
         if (!Objects.equals(bill.getStatus(), STATUS_DRAFT)) {
@@ -781,6 +857,9 @@ public abstract class AbstractFixedAssetSupport {
         }
         return mapDisposalBill(bill);
     }
+        /**
+         * 关闭期间。
+         */
         public FixedAssetPeriodStatusVO closePeriod(FixedAssetPeriodCloseDTO dto, String operatorName) {
         String companyId = requireCompanyId(dto.getCompanyId());
         String bookCode = defaultBookCode(dto.getBookCode());
@@ -801,6 +880,9 @@ public abstract class AbstractFixedAssetSupport {
         }
         return getPeriodStatus(companyId, bookCode, year, period);
     }
+    /**
+     * 获取期间Status。
+     */
     public FixedAssetPeriodStatusVO getPeriodStatus(String companyId, String bookCode, Integer fiscalYear, Integer fiscalPeriod) {
         String effectiveCompanyId = requireCompanyId(companyId);
         String effectiveBookCode = defaultBookCode(bookCode);
@@ -818,6 +900,9 @@ public abstract class AbstractFixedAssetSupport {
         status.setClosedAt(close == null ? null : formatDateTime(close.getClosedAt()));
         return status;
     }
+    /**
+     * 获取凭证Link。
+     */
     public FixedAssetVoucherLinkVO getVoucherLink(String companyId, String businessType, Long businessId) {
         String effectiveCompanyId = requireCompanyId(companyId);
         FaAssetVoucherLink link = faAssetVoucherLinkMapper.selectOne(
@@ -925,6 +1010,9 @@ public abstract class AbstractFixedAssetSupport {
         faAssetCardMapper.updateById(card);
     }
 
+    /**
+     * 校验分类Save。
+     */
     private void validateCategorySave(FixedAssetCategorySaveDTO dto) {
         validateFieldLength(dto.getCategoryCode(), FIXED_ASSET_CODE_MAX_LENGTH, "类别编码");
         validateFieldLength(dto.getCategoryName(), FIXED_ASSET_NAME_MAX_LENGTH, "类别名称");
@@ -968,6 +1056,9 @@ public abstract class AbstractFixedAssetSupport {
         policy.setOffsetAccount(dto.getOffsetAccount().trim());
     }
 
+    /**
+     * 校验卡片Save。
+     */
     private void validateCardSave(FixedAssetCardSaveDTO dto, FaAssetCard existing) {
         validateFieldLength(dto.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
         validateFieldLength(dto.getAssetName(), FIXED_ASSET_NAME_MAX_LENGTH, "资产名称");
@@ -1026,6 +1117,9 @@ public abstract class AbstractFixedAssetSupport {
         card.setUpdatedBy(defaultOperator(operatorName));
     }
 
+    /**
+     * 校验启用Row。
+     */
     private String validateOpeningRow(String companyId, FixedAssetOpeningImportRowDTO row, Set<String> duplicateCodes) {
         String lengthMessage = validateOpeningRowTextLengths(row);
         if (lengthMessage != null) {
@@ -1072,6 +1166,9 @@ public abstract class AbstractFixedAssetSupport {
         return null;
     }
 
+    /**
+     * 组装卡片From启用Row。
+     */
     private FaAssetCard buildCardFromOpeningRow(String companyId, String bookCode, FixedAssetOpeningImportRowDTO row, FaAssetCategory category, String operatorName) {
         FaAssetCard card = new FaAssetCard();
         card.setCompanyId(companyId);
@@ -1104,6 +1201,9 @@ public abstract class AbstractFixedAssetSupport {
         return card;
     }
 
+    /**
+     * 组装变更Line。
+     */
     private FaAssetChangeLine buildChangeLine(String companyId, String billType, Long billId, FixedAssetChangeLineDTO dto) {
         FaAssetChangeLine line = new FaAssetChangeLine();
         line.setCompanyId(companyId);
@@ -1137,6 +1237,9 @@ public abstract class AbstractFixedAssetSupport {
         return line;
     }
 
+    /**
+     * 校验变更类型。
+     */
     private void validateChangeType(String billType) {
         Set<String> supported = Set.of(CHANGE_ADD, CHANGE_TRANSFER_DEPT, CHANGE_TRANSFER_KEEPER, CHANGE_VALUE_ADJUST, CHANGE_RESIDUAL_ADJUST, CHANGE_LIFE_ADJUST);
         if (!supported.contains(trimToNull(billType))) {
@@ -1144,16 +1247,25 @@ public abstract class AbstractFixedAssetSupport {
         }
     }
 
+    /**
+     * 校验变更LineInput。
+     */
     private void validateChangeLineInput(FixedAssetChangeLineDTO dto) {
         validateFieldLength(dto.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
         validateFieldLength(dto.getAssetName(), FIXED_ASSET_NAME_MAX_LENGTH, "资产名称");
         validateFieldLength(dto.getCategoryCode(), FIXED_ASSET_CODE_MAX_LENGTH, "类别编码");
     }
 
+    /**
+     * 校验处置LineInput。
+     */
     private void validateDisposalLineInput(FixedAssetDisposalLineDTO dto) {
         validateFieldLength(dto.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
     }
 
+    /**
+     * 校验启用RowTextLengths。
+     */
     private String validateOpeningRowTextLengths(FixedAssetOpeningImportRowDTO row) {
         try {
             validateFieldLength(row.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
@@ -1165,6 +1277,9 @@ public abstract class AbstractFixedAssetSupport {
         return null;
     }
 
+    /**
+     * 校验字段Length。
+     */
     private void validateFieldLength(String value, int maxLength, String fieldLabel) {
         String normalized = trimToNull(value);
         if (normalized != null && normalized.length() > maxLength) {
@@ -1179,6 +1294,9 @@ public abstract class AbstractFixedAssetSupport {
         return "第 " + rowNo + " 行" + message;
     }
 
+    /**
+     * 校验折旧Method。
+     */
     private void validateDepreciationMethod(String method) {
         Set<String> supported = Set.of(METHOD_STRAIGHT_LINE, METHOD_WORKLOAD, METHOD_DOUBLE_DECLINING);
         if (!supported.contains(trimToNull(method))) {
@@ -1186,6 +1304,9 @@ public abstract class AbstractFixedAssetSupport {
         }
     }
 
+    /**
+     * 计算折旧。
+     */
     private DepreciationResult calculateDepreciation(FaAssetCard card, int fiscalYear, int fiscalPeriod, BigDecimal workload) {
         if (!Objects.equals(card.getCanDepreciate(), 1) || !Objects.equals(card.getStatus(), CARD_STATUS_IN_USE) || card.getInServiceDate() == null) {
             return null;
@@ -1231,6 +1352,9 @@ public abstract class AbstractFixedAssetSupport {
         return new DepreciationResult(scale(amount), scaleQty(workload), scale(accum), scale(accum.add(amount)), scale(defaultAmount(card.getNetAmount())), scale(defaultAmount(card.getNetAmount()).subtract(amount)));
     }
 
+    /**
+     * 判断是否拥有Depreciated。
+     */
     private boolean hasDepreciated(FaAssetCard card, int fiscalYear, int fiscalPeriod) {
         if (card.getLastDeprYear() == null || card.getLastDeprPeriod() == null) {
             return false;
@@ -1277,6 +1401,9 @@ public abstract class AbstractFixedAssetSupport {
         return count == null ? 0L : count;
     }
 
+    /**
+     * 查询ActiveDepr执行。
+     */
     private FaAssetDeprRun findActiveDeprRun(String companyId, String bookCode, int fiscalYear, int fiscalPeriod) {
         return faAssetDeprRunMapper.selectOne(Wrappers.<FaAssetDeprRun>lambdaQuery()
                 .eq(FaAssetDeprRun::getCompanyId, companyId)
@@ -1313,6 +1440,9 @@ public abstract class AbstractFixedAssetSupport {
         return vo;
     }
 
+    /**
+     * 映射卡片。
+     */
     private List<FixedAssetCardVO> mapCards(List<FaAssetCard> cards) {
         if (cards.isEmpty()) {
             return List.of();
@@ -1323,6 +1453,9 @@ public abstract class AbstractFixedAssetSupport {
         return cards.stream().sorted(Comparator.comparing(FaAssetCard::getAssetCode)).map(card -> toCardVO(card, categories, departments, users)).toList();
     }
 
+    /**
+     * 映射卡片。
+     */
     private FixedAssetCardVO mapCard(FaAssetCard card) {
         return mapCards(List.of(card)).get(0);
     }
@@ -1389,6 +1522,9 @@ public abstract class AbstractFixedAssetSupport {
         return option;
     }
 
+    /**
+     * 映射变更Bill。
+     */
     private FixedAssetChangeBillVO mapChangeBill(FaAssetChangeBill bill) {
         FixedAssetChangeBillVO vo = new FixedAssetChangeBillVO();
         vo.setId(bill.getId());
@@ -1408,6 +1544,9 @@ public abstract class AbstractFixedAssetSupport {
         return vo;
     }
 
+    /**
+     * 映射变更Lines。
+     */
     private List<FixedAssetChangeLineVO> mapChangeLines(List<FaAssetChangeLine> lines) {
         if (lines.isEmpty()) {
             return List.of();
@@ -1443,6 +1582,9 @@ public abstract class AbstractFixedAssetSupport {
         }).toList();
     }
 
+    /**
+     * 映射Depr执行。
+     */
     private FixedAssetDeprRunVO mapDeprRun(FaAssetDeprRun run) {
         FixedAssetDeprRunVO vo = new FixedAssetDeprRunVO();
         vo.setId(run.getId());
@@ -1461,6 +1603,9 @@ public abstract class AbstractFixedAssetSupport {
         return vo;
     }
 
+    /**
+     * 映射DeprLines。
+     */
     private List<FixedAssetDeprLineVO> mapDeprLines(List<FaAssetDeprLine> lines) {
         if (lines.isEmpty()) {
             return List.of();
@@ -1502,6 +1647,9 @@ public abstract class AbstractFixedAssetSupport {
         return vo;
     }
 
+    /**
+     * 映射处置Bill。
+     */
     private FixedAssetDisposalBillVO mapDisposalBill(FaAssetDisposalBill bill) {
         FixedAssetDisposalBillVO vo = new FixedAssetDisposalBillVO();
         vo.setId(bill.getId());
@@ -1523,6 +1671,9 @@ public abstract class AbstractFixedAssetSupport {
         return vo;
     }
 
+    /**
+     * 映射处置Lines。
+     */
     private List<FixedAssetDisposalLineVO> mapDisposalLines(List<FaAssetDisposalLine> lines) {
         if (lines.isEmpty()) {
             return List.of();
@@ -1570,12 +1721,18 @@ public abstract class AbstractFixedAssetSupport {
         return vo;
     }
 
+    /**
+     * 查询AccessibleCategories列表。
+     */
     private List<FaAssetCategory> listAccessibleCategories(String companyId) {
         return faAssetCategoryMapper.selectList(Wrappers.<FaAssetCategory>lambdaQuery()
                 .and(wrapper -> wrapper.eq(FaAssetCategory::getCompanyId, companyId).or().eq(FaAssetCategory::getShareScope, SHARE_SCOPE_GROUP))
                 .orderByAsc(FaAssetCategory::getCategoryCode, FaAssetCategory::getId));
     }
 
+    /**
+     * 加载Policy映射ForCompanies。
+     */
     private Map<String, FaAssetAccountPolicy> loadPolicyMapForCompanies(List<FaAssetCategory> categories) {
         if (categories.isEmpty()) {
             return Map.of();
@@ -1593,6 +1750,9 @@ public abstract class AbstractFixedAssetSupport {
         return map;
     }
 
+    /**
+     * 加载分类映射。
+     */
     private Map<Long, FaAssetCategory> loadCategoryMap(Collection<Long> ids) {
         List<Long> filteredIds = ids.stream().filter(Objects::nonNull).distinct().toList();
         if (filteredIds.isEmpty()) {
@@ -1605,6 +1765,9 @@ public abstract class AbstractFixedAssetSupport {
         return map;
     }
 
+    /**
+     * 加载Department映射。
+     */
     private Map<Long, SystemDepartment> loadDepartmentMap(Collection<Long> ids) {
         List<Long> filteredIds = ids.stream().filter(Objects::nonNull).distinct().toList();
         if (filteredIds.isEmpty()) {
@@ -1617,6 +1780,9 @@ public abstract class AbstractFixedAssetSupport {
         return map;
     }
 
+    /**
+     * 加载用户映射。
+     */
     private Map<Long, User> loadUserMap(Collection<Long> ids) {
         List<Long> filteredIds = ids.stream().filter(Objects::nonNull).distinct().toList();
         if (filteredIds.isEmpty()) {
@@ -1629,14 +1795,23 @@ public abstract class AbstractFixedAssetSupport {
         return map;
     }
 
+    /**
+     * 加载EnabledCompanies。
+     */
     private List<SystemCompany> loadEnabledCompanies() {
         return systemCompanyMapper.selectList(Wrappers.<SystemCompany>lambdaQuery().eq(SystemCompany::getStatus, 1).orderByAsc(SystemCompany::getCompanyCode, SystemCompany::getCompanyId));
     }
 
+    /**
+     * 加载EnabledDepartments。
+     */
     private List<SystemDepartment> loadEnabledDepartments(String companyId) {
         return systemDepartmentMapper.selectList(Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getCompanyId, companyId).eq(SystemDepartment::getStatus, 1).orderByAsc(SystemDepartment::getDeptCode, SystemDepartment::getId));
     }
 
+    /**
+     * 加载Enabled用户。
+     */
     private List<User> loadEnabledUsers(String companyId) {
         QueryWrapper<User> query = new QueryWrapper<>();
         query.eq("status", 1);
@@ -1666,6 +1841,9 @@ public abstract class AbstractFixedAssetSupport {
         return category;
     }
 
+    /**
+     * 查询分类按编码。
+     */
     private FaAssetCategory findCategoryByCode(String companyId, String categoryCode) {
         String normalizedCode = trimToNull(categoryCode);
         if (normalizedCode == null) {
@@ -1685,6 +1863,9 @@ public abstract class AbstractFixedAssetSupport {
         return policy;
     }
 
+    /**
+     * 查询Policy。
+     */
     private FaAssetAccountPolicy findPolicy(String companyId, Long categoryId, String bookCode) {
         return faAssetAccountPolicyMapper.selectOne(Wrappers.<FaAssetAccountPolicy>lambdaQuery()
                 .eq(FaAssetAccountPolicy::getCompanyId, companyId)
@@ -1709,6 +1890,9 @@ public abstract class AbstractFixedAssetSupport {
         return card;
     }
 
+    /**
+     * 查询卡片按编码。
+     */
     private FaAssetCard findCardByCode(String companyId, String assetCode) {
         String normalizedCode = trimToNull(assetCode);
         if (normalizedCode == null) {
@@ -1725,6 +1909,9 @@ public abstract class AbstractFixedAssetSupport {
         return bill;
     }
 
+    /**
+     * 查询变更Lines列表。
+     */
     private List<FaAssetChangeLine> listChangeLines(Long billId) {
         return faAssetChangeLineMapper.selectList(Wrappers.<FaAssetChangeLine>lambdaQuery().eq(FaAssetChangeLine::getBillId, billId).orderByAsc(FaAssetChangeLine::getId));
     }
@@ -1737,6 +1924,9 @@ public abstract class AbstractFixedAssetSupport {
         return run;
     }
 
+    /**
+     * 查询DeprLines列表。
+     */
     private List<FaAssetDeprLine> listDeprLines(Long runId) {
         return faAssetDeprLineMapper.selectList(Wrappers.<FaAssetDeprLine>lambdaQuery().eq(FaAssetDeprLine::getRunId, runId).orderByAsc(FaAssetDeprLine::getId));
     }
@@ -1749,10 +1939,16 @@ public abstract class AbstractFixedAssetSupport {
         return bill;
     }
 
+    /**
+     * 查询处置Lines列表。
+     */
     private List<FaAssetDisposalLine> listDisposalLines(Long billId) {
         return faAssetDisposalLineMapper.selectList(Wrappers.<FaAssetDisposalLine>lambdaQuery().eq(FaAssetDisposalLine::getBillId, billId).orderByAsc(FaAssetDisposalLine::getId));
     }
 
+    /**
+     * 查询期间Close。
+     */
     private FaAssetPeriodClose findPeriodClose(String companyId, String bookCode, int fiscalYear, int fiscalPeriod) {
         return faAssetPeriodCloseMapper.selectOne(Wrappers.<FaAssetPeriodClose>lambdaQuery()
                 .eq(FaAssetPeriodClose::getCompanyId, companyId)
@@ -1768,6 +1964,9 @@ public abstract class AbstractFixedAssetSupport {
         }
     }
 
+    /**
+     * 创建凭证。
+     */
     private void createVoucher(String companyId, String bookCode, Integer period, LocalDate billDate, String summary, VoucherAccumulator voucher, String businessType, Long businessId, String operatorName) {
         if (voucher.isEmpty()) {
             return;
@@ -1805,6 +2004,9 @@ public abstract class AbstractFixedAssetSupport {
         }
     }
 
+    /**
+     * 组装凭证Row。
+     */
     private GlAccvouch buildVoucherRow(String companyId, Integer period, Integer voucherNo, Integer rowNo, LocalDateTime billDate, String summary, String accountCode, BigDecimal debit, BigDecimal credit, String operatorName, String businessType) {
         GlAccvouch row = new GlAccvouch();
         row.setCompanyId(companyId);
@@ -1848,6 +2050,9 @@ public abstract class AbstractFixedAssetSupport {
         return rows.get(0).getInoId() + 1;
     }
 
+    /**
+     * 组装凭证No。
+     */
     private String buildVoucherNo(String companyId, Integer period, String voucherType, Integer voucherNo) {
         return companyId + "~" + period + "~" + voucherType + "~" + voucherNo;
     }
@@ -1884,6 +2089,9 @@ public abstract class AbstractFixedAssetSupport {
         return map;
     }
 
+    /**
+     * 解析默认公司Id。
+     */
     private String resolveDefaultCompanyId(String companyId, User currentUser, List<SystemCompany> companies) {
         String candidate = trimToNull(companyId);
         if (candidate != null) {

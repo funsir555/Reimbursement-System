@@ -127,6 +127,6 @@ class FinanceVendorServiceImplTest {
                 () -> financeVendorService.createVendor("COMPANY_A", dto, "tester", true)
         );
 
-        assertEquals("Bank account number is required", error.getMessage());
+        assertEquals("银行账号不能为空", error.getMessage());
     }
 }

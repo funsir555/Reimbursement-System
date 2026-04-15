@@ -4,9 +4,14 @@
       <article
         v-for="item in statusCards"
         :key="item.tab"
-        class="expense-wb-stat-card expense-wb-stat-card--compact cursor-pointer"
-        :class="{ 'ring-2 ring-blue-500/60': activeTab === item.tab }"
+        class="expense-wb-stat-card expense-wb-stat-card--compact expense-wb-stat-card--filterable"
+        :class="{ 'expense-wb-stat-card--active': activeTab === item.tab }"
+        :data-testid="`expense-payment-stat-${item.tab}`"
+        role="button"
+        tabindex="0"
         @click="switchTab(item.tab)"
+        @keydown.enter.prevent="switchTab(item.tab)"
+        @keydown.space.prevent="switchTab(item.tab)"
       >
         <div class="expense-wb-stat-card__top">
           <div>

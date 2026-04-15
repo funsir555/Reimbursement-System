@@ -308,7 +308,7 @@ CREATE TABLE IF NOT EXISTS pm_template_category (
 CREATE TABLE IF NOT EXISTS pm_custom_archive_design (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自定义档案ID',
     archive_code VARCHAR(64) NOT NULL COMMENT '档案编码',
-    archive_name VARCHAR(100) NOT NULL COMMENT '档案名称',
+    archive_name VARCHAR(64) NOT NULL COMMENT '档案名称',
     archive_type VARCHAR(32) NOT NULL COMMENT '档案类型:SELECT可选档案/AUTO_RULE自动划分',
     archive_description VARCHAR(255) COMMENT '档案说明',
     status TINYINT DEFAULT 1 COMMENT '状态:1启用 0停用',
@@ -331,7 +331,7 @@ CREATE TABLE IF NOT EXISTS pm_custom_archive_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '档案结果项ID',
     archive_id BIGINT NOT NULL COMMENT '所属档案ID',
     item_code VARCHAR(64) NOT NULL COMMENT '结果项编码',
-    item_name VARCHAR(100) NOT NULL COMMENT '结果项名称',
+    item_name VARCHAR(64) NOT NULL COMMENT '结果项名称',
     priority INT DEFAULT 1 COMMENT '优先级，值越小越靠前',
     status TINYINT DEFAULT 1 COMMENT '状态:1启用 0停用',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -362,7 +362,7 @@ ALTER TABLE pm_custom_archive_rule
 CREATE TABLE IF NOT EXISTS pm_document_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '妯℃澘ID',
     template_code VARCHAR(64) NOT NULL COMMENT '妯℃澘缂栫爜',
-    template_name VARCHAR(100) NOT NULL COMMENT '妯℃澘鍚嶇О',
+    template_name VARCHAR(64) NOT NULL COMMENT '妯℃澘鍚嶇О',
     template_type VARCHAR(32) NOT NULL COMMENT '妯℃澘绫诲瀷:report/application/loan',
     template_type_label VARCHAR(32) NOT NULL COMMENT '妯℃澘绫诲瀷涓枃鍚?,
     category_code VARCHAR(64) NOT NULL COMMENT '鍒嗙被缂栫爜',
@@ -374,7 +374,7 @@ CREATE TABLE IF NOT EXISTS pm_document_template (
     publish_status VARCHAR(16) DEFAULT 'ENABLED' COMMENT '鍙戝竷鐘舵€?,
     print_mode VARCHAR(64) COMMENT '鎵撳嵃鏂瑰紡',
     approval_flow VARCHAR(64) COMMENT '瀹℃壒娴佺▼缂栫爜',
-    flow_name VARCHAR(100) COMMENT '瀹℃壒娴佺▼鍚嶇О',
+    flow_name VARCHAR(64) COMMENT '瀹℃壒娴佺▼鍚嶇О',
     payment_mode VARCHAR(64) COMMENT '浠樻鑱斿姩妯″紡',
     allocation_form VARCHAR(64) COMMENT '鍒嗘憡琛ㄥ崟',
     ai_audit_mode VARCHAR(64) DEFAULT 'disabled' COMMENT 'AI瀹℃牳妯″紡',
@@ -1215,7 +1215,7 @@ CREATE TABLE IF NOT EXISTS fin_project_class (
     PRIMARY KEY (id),
     UNIQUE KEY uk_fin_project_class_company_code (company_id, project_class_code),
     KEY idx_fin_project_class_company_status (company_id, status, sort_order),
-    CONSTRAINT ck_fin_project_class_code_format CHECK (project_class_code REGEXP '^[0-9]{2}$')
+    CONSTRAINT ck_fin_project_class_code_format CHECK (project_class_code REGEXP '^[0-9]{1,2}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目分类表';
 
 CREATE TABLE IF NOT EXISTS fin_project_archive (
@@ -1237,8 +1237,8 @@ CREATE TABLE IF NOT EXISTS fin_project_archive (
     UNIQUE KEY uk_fin_project_archive_company_code (company_id, citemcode),
     KEY idx_fin_project_archive_company_class (company_id, citemccode),
     KEY idx_fin_project_archive_company_status (company_id, status, bclose, sort_order),
-    CONSTRAINT ck_fin_project_archive_code_format CHECK (citemcode REGEXP '^[0-9]{6}$'),
-    CONSTRAINT ck_fin_project_archive_class_format CHECK (citemccode REGEXP '^[0-9]{2}$'),
+    CONSTRAINT ck_fin_project_archive_code_format CHECK (citemcode REGEXP '^[0-9]{1,6}$'),
+    CONSTRAINT ck_fin_project_archive_class_format CHECK (citemccode REGEXP '^[0-9]{1,2}$'),
     CONSTRAINT fk_fin_project_archive_class
         FOREIGN KEY (company_id, citemccode)
         REFERENCES fin_project_class (company_id, project_class_code)
@@ -1905,7 +1905,7 @@ ALTER TABLE pm_custom_archive_rule
 ALTER TABLE pm_document_relation
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     MODIFY COLUMN source_document_code varchar(64) NOT NULL COMMENT '源单据编码',
-    MODIFY COLUMN source_field_key varchar(128) NOT NULL COMMENT '源字段标识',
+    MODIFY COLUMN source_field_key varchar(64) NOT NULL COMMENT '源字段标识',
     MODIFY COLUMN target_document_code varchar(64) NOT NULL COMMENT '目标单据编码',
     MODIFY COLUMN target_template_type varchar(32) NOT NULL COMMENT '目标模板类型',
     MODIFY COLUMN sort_order int NOT NULL DEFAULT 1 COMMENT '排序号',
@@ -1918,10 +1918,10 @@ ALTER TABLE pm_document_task
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '审批任务ID',
     MODIFY COLUMN document_code varchar(64) NOT NULL COMMENT '单据编码',
     MODIFY COLUMN node_key varchar(64) NOT NULL COMMENT '节点key',
-    MODIFY COLUMN node_name varchar(100) NULL COMMENT '节点名称',
+    MODIFY COLUMN node_name varchar(64) NULL COMMENT '节点名称',
     MODIFY COLUMN node_type varchar(32) NOT NULL COMMENT '节点类型',
     MODIFY COLUMN assignee_user_id bigint NOT NULL COMMENT '处理人用户ID',
-    MODIFY COLUMN assignee_name varchar(100) NULL COMMENT '处理人姓名',
+    MODIFY COLUMN assignee_name varchar(64) NULL COMMENT '处理人姓名',
     MODIFY COLUMN status varchar(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态',
     MODIFY COLUMN task_batch_no varchar(64) NOT NULL COMMENT '同节点同批次任务号',
     MODIFY COLUMN approval_mode varchar(32) NULL COMMENT '审批模式',
@@ -1936,7 +1936,7 @@ ALTER TABLE pm_document_template
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '模板ID',
     MODIFY COLUMN company_id varchar(64) NULL COMMENT '公司主体编码',
     MODIFY COLUMN template_code varchar(64) NOT NULL COMMENT '模板编码',
-    MODIFY COLUMN template_name varchar(100) NOT NULL COMMENT '模板名称',
+    MODIFY COLUMN template_name varchar(64) NOT NULL COMMENT '模板名称',
     MODIFY COLUMN template_type varchar(32) NOT NULL COMMENT '模板类型:report/application/loan',
     MODIFY COLUMN template_type_label varchar(32) NOT NULL COMMENT '模板类型中文名',
     MODIFY COLUMN category_code varchar(64) NOT NULL COMMENT '分类编码',
@@ -1949,7 +1949,7 @@ ALTER TABLE pm_document_template
     MODIFY COLUMN publish_status varchar(16) NULL DEFAULT 'ENABLED' COMMENT '发布状态',
     MODIFY COLUMN print_mode varchar(64) NULL COMMENT '打印方式',
     MODIFY COLUMN approval_flow varchar(64) NULL COMMENT '审批流程编码',
-    MODIFY COLUMN flow_name varchar(100) NULL COMMENT '审批流程名称',
+    MODIFY COLUMN flow_name varchar(64) NULL COMMENT '审批流程名称',
     MODIFY COLUMN payment_mode varchar(64) NULL COMMENT '付款联动模式',
     MODIFY COLUMN split_payment tinyint NULL DEFAULT 0 COMMENT '是否支持分期付款:1是 0否',
     MODIFY COLUMN travel_form varchar(64) NULL COMMENT '出差申请配置',
@@ -1969,7 +1969,7 @@ ALTER TABLE pm_document_template
 ALTER TABLE pm_document_write_off
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     MODIFY COLUMN source_document_code varchar(64) NOT NULL COMMENT '源单据编码',
-    MODIFY COLUMN source_field_key varchar(128) NOT NULL COMMENT '源字段标识',
+    MODIFY COLUMN source_field_key varchar(64) NOT NULL COMMENT '源字段标识',
     MODIFY COLUMN target_document_code varchar(64) NOT NULL COMMENT '目标单据编码',
     MODIFY COLUMN target_template_type varchar(32) NOT NULL COMMENT '目标模板类型',
     MODIFY COLUMN writeoff_source_kind varchar(32) NOT NULL COMMENT '核销来源类型',

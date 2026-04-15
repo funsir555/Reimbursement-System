@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -26,6 +31,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * ExpenseApprovalDomainSupport：领域规则支撑类。
+ * 承接 报销单审批的核心业务规则。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class ExpenseApprovalDomainSupport {
@@ -49,6 +59,9 @@ public class ExpenseApprovalDomainSupport {
     private final UserMapper userMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
 
+    /**
+     * 查询Pending审批列表。
+     */
     public List<ExpenseApprovalPendingItemVO> listPendingApprovals(Long userId) {
         List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -72,6 +85,9 @@ public class ExpenseApprovalDomainSupport {
         return expenseSummaryAssembler.toPendingItems(tasks, instanceMap);
     }
 
+    /**
+     * 审批通过任务。
+     */
     public ExpenseDocumentDetailVO approveTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
@@ -91,6 +107,9 @@ public class ExpenseApprovalDomainSupport {
         return expenseDocumentReadSupport.buildDocumentDetail(latest);
     }
 
+    /**
+     * 审批驳回任务。
+     */
     public ExpenseDocumentDetailVO rejectTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
@@ -107,12 +126,18 @@ public class ExpenseApprovalDomainSupport {
         );
     }
 
+    /**
+     * 获取任务Modify上下文。
+     */
     public ExpenseDocumentEditContextVO getTaskModifyContext(Long userId, Long taskId) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         return expenseDocumentTemplateSupport.buildEditContext(userId, instance, task.getId(), "MODIFY");
     }
 
+    /**
+     * 处理报销单审批中的这一步。
+     */
     public ExpenseDocumentDetailVO modifyTaskDocument(Long userId, String username, Long taskId, ExpenseDocumentUpdateDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
@@ -141,6 +166,9 @@ public class ExpenseApprovalDomainSupport {
         );
     }
 
+    /**
+     * 处理报销单审批中的这一步。
+     */
     public ExpenseDocumentDetailVO transferTask(Long userId, String username, Long taskId, ExpenseTaskTransferDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         User targetUser = requireActiveUser(dto == null ? null : dto.getTargetUserId());
@@ -170,6 +198,9 @@ public class ExpenseApprovalDomainSupport {
         );
     }
 
+    /**
+     * 处理报销单审批中的这一步。
+     */
     public ExpenseDocumentDetailVO addSignTask(Long userId, String username, Long taskId, ExpenseTaskAddSignDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         User targetUser = requireActiveUser(dto == null ? null : dto.getTargetUserId());
@@ -184,6 +215,9 @@ public class ExpenseApprovalDomainSupport {
         );
     }
 
+    /**
+     * 查询Action用户。
+     */
     public List<ExpenseActionUserOptionVO> searchActionUsers(Long userId, String keyword) {
         String normalizedKeyword = trimToNull(keyword);
         Map<Long, String> departmentNameMap = systemDepartmentMapper.selectList(
@@ -237,9 +271,14 @@ public class ExpenseApprovalDomainSupport {
         return user;
     }
 
+    /**
+     * 判断EffectiveApprovedStatus是否成立。
+     */
     private boolean isEffectiveApprovedStatus(String status) {
         String normalized = trimToNull(status);
         return Objects.equals(normalized, "APPROVED")
+                || Objects.equals(normalized, "COMPLETED")
+                || Objects.equals(normalized, "PENDING_PAYMENT")
                 || Objects.equals(normalized, "PAYMENT_COMPLETED")
                 || Objects.equals(normalized, "PAYMENT_FINISHED");
     }

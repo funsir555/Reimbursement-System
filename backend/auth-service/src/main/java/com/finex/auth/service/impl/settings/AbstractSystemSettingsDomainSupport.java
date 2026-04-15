@@ -1,3 +1,8 @@
+// 业务域：系统设置
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 组织、角色、公司信息和基础设置页面，下游会继续协调 公司、组织、角色、同步任务和系统参数。
+// 风险提醒：改坏后最容易影响 权限体系、组织架构和历史单据可用性。
+
 package com.finex.auth.service.impl.settings;
 
 import cn.hutool.core.util.StrUtil;
@@ -75,6 +80,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * AbstractSystemSettingsDomainSupport：领域规则支撑类。
+ * 承接 系统系统设置的核心业务规则。
+ * 改这里时，要特别关注 权限体系、组织架构和历史单据可用性是否会被一起带坏。
+ */
 @RequiredArgsConstructor
 abstract class AbstractSystemSettingsDomainSupport {
 
@@ -116,6 +126,9 @@ abstract class AbstractSystemSettingsDomainSupport {
     private final ObjectMapper objectMapper;
     private final List<OrganizationSyncAdapter> syncAdapters;
 
+    /**
+     * 获取初始化。
+     */
     protected SystemSettingsBootstrapVO getBootstrap(Long currentUserId) {
         SystemSettingsBootstrapVO bootstrap = new SystemSettingsBootstrapVO();
         bootstrap.setCurrentUser(buildCurrentUser(currentUserId));
@@ -130,6 +143,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return bootstrap;
     }
 
+    /**
+     * 查询Departments列表。
+     */
     protected List<DepartmentTreeNodeVO> listDepartments() {
         List<SystemDepartment> departments = systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
@@ -138,6 +154,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return buildDepartmentTree(departments);
     }
 
+    /**
+     * 创建Department。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected DepartmentTreeNodeVO createDepartment(DepartmentSaveDTO dto) {
         if (dto.getParentId() != null) {
@@ -163,6 +182,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findDepartmentNode(department.getId());
     }
 
+    /**
+     * 更新Department。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected DepartmentTreeNodeVO updateDepartment(Long id, DepartmentSaveDTO dto) {
         SystemDepartment department = requireDepartment(id);
@@ -191,6 +213,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findDepartmentNode(id);
     }
 
+    /**
+     * 删除Department。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteDepartment(Long id) {
         SystemDepartment department = requireDepartment(id);
@@ -213,6 +238,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 查询Employees列表。
+     */
     protected List<EmployeeVO> listEmployees(EmployeeQueryDTO query) {
         EmployeeQueryDTO payload = query == null ? new EmployeeQueryDTO() : query;
         LambdaQueryWrapper<User> wrapper = Wrappers.<User>lambdaQuery()
@@ -288,6 +316,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }).toList();
     }
 
+    /**
+     * 创建Employee。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected EmployeeVO createEmployee(EmployeeSaveDTO dto) {
         ensureUsernameUnique(dto.getUsername(), null);
@@ -310,6 +341,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findEmployee(user.getId());
     }
 
+    /**
+     * 更新Employee。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected EmployeeVO updateEmployee(Long id, EmployeeSaveDTO dto) {
         User user = requireUser(id);
@@ -330,6 +364,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findEmployee(id);
     }
 
+    /**
+     * 删除Employee。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteEmployee(Long id) {
         User user = requireUser(id);
@@ -347,6 +384,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 查询角色列表。
+     */
     protected List<RoleVO> listRoles() {
         List<SystemRole> roles = systemRoleMapper.selectList(
                 Wrappers.<SystemRole>lambdaQuery()
@@ -383,6 +423,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }).toList();
     }
 
+    /**
+     * 创建角色。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected RoleVO createRole(RoleSaveDTO dto) {
         SystemRole role = new SystemRole();
@@ -394,6 +437,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findRole(role.getId());
     }
 
+    /**
+     * 更新角色。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected RoleVO updateRole(Long id, RoleSaveDTO dto) {
         SystemRole role = requireRole(id);
@@ -407,6 +453,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findRole(id);
     }
 
+    /**
+     * 删除角色。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteRole(Long id) {
         SystemRole role = requireRole(id);
@@ -419,6 +468,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 处理系统系统设置中的这一步。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean assignRolePermissions(Long roleId, RolePermissionAssignDTO dto, Long currentUserId) {
         SystemRole role = requireRole(roleId);
@@ -446,6 +498,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 处理系统系统设置中的这一步。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean assignUserRoles(Long userId, UserRoleAssignDTO dto) {
         requireUser(userId);
@@ -478,6 +533,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 获取权限Tree。
+     */
     protected List<PermissionTreeNodeVO> getPermissionTree() {
         List<SystemPermission> permissions = systemPermissionMapper.selectList(
                 Wrappers.<SystemPermission>lambdaQuery()
@@ -511,6 +569,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return roots;
     }
 
+    /**
+     * 查询Companies列表。
+     */
     protected List<CompanyVO> listCompanies() {
         List<SystemCompany> companies = systemCompanyMapper.selectList(
                 Wrappers.<SystemCompany>lambdaQuery()
@@ -519,6 +580,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return buildCompanyList(companies);
     }
 
+    /**
+     * 创建公司。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected CompanyVO createCompany(CompanySaveDTO dto) {
         CompanyCodeBundle codeBundle = generateCompanyCodes();
@@ -530,6 +594,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findCompany(company.getCompanyId());
     }
 
+    /**
+     * 更新公司。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected CompanyVO updateCompany(String companyId, CompanySaveDTO dto) {
         SystemCompany company = requireCompany(companyId);
@@ -539,6 +606,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findCompany(companyId);
     }
 
+    /**
+     * 删除公司。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteCompany(String companyId) {
         requireCompany(companyId);
@@ -564,6 +634,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 查询公司银行账户列表。
+     */
     protected List<CompanyBankAccountVO> listCompanyBankAccounts() {
         List<SystemCompanyBankAccount> accounts = systemCompanyBankAccountMapper.selectList(
                 Wrappers.<SystemCompanyBankAccount>lambdaQuery()
@@ -583,6 +656,9 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .toList();
     }
 
+    /**
+     * 创建公司银行账户。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected CompanyBankAccountVO createCompanyBankAccount(CompanyBankAccountSaveDTO dto) {
         SystemCompanyBankAccount account = new SystemCompanyBankAccount();
@@ -595,6 +671,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findCompanyBankAccount(account.getId());
     }
 
+    /**
+     * 更新公司银行账户。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected CompanyBankAccountVO updateCompanyBankAccount(Long id, CompanyBankAccountSaveDTO dto) {
         SystemCompanyBankAccount account = requireCompanyBankAccount(id);
@@ -607,6 +686,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return findCompanyBankAccount(id);
     }
 
+    /**
+     * 删除公司银行账户。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteCompanyBankAccount(Long id) {
         requireCompanyBankAccount(id);
@@ -614,6 +696,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 查询同步Connectors列表。
+     */
     protected List<SyncConnectorVO> listSyncConnectors() {
         ensureDefaultConnectors();
         return systemSyncConnectorMapper.selectList(
@@ -621,6 +706,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         ).stream().map(this::toSyncConnectorVo).toList();
     }
 
+    /**
+     * 更新同步Connector。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected SyncConnectorVO updateSyncConnector(SyncConnectorSaveDTO dto) {
         ensureDefaultConnectors();
@@ -646,6 +734,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return toSyncConnectorVo(requireConnector(platformCode));
     }
 
+    /**
+     * 查询同步Jobs列表。
+     */
     protected List<SyncJobVO> listSyncJobs() {
         return systemSyncJobMapper.selectList(
                 Wrappers.<SystemSyncJob>lambdaQuery()
@@ -654,6 +745,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         ).stream().map(this::toSyncJobVo).toList();
     }
 
+    /**
+     * 执行同步。
+     */
     protected SyncJobVO runSync(SyncRunDTO dto, String operator) {
         ensureDefaultConnectors();
         List<String> platformCodes = dto == null || dto.getPlatformCodes() == null || dto.getPlatformCodes().isEmpty()
@@ -674,6 +768,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return lastJob;
     }
 
+    /**
+     * 执行Due同步Jobs。
+     */
     protected void runDueSyncJobs() {
         ensureDefaultConnectors();
         List<SystemSyncConnector> connectors = systemSyncConnectorMapper.selectList(
@@ -693,6 +790,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 执行同步。
+     */
     private SyncJobVO executeSync(SystemSyncConnector connector, String triggerType, String operator) {
         if (connector.getEnabled() == null || connector.getEnabled() != 1) {
             throw new IllegalArgumentException(resolvePlatformName(connector.getPlatformCode()) + " \u540c\u6b65\u672a\u542f\u7528");
@@ -931,6 +1031,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 删除ManagedDepartmentRecursively。
+     */
     private boolean deleteManagedDepartmentRecursively(Long jobId, SystemDepartment department, SyncStats stats) {
         List<SystemDepartment> children = systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getParentId, department.getId())
@@ -967,6 +1070,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return true;
     }
 
+    /**
+     * 组装当前用户。
+     */
     private UserProfileVO buildCurrentUser(Long userId) {
         User user = requireUser(userId);
         UserProfileVO currentUser = new UserProfileVO();
@@ -983,6 +1089,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return currentUser;
     }
 
+    /**
+     * 组装DepartmentTree。
+     */
     private List<DepartmentTreeNodeVO> buildDepartmentTree(List<SystemDepartment> departments) {
         if (departments == null || departments.isEmpty()) {
             return List.of();
@@ -1009,6 +1118,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return roots;
     }
 
+    /**
+     * 组装公司列表。
+     */
     private List<CompanyVO> buildCompanyList(List<SystemCompany> companies) {
         if (companies == null || companies.isEmpty()) {
             return List.of();
@@ -1028,6 +1140,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return result;
     }
 
+    /**
+     * 组装公司Name映射。
+     */
     private Map<String, String> buildCompanyNameMap(Set<String> companyIds) {
         if (companyIds == null || companyIds.isEmpty()) {
             return Map.of();
@@ -1105,6 +1220,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return node;
     }
 
+    /**
+     * 组装用户DisplayName映射。
+     */
     private Map<Long, String> buildUserDisplayNameMap(Collection<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Map.of();
@@ -1119,6 +1237,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         ));
     }
 
+    /**
+     * 解析映射Value。
+     */
     private <K, V> V resolveMapValue(Map<K, V> source, K key, V defaultValue) {
         if (source == null || source.isEmpty() || key == null) {
             return defaultValue;
@@ -1189,6 +1310,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 校验ConnectorSave。
+     */
     private void validateConnectorSave(String platformCode, SyncConnectorSaveDTO dto) {
         if (!PLATFORM_WECOM.equals(platformCode)) {
             return;
@@ -1197,6 +1321,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         requireConnectorField(dto.getAppSecret(), "\u4f01\u5fae\u901a\u8baf\u5f55 Secret");
     }
 
+    /**
+     * 校验Connector执行Config。
+     */
     private void validateConnectorRunConfig(String platformCode, Map<String, String> config) {
         if (!PLATFORM_WECOM.equals(platformCode)) {
             return;
@@ -1237,6 +1364,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return MatchResult.success(phoneUser != null ? phoneUser : emailUser);
     }
 
+    /**
+     * 组装同步用户名。
+     */
     private String buildSyncUsername(ExternalEmployeeData externalEmployee, String platformCode) {
         String preferred = trimToNull(externalEmployee.getUsername());
         if (preferred == null) {
@@ -1257,10 +1387,16 @@ abstract class AbstractSystemSettingsDomainSupport {
         return candidate;
     }
 
+    /**
+     * 组装JobNo。
+     */
     private String buildJobNo(String platformCode) {
         return platformCode + "-" + LocalDateTime.now().format(JOB_NO_FORMATTER);
     }
 
+    /**
+     * 组装Job汇总。
+     */
     private String buildJobSummary(SyncStats stats) {
         return "\u6210\u529f " + stats.successCount.get()
                 + "\uff0c\u8df3\u8fc7 " + stats.skippedCount.get()
@@ -1300,6 +1436,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 组装用户角色编码映射。
+     */
     private Map<Long, List<String>> buildUserRoleCodeMap(List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Map.of();
@@ -1329,6 +1468,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         ));
     }
 
+    /**
+     * 组装角色权限编码映射。
+     */
     private Map<Long, List<String>> buildRolePermissionCodeMap(List<Long> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) {
             return Map.of();
@@ -1358,6 +1500,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         ));
     }
 
+    /**
+     * 组装角色用户Id映射。
+     */
     private Map<Long, List<Long>> buildRoleUserIdMap(List<Long> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) {
             return Map.of();
@@ -1405,6 +1550,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 获取用户ExternalId。
+     */
     private String getUserExternalId(User user, String platformCode) {
         if (PLATFORM_DINGTALK.equals(platformCode)) {
             return user.getDingtalkUserId();
@@ -1418,6 +1566,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return null;
     }
 
+    /**
+     * 解析Employee业务Key。
+     */
     private String resolveEmployeeBusinessKey(ExternalEmployeeData externalEmployee) {
         if (StrUtil.isNotBlank(externalEmployee.getPhone())) {
             return normalizePhone(externalEmployee.getPhone());
@@ -1458,10 +1609,16 @@ abstract class AbstractSystemSettingsDomainSupport {
         department.setStatAreaBelong(trimToNull(dto.getStatAreaBelong()));
     }
 
+    /**
+     * 判断ManualEmployee是否成立。
+     */
     private boolean isManualEmployee(User user) {
         return SOURCE_MANUAL.equalsIgnoreCase(user.getSourceType()) || !isSyncManaged(user.getSyncManaged());
     }
 
+    /**
+     * 判断同步Managed是否成立。
+     */
     private boolean isSyncManaged(Integer syncManaged) {
         return syncManaged != null && syncManaged == 1;
     }
@@ -1474,6 +1631,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return value != null && value == 1 ? 1 : 0;
     }
 
+    /**
+     * 解析PlatformName。
+     */
     private String resolvePlatformName(String platformCode) {
         return switch (platformCode) {
             case PLATFORM_DINGTALK -> "\u9489\u9489";
@@ -1553,6 +1713,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 清理Other默认公司银行账户。
+     */
     private void clearOtherDefaultCompanyBankAccounts(String companyId, Long currentId) {
         List<SystemCompanyBankAccount> companyAccounts = systemCompanyBankAccountMapper.selectList(
                 Wrappers.<SystemCompanyBankAccount>lambdaQuery()
@@ -1568,10 +1731,16 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 判断默认账户是否成立。
+     */
     private boolean isDefaultAccount(SystemCompanyBankAccount account) {
         return account.getDefaultAccount() != null && account.getDefaultAccount() == 1;
     }
 
+    /**
+     * 查询Employee。
+     */
     private EmployeeVO findEmployee(Long userId) {
         return listEmployees(new EmployeeQueryDTO()).stream()
                 .filter(item -> Objects.equals(item.getUserId(), userId))
@@ -1579,6 +1748,9 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .orElseThrow(() -> new IllegalArgumentException("\u5458\u5de5\u4e0d\u5b58\u5728"));
     }
 
+    /**
+     * 查询DepartmentNode。
+     */
     private DepartmentTreeNodeVO findDepartmentNode(Long departmentId) {
         return flattenDepartmentNodes(listDepartments()).stream()
                 .filter(item -> Objects.equals(item.getId(), departmentId))
@@ -1586,6 +1758,9 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .orElseThrow(() -> new IllegalArgumentException("\u90e8\u95e8\u4e0d\u5b58\u5728"));
     }
 
+    /**
+     * 查询角色。
+     */
     private RoleVO findRole(Long roleId) {
         return listRoles().stream()
                 .filter(item -> Objects.equals(item.getId(), roleId))
@@ -1593,6 +1768,9 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .orElseThrow(() -> new IllegalArgumentException("\u89d2\u8272\u4e0d\u5b58\u5728"));
     }
 
+    /**
+     * 查询公司。
+     */
     private CompanyVO findCompany(String companyId) {
         Deque<CompanyVO> queue = new ArrayDeque<>(listCompanies());
         while (!queue.isEmpty()) {
@@ -1605,6 +1783,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         throw new IllegalArgumentException("\u516c\u53f8\u4e0d\u5b58\u5728");
     }
 
+    /**
+     * 查询公司银行账户。
+     */
     private CompanyBankAccountVO findCompanyBankAccount(Long id) {
         SystemCompanyBankAccount account = requireCompanyBankAccount(id);
         return toCompanyBankAccountVo(account, buildCompanyNameMap(Set.of(account.getCompanyId())));
@@ -1674,6 +1855,9 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .toList();
     }
 
+    /**
+     * 校验Department上级。
+     */
     private void validateDepartmentLeader(Long leaderUserId) {
         if (leaderUserId != null) {
             requireUser(leaderUserId);
@@ -1738,6 +1922,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
     }
 
+    /**
+     * 生成ManualDepartment编码。
+     */
     private String generateManualDepartmentCode() {
         String prefix = DEPARTMENT_CODE_PREFIX + LocalDate.now().format(CODE_DATE_FORMATTER);
         for (int attempt = 0; attempt < CODE_GENERATION_MAX_RETRY; attempt++) {
@@ -1756,6 +1943,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         throw new IllegalStateException("\u90e8\u95e8\u7f16\u7801\u81ea\u52a8\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5");
     }
 
+    /**
+     * 生成角色编码。
+     */
     private String generateRoleCode() {
         for (int attempt = 0; attempt < CODE_GENERATION_MAX_RETRY; attempt++) {
             int maxSequence = systemRoleMapper.selectList(
@@ -1788,6 +1978,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         return Integer.parseInt(sequencePart);
     }
 
+    /**
+     * 判断SuperAdmin角色是否成立。
+     */
     private boolean isSuperAdminRole(SystemRole role) {
         return role != null && SUPER_ADMIN_ROLE_CODE.equalsIgnoreCase(StrUtil.blankToDefault(role.getRoleCode(), ""));
     }
@@ -1800,6 +1993,9 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .anyMatch(roleCode -> SUPER_ADMIN_ROLE_CODE.equalsIgnoreCase(roleCode));
     }
 
+    /**
+     * 查询SuperAdmin角色Id。
+     */
     private Long findSuperAdminRoleId() {
         return systemRoleMapper.selectList(
                 Wrappers.<SystemRole>lambdaQuery()
@@ -1808,6 +2004,9 @@ abstract class AbstractSystemSettingsDomainSupport {
         ).stream().findFirst().map(SystemRole::getId).orElse(null);
     }
 
+    /**
+     * 生成公司编码。
+     */
     private CompanyCodeBundle generateCompanyCodes() {
         String datePart = LocalDate.now().format(CODE_DATE_FORMATTER);
         String companyIdPrefix = COMPANY_ID_PREFIX + datePart;

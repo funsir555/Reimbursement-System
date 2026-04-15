@@ -1,3 +1,8 @@
+// 业务域：异步任务
+// 文件角色：后台执行类
+// 上下游关系：上游通常来自 异步提交、查询和通知相关接口，下游会继续协调 任务记录、状态更新和通知消息。
+// 风险提醒：改坏后最容易影响 任务重复提交、异步状态不准确和结果回传。
+
 package com.finex.auth.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +40,11 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+/**
+ * AsyncTaskWorker：后台执行类。
+ * 在后台真正执行 异步任务这一段耗时或批处理流程。
+ * 改这里时，要特别关注 任务重复提交、异步状态不准确和结果回传是否会被一起带坏。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -47,6 +57,9 @@ public class AsyncTaskWorker {
     private final ObjectMapper objectMapper;
     private final DownloadStorageService downloadStorageService;
 
+    /**
+     * 执行Export任务。
+     */
     @Async("finexAsyncExecutor")
     public void runExportTask(Long taskId) {
         AsyncTaskRecord task = requireTask(taskId);
@@ -82,6 +95,9 @@ public class AsyncTaskWorker {
         }
     }
 
+    /**
+     * 执行报销单Export任务。
+     */
     @Async("finexAsyncExecutor")
     public void runExpenseExportTask(Long taskId) {
         AsyncTaskRecord task = requireTask(taskId);
@@ -131,6 +147,9 @@ public class AsyncTaskWorker {
         }
     }
 
+    /**
+     * 执行发票Verify任务。
+     */
     @Async("finexAsyncExecutor")
     public void runInvoiceVerifyTask(Long taskId) {
         AsyncTaskRecord task = requireTask(taskId);
@@ -167,6 +186,9 @@ public class AsyncTaskWorker {
         }
     }
 
+    /**
+     * 执行发票Ocr任务。
+     */
     @Async("finexAsyncExecutor")
     public void runInvoiceOcrTask(Long taskId) {
         AsyncTaskRecord task = requireTask(taskId);
@@ -203,6 +225,9 @@ public class AsyncTaskWorker {
         }
     }
 
+    /**
+     * 加载报销单汇总Rows。
+     */
     private List<ExpenseSummaryVO> loadExpenseSummaryRows(Long userId, ExpenseExportSubmitDTO payload) {
         Set<String> documentCodes = payload.getDocumentCodes() == null ? Set.of() : Set.copyOf(payload.getDocumentCodes());
         List<ExpenseSummaryVO> rows = switch (payload.getScene()) {
@@ -220,6 +245,9 @@ public class AsyncTaskWorker {
         return filtered;
     }
 
+    /**
+     * 加载Pending审批Rows。
+     */
     private List<ExpenseApprovalPendingItemVO> loadPendingApprovalRows(Long userId, ExpenseExportSubmitDTO payload) {
         Set<Long> taskIds = payload.getTaskIds() == null ? Set.of() : Set.copyOf(payload.getTaskIds());
         List<ExpenseApprovalPendingItemVO> filtered = expenseDocumentService.listPendingApprovals(userId).stream()
@@ -231,6 +259,9 @@ public class AsyncTaskWorker {
         return filtered;
     }
 
+    /**
+     * 组装报销单汇总Workbook。
+     */
     private byte[] buildExpenseSummaryWorkbook(String sheetName, List<ExpenseSummaryVO> rows) {
         String[] headers = new String[] {
                 "单据编号", "备用编号", "单据类型", "标题", "事由", "模板名称", "模板类型", "模板类型标签",
@@ -276,6 +307,9 @@ public class AsyncTaskWorker {
         }
     }
 
+    /**
+     * 组装Pending审批Workbook。
+     */
     private byte[] buildPendingApprovalWorkbook(String sheetName, List<ExpenseApprovalPendingItemVO> rows) {
         String[] headers = new String[] {
                 "任务 ID", "单据编号", "标题", "事由", "模板名称", "模板类型", "模板类型标签",
@@ -361,6 +395,9 @@ public class AsyncTaskWorker {
                 .collect(Collectors.joining("、"));
     }
 
+    /**
+     * 解析SheetName。
+     */
     private String resolveSheetName(ExpenseExportSubmitDTO payload) {
         return switch (payload.getScene()) {
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES -> "我的报销";
@@ -396,6 +433,9 @@ public class AsyncTaskWorker {
         asyncTaskRecordMapper.updateById(task);
     }
 
+    /**
+     * 更新任务。
+     */
     private void updateTask(AsyncTaskRecord task, int progress, String message) {
         task.setProgress(progress);
         task.setResultMessage(message);
@@ -418,6 +458,9 @@ public class AsyncTaskWorker {
         asyncTaskRecordMapper.updateById(task);
     }
 
+    /**
+     * 更新下载。
+     */
     private void updateDownload(Long downloadRecordId, Integer progress, String status, String fileSize, LocalDateTime finishedAt) {
         if (downloadRecordId == null) {
             return;

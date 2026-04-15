@@ -1,3 +1,8 @@
+// 业务域：流程模板与流程配置
+// 文件角色：service 入口实现
+// 上下游关系：上游通常来自 流程管理页面对应的 Controller，下游会继续协调 流程模板、报销类型、自定义档案和发布状态。
+// 风险提醒：改坏后最容易影响 审批路由、模板发布和后续单据流转。
+
 package com.finex.auth.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -5,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ProcessFlowConditionFieldVO;
+import com.finex.auth.dto.ProcessFlowConditionDTO;
 import com.finex.auth.dto.ProcessFlowConditionGroupDTO;
 import com.finex.auth.dto.ProcessFlowConfigOptionVO;
 import com.finex.auth.dto.ProcessFlowDetailVO;
@@ -57,12 +63,19 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * ProcessFlowDesignServiceImpl：service 入口实现。
+ * 接住上层请求，并把 流程流程设计相关流程分发到更细的规则组件。
+ * 改这里时，要特别关注 审批路由、模板发布和后续单据流转是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
 
     private static final DateTimeFormatter CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final int PM_NAME_MAX_LENGTH = 64;
+    private static final int PM_FIELD_KEY_MAX_LENGTH = 64;
 
     private static final String FLOW_STATUS_DRAFT = "DRAFT";
     private static final String FLOW_STATUS_ENABLED = "ENABLED";
@@ -122,6 +135,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     private final ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 查询流程列表。
+     */
     @Override
     public List<ProcessFlowSummaryVO> listFlows() {
         List<ProcessFlow> flows = processFlowMapper.selectList(
@@ -162,6 +178,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         }).toList();
     }
 
+    /**
+     * 获取流程元数据。
+     */
     @Override
     public ProcessFlowMetaVO getFlowMeta() {
         ProcessFlowMetaVO meta = new ProcessFlowMetaVO();
@@ -255,11 +274,17 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return meta;
     }
 
+    /**
+     * 获取流程明细。
+     */
     @Override
     public ProcessFlowDetailVO getFlowDetail(Long id) {
         return buildFlowDetail(requireFlow(id));
     }
 
+    /**
+     * 创建流程。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowDetailVO createFlow(ProcessFlowSaveDTO dto) {
@@ -278,6 +303,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return buildFlowDetail(requireFlow(flow.getId()));
     }
 
+    /**
+     * 更新流程。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowDetailVO updateFlow(Long id, ProcessFlowSaveDTO dto) {
@@ -304,6 +332,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return buildFlowDetail(requireFlow(id));
     }
 
+    /**
+     * 发布流程。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowDetailVO publishFlow(Long id) {
@@ -311,7 +342,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ProcessFlowVersion draftVersion = currentDraftVersion(flow);
         if (draftVersion == null) {
             if (currentPublishedVersion(flow) == null) {
-                throw new IllegalStateException("褰撳墠娴佺▼娌℃湁鍙彂甯冪殑鑽夌鐗堟湰");
+                throw new IllegalStateException("\u5f53\u524d\u6d41\u7a0b\u6ca1\u6709\u53ef\u53d1\u5e03\u7684\u8349\u7a3f\u7248\u672c");
             }
             flow.setStatus(FLOW_STATUS_ENABLED);
             processFlowMapper.updateById(flow);
@@ -335,6 +366,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return buildFlowDetail(requireFlow(id));
     }
 
+    /**
+     * 更新流程Status。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateFlowStatus(Long id, String status) {
@@ -348,16 +382,21 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return Boolean.TRUE;
     }
 
+    /**
+     * 创建流程Scene。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowSceneVO createFlowScene(ProcessFlowSceneSaveDTO dto) {
-        if (dto.getSceneName() == null || dto.getSceneName().trim().isEmpty()) {
-            throw new IllegalStateException("娴佺▼鍦烘櫙鍚嶇О涓嶈兘涓虹┖");
+        String sceneName = trimToNull(dto.getSceneName());
+        if (sceneName == null) {
+            throw new IllegalStateException("\u573a\u666f\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
         }
+        validatePmNameLength(sceneName, "\u573a\u666f\u540d\u79f0");
 
         ProcessFlowScene scene = new ProcessFlowScene();
         scene.setSceneCode(buildSceneCode());
-        scene.setSceneName(dto.getSceneName().trim());
+        scene.setSceneName(sceneName);
         scene.setSceneDescription(trimToNull(dto.getSceneDescription()));
         scene.setStatus(dto.getStatus() == null ? 1 : (dto.getStatus() == 0 ? 0 : 1));
         processFlowSceneMapper.insert(scene);
@@ -427,6 +466,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return result;
     }
 
+    /**
+     * 查询Published流程选项。
+     */
     @Override
     public List<ProcessFormOptionVO> listPublishedFlowOptions() {
         return processFlowMapper.selectList(
@@ -437,6 +479,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ).stream().map(item -> option(item.getFlowName(), item.getFlowCode())).toList();
     }
 
+    /**
+     * 处理流程流程设计中的这一步。
+     */
     @Override
     public Map<String, String> publishedFlowLabelMap() {
         return processFlowMapper.selectList(
@@ -451,6 +496,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ));
     }
 
+    /**
+     * 组装流程明细。
+     */
     private ProcessFlowDetailVO buildFlowDetail(ProcessFlow flow) {
         ProcessFlowDetailVO detail = new ProcessFlowDetailVO();
         detail.setId(flow.getId());
@@ -474,12 +522,64 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return detail;
     }
 
+    /**
+     * 校验流程Save。
+     */
     private void validateFlowSave(ProcessFlowSaveDTO dto) {
-        if (dto.getFlowName() == null || dto.getFlowName().trim().isEmpty()) {
-            throw new IllegalStateException("娴佺▼鍚嶇О涓嶈兘涓虹┖");
+        String flowName = trimToNull(dto.getFlowName());
+        if (flowName == null) {
+            throw new IllegalStateException("\u6d41\u7a0b\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
         }
+        validatePmNameLength(flowName, "\u6d41\u7a0b\u540d\u79f0");
         normalizeNodes(dto.getNodes());
         normalizeRoutes(dto.getRoutes());
+
+        Set<String> validConditionFieldKeys = buildConditionFields().stream()
+                .map(ProcessFlowConditionFieldVO::getKey)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<Long> validSceneIds = processFlowSceneMapper.selectList(
+                Wrappers.<ProcessFlowScene>lambdaQuery()
+                        .eq(ProcessFlowScene::getStatus, 1)
+        ).stream().map(ProcessFlowScene::getId).collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (dto.getNodes() != null) {
+            for (int index = 0; index < dto.getNodes().size(); index++) {
+                ProcessFlowNodeDTO node = dto.getNodes().get(index);
+                validatePmNameLength(node.getNodeName(), "\u7b2c " + (index + 1) + " \u4e2a\u8282\u70b9\u540d\u79f0");
+                if (node.getSceneId() != null && !validSceneIds.contains(node.getSceneId())) {
+                    throw new IllegalStateException("\u7b2c " + (index + 1) + " \u4e2a\u8282\u70b9\u7ed1\u5b9a\u7684\u573a\u666f\u5df2\u5931\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9");
+                }
+            }
+        }
+
+        if (dto.getRoutes() != null) {
+            for (int routeIndex = 0; routeIndex < dto.getRoutes().size(); routeIndex++) {
+                ProcessFlowRouteDTO route = dto.getRoutes().get(routeIndex);
+                validatePmNameLength(route.getRouteName(), "\u7b2c " + (routeIndex + 1) + " \u6761\u5206\u652f\u540d\u79f0");
+                if (route.getConditionGroups() == null) {
+                    continue;
+                }
+                for (int groupIndex = 0; groupIndex < route.getConditionGroups().size(); groupIndex++) {
+                    ProcessFlowConditionGroupDTO group = route.getConditionGroups().get(groupIndex);
+                    if (group.getConditions() == null) {
+                        continue;
+                    }
+                    for (int conditionIndex = 0; conditionIndex < group.getConditions().size(); conditionIndex++) {
+                        ProcessFlowConditionDTO condition = group.getConditions().get(conditionIndex);
+                        String fieldKey = trimToNull(condition.getFieldKey());
+                        if (fieldKey == null) {
+                            continue;
+                        }
+                        if (fieldKey.length() > PM_FIELD_KEY_MAX_LENGTH) {
+                            throw new IllegalStateException("\u7b2c " + (routeIndex + 1) + " \u6761\u5206\u652f\u7b2c " + (groupIndex + 1) + " \u7ec4\u7b2c " + (conditionIndex + 1) + " \u4e2a\u6761\u4ef6\u5b57\u6bb5\u6807\u8bc6\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
+                        }
+                        if (!validConditionFieldKeys.contains(fieldKey)) {
+                            throw new IllegalStateException("\u7b2c " + (routeIndex + 1) + " \u6761\u5206\u652f\u7b2c " + (groupIndex + 1) + " \u7ec4\u7b2c " + (conditionIndex + 1) + " \u4e2a\u6761\u4ef6\u5b57\u6bb5\u5df2\u5931\u6548\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private void normalizeNodes(List<ProcessFlowNodeDTO> nodes) {
@@ -494,7 +594,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 node.setNodeKey("node-" + (index + 1));
             }
             if (!nodeKeys.add(node.getNodeKey())) {
-                throw new IllegalStateException("娴佺▼鑺傜偣鏍囪瘑涓嶈兘閲嶅");
+                throw new IllegalStateException("\u8282\u70b9\u6807\u8bc6\u4e0d\u80fd\u91cd\u590d");
             }
             if (node.getDisplayOrder() == null) {
                 node.setDisplayOrder(index + 1);
@@ -504,6 +604,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             if (node.getNodeName() == null || node.getNodeName().trim().isEmpty()) {
                 node.setNodeName(defaultNodeName(node.getNodeType(), index + 1));
             }
+            validatePmNameLength(node.getNodeName(), "\u7b2c " + (index + 1) + " \u4e2a\u8282\u70b9\u540d\u79f0");
             node.setConfig(normalizeNodeConfig(node.getNodeType(), node.getConfig(), true));
         }
     }
@@ -520,7 +621,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 route.setRouteKey("route-" + (index + 1));
             }
             if (!routeKeys.add(route.getRouteKey())) {
-                throw new IllegalStateException("娴佺▼鍒嗘敮鏍囪瘑涓嶈兘閲嶅");
+                throw new IllegalStateException("\u5206\u652f\u6807\u8bc6\u4e0d\u80fd\u91cd\u590d");
             }
             if (route.getPriority() == null) {
                 route.setPriority(index + 1);
@@ -528,6 +629,14 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             if (route.getConditionGroups() == null) {
                 route.setConditionGroups(new ArrayList<>());
             }
+            validatePmNameLength(route.getRouteName(), "\u7b2c " + (index + 1) + " \u6761\u5206\u652f\u540d\u79f0");
+        }
+    }
+
+    private void validatePmNameLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > PM_NAME_MAX_LENGTH) {
+            throw new IllegalStateException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
         }
     }
 
@@ -610,6 +719,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return config;
     }
 
+    /**
+     * 创建DraftVersion。
+     */
     private ProcessFlowVersion createDraftVersion(Long flowId, int versionNo, ProcessFlowSaveDTO dto) {
         ProcessFlowVersion version = new ProcessFlowVersion();
         version.setFlowId(flowId);
@@ -658,6 +770,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         }
     }
 
+    /**
+     * 加载VersionNodes。
+     */
     private List<ProcessFlowNodeDTO> loadVersionNodes(Long versionId) {
         return processFlowNodeMapper.selectList(
                 Wrappers.<ProcessFlowNode>lambdaQuery()
@@ -676,6 +791,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         }).toList();
     }
 
+    /**
+     * 加载VersionRoutes。
+     */
     private List<ProcessFlowRouteDTO> loadVersionRoutes(Long versionId) {
         return processFlowRouteMapper.selectList(
                 Wrappers.<ProcessFlowRoute>lambdaQuery()
@@ -694,6 +812,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         }).toList();
     }
 
+    /**
+     * 解析ManagerMembers。
+     */
     private List<User> resolveManagerMembers(Map<String, Object> config, Map<String, Object> context, List<String> trace) {
         Map<String, Object> managerConfig = normalizeManagerConfig(config.get("managerConfig"));
         String ruleMode = asText(managerConfig.get("ruleMode"), MANAGER_RULE_MODE_FORM_DEPT_MANAGER);
@@ -738,6 +859,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return result;
     }
 
+    /**
+     * 查询上级ForDepartment。
+     */
     private User findLeaderForDepartment(
             SystemDepartment targetDept,
             Map<Long, SystemDepartment> departmentMap,
@@ -773,6 +897,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return user;
     }
 
+    /**
+     * 解析上级。
+     */
     private LeaderResolution resolveLeader(
             SystemDepartment startDept,
             Map<Long, SystemDepartment> departmentMap,
@@ -796,6 +923,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return null;
     }
 
+    /**
+     * 解析DesignatedMembers。
+     */
     private List<User> resolveDesignatedMembers(Map<String, Object> config, List<String> trace) {
         List<Long> userIds = toLongList(toObjectMap(config.get("designatedMemberConfig")).get("userIds"));
         if (userIds.isEmpty()) {
@@ -806,6 +936,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return loadActiveUsers(userIds);
     }
 
+    /**
+     * 解析ManualMembers。
+     */
     private List<User> resolveManualMembers(Map<String, Object> context, List<String> trace) {
         List<Long> userIds = toLongList(context == null ? null : context.get("manualSelectedUserIds"));
         if (userIds.isEmpty()) {
@@ -816,6 +949,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return loadActiveUsers(userIds);
     }
 
+    /**
+     * 解析StartDeptIds。
+     */
     private List<Long> resolveStartDeptIds(String deptSource, Map<String, Object> context) {
         if (DEPT_SOURCE_SUBMITTER.equals(deptSource)) {
             Long submitterDeptId = asLong(context == null ? null : context.get("submitterDeptId"));
@@ -839,6 +975,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return current;
     }
 
+    /**
+     * 加载Version映射。
+     */
     private Map<Long, ProcessFlowVersion> loadVersionMap(Collection<Long> versionIds) {
         if (versionIds == null || versionIds.isEmpty()) {
             return Collections.emptyMap();
@@ -876,6 +1015,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return null;
     }
 
+    /**
+     * 解析EditableVersion。
+     */
     private ProcessFlowVersion resolveEditableVersion(ProcessFlow flow) {
         ProcessFlowVersion draft = currentDraftVersion(flow);
         return draft != null ? draft : currentPublishedVersion(flow);
@@ -899,6 +1041,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return versions.isEmpty() ? 1 : versions.get(0).getVersionNo() + 1;
     }
 
+    /**
+     * 组装流程编码。
+     */
     private String buildFlowCode() {
         String prefix = "PF" + LocalDate.now().format(CODE_DATE_FORMATTER);
         Long count = processFlowMapper.selectCount(
@@ -907,6 +1052,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return prefix + String.format("%04d", (count == null ? 0L : count) + 1);
     }
 
+    /**
+     * 组装Scene编码。
+     */
     private String buildSceneCode() {
         String prefix = "PS" + LocalDate.now().format(CODE_DATE_FORMATTER);
         Long count = processFlowSceneMapper.selectCount(
@@ -915,6 +1063,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return prefix + String.format("%04d", (count == null ? 0L : count) + 1);
     }
 
+    /**
+     * 加载Scene选项。
+     */
     private List<ProcessFlowSceneVO> loadSceneOptions() {
         return processFlowSceneMapper.selectList(
                 Wrappers.<ProcessFlowScene>lambdaQuery()
@@ -933,6 +1084,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return item;
     }
 
+    /**
+     * 组装Level选项。
+     */
     private List<ProcessFormOptionVO> buildLevelOptions(String pattern) {
         List<ProcessFormOptionVO> result = new ArrayList<>();
         for (int level = 1; level <= 10; level++) {
@@ -941,6 +1095,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return result;
     }
 
+    /**
+     * 组装Condition字段。
+     */
     private List<ProcessFlowConditionFieldVO> buildConditionFields() {
         return List.of(
                 conditionField("submitterDeptId", "提单人部门", "department", List.of("EQ", "NE", "IN", "NOT_IN")),
@@ -962,6 +1119,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return item;
     }
 
+    /**
+     * 加载Department选项。
+     */
     private List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
@@ -970,6 +1130,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ).stream().map(item -> option(item.getDeptName(), String.valueOf(item.getId()))).toList();
     }
 
+    /**
+     * 加载用户选项。
+     */
     private List<ProcessFormOptionVO> loadUserOptions() {
         return userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
@@ -978,6 +1141,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ).stream().map(item -> option(normalizeUserName(item), String.valueOf(item.getId()))).toList();
     }
 
+    /**
+     * 加载报销单类型选项。
+     */
     private List<ProcessFormOptionVO> loadExpenseTypeOptions() {
         return processExpenseTypeMapper.selectList(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -986,6 +1152,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ).stream().map(item -> option(item.getExpenseName(), item.getExpenseCode())).toList();
     }
 
+    /**
+     * 加载档案选项。
+     */
     private List<ProcessFormOptionVO> loadArchiveOptions() {
         return processCustomArchiveDesignMapper.selectList(
                 Wrappers.<ProcessCustomArchiveDesign>lambdaQuery()
@@ -994,6 +1163,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ).stream().map(item -> option(item.getArchiveName(), item.getArchiveCode())).toList();
     }
 
+    /**
+     * 加载全部Department映射。
+     */
     private Map<Long, SystemDepartment> loadAllDepartmentMap() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getStatus, 1)
@@ -1005,6 +1177,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         ));
     }
 
+    /**
+     * 加载DeptName映射。
+     */
     private Map<Long, String> loadDeptNameMap(List<Long> deptIds) {
         if (deptIds == null || deptIds.isEmpty()) {
             return Collections.emptyMap();
@@ -1019,6 +1194,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 ));
     }
 
+    /**
+     * 加载Active用户。
+     */
     private List<User> loadActiveUsers(List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Collections.emptyList();
@@ -1030,6 +1208,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 .toList();
     }
 
+    /**
+     * 加载Active用户。
+     */
     private User loadActiveUser(Long userId) {
         if (userId == null) {
             return null;
@@ -1038,6 +1219,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         return user != null && Objects.equals(user.getStatus(), 1) ? user : null;
     }
 
+    /**
+     * 校验Active用户。
+     */
     private void validateActiveUsers(List<Long> userIds) {
         if (loadActiveUsers(userIds).stream().map(User::getId).collect(Collectors.toCollection(LinkedHashSet::new)).size()
                 != new LinkedHashSet<>(userIds).size()) {
@@ -1113,10 +1297,10 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
 
     private String defaultNodeName(String nodeType, int index) {
         return switch (nodeType) {
-            case NODE_TYPE_CC -> "鎶勯€佽妭鐐?" + index;
-            case NODE_TYPE_PAYMENT -> "鏀粯鑺傜偣 " + index;
-            case NODE_TYPE_BRANCH -> "娴佺▼鍒嗘敮 " + index;
-            default -> "瀹℃壒鑺傜偣 " + index;
+            case NODE_TYPE_CC -> "\u6284\u9001\u8282\u70b9 " + index;
+            case NODE_TYPE_PAYMENT -> "\u652f\u4ed8\u8282\u70b9 " + index;
+            case NODE_TYPE_BRANCH -> "\u6d41\u7a0b\u5206\u652f " + index;
+            default -> "\u5ba1\u6279\u8282\u70b9 " + index;
         };
     }
 

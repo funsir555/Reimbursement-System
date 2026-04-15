@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -19,6 +24,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * ExpenseDetailSystemFieldSupport：通用支撑类。
+ * 封装 报销单明细系统字段这块可复用的业务能力。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Component
 @RequiredArgsConstructor
 public class ExpenseDetailSystemFieldSupport {
@@ -81,6 +91,9 @@ public class ExpenseDetailSystemFieldSupport {
     private final ObjectMapper objectMapper;
     private final ProcessExpenseTypeMapper processExpenseTypeMapper;
 
+    /**
+     * 处理报销单明细系统字段中的这一步。
+     */
     public Map<String, Object> readSchema(String schemaJson, String detailType) {
         if (trimToNull(schemaJson) == null) {
             return normalizeSchema(defaultSchema(), detailType);
@@ -93,6 +106,9 @@ public class ExpenseDetailSystemFieldSupport {
         }
     }
 
+    /**
+     * 处理报销单明细系统字段中的这一步。
+     */
     public String writeSchema(Map<String, Object> schema, String detailType) {
         try {
             return objectMapper.writeValueAsString(normalizeSchema(schema, detailType));
@@ -101,6 +117,9 @@ public class ExpenseDetailSystemFieldSupport {
         }
     }
 
+    /**
+     * 处理报销单明细系统字段中的这一步。
+     */
     public Map<String, Object> normalizeSchema(Map<String, Object> schema, String detailType) {
         String normalizedDetailType = normalizeDetailType(detailType);
         Map<String, Object> normalized = new LinkedHashMap<>();
@@ -137,6 +156,9 @@ public class ExpenseDetailSystemFieldSupport {
         return normalized;
     }
 
+    /**
+     * 处理报销单明细系统字段中的这一步。
+     */
     public Map<String, Object> defaultSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("layoutMode", "TWO_COLUMN");
@@ -144,6 +166,9 @@ public class ExpenseDetailSystemFieldSupport {
         return schema;
     }
 
+    /**
+     * 加载报销单类型选项。
+     */
     public List<ProcessFormOptionVO> loadExpenseTypeOptions() {
         return loadEnabledExpenseTypes().stream().map(item -> {
             ProcessFormOptionVO option = new ProcessFormOptionVO();
@@ -153,16 +178,25 @@ public class ExpenseDetailSystemFieldSupport {
         }).toList();
     }
 
+    /**
+     * 加载报销单类型发票FreeMode映射。
+     */
     public Map<String, String> loadExpenseTypeInvoiceFreeModeMap() {
         Map<String, String> result = new LinkedHashMap<>();
         loadEnabledExpenseTypes().forEach(item -> result.put(item.getExpenseCode(), trimToNull(item.getInvoiceFreeMode())));
         return result;
     }
 
+    /**
+     * 处理报销单明细系统字段中的这一步。
+     */
     public String normalizeDetailType(String detailType) {
         return Objects.equals(trimToNull(detailType), DETAIL_TYPE_ENTERPRISE) ? DETAIL_TYPE_ENTERPRISE : DETAIL_TYPE_NORMAL;
     }
 
+    /**
+     * 加载Enabled报销单类型。
+     */
     private List<ProcessExpenseType> loadEnabledExpenseTypes() {
         return processExpenseTypeMapper.selectList(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -209,6 +243,9 @@ public class ExpenseDetailSystemFieldSupport {
         return block;
     }
 
+    /**
+     * 创建系统Block。
+     */
     private Map<String, Object> createSystemBlock(String systemFieldCode, String detailType) {
         Map<String, Object> block = new LinkedHashMap<>();
         block.put("blockId", "system-" + SYSTEM_FIELD_KEYS.get(systemFieldCode));
@@ -224,6 +261,9 @@ public class ExpenseDetailSystemFieldSupport {
         return block;
     }
 
+    /**
+     * 组装系统字段Props。
+     */
     private Map<String, Object> buildSystemFieldProps(String systemFieldCode, String detailType) {
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("systemFieldCode", systemFieldCode);
@@ -271,6 +311,9 @@ public class ExpenseDetailSystemFieldSupport {
         return props;
     }
 
+    /**
+     * 加载报销单类型选项映射。
+     */
     private List<Map<String, Object>> loadExpenseTypeOptionMaps() {
         return loadExpenseTypeOptions().stream().map(item -> option(item.getLabel(), item.getValue())).toList();
     }
@@ -286,6 +329,9 @@ public class ExpenseDetailSystemFieldSupport {
         return Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE) ? ENTERPRISE_SYSTEM_FIELD_ORDER : NORMAL_SYSTEM_FIELD_ORDER;
     }
 
+    /**
+     * 判断系统字段AlwaysRequired是否成立。
+     */
     private boolean isSystemFieldAlwaysRequired(String systemFieldCode, String detailType) {
         if (Objects.equals(systemFieldCode, SYSTEM_EXPENSE_TYPE)
                 || Objects.equals(systemFieldCode, SYSTEM_BUSINESS_SCENARIO)
@@ -350,6 +396,9 @@ public class ExpenseDetailSystemFieldSupport {
         return permission;
     }
 
+    /**
+     * 复制映射。
+     */
     private Map<String, Object> copyMap(Object value) {
         if (!(value instanceof Map<?, ?> map)) {
             return new LinkedHashMap<>();

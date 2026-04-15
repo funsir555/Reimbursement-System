@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { FinanceAccountSubjectDetail, FinanceAccountSubjectMeta, FinanceAccountSubjectSavePayload, FinanceAccountSubjectSummary, FinanceCustomerDetail, FinanceCustomerSavePayload, FinanceCustomerSummary, FinanceProjectArchiveMeta, FinanceProjectClassSavePayload, FinanceProjectClassSummary, FinanceProjectDetail, FinanceProjectSavePayload, FinanceProjectSummary, FinanceVendorDetail, FinanceVendorSavePayload, FinanceVendorSummary } from './finance-archive-types'
+import type { FinanceAccountSubjectDetail, FinanceAccountSubjectMeta, FinanceAccountSubjectSavePayload, FinanceAccountSubjectSummary, FinanceCustomerDetail, FinanceCustomerSavePayload, FinanceCustomerSummary, FinanceDepartmentArchiveMeta, FinanceDepartmentQueryPayload, FinanceDepartmentSummary, FinanceProjectArchiveMeta, FinanceProjectClassSavePayload, FinanceProjectClassSummary, FinanceProjectDetail, FinanceProjectSavePayload, FinanceProjectSummary, FinanceVendorDetail, FinanceVendorSavePayload, FinanceVendorSummary } from './finance-archive-types'
 import type { EmployeeQueryPayload, EmployeeRecord, FinanceEmployeeArchiveMeta } from './system-settings-types'
 
 // 这一组方法供对应页面统一调用。
@@ -118,6 +118,13 @@ export const financeArchiveApi = {
         body: JSON.stringify({ bclose })
       }
     ),
+  getDepartmentArchiveMeta: () =>
+    request<FinanceDepartmentArchiveMeta>('/auth/finance/archives/departments/meta'),
+  queryDepartments: (payload: FinanceDepartmentQueryPayload = {}) =>
+    request<FinanceDepartmentSummary[]>('/auth/finance/archives/departments/query', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
   listCustomers: (params: { companyId: string; keyword?: string; includeDisabled?: boolean }) =>
     request<FinanceCustomerSummary[]>(`/auth/finance/archives/customers${buildQueryString(params)}`),
   getCustomerDetail: (companyId: string, customerCode: string) =>

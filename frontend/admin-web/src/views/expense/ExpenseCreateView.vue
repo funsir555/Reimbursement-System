@@ -248,6 +248,7 @@
             </div>
 
             <expense-runtime-form-editor
+              ref="runtimeEditorRef"
               v-model="formValuesModel"
               :schema="templateDetail?.schema || emptySchema"
               :shared-archives="templateDetail?.sharedArchives || []"
@@ -374,6 +375,7 @@ import {
   FIELD_ACTUAL_PAYMENT_AMOUNT
 } from './expenseDetailRuntime'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
+import { validateExpenseRuntimeSchema } from '@/views/process/pmValidation'
 
 type PageMode = 'create' | 'resubmit' | 'modify'
 type AsyncStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
@@ -412,6 +414,7 @@ const templateDetailStatus = ref<Exclude<AsyncStatus, 'empty'>>('idle')
 const templateDetailErrorMessage = ref('')
 const selectedTemplateCode = ref('')
 const templateDetail = ref<ExpenseCreateTemplateDetail | null>(null)
+const runtimeEditorRef = ref<InstanceType<typeof ExpenseRuntimeFormEditor> | null>(null)
 const currentDraftKey = ref('')
 const pageRootRef = ref<HTMLElement | null>(null)
 const floatingBarStyle = ref<Record<string, string>>({})
@@ -1199,6 +1202,14 @@ function saveDraftManually() {
 async function submitDocument() {
   if (!selectedTemplateCode.value || !templateDetail.value) {
     ElMessage.warning('请先选择模板')
+    return
+  }
+  const runtimeSchemaIssues = validateExpenseRuntimeSchema(templateDetail.value.schema || emptySchema)
+  if (runtimeSchemaIssues.length) {
+    ElMessage.warning(runtimeSchemaIssues[0])
+    return
+  }
+  if (runtimeEditorRef.value?.validateBeforeSubmit && !runtimeEditorRef.value.validateBeforeSubmit()) {
     return
   }
   if (isReportTemplate.value) {

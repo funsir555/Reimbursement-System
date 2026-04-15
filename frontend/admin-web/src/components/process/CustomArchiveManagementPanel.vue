@@ -104,7 +104,12 @@
 
             <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <el-form-item label="档案名称" required>
-                <el-input v-model="form.archiveName" placeholder="请输入档案名称" />
+                <el-input
+                  v-model="form.archiveName"
+                  :maxlength="PM_NAME_MAX_LENGTH"
+                  show-word-limit
+                  placeholder="请输入档案名称"
+                />
               </el-form-item>
 
               <el-form-item label="档案类型">
@@ -185,7 +190,12 @@
 
                 <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
                   <el-form-item label="结果名称" required>
-                    <el-input v-model="item.itemName" placeholder="请输入结果项名称" />
+                    <el-input
+                      v-model="item.itemName"
+                      :maxlength="PM_NAME_MAX_LENGTH"
+                      show-word-limit
+                      placeholder="请输入结果项名称"
+                    />
                   </el-form-item>
 
                   <el-form-item label="结果编码">
@@ -387,6 +397,7 @@ import {
   type ProcessCustomArchiveSavePayload,
   type ProcessCustomArchiveSummary
 } from '@/api'
+import { PM_NAME_MAX_LENGTH, validateArchiveRuleFieldKey, validateMaxLength } from '@/views/process/pmValidation'
 
 type ArchiveTypeValue = 'SELECT' | 'AUTO_RULE'
 
@@ -704,13 +715,22 @@ function validate(current: ProcessCustomArchiveDetail) {
   if (!current.archiveName.trim()) {
     throw new Error('请输入档案名称')
   }
+  const archiveNameIssue = validateMaxLength(current.archiveName, PM_NAME_MAX_LENGTH, '档案名称')
+  if (archiveNameIssue) {
+    throw new Error(archiveNameIssue)
+  }
   if (current.items.length === 0) {
     throw new Error('请至少保留一个结果项')
   }
+  const allowedFieldKeys = (meta.value?.ruleFields || []).map((field) => String(field.key || '').trim()).filter(Boolean)
 
   current.items.forEach((item, index) => {
     if (!item.itemName.trim()) {
       throw new Error(`请输入第 ${index + 1} 个结果项名称`)
+    }
+    const itemNameIssue = validateMaxLength(item.itemName, PM_NAME_MAX_LENGTH, `第 ${index + 1} 个结果项名称`)
+    if (itemNameIssue) {
+      throw new Error(itemNameIssue)
     }
 
     if (current.archiveType === 'AUTO_RULE') {
@@ -721,6 +741,10 @@ function validate(current: ProcessCustomArchiveDetail) {
       item.rules.forEach((rule, ruleIndex) => {
         if (!rule.fieldKey) {
           throw new Error(`第 ${index + 1} 个结果项的第 ${ruleIndex + 1} 条规则缺少字段`)
+        }
+        const fieldKeyIssue = validateArchiveRuleFieldKey(rule.fieldKey, allowedFieldKeys, index, ruleIndex)
+        if (fieldKeyIssue) {
+          throw new Error(fieldKeyIssue)
         }
         if (!rule.operator) {
           throw new Error(`第 ${index + 1} 个结果项的第 ${ruleIndex + 1} 条规则缺少运算符`)

@@ -237,7 +237,7 @@ describe('FinanceCustomerArchiveView', () => {
         {
           cCusCode: 'CUS001',
           cCusName: '广州客户',
-          cCusAbbName: '广州客',
+          cCusAbbName: '广州简称',
           cCusPerson: '张三',
           cCusHand: '13800000000',
           cCusBank: '建设银行',
@@ -249,21 +249,81 @@ describe('FinanceCustomerArchiveView', () => {
         }
       ]
     })
+    mocks.financeArchiveApi.getCustomerDetail.mockResolvedValue({
+      data: {
+        cCusCode: 'CUS001',
+        cCusName: '广州客户',
+        cCusAbbName: '广州简称',
+        cCusPerson: '张三',
+        cCusHand: '13800000000',
+        companyId: 'COMPANY_A',
+        active: true
+      }
+    })
     mocks.financeArchiveApi.createCustomer.mockResolvedValue({ data: { cCusCode: 'CUS001' } })
+    mocks.financeArchiveApi.updateCustomer.mockResolvedValue({ data: { cCusCode: 'CUS001' } })
     mocks.elMessageBox.confirm.mockResolvedValue(undefined)
   })
 
-  it('loads customers with the current finance company', async () => {
+  it('loads customer list rows with code, name and abbreviation', async () => {
     const wrapper = await mountView()
-    const vm = wrapper.vm as unknown as { customers: Array<{ cCusName: string }> }
+    const vm = wrapper.vm as unknown as { customers: Array<{ cCusCode: string; cCusName: string; cCusAbbName: string }> }
 
     expect(mocks.financeArchiveApi.listCustomers).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       keyword: '',
       includeDisabled: false
     })
-    expect(wrapper.text()).toContain('客户档案')
-    expect(vm.customers.map((item) => item.cCusName)).toEqual(['广州客户'])
+    expect(vm.customers).toEqual([
+      expect.objectContaining({
+        cCusCode: 'CUS001',
+        cCusName: '广州客户',
+        cCusAbbName: '广州简称'
+      })
+    ])
+    expect(vm.customers[0]?.cCusCode).toBe('CUS001')
+    expect(vm.customers[0]?.cCusName).toBe('广州客户')
+    expect(vm.customers[0]?.cCusAbbName).toBe('广州简称')
+  })
+
+  it('opens customer detail with the list code and hydrates the edit form', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openEditDialog: (customerCode: string) => Promise<void>
+      customerForm: Record<string, string | number | undefined>
+    }
+
+    await vm.openEditDialog('CUS001')
+
+    expect(mocks.financeArchiveApi.getCustomerDetail).toHaveBeenCalledWith('COMPANY_A', 'CUS001')
+    expect(vm.customerForm.cCusCode).toBe('CUS001')
+    expect(vm.customerForm.cCusName).toBe('广州客户')
+    expect(vm.customerForm.cCusAbbName).toBe('广州简称')
+  })
+
+  it('updates customer records with the same camel-case payload contract', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openEditDialog: (customerCode: string) => Promise<void>
+      customerForm: Record<string, string | number | undefined>
+      saveCustomer: () => Promise<void>
+    }
+
+    await vm.openEditDialog('CUS001')
+    vm.customerForm.cCusName = '深圳客户'
+    vm.customerForm.cCusAbbName = '深圳简称'
+    await vm.saveCustomer()
+
+    expect(mocks.financeArchiveApi.updateCustomer).toHaveBeenCalledWith(
+      'COMPANY_A',
+      'CUS001',
+      expect.objectContaining({
+        companyId: 'COMPANY_A',
+        cCusName: '深圳客户',
+        cCusAbbName: '深圳简称'
+      })
+    )
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('客户档案已更新')
   })
 
   it('creates customer records with the current company context', async () => {
@@ -288,6 +348,40 @@ describe('FinanceCustomerArchiveView', () => {
       })
     )
     expect(mocks.elMessage.success).toHaveBeenCalledWith('客户档案已创建')
+  })
+
+  it('blocks customer save when a tightened field exceeds the limit', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCreateDialog: () => void
+      customerForm: Record<string, string | number | undefined>
+      saveCustomer: () => Promise<void>
+    }
+
+    vm.openCreateDialog()
+    vm.customerForm.cCusName = '深圳客户'
+    vm.customerForm.cCusCode = 'C'.repeat(65)
+    await vm.saveCustomer()
+
+    expect(mocks.financeArchiveApi.createCustomer).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('客户编码最多 64 个字符')
+  })
+
+  it('blocks customer save when a bank field exceeds the tightened length limit', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCreateDialog: () => void
+      customerForm: Record<string, string | number | undefined>
+      saveCustomer: () => Promise<void>
+    }
+
+    vm.openCreateDialog()
+    vm.customerForm.cCusName = '深圳客户'
+    vm.customerForm.cCusBank = 'B'.repeat(129)
+    await vm.saveCustomer()
+
+    expect(mocks.financeArchiveApi.createCustomer).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('开户银行最多 128 个字符')
   })
 
   it('registers a company switch guard while editing', async () => {

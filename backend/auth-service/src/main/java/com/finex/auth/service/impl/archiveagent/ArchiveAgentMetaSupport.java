@@ -1,3 +1,8 @@
+// 业务域：档案代理与归档任务
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 档案代理配置接口和后台调度，下游会继续协调 归档规则、执行记录和调度计划。
+// 风险提醒：改坏后最容易影响 档案归集效果、执行漏掉和后续追溯。
+
 package com.finex.auth.service.impl.archiveagent;
 
 import com.finex.auth.dto.ArchiveAgentMetaVO;
@@ -6,12 +11,23 @@ import com.finex.auth.support.archiveagent.ArchiveAgentSupport;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * ArchiveAgentMetaSupport：通用支撑类。
+ * 封装 档案代理这块可复用的业务能力。
+ * 改这里时，要特别关注 档案归集效果、执行漏掉和后续追溯是否会被一起带坏。
+ */
 public class ArchiveAgentMetaSupport extends AbstractArchiveAgentSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ArchiveAgentMetaSupport(Dependencies dependencies) {
         super(dependencies);
     }
 
+    /**
+     * 获取元数据。
+     */
     public ArchiveAgentMetaVO getMeta() {
         ArchiveAgentMetaVO meta = new ArchiveAgentMetaVO();
         meta.setModelProviders(List.of(

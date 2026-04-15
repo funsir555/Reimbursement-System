@@ -11,6 +11,7 @@
       <el-form-item :label="accountNameLabel" :required="required" class="!mb-0">
         <el-input
           v-model="accountNameModel"
+          :maxlength="128"
           :placeholder="required ? '请输入开户名/收款人姓名' : '请输入开户名/收款人姓名'"
         />
       </el-form-item>
@@ -18,6 +19,7 @@
       <el-form-item label="联行号" class="!mb-0">
         <el-input
           v-model="cnapsCodeModel"
+          :maxlength="64"
           placeholder="请输入联行号"
           :suffix-icon="Search"
           @blur="handleCnapsLookup"
@@ -49,6 +51,7 @@
       <el-form-item label="银行账号" :required="required" class="!mb-0">
         <el-input
           v-model="accountNoModel"
+          :maxlength="64"
           placeholder="请输入银行账号"
         />
       </el-form-item>

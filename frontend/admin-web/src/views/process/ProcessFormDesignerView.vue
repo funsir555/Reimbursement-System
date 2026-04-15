@@ -126,7 +126,12 @@
         <div class="space-y-6">
           <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,0.9fr)]">
             <el-form-item :label="designerNameLabel" required class="!mb-0">
-              <el-input v-model="working.formName" :placeholder="`请输入${designerNameLabel}`" />
+              <el-input
+                v-model="working.formName"
+                :maxlength="PM_NAME_MAX_LENGTH"
+                show-word-limit
+                :placeholder="`请输入${designerNameLabel}`"
+              />
             </el-form-item>
 
             <el-form-item :label="designerCodeLabel" class="!mb-0">
@@ -306,7 +311,14 @@
             <el-tab-pane label="字段属性" name="properties">
               <div class="space-y-6">
                 <el-form-item label="显示字段" class="!mb-0"><el-input v-model="selectedBlock.label" placeholder="请输入显示字段" /></el-form-item>
-                <el-form-item label="字段标识" class="!mb-0"><el-input v-model="selectedBlock.fieldKey" placeholder="请输入字段标识" /></el-form-item>
+                <el-form-item label="字段标识" class="!mb-0">
+                  <el-input
+                    v-model="selectedBlock.fieldKey"
+                    :maxlength="PM_FIELD_KEY_MAX_LENGTH"
+                    show-word-limit
+                    placeholder="请输入字段标识"
+                  />
+                </el-form-item>
                 <el-form-item label="说明文案" class="!mb-0"><el-input v-model="selectedBlock.helpText" type="textarea" :rows="3" placeholder="请输入字段说明" /></el-form-item>
 
                 <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -582,6 +594,7 @@ import {
   normalizeFormSchema,
   removeBlock
 } from '@/views/process/formDesignerHelper'
+import { PM_FIELD_KEY_MAX_LENGTH, PM_NAME_MAX_LENGTH, validateMaxLength, validateSchemaFieldKeys } from '@/views/process/pmValidation'
 
 type PaletteTabKey = 'controls' | 'business' | 'shared'
 type DragSource = { type: 'palette'; key: string } | { type: 'canvas'; blockId: string; index: number }
@@ -1305,9 +1318,22 @@ async function saveFormDesign(mode: 'draft' | 'final' = 'final') {
     ElMessage.warning(`请先填写${designerNameLabel.value}`)
     return
   }
+  const formNameIssue = validateMaxLength(working.formName, PM_NAME_MAX_LENGTH, designerNameLabel.value)
+  if (formNameIssue) {
+    ElMessage.warning(formNameIssue)
+    return
+  }
+  const schema = normalizeFormSchema(working.schema)
+  const schemaIssues = validateSchemaFieldKeys(
+    schema,
+    isExpenseDetailDesigner.value ? '费用明细表单' : '表单设计'
+  )
+  if (schemaIssues.length) {
+    ElMessage.warning(schemaIssues[0])
+    return
+  }
   savingMode.value = mode
   try {
-    const schema = normalizeFormSchema(working.schema)
     const res = isExpenseDetailDesigner.value
       ? await (formId.value !== null
         ? processApi.updateExpenseDetailDesign(formId.value, {

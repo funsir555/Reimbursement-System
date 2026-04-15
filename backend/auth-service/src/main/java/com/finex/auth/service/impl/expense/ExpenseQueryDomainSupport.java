@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -28,6 +33,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * ExpenseQueryDomainSupport：领域规则支撑类。
+ * 承接 报销单的核心业务规则。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class ExpenseQueryDomainSupport {
@@ -35,6 +45,10 @@ public class ExpenseQueryDomainSupport {
     private static final String DOCUMENT_STATUS_PENDING = "PENDING_APPROVAL";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
     private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
+    private static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
+    private static final String DOCUMENT_STATUS_PAYMENT_COMPLETED = "PAYMENT_COMPLETED";
+    private static final String DOCUMENT_STATUS_PAYMENT_FINISHED = "PAYMENT_FINISHED";
     private static final String DOCUMENT_STATUS_DRAFT = "DRAFT";
     private static final String TASK_STATUS_PENDING = "PENDING";
     private static final String TASK_STATUS_PAUSED = "PAUSED";
@@ -56,6 +70,9 @@ public class ExpenseQueryDomainSupport {
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     private final NotificationService notificationService;
 
+    /**
+     * 查询报销单Summaries列表。
+     */
     public List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
@@ -65,6 +82,9 @@ public class ExpenseQueryDomainSupport {
         return expenseSummaryAssembler.toExpenseSummaries(instances);
     }
 
+    /**
+     * 查询查询单据Summaries列表。
+     */
     public List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
@@ -74,6 +94,9 @@ public class ExpenseQueryDomainSupport {
         return expenseSummaryAssembler.toExpenseSummaries(instances);
     }
 
+    /**
+     * 查询Outstanding单据列表。
+     */
     public List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
         String normalizedKind = normalizeOutstandingKind(kind);
         String templateType = Objects.equals(normalizedKind, OUTSTANDING_KIND_LOAN) ? "loan" : "report";
@@ -82,8 +105,10 @@ public class ExpenseQueryDomainSupport {
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
-                                "PAYMENT_COMPLETED",
-                                "PAYMENT_FINISHED"
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
+                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
                         .eq(ProcessDocumentInstance::getTemplateType, templateType)
                         .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
@@ -104,12 +129,18 @@ public class ExpenseQueryDomainSupport {
                 .toList();
     }
 
+    /**
+     * 获取单据明细。
+     */
     public ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
         return expenseDocumentReadSupport.buildDocumentDetail(instance);
     }
 
+    /**
+     * 获取报销单明细。
+     */
     public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
@@ -117,6 +148,9 @@ public class ExpenseQueryDomainSupport {
         return expenseDocumentDetailAssembler.toExpenseDetailDetailVO(detail);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public ExpenseDocumentDetailVO recallDocument(Long userId, String username, String documentCode) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.requireSubmitter(instance, userId);
@@ -140,6 +174,9 @@ public class ExpenseQueryDomainSupport {
         return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public ExpenseDocumentDetailVO commentOnDocument(Long userId, String username, String documentCode, ExpenseDocumentCommentDTO dto, boolean allowCrossView) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
@@ -171,6 +208,9 @@ public class ExpenseQueryDomainSupport {
         return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public ExpenseDocumentDetailVO remindDocument(Long userId, String username, String documentCode, ExpenseDocumentReminderDTO dto) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.requireSubmitter(instance, userId);
@@ -203,6 +243,9 @@ public class ExpenseQueryDomainSupport {
         return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
 
+    /**
+     * 获取单据Navigation。
+     */
     public ExpenseDocumentNavigationVO getDocumentNavigation(Long userId, String documentCode, boolean approvalViewer) {
         ExpenseDocumentNavigationVO navigation = new ExpenseDocumentNavigationVO();
         if (!approvalViewer) {
@@ -223,10 +266,16 @@ public class ExpenseQueryDomainSupport {
         return navigation;
     }
 
+    /**
+     * 获取单据Edit上下文。
+     */
     public ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode) {
         return expenseDocumentTemplateSupport.getDocumentEditContext(userId, documentCode);
     }
 
+    /**
+     * 判断流程Related用户是否成立。
+     */
     private boolean isFlowRelatedUser(ProcessDocumentInstance instance, Long userId) {
         if (Objects.equals(instance.getSubmitterUserId(), userId)) {
             return true;
@@ -263,6 +312,9 @@ public class ExpenseQueryDomainSupport {
         }
     }
 
+    /**
+     * 加载Pending任务。
+     */
     private List<ProcessDocumentTask> loadPendingTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -272,6 +324,9 @@ public class ExpenseQueryDomainSupport {
         );
     }
 
+    /**
+     * 加载开立任务。
+     */
     private List<ProcessDocumentTask> loadOpenTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -303,6 +358,9 @@ public class ExpenseQueryDomainSupport {
                 .toList();
     }
 
+    /**
+     * 加载Navigation单据编码。
+     */
     private List<String> loadNavigationDocumentCodes(Long userId, String currentDocumentCode) {
         List<String> pendingCodes = processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -342,7 +400,11 @@ public class ExpenseQueryDomainSupport {
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_PENDING,
                                 DOCUMENT_STATUS_EXCEPTION,
-                                DOCUMENT_STATUS_APPROVED
+                                DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
+                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
                         .orderByDesc(ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
         ).stream().map(ProcessDocumentInstance::getDocumentCode).toList();

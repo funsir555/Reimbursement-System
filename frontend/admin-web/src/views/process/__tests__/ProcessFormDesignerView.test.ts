@@ -179,12 +179,15 @@ function buildExpenseDetailDesignDetail(overrides: Record<string, unknown> = {})
 }
 
 async function mountView(options?: {
+  formDesignDetail?: Record<string, unknown>
   expenseDetailDesignDetail?: Record<string, unknown>
   expenseDetailDesignError?: Error
 }) {
   mocks.processApi.getFlowMeta.mockResolvedValue({ data: buildFlowMeta() })
   mocks.processApi.listCustomArchives.mockResolvedValue({ data: [] })
-  mocks.processApi.getFormDesignDetail.mockResolvedValue({ data: buildFormDesignDetail() })
+  mocks.processApi.getFormDesignDetail.mockResolvedValue({
+    data: buildFormDesignDetail(options?.formDesignDetail)
+  })
   if (options?.expenseDetailDesignError) {
     mocks.processApi.getExpenseDetailDesignDetail.mockRejectedValue(options.expenseDetailDesignError)
   } else {
@@ -399,5 +402,47 @@ describe('ProcessFormDesignerView', () => {
     expect(mocks.elMessage.error).toHaveBeenCalledWith('源设计不存在')
     expect(wrapper.text()).toContain('保存后自动生成')
     expect(wrapper.find('input').element.value).toBe('')
+  })
+
+  it('blocks save when form name exceeds 64 characters', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.find('input').setValue('A'.repeat(65))
+    await wrapper.findAll('button').find((item) => item.text().includes('保存草稿'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.createFormDesign).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('表单名称最多 64 个字符')
+  })
+
+  it('blocks save when schema fieldKey exceeds 64 characters', async () => {
+    mocks.route.name = 'expense-workbench-process-form-edit'
+    mocks.route.params = { id: '8' }
+    const wrapper = await mountView({
+      formDesignDetail: {
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-1',
+              fieldKey: 'x'.repeat(65),
+              label: '超长字段',
+              kind: 'CONTROL',
+              span: 1,
+              required: false,
+              defaultValue: '',
+              helpText: '',
+              props: { controlType: 'TEXT' },
+              permission: { visible: true, editable: true, required: false, sceneOverrides: [] }
+            }
+          ]
+        }
+      }
+    })
+
+    await wrapper.findAll('button').find((item) => item.text().includes('保存表单设计'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFormDesign).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith(`字段标识 ${'x'.repeat(65)}最多 64 个字符`)
   })
 })

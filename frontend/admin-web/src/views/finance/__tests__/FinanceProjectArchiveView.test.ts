@@ -142,14 +142,14 @@ describe('FinanceProjectArchiveView', () => {
           { value: '0', label: '未封存' },
           { value: '1', label: '已封存' }
         ],
-        projectClassOptions: [{ value: 'CLASS001', label: 'CLASS001 / 市场项目' }]
+        projectClassOptions: [{ value: '97', label: '97 / Market Projects' }]
       }
     })
     mocks.financeArchiveApi.listProjectClasses.mockResolvedValue({
-      data: [{ project_class_code: 'CLASS001', project_class_name: '市场项目', status: 1, has_projects: false }]
+      data: [{ project_class_code: '97', project_class_name: 'Market Projects', status: 1, has_projects: false }]
     })
     mocks.financeArchiveApi.listProjects.mockResolvedValue({
-      data: [{ citemcode: 'PROJ001', citemname: '项目一', citemccode: 'CLASS001', status: 1, bclose: 0 }]
+      data: [{ citemcode: '2002', citemname: 'Project One', citemccode: '97', status: 1, bclose: 0 }]
     })
     mocks.financeArchiveApi.createProject.mockResolvedValue({ data: {} })
     mocks.financeArchiveApi.updateProjectStatus.mockResolvedValue({ data: true })
@@ -177,9 +177,9 @@ describe('FinanceProjectArchiveView', () => {
       status: undefined,
       bclose: undefined
     })
-    expect(vm.meta.projectClassOptions[0]?.value).toBe('CLASS001')
-    expect(vm.projectClasses[0]?.project_class_code).toBe('CLASS001')
-    expect(vm.projects[0]?.citemcode).toBe('PROJ001')
+    expect(vm.meta.projectClassOptions[0]?.value).toBe('97')
+    expect(vm.projectClasses[0]?.project_class_code).toBe('97')
+    expect(vm.projects[0]?.citemcode).toBe('2002')
 
     wrapper.unmount()
   })
@@ -193,16 +193,45 @@ describe('FinanceProjectArchiveView', () => {
     }
 
     vm.openProjectDialog('create')
-    vm.projectForm.citemcode = 'PROJ002'
-    vm.projectForm.citemname = '项目二'
-    vm.projectForm.citemccode = 'CLASS001'
+    vm.projectForm.citemcode = '2002'
+    vm.projectForm.citemname = 'Project Two'
+    vm.projectForm.citemccode = '97'
     vm.projectForm.iotherused = 2
 
     expect(vm.buildProjectPayload()).toMatchObject({
-      citemcode: 'PROJ002',
-      citemname: '项目二',
-      citemccode: 'CLASS001',
+      citemcode: '2002',
+      citemname: 'Project Two',
+      citemccode: '97',
       iotherused: 2
+    })
+
+    wrapper.unmount()
+  })
+
+
+  it('accepts variable-length numeric project codes when saving', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openProjectDialog: (mode: 'create') => void
+      projectForm: Record<string, unknown>
+      saveProject: () => Promise<void>
+    }
+
+    vm.openProjectDialog('create')
+    vm.projectForm.citemcode = '2002'
+    vm.projectForm.citemname = 'Project Two'
+    vm.projectForm.citemccode = '7'
+    vm.projectForm.iotherused = 0
+
+    await vm.saveProject()
+    await flushPromises()
+
+    expect(mocks.financeArchiveApi.createProject).toHaveBeenCalledWith('COMPANY_A', {
+      citemcode: '2002',
+      citemname: 'Project Two',
+      citemccode: '7',
+      iotherused: 0,
+      d_end_date: undefined
     })
 
     wrapper.unmount()
@@ -215,12 +244,12 @@ describe('FinanceProjectArchiveView', () => {
       toggleProjectClose: (row: Record<string, unknown>) => Promise<void>
     }
 
-    await vm.toggleProjectStatus({ citemcode: 'PROJ001', citemname: '项目一', status: 1, bclose: 0 } as Record<string, unknown>)
-    await vm.toggleProjectClose({ citemcode: 'PROJ001', citemname: '项目一', status: 1, bclose: 0 } as Record<string, unknown>)
+    await vm.toggleProjectStatus({ citemcode: '2002', citemname: 'Project One', status: 1, bclose: 0 } as Record<string, unknown>)
+    await vm.toggleProjectClose({ citemcode: '2002', citemname: 'Project One', status: 1, bclose: 0 } as Record<string, unknown>)
     await flushPromises()
 
-    expect(mocks.financeArchiveApi.updateProjectStatus).toHaveBeenCalledWith('COMPANY_A', 'PROJ001', 0)
-    expect(mocks.financeArchiveApi.updateProjectClose).toHaveBeenCalledWith('COMPANY_A', 'PROJ001', 1)
+    expect(mocks.financeArchiveApi.updateProjectStatus).toHaveBeenCalledWith('COMPANY_A', '2002', 0)
+    expect(mocks.financeArchiveApi.updateProjectClose).toHaveBeenCalledWith('COMPANY_A', '2002', 1)
 
     wrapper.unmount()
   })

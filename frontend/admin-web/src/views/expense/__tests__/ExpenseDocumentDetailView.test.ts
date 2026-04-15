@@ -385,7 +385,7 @@ describe('ExpenseDocumentDetailView', () => {
     expect(wrapper.text()).not.toContain('流程概览')
     expect(wrapper.text()).toContain('李四 提交单据')
     expect(wrapper.text()).not.toContain('zhangsan 提交单据')
-    expect(wrapper.text()).toContain('Finance LiSi 待审批')
+    expect(wrapper.text()).toContain('Finance LiSi 审批中')
   })
 
   it('falls back to detail submitterName when submit log actorName is missing', async () => {
@@ -440,11 +440,24 @@ describe('ExpenseDocumentDetailView', () => {
     expect(wrapper.text()).toContain('提单人 提交单据')
   })
 
-  it('shows approval pending logs with approver names and falls back when approver is missing', async () => {
+  it('shows only the current approval task as 审批中 and hides historical approval pending logs', async () => {
     mocks.expenseApi.getDetail.mockResolvedValue({
       data: {
         ...buildDocumentDetail(),
-        currentTasks: [],
+        currentTasks: [
+          {
+            id: 21,
+            documentCode: 'DOC-001',
+            nodeKey: 'finance',
+            nodeName: 'Finance',
+            nodeType: 'APPROVAL',
+            assigneeUserId: 8,
+            assigneeName: 'LiSi',
+            status: 'PENDING',
+            taskBatchNo: 'B-1',
+            createdAt: '2026-04-01 12:20:00'
+          }
+        ],
         actionLogs: [
           {
             id: 11,
@@ -463,12 +476,12 @@ describe('ExpenseDocumentDetailView', () => {
           {
             id: 12,
             documentCode: 'DOC-001',
-            nodeKey: 'legal',
-            nodeName: 'Legal',
-            actionType: 'APPROVAL_PENDING',
-            actorUserId: undefined,
-            actorName: '',
-            actionComment: '',
+            nodeKey: 'finance',
+            nodeName: 'Finance',
+            actionType: 'APPROVE',
+            actorUserId: 9,
+            actorName: 'WangWu',
+            actionComment: '通过',
             payload: {},
             createdAt: '2026-04-01 12:10:00'
           }
@@ -478,8 +491,11 @@ describe('ExpenseDocumentDetailView', () => {
 
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('Finance LiSi、WangWu 审批中')
-    expect(wrapper.text()).toContain('Legal 未查询到审批人 审批中')
+    expect(wrapper.text()).toContain('Finance WangWu 审批通过')
+    expect(wrapper.text()).toContain('Finance LiSi 审批中')
+    expect(wrapper.text()).not.toContain('LiSi、WangWu 审批中')
+    expect(wrapper.text()).not.toContain('未查询到审批人 审批中')
+    expect(wrapper.text()).not.toContain('通过通过')
   })
 
   it('shows handled approver names from action logs in the timeline', async () => {
@@ -507,6 +523,64 @@ describe('ExpenseDocumentDetailView', () => {
     const wrapper = await mountView()
 
     expect(wrapper.text()).toContain('Finance WangWu 审批通过')
+  })
+
+  it('shows only one pending payment row and hides payment process logs', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: {
+        ...buildDocumentDetail(1880.5, {
+          status: 'PENDING_PAYMENT',
+          statusLabel: '待支付'
+        }),
+        currentTasks: [
+          {
+            id: 31,
+            documentCode: 'DOC-001',
+            nodeKey: 'payment',
+            nodeName: '支付节点 4',
+            nodeType: 'PAYMENT',
+            assigneeUserId: 18,
+            assigneeName: '王五',
+            status: 'PENDING',
+            taskBatchNo: 'B-2',
+            createdAt: '2026-04-07 19:22:00'
+          }
+        ],
+        actionLogs: [
+          {
+            id: 21,
+            documentCode: 'DOC-001',
+            nodeKey: 'payment',
+            nodeName: '支付节点 4',
+            actionType: 'PAYMENT_REACHED',
+            actorUserId: undefined,
+            actorName: '',
+            actionComment: '支付节点 4 / Payment node reached',
+            payload: {},
+            createdAt: '2026-04-07 19:22:00'
+          },
+          {
+            id: 22,
+            documentCode: 'DOC-001',
+            nodeKey: 'payment',
+            nodeName: '支付节点 4',
+            actionType: 'PAYMENT_PENDING',
+            actorUserId: undefined,
+            actorName: '',
+            actionComment: '支付节点 4',
+            payload: {},
+            createdAt: '2026-04-07 19:22:01'
+          }
+        ]
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('王五 待支付')
+    expect(wrapper.text()).not.toContain('到达支付节点')
+    expect(wrapper.text()).not.toContain('进入待支付')
+    expect(wrapper.text()).not.toContain('Payment node reached')
   })
 
   it('renders detail content even when navigation request is still pending', async () => {

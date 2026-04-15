@@ -368,4 +368,23 @@ describe('ProcessTemplateCreateView', () => {
     expect(mocks.elMessage.error).toHaveBeenCalledWith('保存模板超时，请检查后端服务或稍后重试')
     expect(findSaveButton(wrapper).attributes('data-loading')).toBe('false')
   })
+
+  it('blocks save when template name exceeds 64 characters', async () => {
+    seedDraft({
+      category: 'employee-expense',
+      templateName: 'A'.repeat(65),
+      formDesign: 'FD202603290001',
+      approvalFlow: 'FLOW-001',
+      expenseDetailDesign: 'EDD202603310002',
+      expenseDetailModeDefault: 'PREPAY_UNBILLED'
+    })
+
+    const wrapper = await mountView()
+
+    await findSaveButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.createTemplate).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('模板名称最多 64 个字符')
+  })
 })

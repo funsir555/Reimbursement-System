@@ -536,10 +536,12 @@ const statusBucket = computed<'pending' | 'exception' | 'terminal' | 'other'>(()
   }
   if (
     status === 'APPROVED'
+    || status === 'COMPLETED'
     || status === 'PAID'
     || status === 'PENDING_PAYMENT'
     || status === 'PAYING'
     || status === 'PAYMENT_COMPLETED'
+    || status === 'PAYMENT_FINISHED'
     || status === 'PAYMENT_EXCEPTION'
   ) {
     return 'terminal'
@@ -551,13 +553,15 @@ const approvalTimelineItems = computed<ApprovalTimelineItem[]>(() => {
   if (!detail.value) {
     return []
   }
-  const logItems = (detail.value.actionLogs || []).map((log, index) => ({
+  const logItems = (detail.value.actionLogs || [])
+    .filter(shouldDisplayTimelineLog)
+    .map((log, index) => ({
     key: `log-${log.id ?? index}`,
     timestamp: log.createdAt || '',
     title: timelineTitle(log, detail.value),
     description: timelineDescription(log),
     attachmentNames: commentAttachmentNames(log)
-  }))
+    }))
   return logItems.concat(buildPendingTimelineItems(detail.value.currentTasks || []))
 })
 const actionItems = computed<ActionItem[]>(() => {
@@ -706,14 +710,10 @@ async function loadNavigation(documentCode: string, requestVersion: number) {
 function timelineTitle(log: ExpenseApprovalLog, documentDetail?: ExpenseDocumentDetail | null) {
   const actorName = log.actorName || '\u5ba1\u6279\u4eba'
   const nodeName = asString(log.nodeName) || '\u8282\u70b9'
-  const approverNames = resolveApproverNamesForTimelineLog(log)
-  const approverText = approverNames.length ? approverNames.join('\u3001') : '\u672a\u67e5\u8be2\u5230\u5ba1\u6279\u4eba'
   const actionMap: Record<string, string> = {
     SUBMIT: `${asString(documentDetail?.submitterName) || asString(log.actorName) || '\u63d0\u5355\u4eba'} \u63d0\u4ea4\u5355\u636e`,
     RECALL: actorName + ' \u53ec\u56de\u5355\u636e',
     RESUBMIT: actorName + ' \u91cd\u65b0\u63d0\u4ea4',
-    ROUTE_HIT: ('\u547d\u4e2d\u5206\u652f ' + String(log.payload?.routeName || '')).trim(),
-    APPROVAL_PENDING: `${nodeName} ${approverText} \u5ba1\u6279\u4e2d`,
     APPROVE: `${nodeName} ${actorName} \u5ba1\u6279\u901a\u8fc7`,
     REJECT: `${nodeName} ${actorName} \u5ba1\u6279\u9a73\u56de`,
     MODIFY: actorName + ' \u4fee\u6539\u5355\u636e',
@@ -721,10 +721,6 @@ function timelineTitle(log: ExpenseApprovalLog, documentDetail?: ExpenseDocument
     REMIND: actorName + ' \u53d1\u8d77\u50ac\u529e',
     TRANSFER: actorName + ' \u8f6c\u4ea4\u5ba1\u6279',
     ADD_SIGN: actorName + ' \u53d1\u8d77\u52a0\u7b7e',
-    AUTO_SKIP: ('\u81ea\u52a8\u8df3\u8fc7 ' + (log.nodeName || '')).trim(),
-    CC_REACHED: ('\u5230\u8fbe\u6284\u9001\u8282\u70b9 ' + (log.nodeName || '')).trim(),
-    PAYMENT_REACHED: ('\u5230\u8fbe\u652f\u4ed8\u8282\u70b9 ' + (log.nodeName || '')).trim(),
-    PAYMENT_PENDING: ('\u8fdb\u5165\u5f85\u652f\u4ed8 ' + (log.nodeName || '')).trim(),
     PAYMENT_START: actorName + ' \u53d1\u8d77\u652f\u4ed8',
     PAYMENT_COMPLETE: actorName + ' \u786e\u8ba4\u5df2\u652f\u4ed8',
     PAYMENT_EXCEPTION: actorName + ' \u6807\u8bb0\u652f\u4ed8\u5f02\u5e38',
@@ -737,11 +733,12 @@ function timelineDescription(log: ExpenseApprovalLog) {
   if (log.actionType === 'COMMENT') {
     return String(log.payload?.comment || log.actionComment || '')
   }
-  if (['SUBMIT', 'APPROVE', 'REJECT', 'APPROVAL_PENDING'].includes(log.actionType)) {
-    return asString(log.actionComment)
+  if (['SUBMIT', 'APPROVE', 'REJECT', 'PAYMENT_COMPLETE', 'PAYMENT_EXCEPTION'].includes(log.actionType)) {
+    const comment = asString(log.actionComment)
+    return isRedundantTimelineComment(log.actionType, comment) ? '' : comment
   }
-  const parts = [log.actionComment]
-  if (log.nodeName && !['APPROVE', 'REJECT', 'APPROVAL_PENDING', 'RECALL', 'RESUBMIT', 'COMMENT'].includes(log.actionType)) {
+  const parts = [asString(log.actionComment)]
+  if (log.nodeName && !['APPROVE', 'REJECT', 'RECALL', 'RESUBMIT', 'COMMENT'].includes(log.actionType)) {
     parts.unshift(log.nodeName)
   }
   if (log.actionType === 'TRANSFER' && log.payload?.targetUserName) {
@@ -762,7 +759,6 @@ function buildPendingTimelineItems(tasks: ExpenseApprovalTask[]): ApprovalTimeli
   tasks.forEach((task, index) => {
     const nodeName = asString(task.nodeName) || '\u8282\u70b9'
     const assigneeName = asString(task.assigneeName) || '\u672a\u67e5\u8be2\u5230\u5904\u7406\u4eba'
-    const pendingLabel = task.nodeType === 'PAYMENT' ? '\u5f85\u652f\u4ed8' : '\u5f85\u5ba1\u6279'
     const dedupeKey = `${asString(task.nodeKey) || 'pending'}::${assigneeName}`
     if (deduped.has(dedupeKey)) {
       return
@@ -770,7 +766,9 @@ function buildPendingTimelineItems(tasks: ExpenseApprovalTask[]): ApprovalTimeli
     deduped.set(dedupeKey, {
       key: `pending-${task.id ?? index}-${dedupeKey}`,
       timestamp: task.createdAt || '',
-      title: `${nodeName} ${assigneeName} ${pendingLabel}`,
+      title: task.nodeType === 'PAYMENT'
+        ? `${assigneeName} \u5f85\u652f\u4ed8`
+        : `${nodeName} ${assigneeName} \u5ba1\u6279\u4e2d`,
       description: '',
       attachmentNames: []
     })
@@ -778,25 +776,39 @@ function buildPendingTimelineItems(tasks: ExpenseApprovalTask[]): ApprovalTimeli
   return Array.from(deduped.values())
 }
 
-function resolveApproverNamesForTimelineLog(log: ExpenseApprovalLog) {
-  const names: string[] = []
-  if (['APPROVE', 'REJECT'].includes(log.actionType)) {
-    const actorName = asString(log.actorName)
-    if (actorName) {
-      names.push(actorName)
-    }
-  }
-  if (log.actionType === 'APPROVAL_PENDING') {
-    const approverNames = Array.isArray(log.payload?.approverNames) ? log.payload.approverNames : []
-    approverNames.forEach((name) => {
-      const normalizedName = asString(name)
-      if (normalizedName && !names.includes(normalizedName)) {
-        names.push(normalizedName)
-      }
-    })
-  }
-  return names
+function shouldDisplayTimelineLog(log: ExpenseApprovalLog) {
+  return [
+    'SUBMIT',
+    'RECALL',
+    'RESUBMIT',
+    'APPROVE',
+    'REJECT',
+    'MODIFY',
+    'COMMENT',
+    'TRANSFER',
+    'ADD_SIGN',
+    'PAYMENT_START',
+    'PAYMENT_COMPLETE',
+    'PAYMENT_EXCEPTION',
+    'FINISH',
+    'EXCEPTION'
+  ].includes(log.actionType)
 }
+
+function isRedundantTimelineComment(actionType: string, comment: string) {
+  if (!comment) {
+    return false
+  }
+  const normalized = comment.replace(/\s+/g, '')
+  const redundantByAction: Record<string, string[]> = {
+    APPROVE: ['\u901a\u8fc7', '\u5ba1\u6279\u901a\u8fc7', '\u540c\u610f'],
+    REJECT: ['\u9a73\u56de', '\u5ba1\u6279\u9a73\u56de'],
+    PAYMENT_COMPLETE: ['\u5df2\u652f\u4ed8', '\u786e\u8ba4\u5df2\u652f\u4ed8'],
+    PAYMENT_EXCEPTION: ['\u652f\u4ed8\u5f02\u5e38', '\u6807\u8bb0\u652f\u4ed8\u5f02\u5e38']
+  }
+  return (redundantByAction[actionType] || []).includes(normalized)
+}
+
 async function handleTaskAction(action: 'approve' | 'reject') {
   if (!detail.value || !approvableTasks.value.length) {
     return

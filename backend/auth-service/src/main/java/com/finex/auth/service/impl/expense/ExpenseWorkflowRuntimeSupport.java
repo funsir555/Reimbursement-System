@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +28,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * ExpenseWorkflowRuntimeSupport：通用支撑类。
+ * 封装 报销单这块可复用的业务能力。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 public class ExpenseWorkflowRuntimeSupport {
 
@@ -30,6 +40,9 @@ public class ExpenseWorkflowRuntimeSupport {
     private final ExpenseWorkflowExecutionSupport executionSupport;
     private final ExpenseWorkflowRepairSupport repairSupport;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ExpenseWorkflowRuntimeSupport(
             ProcessDocumentInstanceMapper processDocumentInstanceMapper,
             ProcessDocumentTaskMapper processDocumentTaskMapper,
@@ -59,6 +72,9 @@ public class ExpenseWorkflowRuntimeSupport {
         this.repairSupport = new ExpenseWorkflowRepairSupport(support, executionSupport);
     }
 
+    /**
+     * 组装运行时流程上下文。
+     */
     public Map<String, Object> buildRuntimeFlowContext(
             User currentUser,
             ProcessDocumentTemplate template,
@@ -70,18 +86,30 @@ public class ExpenseWorkflowRuntimeSupport {
         return contextSupport.buildRuntimeFlowContext(currentUser, template, formDesign, formData, expenseDetailDesign, expenseDetails);
     }
 
+    /**
+     * 组装运行时上下文ForInstance。
+     */
     public Map<String, Object> buildRuntimeContextForInstance(ProcessDocumentInstance instance) {
         return contextSupport.buildRuntimeContextForInstance(instance);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void initializeRuntime(ProcessDocumentInstance instance, Map<String, Object> context) {
         executionSupport.initializeRuntime(instance, context);
     }
 
+    /**
+     * 校验流程Snapshot。
+     */
     public void validateFlowSnapshot(String snapshotJson) {
         contextSupport.validateFlowSnapshot(snapshotJson);
     }
 
+    /**
+     * 审批通过Pending任务。
+     */
     public void approvePendingTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -92,6 +120,9 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.approvePendingTask(instance, task, userId, username, comment);
     }
 
+    /**
+     * 审批驳回Pending任务。
+     */
     public void rejectPendingTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -102,6 +133,9 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.rejectPendingTask(instance, task, userId, username, comment);
     }
 
+    /**
+     * 创建AddSign任务。
+     */
     public void createAddSignTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -113,6 +147,9 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.createAddSignTask(instance, task, targetUser, userId, username, remark);
     }
 
+    /**
+     * 审批通过AddSign任务。
+     */
     public void approveAddSignTask(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -123,14 +160,23 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.approveAddSignTask(instance, task, userId, username, comment);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public boolean paymentTaskAllowsRetry(ProcessDocumentTask task) {
         return executionSupport.paymentTaskAllowsRetry(task);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public boolean paymentTaskAllowsRetry(ProcessDocumentInstance instance, ProcessDocumentTask task) {
         return executionSupport.paymentTaskAllowsRetry(instance, task);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void markPaymentStarted(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -144,6 +190,9 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.markPaymentStarted(instance, task, userId, username, retrying, companyBankAccountId, companyBankAccountName, pushRequestNo);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void completePaymentRuntime(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -156,6 +205,9 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.completePaymentRuntime(instance, task, userId, username, comment, manualPaid, paidAt);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public void markPaymentException(
             ProcessDocumentInstance instance,
             ProcessDocumentTask task,
@@ -167,10 +219,16 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.markPaymentException(instance, task, userId, username, comment, allowRetry);
     }
 
+    /**
+     * 处理报销单中的这一步。
+     */
     public RawFlowSnapshotSignature inspectRawFlowSnapshot(String snapshotJson) {
         return contextSupport.inspectRawFlowSnapshot(snapshotJson);
     }
 
+    /**
+     * 判断Misapproved按BlankRootBug是否成立。
+     */
     boolean isMisapprovedByBlankRootBug(String documentCode) {
         return repairSupport.isMisapprovedByBlankRootBug(documentCode);
     }

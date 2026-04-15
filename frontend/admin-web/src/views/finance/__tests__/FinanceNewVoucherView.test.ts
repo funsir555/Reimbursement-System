@@ -355,4 +355,125 @@ describe('FinanceNewVoucherView', () => {
     expect(mocks.financeApi.createVoucher).toHaveBeenCalled()
     expect(mocks.elMessage.success).toHaveBeenCalled()
   })
+
+  it('blocks save when a voucher digest exceeds the tightened length limit', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = 'A'.repeat(256)
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('第 1 行摘要最多 255 个字符')
+  })
+
+  it('blocks save when currency name exceeds the tightened length limit', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          cexchName?: string
+          md?: string
+          mc?: string
+        }>
+      }
+      validateVoucher: (showToast?: boolean) => boolean
+    }
+
+    vm.form.entries[0].cdigest = '\u6458\u8981 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].cexchName = 'C'.repeat(33)
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '\u6458\u8981 B'
+    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+
+    expect(vm.validateVoucher(true)).toBe(false)
+
+    expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('\u7b2c 1 \u884c\u5e01\u79cd\u540d\u79f0\u6700\u591a 32 \u4e2a\u5b57\u7b26')
+  })
+
+  it('blocks save when an archive selection is stale or project ownership mismatches', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          ccusId?: string
+          citemClass?: string
+          citemId?: string
+          md?: string
+          mc?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].ccusId = 'C99999'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].citemClass = '01'
+    vm.form.entries[1].citemId = '000002'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('第 1 行客户不存在或当前不可用')
+  })
+
+  it('auto clears the selected project when it no longer belongs to the selected project class', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          citemClass?: string
+          citemId?: string
+          md?: string
+          mc?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '??? A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].citemClass = '01'
+    vm.form.entries[0].citemId = '000002'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '??? B'
+    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+    await nextTick()
+
+    expect(vm.form.entries[0].citemId).toBe('')
+  })
 })

@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：数据组装类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -43,6 +48,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * ExpenseSummaryAssembler：数据组装类。
+ * 把多组数据拼成 报销单汇总需要的输出结果。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class ExpenseSummaryAssembler {
@@ -60,6 +70,7 @@ public class ExpenseSummaryAssembler {
     private static final Set<String> PAYMENT_DATE_LEGACY_LABEL_ALIASES = buildLegacyUtf8AsGbkLabels(PAYMENT_DATE_LABELS);
     private static final String TEMPLATE_SCOPE_TYPE_TAG_ARCHIVE = "TAG_ARCHIVE";
     private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
     private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
     private static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
@@ -79,10 +90,16 @@ public class ExpenseSummaryAssembler {
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 处理报销单汇总中的这一步。
+     */
     public List<ExpenseSummaryVO> toExpenseSummaries(List<ProcessDocumentInstance> instances) {
         return instances.isEmpty() ? Collections.emptyList() : toExpenseSummariesInternal(instances);
     }
 
+    /**
+     * 处理报销单汇总中的这一步。
+     */
     public List<ExpenseApprovalPendingItemVO> toPendingItems(List<ProcessDocumentTask> tasks, Map<String, ProcessDocumentInstance> instanceMap) {
         if (tasks.isEmpty() || instanceMap.isEmpty()) {
             return Collections.emptyList();
@@ -165,10 +182,16 @@ public class ExpenseSummaryAssembler {
         return item;
     }
 
+    /**
+     * 组装汇总Enrichment数据。
+     */
     SummaryEnrichmentData buildSummaryEnrichmentData(List<ProcessDocumentInstance> instances) {
         return buildSummaryEnrichment(instances);
     }
 
+    /**
+     * 组装汇总Enrichment。
+     */
     private SummaryEnrichmentData buildSummaryEnrichment(List<ProcessDocumentInstance> instances) {
         if (instances == null || instances.isEmpty()) {
             return SummaryEnrichmentData.empty();
@@ -319,6 +342,9 @@ public class ExpenseSummaryAssembler {
         return new SummaryEnrichmentData(metadataMap);
     }
 
+    /**
+     * 加载Tag档案编码按模板编码。
+     */
     private Map<String, String> loadTagArchiveCodeByTemplateCode(Map<String, ProcessDocumentTemplate> templateMap) {
         if (templateMap.isEmpty()) {
             return Collections.emptyMap();
@@ -353,6 +379,9 @@ public class ExpenseSummaryAssembler {
                 ));
     }
 
+    /**
+     * 加载档案ItemLabel映射。
+     */
     private Map<String, Map<String, String>> loadArchiveItemLabelMap(Set<String> archiveCodes) {
         if (archiveCodes == null || archiveCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -462,6 +491,9 @@ public class ExpenseSummaryAssembler {
         return firstStringValue(formData.get(dateFieldKeys.get(0)));
     }
 
+    /**
+     * 判断付款DateLabel是否成立。
+     */
     private boolean isPaymentDateLabel(String label) {
         String normalized = trimToNull(label);
         return normalized != null && (PAYMENT_DATE_LABELS.contains(normalized) || PAYMENT_DATE_LEGACY_LABEL_ALIASES.contains(normalized));
@@ -476,6 +508,9 @@ public class ExpenseSummaryAssembler {
         return lowerCaseKey.contains("payment") && lowerCaseKey.contains("date");
     }
 
+    /**
+     * 组装LegacyUtf8AsGbkLabels。
+     */
     private static Set<String> buildLegacyUtf8AsGbkLabels(Set<String> labels) {
         LinkedHashSet<String> aliases = new LinkedHashSet<>();
         for (String label : labels) {
@@ -544,6 +579,9 @@ public class ExpenseSummaryAssembler {
         }
     }
 
+    /**
+     * 解析付款公司Name。
+     */
     private String resolvePaymentCompanyName(String companyId, Map<String, SystemCompany> companyMap) {
         String normalized = trimToNull(companyId);
         if (normalized == null) {
@@ -553,6 +591,9 @@ public class ExpenseSummaryAssembler {
         return company == null ? normalized : firstNonBlank(company.getCompanyName(), company.getCompanyCode(), normalized);
     }
 
+    /**
+     * 解析PartyName。
+     */
     private String resolvePartyName(String value, Map<Long, User> userMap, Map<String, FinanceVendor> vendorMap) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -569,6 +610,9 @@ public class ExpenseSummaryAssembler {
         return resolveVendorName(normalized, vendorMap);
     }
 
+    /**
+     * 解析供应商Name。
+     */
     private String resolveVendorName(String value, Map<String, FinanceVendor> vendorMap) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -584,6 +628,9 @@ public class ExpenseSummaryAssembler {
         return vendor == null ? normalized : firstNonBlank(vendor.getCVenName(), vendor.getCVenAbbName(), normalized);
     }
 
+    /**
+     * 解析DepartmentNames。
+     */
     private List<String> resolveDepartmentNames(List<String> departmentIds, Map<String, String> departmentNameMap) {
         if (departmentIds == null || departmentIds.isEmpty()) {
             return Collections.emptyList();
@@ -599,6 +646,9 @@ public class ExpenseSummaryAssembler {
         return new ArrayList<>(names);
     }
 
+    /**
+     * 解析档案ItemNames。
+     */
     private List<String> resolveArchiveItemNames(
             String archiveCode,
             List<String> values,
@@ -706,6 +756,9 @@ public class ExpenseSummaryAssembler {
         }
     }
 
+    /**
+     * 解析UndertakeDeptIdsFromSnapshots。
+     */
     private List<String> resolveUndertakeDeptIdsFromSnapshots(
             Map<String, Object> mainSchema,
             Map<String, Object> mainFormData,
@@ -803,6 +856,9 @@ public class ExpenseSummaryAssembler {
         return value == null ? BigDecimal.ZERO : value;
     }
 
+    /**
+     * 解析模板类型Label。
+     */
     private String resolveTemplateTypeLabel(String templateType, String currentLabel) {
         if (trimToNull(currentLabel) != null) {
             return currentLabel;
@@ -815,6 +871,9 @@ public class ExpenseSummaryAssembler {
         };
     }
 
+    /**
+     * 解析StatusLabel。
+     */
     private String resolveStatusLabel(String status) {
         return switch (trimToNull(status) == null ? "" : status.trim()) {
             case DOCUMENT_STATUS_PENDING_PAYMENT -> "\u5f85\u652f\u4ed8";
@@ -822,7 +881,7 @@ public class ExpenseSummaryAssembler {
             case DOCUMENT_STATUS_PAYMENT_COMPLETED -> "\u5df2\u652f\u4ed8";
             case DOCUMENT_STATUS_PAYMENT_FINISHED -> "\u5df2\u5b8c\u6210";
             case DOCUMENT_STATUS_PAYMENT_EXCEPTION -> "\u652f\u4ed8\u5f02\u5e38";
-            case DOCUMENT_STATUS_APPROVED -> "\u5df2\u901a\u8fc7";
+            case DOCUMENT_STATUS_APPROVED, DOCUMENT_STATUS_COMPLETED -> "\u5df2\u5b8c\u6210";
             case DOCUMENT_STATUS_REJECTED -> "\u5df2\u9a73\u56de";
             case "DRAFT" -> "\u8349\u7a3f";
             case DOCUMENT_STATUS_EXCEPTION -> "\u6d41\u7a0b\u5f02\u5e38";

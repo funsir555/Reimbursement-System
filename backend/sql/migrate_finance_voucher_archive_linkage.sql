@@ -7,7 +7,7 @@ SET @schema_name = DATABASE();
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
-        'ALTER TABLE gl_accvouch ADD COLUMN ccode_name VARCHAR(255) NULL COMMENT ''科目名称'' AFTER ccode',
+        'ALTER TABLE gl_accvouch ADD COLUMN ccode_name VARCHAR(128) NULL COMMENT ''科目名称'' AFTER ccode',
         'SELECT ''gl_accvouch.ccode_name exists'''
     )
     FROM information_schema.COLUMNS
@@ -231,7 +231,7 @@ DEALLOCATE PREPARE stmt;
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
-        'ALTER TABLE fin_project_class ADD CONSTRAINT ck_fin_project_class_code_format CHECK (project_class_code REGEXP ''^[0-9]{2}$'')',
+        'ALTER TABLE fin_project_class ADD CONSTRAINT ck_fin_project_class_code_format CHECK (project_class_code REGEXP ''^[0-9]{1,2}$'')',
         'SELECT ''ck_fin_project_class_code_format exists'''
     )
     FROM information_schema.TABLE_CONSTRAINTS
@@ -246,7 +246,7 @@ DEALLOCATE PREPARE stmt;
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
-        'ALTER TABLE fin_project_archive ADD CONSTRAINT ck_fin_project_archive_code_format CHECK (citemcode REGEXP ''^[0-9]{6}$'')',
+        'ALTER TABLE fin_project_archive ADD CONSTRAINT ck_fin_project_archive_code_format CHECK (citemcode REGEXP ''^[0-9]{1,6}$'')',
         'SELECT ''ck_fin_project_archive_code_format exists'''
     )
     FROM information_schema.TABLE_CONSTRAINTS
@@ -261,7 +261,7 @@ DEALLOCATE PREPARE stmt;
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
-        'ALTER TABLE fin_project_archive ADD CONSTRAINT ck_fin_project_archive_class_format CHECK (citemccode REGEXP ''^[0-9]{2}$'')',
+        'ALTER TABLE fin_project_archive ADD CONSTRAINT ck_fin_project_archive_class_format CHECK (citemccode REGEXP ''^[0-9]{1,2}$'')',
         'SELECT ''ck_fin_project_archive_class_format exists'''
     )
     FROM information_schema.TABLE_CONSTRAINTS

@@ -1,3 +1,8 @@
+// 业务域：财务系统管理
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 财务系统设置和账套相关接口，下游会继续协调 账套、同步任务和财务上下文基础数据。
+// 风险提醒：改坏后最容易影响 账套切换、基础数据同步和下游系统连接。
+
 package com.finex.auth.service.impl.financesystem;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -29,8 +34,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * FinanceAccountSetMetaSupport：通用支撑类。
+ * 封装 财务账户Set这块可复用的业务能力。
+ * 改这里时，要特别关注 账套切换、基础数据同步和下游系统连接是否会被一起带坏。
+ */
 public class FinanceAccountSetMetaSupport extends AbstractFinanceSystemManagementSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public FinanceAccountSetMetaSupport(
             FinanceAccountSetMapper financeAccountSetMapper,
             FinanceAccountSetCodeRuleMapper financeAccountSetCodeRuleMapper,
@@ -55,6 +68,9 @@ public class FinanceAccountSetMetaSupport extends AbstractFinanceSystemManagemen
         );
     }
 
+    /**
+     * 获取元数据。
+     */
     public FinanceAccountSetMetaVO getMeta() {
         FinanceAccountSetMetaVO meta = new FinanceAccountSetMetaVO();
         meta.setCompanyOptions(loadCompanyOptions());
@@ -65,6 +81,9 @@ public class FinanceAccountSetMetaSupport extends AbstractFinanceSystemManagemen
         return meta;
     }
 
+    /**
+     * 加载公司选项。
+     */
     private List<FinanceContextCompanyOptionVO> loadCompanyOptions() {
         return systemCompanyMapper().selectList(
                         Wrappers.<SystemCompany>lambdaQuery()
@@ -75,6 +94,9 @@ public class FinanceAccountSetMetaSupport extends AbstractFinanceSystemManagemen
                 .toList();
     }
 
+    /**
+     * 加载Supervisor选项。
+     */
     private List<FinanceAccountSetOptionVO> loadSupervisorOptions() {
         return userMapper().selectList(
                         Wrappers.<User>lambdaQuery()
@@ -90,6 +112,9 @@ public class FinanceAccountSetMetaSupport extends AbstractFinanceSystemManagemen
                 .toList();
     }
 
+    /**
+     * 加载模板选项。
+     */
     private List<FinanceAccountSetTemplateSummaryVO> loadTemplateOptions() {
         List<FinanceAccountSetTemplate> templates = financeAccountSetTemplateMapper().selectList(
                 Wrappers.<FinanceAccountSetTemplate>lambdaQuery()
@@ -117,6 +142,9 @@ public class FinanceAccountSetMetaSupport extends AbstractFinanceSystemManagemen
         return result;
     }
 
+    /**
+     * 组装Reference选项。
+     */
     private List<FinanceAccountSetReferenceOptionVO> buildReferenceOptions(
             List<FinanceAccountSet> accountSets,
             Map<String, SystemCompany> companyMap,

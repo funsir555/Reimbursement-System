@@ -1,3 +1,8 @@
+// 业务域：登录认证与权限
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 AuthController、用户相关 service 入口，下游会继续协调 用户、角色、权限与 JWT 等基础能力。
+// 风险提醒：改坏后最容易影响 登录成功率、权限判断和当前用户识别。
+
 package com.finex.auth.service.impl.auth;
 
 import cn.hutool.core.bean.BeanUtil;
@@ -13,11 +18,19 @@ import com.finex.auth.mapper.UserMapper;
 import com.finex.common.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * AuthLoginDomainSupport：领域规则支撑类。
+ * 承接 认证登录的核心业务规则。
+ * 改这里时，要特别关注 登录成功率、权限判断和当前用户识别是否会被一起带坏。
+ */
 @Slf4j
 public class AuthLoginDomainSupport extends AbstractAuthDomainSupport {
 
     private final AuthAuthorizationDomainSupport authAuthorizationDomainSupport;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public AuthLoginDomainSupport(
             UserMapper userMapper,
             SystemUserRoleMapper systemUserRoleMapper,
@@ -30,6 +43,9 @@ public class AuthLoginDomainSupport extends AbstractAuthDomainSupport {
         this.authAuthorizationDomainSupport = authAuthorizationDomainSupport;
     }
 
+    /**
+     * 执行登录校验并返回登录结果。
+     */
     public LoginVO login(LoginDTO loginDTO) {
         User user = getByUsername(loginDTO.getUsername());
         if (user == null) {
@@ -59,6 +75,9 @@ public class AuthLoginDomainSupport extends AbstractAuthDomainSupport {
         return loginVO;
     }
 
+    /**
+     * 按用户名获取用户。
+     */
     public User getByUsername(String username) {
         return loadByUsername(username);
     }

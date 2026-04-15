@@ -1,3 +1,7 @@
+// 业务域：财务系统管理
+// 文件角色：后台执行类
+// 上下游关系：上游通常来自 财务系统设置和账套相关接口，下游会继续协调 账套、同步任务和财务上下文基础数据。
+// 风险提醒：改坏后最容易影响 账套切换、基础数据同步和下游系统连接。
 
 package com.finex.auth.service.impl;
 
@@ -34,6 +38,11 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+/**
+ * FinanceAccountSetTaskWorker：后台执行类。
+ * 在后台真正执行 财务账户Set任务这一段耗时或批处理流程。
+ * 改这里时，要特别关注 账套切换、基础数据同步和下游系统连接是否会被一起带坏。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -56,6 +65,9 @@ public class FinanceAccountSetTaskWorker {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
 
+    /**
+     * 执行创建账户Set任务。
+     */
     @Async("finexAsyncExecutor")
     public void runCreateAccountSetTask(Long taskId) {
         AsyncTaskRecord task = asyncTaskRecordMapper.selectById(taskId);
@@ -155,6 +167,9 @@ public class FinanceAccountSetTaskWorker {
         financeAccountSetMapper.updateById(accountSet);
     }
 
+    /**
+     * 组装Blank科目。
+     */
     private List<FinanceAccountSubject> buildBlankSubjects(String templateCode, String companyId, String scheme) {
         List<FinanceAccountSetTemplateSubject> templateSubjects = financeAccountSetTemplateSubjectMapper.selectList(
                 Wrappers.<FinanceAccountSetTemplateSubject>lambdaQuery()
@@ -199,6 +214,9 @@ public class FinanceAccountSetTaskWorker {
         return subjects;
     }
 
+    /**
+     * 复制Reference科目。
+     */
     private List<FinanceAccountSubject> copyReferenceSubjects(String sourceCompanyId, String targetCompanyId, String templateCode) {
         List<FinanceAccountSubject> sourceSubjects = financeAccountSubjectMapper.selectList(
                 Wrappers.<FinanceAccountSubject>lambdaQuery()

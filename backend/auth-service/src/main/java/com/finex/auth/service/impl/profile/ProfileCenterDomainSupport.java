@@ -1,3 +1,8 @@
+// 业务域：个人中心与下载
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 个人中心页面、下载中心接口，下游会继续协调 个人信息、银行卡账户和下载记录。
+// 风险提醒：改坏后最容易影响 个人信息展示、银行卡维护和下载留痕。
+
 package com.finex.auth.service.impl.profile;
 
 import cn.hutool.core.util.StrUtil;
@@ -11,10 +16,18 @@ import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.DownloadStorageService;
 
+/**
+ * ProfileCenterDomainSupport：领域规则支撑类。
+ * 承接 个人中心中心的核心业务规则。
+ * 改这里时，要特别关注 个人信息展示、银行卡维护和下载留痕是否会被一起带坏。
+ */
 public final class ProfileCenterDomainSupport extends AbstractProfileDomainSupport {
 
     private final ProfileBankAccountDomainSupport profileBankAccountDomainSupport;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ProfileCenterDomainSupport(
             UserService userService,
             UserBankAccountMapper userBankAccountMapper,
@@ -26,6 +39,9 @@ public final class ProfileCenterDomainSupport extends AbstractProfileDomainSuppo
         this.profileBankAccountDomainSupport = profileBankAccountDomainSupport;
     }
 
+    /**
+     * 获取个人中心。
+     */
     public PersonalCenterVO getPersonalCenter(Long userId) {
         User user = requireUser(userId);
 
@@ -35,6 +51,9 @@ public final class ProfileCenterDomainSupport extends AbstractProfileDomainSuppo
         return center;
     }
 
+    /**
+     * 处理个人中心中心中的这一步。
+     */
     public void changePassword(Long userId, ChangePasswordDTO dto) {
         User user = requireUser(userId);
         String currentPassword = DigestUtil.md5Hex(dto.getCurrentPassword());

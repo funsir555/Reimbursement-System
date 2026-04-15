@@ -142,7 +142,7 @@
           <el-input :model-value="currentCompanyName || currentCompanyId || ''" disabled />
         </el-form-item>
         <el-form-item label="分类编码" class="!mb-0">
-          <el-input v-model="classForm.project_class_code" :disabled="classDialogMode === 'edit'" maxlength="2" placeholder="请输入2位数字分类编码" />
+          <el-input v-model="classForm.project_class_code" :disabled="classDialogMode === 'edit'" maxlength="2" :placeholder="'\u8bf7\u8f93\u51651-2\u4f4d\u6570\u5b57\u5206\u7c7b\u7f16\u7801'" />
         </el-form-item>
         <el-form-item label="分类名称" class="!mb-0">
           <el-input v-model="classForm.project_class_name" placeholder="请输入项目分类名称" />
@@ -179,7 +179,7 @@
 
         <el-form label-position="top" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <el-form-item label="项目编码" class="!mb-0">
-            <el-input v-model="projectForm.citemcode" :disabled="projectDialogMode !== 'create'" maxlength="6" placeholder="请输入6位数字项目编码" />
+            <el-input v-model="projectForm.citemcode" :disabled="projectDialogMode !== 'create'" maxlength="6" :placeholder="'\u8bf7\u8f93\u51651-6\u4f4d\u6570\u5b57\u9879\u76ee\u7f16\u7801'" />
           </el-form-item>
           <el-form-item label="项目名称" class="!mb-0">
             <el-input v-model="projectForm.citemname" :disabled="isProjectDetailMode" placeholder="请输入项目名称" />
@@ -412,8 +412,8 @@ async function saveProjectClass() {
     ElMessage.warning('项目分类编码不能为空')
     return
   }
-  if (!/^\d{2}$/.test(classForm.project_class_code.trim())) {
-    ElMessage.warning('项目分类编码必须为2位数字文本')
+  if (!/^\d{1,2}$/.test(classForm.project_class_code.trim())) {
+    ElMessage.warning('\u9879\u76ee\u5206\u7c7b\u7f16\u7801\u5fc5\u987b\u4e3a1-2\u4f4d\u6570\u5b57\u6587\u672c')
     return
   }
   if (!classForm.project_class_name.trim()) {
@@ -510,8 +510,8 @@ async function saveProject() {
     ElMessage.warning('项目编码不能为空')
     return
   }
-  if (!/^\d{6}$/.test(String(projectForm.citemcode || '').trim())) {
-    ElMessage.warning('项目编码必须为6位数字文本')
+  if (!/^\d{1,6}$/.test(String(projectForm.citemcode || '').trim())) {
+    ElMessage.warning('\u9879\u76ee\u7f16\u7801\u5fc5\u987b\u4e3a1-6\u4f4d\u6570\u5b57\u6587\u672c')
     return
   }
   if (!String(projectForm.citemname || '').trim()) {
@@ -522,8 +522,8 @@ async function saveProject() {
     ElMessage.warning('项目分类不能为空')
     return
   }
-  if (!/^\d{2}$/.test(String(projectForm.citemccode || '').trim())) {
-    ElMessage.warning('项目分类编码必须为2位数字文本')
+  if (!/^\d{1,2}$/.test(String(projectForm.citemccode || '').trim())) {
+    ElMessage.warning('\u9879\u76ee\u5206\u7c7b\u7f16\u7801\u5fc5\u987b\u4e3a1-2\u4f4d\u6570\u5b57\u6587\u672c')
     return
   }
   savingProject.value = true
@@ -664,6 +664,7 @@ defineExpose({
   openClassDialog,
   openProjectDialog,
   buildProjectPayload,
+  saveProject,
   toggleProjectStatus,
   toggleProjectClose
 })

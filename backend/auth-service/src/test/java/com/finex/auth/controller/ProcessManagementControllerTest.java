@@ -191,6 +191,28 @@ class ProcessManagementControllerTest {
     }
 
     @Test
+    void createTemplateRejectsTooLongName() throws Exception {
+        mockMvc.perform(post("/auth/process-management/templates")
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "Operator")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "templateType": "report",
+                                  "templateName": "%s",
+                                  "formDesign": "FD-001",
+                                  "approvalFlow": "FLOW-001",
+                                  "expenseDetailDesign": "DET-001"
+                                }
+                                """.formatted("A".repeat(65))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("单据名称最多 64 个字符"));
+
+        verifyNoInteractions(processManagementService, accessControlService);
+    }
+
+    @Test
     void listFormDesignsReturnsDataAndChecksPermission() throws Exception {
         ProcessFormDesignSummaryVO formDesign = new ProcessFormDesignSummaryVO();
         formDesign.setId(8L);

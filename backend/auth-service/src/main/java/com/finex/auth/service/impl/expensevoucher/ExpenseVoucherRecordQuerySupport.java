@@ -1,3 +1,8 @@
+// 业务域：报销凭证生成与推送
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 报销单凭证生成接口和财务操作入口，下游会继续协调 凭证映射、推送记录和报销单凭证状态。
+// 风险提醒：改坏后最容易影响 重复生成凭证、凭证内容错误和推送记录不一致。
+
 package com.finex.auth.service.impl.expensevoucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -12,12 +17,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * ExpenseVoucherRecordQuerySupport：通用支撑类。
+ * 封装 报销单凭证这块可复用的业务能力。
+ * 改这里时，要特别关注 重复生成凭证、凭证内容错误和推送记录不一致是否会被一起带坏。
+ */
 public class ExpenseVoucherRecordQuerySupport extends AbstractExpenseVoucherGenerationSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ExpenseVoucherRecordQuerySupport(Dependencies dependencies) {
         super(dependencies);
     }
 
+    /**
+     * 获取Generated凭证。
+     */
     public ExpenseVoucherPageVO<ExpenseVoucherGeneratedRecordVO> getGeneratedVouchers(String companyId, String templateCode, String documentCode, String voucherNo, String pushStatus, String dateFrom, String dateTo, Integer page, Integer pageSize) {
         Map<String, String> companyMap = companyNameMap();
         List<ExpenseVoucherGeneratedRecordVO> rows = listPushDocuments().stream()
@@ -34,6 +50,9 @@ public class ExpenseVoucherRecordQuerySupport extends AbstractExpenseVoucherGene
         return buildPage(rows, page, pageSize);
     }
 
+    /**
+     * 获取Generated凭证明细。
+     */
     public ExpenseVoucherGeneratedRecordDetailVO getGeneratedVoucherDetail(Long id) {
         ExpVoucherPushDocument pushDocument = pushDocumentMapper.selectById(id);
         if (pushDocument == null) {

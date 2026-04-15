@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：service 入口实现
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +25,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * ExpenseAttachmentServiceImpl：service 入口实现。
+ * 接住上层请求，并把 报销单附件相关流程分发到更细的规则组件。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
@@ -32,6 +42,9 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
     @Value("${finex.expense.attachments.storage-path:${user.dir}/storage/expense-attachments}")
     private String storagePath;
 
+    /**
+     * 上传附件。
+     */
     @Override
     public ExpenseAttachmentVO uploadAttachment(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -71,6 +84,9 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
         }
     }
 
+    /**
+     * 保存Generated附件。
+     */
     @Override
     public ExpenseAttachmentVO saveGeneratedAttachment(String fileName, String contentType, byte[] content) {
         if (content == null || content.length == 0) {
@@ -79,6 +95,9 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
         return storeAttachment(fileName, contentType, content);
     }
 
+    /**
+     * 加载附件。
+     */
     @Override
     public StoredExpenseAttachment loadAttachment(String attachmentId) {
         String normalizedId = normalizeAttachmentId(attachmentId);
@@ -147,6 +166,9 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
         }
     }
 
+    /**
+     * 删除IfExists。
+     */
     private void deleteIfExists(Path path) {
         try {
             if (path != null) {
@@ -157,6 +179,9 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
         }
     }
 
+    /**
+     * 组装PreviewUrl。
+     */
     private String buildPreviewUrl(String attachmentId) {
         return "/api/auth/expenses/attachments/" + attachmentId + "/content";
     }

@@ -1,3 +1,8 @@
+// 业务域：流程模板与流程配置
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 流程管理页面对应的 Controller，下游会继续协调 流程模板、报销类型、自定义档案和发布状态。
+// 风险提醒：改坏后最容易影响 审批路由、模板发布和后续单据流转。
+
 package com.finex.auth.service.impl.process;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -94,6 +99,11 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+/**
+ * AbstractProcessManagementSupport：通用支撑类。
+ * 封装 流程管理这块可复用的业务能力。
+ * 改这里时，要特别关注 审批路由、模板发布和后续单据流转是否会被一起带坏。
+ */
 @Slf4j
 @RequiredArgsConstructor
 abstract class AbstractProcessManagementSupport {
@@ -104,6 +114,8 @@ abstract class AbstractProcessManagementSupport {
     private static final String TEMPLATE_CODE_PREFIX = "FX";
     private static final String TEMPLATE_CODE_SEQUENCE_KEY = "DOCUMENT_TEMPLATE";
     private static final int TEMPLATE_CODE_RETRY_LIMIT = 3;
+    private static final int PM_NAME_MAX_LENGTH = 64;
+    private static final int PM_FIELD_KEY_MAX_LENGTH = 64;
 
     private static final String DEFAULT_NUMBERING_RULE_CODE = "FX_DATE_4SEQ";
     private static final String DEFAULT_NUMBERING_RULE_PREVIEW = "FX+\u5e74+\u6708+\u65e5+4\u4f4d\u6570\u5b57\uff08\u5982\uff1aFX202503251234\uff09";
@@ -204,6 +216,9 @@ abstract class AbstractProcessManagementSupport {
     private final ProcessFlowDesignService processFlowDesignService;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 获取Overview。
+     */
     protected ProcessCenterOverviewVO getOverview() {
         List<ProcessTemplateCategory> categories = categoryMapper.selectList(
                 Wrappers.<ProcessTemplateCategory>lambdaQuery()
@@ -245,6 +260,9 @@ abstract class AbstractProcessManagementSupport {
         return overview;
     }
 
+    /**
+     * 获取模板类型。
+     */
     protected List<ProcessTemplateTypeVO> getTemplateTypes() {
         return List.of(
                 templateType("report", "\u62a5\u9500\u5355", "\u8d39\u7528\u62a5\u9500", "\u9002\u7528\u4e8e\u5458\u5de5\u62a5\u9500\u3001\u5dee\u65c5\u62a5\u9500\u4e0e\u56e2\u961f\u8d39\u7528\u5f52\u96c6\u7b49\u573a\u666f\u3002", "blue"),
@@ -254,6 +272,9 @@ abstract class AbstractProcessManagementSupport {
         );
     }
 
+    /**
+     * 获取表单选项。
+     */
     protected ProcessTemplateFormOptionsVO getFormOptions(String templateType) {
         ProcessTemplateFormOptionsVO options = new ProcessTemplateFormOptionsVO();
         options.setTemplateType(templateType);
@@ -291,10 +312,16 @@ abstract class AbstractProcessManagementSupport {
         return options;
     }
 
+    /**
+     * 获取模板明细。
+     */
     protected ProcessTemplateDetailVO getTemplateDetail(Long id) {
         return buildTemplateDetail(requireActiveTemplate(id));
     }
 
+    /**
+     * 保存模板。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected ProcessTemplateSaveResultVO saveTemplate(ProcessTemplateSaveDTO dto, String operatorName) {
         String traceId = currentTemplateSaveTraceId();
@@ -442,6 +469,9 @@ abstract class AbstractProcessManagementSupport {
         }
     }
 
+    /**
+     * 更新模板。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected ProcessTemplateSaveResultVO updateTemplate(Long id, ProcessTemplateSaveDTO dto, String operatorName) {
         String traceId = currentTemplateSaveTraceId();
@@ -580,6 +610,9 @@ abstract class AbstractProcessManagementSupport {
         }
     }
 
+    /**
+     * 删除模板。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteTemplate(Long id) {
         ProcessDocumentTemplate template = requireTemplate(id);
@@ -593,6 +626,9 @@ abstract class AbstractProcessManagementSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 查询自定义档案列表。
+     */
     protected List<ProcessCustomArchiveSummaryVO> listCustomArchives() {
         List<ProcessCustomArchiveDesign> archives = customArchiveDesignMapper.selectList(
                 Wrappers.<ProcessCustomArchiveDesign>lambdaQuery()
@@ -623,10 +659,16 @@ abstract class AbstractProcessManagementSupport {
         }).toList();
     }
 
+    /**
+     * 获取自定义档案明细。
+     */
     protected ProcessCustomArchiveDetailVO getCustomArchiveDetail(Long id) {
         return buildCustomArchiveDetail(requireCustomArchive(id));
     }
 
+    /**
+     * 创建自定义档案。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected ProcessCustomArchiveDetailVO createCustomArchive(ProcessCustomArchiveSaveDTO dto) {
         validateCustomArchive(dto);
@@ -640,6 +682,9 @@ abstract class AbstractProcessManagementSupport {
         return buildCustomArchiveDetail(requireCustomArchive(archive.getId()));
     }
 
+    /**
+     * 更新自定义档案。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected ProcessCustomArchiveDetailVO updateCustomArchive(Long id, ProcessCustomArchiveSaveDTO dto) {
         ProcessCustomArchiveDesign archive = requireCustomArchive(id);
@@ -651,6 +696,9 @@ abstract class AbstractProcessManagementSupport {
         return buildCustomArchiveDetail(requireCustomArchive(id));
     }
 
+    /**
+     * 更新自定义档案Status。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean updateCustomArchiveStatus(Long id, Integer status) {
         ProcessCustomArchiveDesign archive = requireCustomArchive(id);
@@ -659,6 +707,9 @@ abstract class AbstractProcessManagementSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 删除自定义档案。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteCustomArchive(Long id) {
         ProcessCustomArchiveDesign archive = requireCustomArchive(id);
@@ -695,6 +746,9 @@ abstract class AbstractProcessManagementSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 获取自定义档案元数据。
+     */
     protected ProcessCustomArchiveMetaVO getCustomArchiveMeta() {
         ProcessCustomArchiveMetaVO meta = new ProcessCustomArchiveMetaVO();
         meta.setArchiveTypeOptions(List.of(
@@ -721,6 +775,9 @@ abstract class AbstractProcessManagementSupport {
         return meta;
     }
 
+    /**
+     * 解析自定义档案。
+     */
     protected ProcessCustomArchiveResolveResultVO resolveCustomArchive(ProcessCustomArchiveResolveDTO dto) {
         ProcessCustomArchiveDesign archive = requireCustomArchive(trimToEmpty(dto.getArchiveCode()));
 
@@ -737,10 +794,16 @@ abstract class AbstractProcessManagementSupport {
         return result;
     }
 
+    /**
+     * 查询报销单类型Tree列表。
+     */
     protected List<ProcessExpenseTypeTreeVO> listExpenseTypeTree() {
         return buildExpenseTypeTree(loadAllExpenseTypes());
     }
 
+    /**
+     * 获取报销单类型元数据。
+     */
     protected ProcessExpenseTypeMetaVO getExpenseTypeMeta() {
         ProcessExpenseTypeMetaVO meta = new ProcessExpenseTypeMetaVO();
         meta.setDepartmentOptions(loadDepartmentOptions());
@@ -763,10 +826,16 @@ abstract class AbstractProcessManagementSupport {
         return meta;
     }
 
+    /**
+     * 获取报销单类型明细。
+     */
     protected ProcessExpenseTypeDetailVO getExpenseTypeDetail(Long id) {
         return buildExpenseTypeDetail(requireExpenseType(id));
     }
 
+    /**
+     * 创建报销单类型。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected ProcessExpenseTypeDetailVO createExpenseType(ProcessExpenseTypeSaveDTO dto) {
         validateExpenseType(dto, null);
@@ -777,6 +846,9 @@ abstract class AbstractProcessManagementSupport {
         return buildExpenseTypeDetail(requireExpenseType(expenseType.getId()));
     }
 
+    /**
+     * 更新报销单类型。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected ProcessExpenseTypeDetailVO updateExpenseType(Long id, ProcessExpenseTypeSaveDTO dto) {
         ProcessExpenseType expenseType = requireExpenseType(id);
@@ -791,6 +863,9 @@ abstract class AbstractProcessManagementSupport {
         return buildExpenseTypeDetail(requireExpenseType(id));
     }
 
+    /**
+     * 更新报销单类型Status。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean updateExpenseTypeStatus(Long id, Integer status) {
         ProcessExpenseType expenseType = requireExpenseType(id);
@@ -805,6 +880,9 @@ abstract class AbstractProcessManagementSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 删除报销单类型。
+     */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteExpenseType(Long id) {
         ProcessExpenseType expenseType = requireExpenseType(id);
@@ -818,90 +896,150 @@ abstract class AbstractProcessManagementSupport {
         return Boolean.TRUE;
     }
 
+    /**
+     * 查询报销单明细设计列表。
+     */
     public List<ProcessExpenseDetailDesignSummaryVO> listExpenseDetailDesigns() {
         return processExpenseDetailDesignService.listExpenseDetailDesigns();
     }
 
+    /**
+     * 获取报销单明细设计明细。
+     */
     public ProcessExpenseDetailDesignDetailVO getExpenseDetailDesignDetail(Long id) {
         return processExpenseDetailDesignService.getExpenseDetailDesignDetail(id);
     }
 
+    /**
+     * 创建报销单明细设计。
+     */
     public ProcessExpenseDetailDesignDetailVO createExpenseDetailDesign(ProcessExpenseDetailDesignSaveDTO dto) {
         return processExpenseDetailDesignService.createExpenseDetailDesign(dto);
     }
 
+    /**
+     * 更新报销单明细设计。
+     */
     public ProcessExpenseDetailDesignDetailVO updateExpenseDetailDesign(Long id, ProcessExpenseDetailDesignSaveDTO dto) {
         return processExpenseDetailDesignService.updateExpenseDetailDesign(id, dto);
     }
 
+    /**
+     * 删除报销单明细设计。
+     */
     public Boolean deleteExpenseDetailDesign(Long id) {
         return processExpenseDetailDesignService.deleteExpenseDetailDesign(id);
     }
 
+    /**
+     * 查询表单设计列表。
+     */
     public List<ProcessFormDesignSummaryVO> listFormDesigns(String templateType) {
         return processFormDesignService.listFormDesigns(templateType);
     }
 
+    /**
+     * 获取表单设计明细。
+     */
     public ProcessFormDesignDetailVO getFormDesignDetail(Long id) {
         return processFormDesignService.getFormDesignDetail(id);
     }
 
+    /**
+     * 创建表单设计。
+     */
     @Transactional(rollbackFor = Exception.class)
     public ProcessFormDesignDetailVO createFormDesign(ProcessFormDesignSaveDTO dto) {
         return processFormDesignService.createFormDesign(dto);
     }
 
+    /**
+     * 更新表单设计。
+     */
     @Transactional(rollbackFor = Exception.class)
     public ProcessFormDesignDetailVO updateFormDesign(Long id, ProcessFormDesignSaveDTO dto) {
         return processFormDesignService.updateFormDesign(id, dto);
     }
 
+    /**
+     * 删除表单设计。
+     */
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteFormDesign(Long id) {
         return processFormDesignService.deleteFormDesign(id);
     }
 
+    /**
+     * 查询流程列表。
+     */
     public List<ProcessFlowSummaryVO> listFlows() {
         return processFlowDesignService.listFlows();
     }
 
+    /**
+     * 获取流程元数据。
+     */
     public ProcessFlowMetaVO getFlowMeta() {
         return processFlowDesignService.getFlowMeta();
     }
 
+    /**
+     * 获取流程明细。
+     */
     public ProcessFlowDetailVO getFlowDetail(Long id) {
         return processFlowDesignService.getFlowDetail(id);
     }
 
+    /**
+     * 创建流程。
+     */
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowDetailVO createFlow(ProcessFlowSaveDTO dto) {
         return processFlowDesignService.createFlow(dto);
     }
 
+    /**
+     * 更新流程。
+     */
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowDetailVO updateFlow(Long id, ProcessFlowSaveDTO dto) {
         return processFlowDesignService.updateFlow(id, dto);
     }
 
+    /**
+     * 发布流程。
+     */
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowDetailVO publishFlow(Long id) {
         return processFlowDesignService.publishFlow(id);
     }
 
+    /**
+     * 更新流程Status。
+     */
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateFlowStatus(Long id, String status) {
         return processFlowDesignService.updateFlowStatus(id, status);
     }
 
+    /**
+     * 创建流程Scene。
+     */
     @Transactional(rollbackFor = Exception.class)
     public ProcessFlowSceneVO createFlowScene(ProcessFlowSceneSaveDTO dto) {
         return processFlowDesignService.createFlowScene(dto);
     }
 
+    /**
+     * 解析流程Approvers。
+     */
     public ProcessFlowResolveApproversVO resolveFlowApprovers(ProcessFlowResolveApproversDTO dto) {
         return processFlowDesignService.resolveApprovers(dto);
     }
 
+    /**
+     * 组装NavItems。
+     */
     private List<ProcessCenterNavItemVO> buildNavItems() {
         return List.of(
                 navItem("document-flow", "\u5355\u636e\u4e0e\u6d41\u7a0b", "\u7ef4\u62a4\u5355\u636e\u6a21\u677f\u3001\u5ba1\u6279\u6d41\u7a0b\u548c\u76f8\u5173\u914d\u7f6e\u80fd\u529b"),
@@ -911,6 +1049,9 @@ abstract class AbstractProcessManagementSupport {
         );
     }
 
+    /**
+     * 组装汇总。
+     */
     private ProcessCenterSummaryVO buildSummary(List<ProcessDocumentTemplate> templates) {
         ProcessCenterSummaryVO summary = new ProcessCenterSummaryVO();
         summary.setTotalTemplates(templates.size());
@@ -922,6 +1063,9 @@ abstract class AbstractProcessManagementSupport {
         return summary;
     }
 
+    /**
+     * 组装分类卡片。
+     */
     private List<ProcessTemplateCategoryVO> buildCategoryCards(
             List<ProcessTemplateCategory> categories,
             List<ProcessDocumentTemplate> templates,
@@ -963,6 +1107,9 @@ abstract class AbstractProcessManagementSupport {
         return result;
     }
 
+    /**
+     * 组装模板卡片。
+     */
     private List<ProcessTemplateCardVO> buildTemplateCards(
             List<ProcessDocumentTemplate> templates,
             String categoryName,
@@ -995,6 +1142,9 @@ abstract class AbstractProcessManagementSupport {
         }).toList();
     }
 
+    /**
+     * 组装模板明细。
+     */
     private ProcessTemplateDetailVO buildTemplateDetail(ProcessDocumentTemplate template) {
         Map<String, List<ProcessTemplateScope>> scopeMap = loadTemplateScopeMap(template.getId());
 
@@ -1025,6 +1175,9 @@ abstract class AbstractProcessManagementSupport {
         return detail;
     }
 
+    /**
+     * 组装模板SaveResult。
+     */
     private ProcessTemplateSaveResultVO buildTemplateSaveResult(ProcessDocumentTemplate template) {
         ProcessTemplateSaveResultVO result = new ProcessTemplateSaveResultVO();
         result.setId(template.getId());
@@ -1034,6 +1187,9 @@ abstract class AbstractProcessManagementSupport {
         return result;
     }
 
+    /**
+     * 加载模板Scope映射。
+     */
     private Map<String, List<ProcessTemplateScope>> loadTemplateScopeMap(Long templateId) {
         return scopeMapper.selectList(
                 Wrappers.<ProcessTemplateScope>lambdaQuery()
@@ -1071,6 +1227,9 @@ abstract class AbstractProcessManagementSupport {
         return trimToNull(scopes.get(0).getOptionCode());
     }
 
+    /**
+     * 解析档案Scope编码。
+     */
     private String resolveArchiveScopeCode(List<ProcessTemplateScope> archiveScopes, List<ProcessTemplateScope> legacyScopes) {
         String archiveCode = firstScopeCode(archiveScopes);
         if (archiveCode != null) {
@@ -1084,6 +1243,9 @@ abstract class AbstractProcessManagementSupport {
         return normalize(findArchiveCodeByLegacyItemCode(legacyItemCode), "");
     }
 
+    /**
+     * 查询档案编码按LegacyItem编码。
+     */
     private String findArchiveCodeByLegacyItemCode(String itemCode) {
         ProcessCustomArchiveItem item = customArchiveItemMapper.selectOne(
                 Wrappers.<ProcessCustomArchiveItem>lambdaQuery()
@@ -1108,6 +1270,9 @@ abstract class AbstractProcessManagementSupport {
                 .toList();
     }
 
+    /**
+     * 加载模板分类选项。
+     */
     private List<ProcessFormOptionVO> loadTemplateCategoryOptions() {
         List<ProcessFormOptionVO> options = categoryMapper.selectList(
                 Wrappers.<ProcessTemplateCategory>lambdaQuery()
@@ -1125,16 +1290,25 @@ abstract class AbstractProcessManagementSupport {
         );
     }
 
+    /**
+     * 加载表单设计选项。
+     */
     private List<ProcessFormOptionVO> loadFormDesignOptions(String templateType) {
         return processFormDesignService.listFormDesignOptions(templateType);
     }
 
+    /**
+     * 加载报销单明细设计选项。
+     */
     private List<ProcessExpenseDetailDesignSummaryVO> loadExpenseDetailDesignOptions(String templateType) {
         return Objects.equals(normalize(templateType, "report"), "report")
                 ? processExpenseDetailDesignService.listExpenseDetailDesigns()
                 : Collections.emptyList();
     }
 
+    /**
+     * 加载报销单明细Mode选项。
+     */
     private List<ProcessFormOptionVO> loadExpenseDetailModeOptions(String templateType) {
         if (!Objects.equals(normalize(templateType, "report"), "report")) {
             return Collections.emptyList();
@@ -1145,10 +1319,16 @@ abstract class AbstractProcessManagementSupport {
         );
     }
 
+    /**
+     * 解析表单设计编码。
+     */
     private String resolveFormDesignCode(String formDesign, String templateType) {
         return processFormDesignService.resolveFormDesignCode(formDesign, templateType);
     }
 
+    /**
+     * 解析报销单明细设计编码。
+     */
     private String resolveExpenseDetailDesignCode(String expenseDetailDesign, String templateType) {
         String normalizedTemplateType = normalize(templateType, "report");
         String normalizedCode = trimToNull(expenseDetailDesign);
@@ -1161,11 +1341,17 @@ abstract class AbstractProcessManagementSupport {
         return processExpenseDetailDesignService.resolveExpenseDetailDesignCode(normalizedCode);
     }
 
+    /**
+     * 解析报销单明细类型。
+     */
     private String resolveExpenseDetailType(String expenseDetailDesignCode) {
         String normalizedCode = trimToNull(expenseDetailDesignCode);
         return normalizedCode == null ? null : processExpenseDetailDesignService.resolveExpenseDetailType(normalizedCode);
     }
 
+    /**
+     * 解析报销单明细Mode默认。
+     */
     private String resolveExpenseDetailModeDefault(String expenseDetailModeDefault, String expenseDetailDesignCode) {
         String detailType = resolveExpenseDetailType(expenseDetailDesignCode);
         if (!Objects.equals(detailType, "ENTERPRISE_TRANSACTION")) {
@@ -1181,15 +1367,22 @@ abstract class AbstractProcessManagementSupport {
         return normalizedMode;
     }
 
+    /**
+     * 校验模板Scope。
+     */
     private void validateTemplateScope(ProcessTemplateSaveDTO dto) {
         String templateType = normalize(dto.getTemplateType(), "report");
+        validatePmNameLength(dto.getTemplateName(), "\u5355\u636e\u540d\u79f0");
         validateSelectableIds(normalizeIdList(dto.getScopeDeptIds()), loadValidDepartmentIdSet(), "\u90e8\u95e8");
         validateSelectableIds(normalizeIdList(dto.getScopeExpenseTypeCodes()), loadValidExpenseTypeCodeSet(), "\u8d39\u7528\u7c7b\u578b");
+        resolveFormDesignCode(dto.getFormDesign(), templateType);
+        resolveApprovalFlowCode(dto.getApprovalFlow(), processFlowDesignService.publishedFlowLabelMap());
 
         if (Objects.equals(templateType, "report")) {
             if (trimToNull(dto.getExpenseDetailDesign()) == null) {
                 throw new IllegalArgumentException("\u62a5\u9500\u6a21\u677f\u5fc5\u987b\u7ed1\u5b9a\u8d39\u7528\u660e\u7ec6\u8868\u5355");
             }
+            resolveExpenseDetailDesignCode(dto.getExpenseDetailDesign(), templateType);
         } else if (trimToNull(dto.getExpenseDetailDesign()) != null || trimToNull(dto.getExpenseDetailModeDefault()) != null) {
             throw new IllegalArgumentException("\u7533\u8bf7\u5355\u548c\u501f\u6b3e\u5355\u4e0d\u652f\u6301\u8d39\u7528\u660e\u7ec6\u8868\u5355");
         }
@@ -1236,6 +1429,9 @@ abstract class AbstractProcessManagementSupport {
         return highlights.stream().limit(3).toList();
     }
 
+    /**
+     * 保存ScopeItems。
+     */
     private void saveScopeItems(Long templateId, String optionType, List<String> codes, Map<String, String> labelMap) {
         List<String> normalizedCodes = normalizeIdList(codes);
         for (int index = 0; index < normalizedCodes.size(); index++) {
@@ -1250,6 +1446,9 @@ abstract class AbstractProcessManagementSupport {
         }
     }
 
+    /**
+     * 保存SingleScopeItem。
+     */
     private void saveSingleScopeItem(Long templateId, String optionType, String code, Map<String, String> labelMap) {
         String normalizedCode = trimToNull(code);
         if (normalizedCode == null) {
@@ -1295,6 +1494,9 @@ abstract class AbstractProcessManagementSupport {
         return templates.get(0).getSortOrder() + 1;
     }
 
+    /**
+     * 解析Description。
+     */
     private String resolveDescription(ProcessTemplateSaveDTO dto) {
         String description = trimToNull(dto.getTemplateDescription());
         if (description != null) {
@@ -1303,6 +1505,9 @@ abstract class AbstractProcessManagementSupport {
         return resolveTemplateTypeLabel(dto.getTemplateType()) + "\u6a21\u677f";
     }
 
+    /**
+     * 解析模板类型Label。
+     */
     private String resolveTemplateTypeLabel(String templateType) {
         return switch (normalize(templateType, "report")) {
             case "application" -> "\u7533\u8bf7\u5355";
@@ -1312,6 +1517,9 @@ abstract class AbstractProcessManagementSupport {
         };
     }
 
+    /**
+     * 解析审批流程编码。
+     */
     private String resolveApprovalFlowCode(String approvalFlow, Map<String, String> flowLabelMap) {
         String flowCode = trimToNull(approvalFlow);
         if (flowCode == null) {
@@ -1324,6 +1532,9 @@ abstract class AbstractProcessManagementSupport {
     }
 
 
+    /**
+     * 解析Color。
+     */
     private String resolveColor(String iconColor) {
         return switch (normalize(iconColor, "blue")) {
             case "cyan" -> "linear-gradient(135deg, #0891b2 0%, #67e8f9 100%)";
@@ -1333,6 +1544,9 @@ abstract class AbstractProcessManagementSupport {
         };
     }
 
+    /**
+     * 组装模板编码。
+     */
     protected String buildTemplateCode() {
         String bizDate = LocalDate.now().format(CODE_DATE_FORMATTER);
         String prefix = TEMPLATE_CODE_PREFIX + bizDate;
@@ -1412,6 +1626,9 @@ abstract class AbstractProcessManagementSupport {
         }
     }
 
+    /**
+     * 判断模板编码Duplicate是否成立。
+     */
     private boolean isTemplateCodeDuplicate(DuplicateKeyException ex) {
         String message = ex.getMostSpecificCause() != null
                 ? ex.getMostSpecificCause().getMessage()
@@ -1441,6 +1658,9 @@ abstract class AbstractProcessManagementSupport {
         ));
     }
 
+    /**
+     * 保存AmountScopeItems。
+     */
     private void saveAmountScopeItems(Long templateId, BigDecimal amountMin, BigDecimal amountMax) {
         if (amountMin != null) {
             saveSingleScopeValue(templateId, SCOPE_TYPE_AMOUNT_MIN, amountMin.stripTrailingZeros().toPlainString(), "\u6700\u5c0f\u91d1\u989d", 1);
@@ -1450,6 +1670,9 @@ abstract class AbstractProcessManagementSupport {
         }
     }
 
+    /**
+     * 保存SingleScopeValue。
+     */
     private void saveSingleScopeValue(Long templateId, String optionType, String optionCode, String optionLabel, int sortOrder) {
         ProcessTemplateScope scope = new ProcessTemplateScope();
         scope.setTemplateId(templateId);
@@ -1469,6 +1692,9 @@ abstract class AbstractProcessManagementSupport {
         return labelMap;
     }
 
+    /**
+     * 加载Enabled档案选项。
+     */
     private List<ProcessFormOptionVO> loadEnabledArchiveOptions() {
         return customArchiveDesignMapper.selectList(
                 Wrappers.<ProcessCustomArchiveDesign>lambdaQuery()
@@ -1486,6 +1712,9 @@ abstract class AbstractProcessManagementSupport {
         ));
     }
 
+    /**
+     * 加载Select档案选项。
+     */
     private List<ProcessFormOptionVO> loadSelectArchiveOptions(String archiveCode) {
         ProcessCustomArchiveDesign archive = customArchiveDesignMapper.selectOne(
                 Wrappers.<ProcessCustomArchiveDesign>lambdaQuery()
@@ -1550,6 +1779,9 @@ abstract class AbstractProcessManagementSupport {
         return archive;
     }
 
+    /**
+     * 组装自定义档案明细。
+     */
     private ProcessCustomArchiveDetailVO buildCustomArchiveDetail(ProcessCustomArchiveDesign archive) {
         ProcessCustomArchiveDetailVO detail = new ProcessCustomArchiveDetailVO();
         detail.setId(archive.getId());
@@ -1594,6 +1826,9 @@ abstract class AbstractProcessManagementSupport {
         return dto;
     }
 
+    /**
+     * 加载Rule映射。
+     */
     private Map<Long, List<ProcessCustomArchiveRule>> loadRuleMap(List<Long> itemIds) {
         if (itemIds.isEmpty()) {
             return Collections.emptyMap();
@@ -1616,18 +1851,24 @@ abstract class AbstractProcessManagementSupport {
         archive.setStatus(normalizeStatus(dto.getStatus()));
     }
 
+    /**
+     * 校验自定义档案。
+     */
     private void validateCustomArchive(ProcessCustomArchiveSaveDTO dto) {
         if (!Set.of(ARCHIVE_TYPE_SELECT, ARCHIVE_TYPE_AUTO_RULE).contains(trimToEmpty(dto.getArchiveType()))) {
-            throw new IllegalArgumentException("闂傚倸鍊搁崐鐑芥嚄閸洖鍌ㄧ憸鏃堝Υ閸愨晜鍎熼柕蹇嬪焺濞茬鈹戦悩璇у伐闁绘锕畷鎴﹀煛閸涱喚鍘介梺閫涘嵆濞佳勬櫠娴煎瓨鐓冪紓浣股戠粈鈧銈庡弨濞夋洟骞戦崟顒傜懝妞ゆ牗鑹炬竟鍕⒒娓氣偓閳ь剛鍋涢懟顖涙櫠椤曗偓閺屾稒绻濋崘鈺佲偓鎰版煏閸℃鍣虹紒铏规櫕缁瑩宕稿Δ鈧弫褰掓⒒娓氣偓濞佳勵殽韫囨洜绀婇柛鈩冾殢閻掍粙鏌涢锝嗙闁抽攱鍨块弻鐔兼嚃閳轰椒绮舵繝纰樷偓鍐叉倯闁靛洤瀚伴獮瀣攽閸♀晙绱戦梻浣告啞鐢鏁Δ鍛畾闁哄啫鐗嗘儫闂侀潧锛忛崘鈺傚暉婵犵绱曢崑鎴﹀磹閺嶎厽鍋嬫俊銈呭暟閻瑩鏌熸潏楣冩闁?SELECT 闂?AUTO_RULE");
+            throw new IllegalArgumentException("\u6863\u6848\u7c7b\u578b\u4e0d\u5408\u6cd5\uff0c\u53ea\u652f\u6301 SELECT \u6216 AUTO_RULE");
         }
+        validatePmNameLength(dto.getArchiveName(), "\u6863\u6848\u540d\u79f0");
         if (dto.getItems() == null || dto.getItems().isEmpty()) {
             throw new IllegalArgumentException("\u8bf7\u81f3\u5c11\u6dfb\u52a0\u4e00\u4e2a\u7ed3\u679c\u9879");
         }
 
-        for (ProcessCustomArchiveItemDTO item : dto.getItems()) {
+        for (int index = 0; index < dto.getItems().size(); index++) {
+            ProcessCustomArchiveItemDTO item = dto.getItems().get(index);
             if (trimToNull(item.getItemName()) == null) {
                 throw new IllegalArgumentException("\u7ed3\u679c\u9879\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
             }
+            validatePmNameLength(item.getItemName(), "\u7b2c " + (index + 1) + " \u4e2a\u7ed3\u679c\u9879\u540d\u79f0");
             if (ARCHIVE_TYPE_AUTO_RULE.equals(dto.getArchiveType())) {
                 validateRules(item.getRules());
             }
@@ -1642,7 +1883,9 @@ abstract class AbstractProcessManagementSupport {
             if (rule.getGroupNo() == null || rule.getGroupNo() < 1) {
                 throw new IllegalArgumentException("\u89c4\u5219\u7ec4\u5e8f\u53f7\u5fc5\u987b\u5927\u4e8e 0");
             }
-            RuleFieldDefinition definition = RULE_FIELD_MAP.get(rule.getFieldKey());
+            String fieldKey = trimToNull(rule.getFieldKey());
+            validateFieldKeyLength(fieldKey, "\u89c4\u5219\u5b57\u6bb5");
+            RuleFieldDefinition definition = RULE_FIELD_MAP.get(fieldKey);
             if (definition == null) {
                 throw new IllegalArgumentException("\u4e0d\u652f\u6301\u7684\u89c4\u5219\u5b57\u6bb5: " + rule.getFieldKey());
             }
@@ -1690,11 +1933,17 @@ abstract class AbstractProcessManagementSupport {
         }
     }
 
+    /**
+     * 解析档案Item编码。
+     */
     private String resolveArchiveItemCode(ProcessCustomArchiveItemDTO itemDto) {
         String itemCode = trimToNull(itemDto.getItemCode());
         return itemCode != null ? itemCode : buildCustomArchiveItemCode();
     }
 
+    /**
+     * 删除档案Children。
+     */
     private void deleteArchiveChildren(Long archiveId) {
         List<ProcessCustomArchiveItem> items = customArchiveItemMapper.selectList(
                 Wrappers.<ProcessCustomArchiveItem>lambdaQuery()
@@ -1724,6 +1973,9 @@ abstract class AbstractProcessManagementSupport {
         return items.stream().sorted(comparator).toList();
     }
 
+    /**
+     * 组装自定义档案编码。
+     */
     private String buildCustomArchiveCode() {
         String prefix = CUSTOM_ARCHIVE_CODE_PREFIX + LocalDate.now().format(CODE_DATE_FORMATTER);
         Long count = customArchiveDesignMapper.selectCount(
@@ -1734,6 +1986,9 @@ abstract class AbstractProcessManagementSupport {
         return prefix + String.format("%04d", next);
     }
 
+    /**
+     * 组装自定义档案Item编码。
+     */
     private String buildCustomArchiveItemCode() {
         String prefix = CUSTOM_ARCHIVE_ITEM_CODE_PREFIX + LocalDate.now().format(CODE_DATE_FORMATTER);
         Long count = customArchiveItemMapper.selectCount(
@@ -1763,6 +2018,9 @@ abstract class AbstractProcessManagementSupport {
         }
     }
 
+    /**
+     * 解析Select档案。
+     */
     private List<ProcessCustomArchiveResolveItemVO> resolveSelectArchive(Long archiveId) {
         return customArchiveItemMapper.selectList(
                 Wrappers.<ProcessCustomArchiveItem>lambdaQuery()
@@ -1772,6 +2030,9 @@ abstract class AbstractProcessManagementSupport {
         ).stream().map(this::toResolvedItem).toList();
     }
 
+    /**
+     * 解析AutoRule档案。
+     */
     private List<ProcessCustomArchiveResolveItemVO> resolveAutoRuleArchive(Long archiveId, Map<String, Object> context) {
         List<ProcessCustomArchiveItem> items = customArchiveItemMapper.selectList(
                 Wrappers.<ProcessCustomArchiveItem>lambdaQuery()
@@ -1883,12 +2144,18 @@ abstract class AbstractProcessManagementSupport {
         return resolvedItem;
     }
 
+    /**
+     * 解析档案类型Label。
+     */
     private String resolveArchiveTypeLabel(String archiveType) {
         if (ARCHIVE_TYPE_AUTO_RULE.equals(archiveType)) {
             return "\u81ea\u52a8\u5212\u5206";
         }
         return "\u63d0\u4f9b\u9009\u62e9";
     }
+    /**
+     * 加载全部报销单类型。
+     */
     private List<ProcessExpenseType> loadAllExpenseTypes() {
         return processExpenseTypeMapper.selectList(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -1896,6 +2163,9 @@ abstract class AbstractProcessManagementSupport {
         );
     }
 
+    /**
+     * 加载Enabled报销单类型。
+     */
     private List<ProcessExpenseType> loadEnabledExpenseTypes() {
         return processExpenseTypeMapper.selectList(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -1904,10 +2174,16 @@ abstract class AbstractProcessManagementSupport {
         );
     }
 
+    /**
+     * 加载Enabled报销单类型Tree。
+     */
     private List<ProcessExpenseTypeTreeVO> loadEnabledExpenseTypeTree() {
         return buildExpenseTypeTree(loadEnabledExpenseTypes());
     }
 
+    /**
+     * 组装报销单类型Tree。
+     */
     private List<ProcessExpenseTypeTreeVO> buildExpenseTypeTree(List<ProcessExpenseType> expenseTypes) {
         if (expenseTypes.isEmpty()) {
             return Collections.emptyList();
@@ -1940,6 +2216,9 @@ abstract class AbstractProcessManagementSupport {
         return treeNode;
     }
 
+    /**
+     * 组装报销单类型明细。
+     */
     private ProcessExpenseTypeDetailVO buildExpenseTypeDetail(ProcessExpenseType expenseType) {
         ProcessExpenseTypeDetailVO detail = new ProcessExpenseTypeDetailVO();
         detail.setId(expenseType.getId());
@@ -1958,8 +2237,12 @@ abstract class AbstractProcessManagementSupport {
         return detail;
     }
 
+    /**
+     * 校验报销单类型。
+     */
     private void validateExpenseType(ProcessExpenseTypeSaveDTO dto, ProcessExpenseType existing) {
         String expenseCode = trimToEmpty(dto.getExpenseCode());
+        validatePmNameLength(dto.getExpenseName(), "\u8d39\u7528\u7c7b\u578b\u540d\u79f0");
         if (!expenseCode.matches("\\d{6}(\\d{2})?")) {
             throw new IllegalArgumentException("\u8d39\u7528\u7c7b\u578b\u7f16\u7801\u5fc5\u987b\u4e3a 6 \u4f4d\u6216 8 \u4f4d\u6570\u5b57");
         }
@@ -2023,6 +2306,9 @@ abstract class AbstractProcessManagementSupport {
         expenseType.setStatus(normalizeStatus(dto.getStatus()));
     }
 
+    /**
+     * 校验报销单类型Status。
+     */
     private void validateExpenseTypeStatus(ProcessExpenseType expenseType, Integer status) {
         if (status != 1 || expenseType.getParentId() == null) {
             return;
@@ -2055,6 +2341,9 @@ abstract class AbstractProcessManagementSupport {
         return expenseType;
     }
 
+    /**
+     * 判断是否拥有报销单类型Children。
+     */
     private boolean hasExpenseTypeChildren(Long id) {
         Long count = processExpenseTypeMapper.selectCount(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -2063,6 +2352,9 @@ abstract class AbstractProcessManagementSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 判断报销单类型Referenced是否成立。
+     */
     private boolean isExpenseTypeReferenced(ProcessExpenseType expenseType) {
         Long count = scopeMapper.selectCount(
                 Wrappers.<ProcessTemplateScope>lambdaQuery()
@@ -2072,6 +2364,9 @@ abstract class AbstractProcessManagementSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 查询报销单类型按编码。
+     */
     private ProcessExpenseType findExpenseTypeByCode(String expenseCode) {
         return processExpenseTypeMapper.selectOne(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -2088,6 +2383,9 @@ abstract class AbstractProcessManagementSupport {
         return option;
     }
 
+    /**
+     * 加载Department选项。
+     */
     private List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
@@ -2097,6 +2395,9 @@ abstract class AbstractProcessManagementSupport {
         ).stream().map(department -> option(department.getDeptName(), String.valueOf(department.getId()))).toList();
     }
 
+    /**
+     * 加载用户选项。
+     */
     private List<ProcessFormOptionVO> loadUserOptions() {
         return userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
@@ -2111,6 +2412,9 @@ abstract class AbstractProcessManagementSupport {
         }).toList();
     }
 
+    /**
+     * 加载ValidDepartmentIdSet。
+     */
     private Set<String> loadValidDepartmentIdSet() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
@@ -2119,6 +2423,9 @@ abstract class AbstractProcessManagementSupport {
         ).stream().map(item -> String.valueOf(item.getId())).collect(Collectors.toSet());
     }
 
+    /**
+     * 加载Valid用户IdSet。
+     */
     private Set<String> loadValidUserIdSet() {
         return userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
@@ -2127,6 +2434,9 @@ abstract class AbstractProcessManagementSupport {
         ).stream().map(item -> String.valueOf(item.getId())).collect(Collectors.toSet());
     }
 
+    /**
+     * 加载Valid报销单类型编码Set。
+     */
     private Set<String> loadValidExpenseTypeCodeSet() {
         return loadEnabledExpenseTypes().stream()
                 .map(ProcessExpenseType::getExpenseCode)
@@ -2134,6 +2444,9 @@ abstract class AbstractProcessManagementSupport {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * 校验SelectableIds。
+     */
     private void validateSelectableIds(List<String> selectedIds, Set<String> validIds, String fieldName) {
         for (String selectedId : selectedIds) {
             if (!validIds.contains(selectedId)) {
@@ -2215,6 +2528,23 @@ abstract class AbstractProcessManagementSupport {
     private String normalize(String value, String defaultValue) {
         String normalizedValue = trimToNull(value);
         return normalizedValue == null ? defaultValue : normalizedValue;
+    }
+
+    private void validatePmNameLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > PM_NAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
+        }
+    }
+
+    private void validateFieldKeyLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            throw new IllegalArgumentException(label + "\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (normalized.length() > PM_FIELD_KEY_MAX_LENGTH) {
+            throw new IllegalArgumentException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
+        }
     }
 
     private String trimToEmpty(String value) {

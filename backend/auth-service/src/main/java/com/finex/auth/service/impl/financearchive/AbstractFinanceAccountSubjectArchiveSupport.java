@@ -1,3 +1,8 @@
+// 业务域：财务档案
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 供应商、客户、项目、科目等档案页面接口，下游会继续协调 档案主数据、下拉选项和与凭证、报销单的基础对应。
+// 风险提醒：改坏后最容易影响 基础档案错配、下游选项错误和历史单据对应失效。
+
 package com.finex.auth.service.impl.financearchive;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -20,6 +25,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * AbstractFinanceAccountSubjectArchiveSupport：通用支撑类。
+ * 封装 财务账户科目档案这块可复用的业务能力。
+ * 改这里时，要特别关注 基础档案错配、下游选项错误和历史单据对应失效是否会被一起带坏。
+ */
 public abstract class AbstractFinanceAccountSubjectArchiveSupport {
 
     protected static final String CATEGORY_ASSET = "ASSET";
@@ -35,6 +45,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
     protected final GlAccvouchMapper glAccvouchMapper;
     protected final ObjectMapper objectMapper;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     protected AbstractFinanceAccountSubjectArchiveSupport(
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
             SystemCompanyMapper systemCompanyMapper,
@@ -47,6 +60,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 组装Tree。
+     */
     protected List<FinanceAccountSubjectSummaryVO> buildTree(List<FinanceAccountSubject> subjects) {
         Map<String, FinanceAccountSubjectSummaryVO> summaryByCode = new LinkedHashMap<>();
         for (FinanceAccountSubject subject : subjects) {
@@ -68,6 +84,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return roots;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected FinanceAccountSubjectSummaryVO toSummary(FinanceAccountSubject subject) {
         FinanceAccountSubjectSummaryVO summary = new FinanceAccountSubjectSummaryVO();
         summary.setSubjectCode(subject.getSubjectCode());
@@ -102,6 +121,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return summary;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected FinanceAccountSubjectDetailVO toDetail(FinanceAccountSubject subject) {
         FinanceAccountSubjectDetailVO detail = new FinanceAccountSubjectDetailVO();
         detail.setId(subject.getId());
@@ -168,6 +190,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return detail;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected void applyMutableFields(FinanceAccountSubject target, FinanceAccountSubjectSaveDTO dto, boolean createMode) {
         target.setSubjectName(requireText(dto.getSubjectName(), "科目名称不能为空"));
         target.setSubjectCategory(resolveCategory(dto.getSubjectCategory()));
@@ -225,6 +250,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         }
     }
 
+    /**
+     * 校验Controlled字段变更。
+     */
     protected void validateControlledFieldChanges(FinanceAccountSubject before, FinanceAccountSubject after) {
         if (!hasVoucherReference(before.getCompanyId(), before.getSubjectCode())) {
             return;
@@ -248,6 +276,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         }
     }
 
+    /**
+     * 解析科目Level。
+     */
     protected Integer resolveSubjectLevel(FinanceAccountSubjectSaveDTO dto, FinanceAccountSubject parent) {
         if (parent != null) {
             int computedLevel = (parent.getSubjectLevel() == null ? 1 : parent.getSubjectLevel()) + 1;
@@ -262,6 +293,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return 1;
     }
 
+    /**
+     * 解析BalanceDirection。
+     */
     protected String resolveBalanceDirection(String subjectCode, String subjectCategory, FinanceAccountSubject parent) {
         if (parent != null && trimToNull(parent.getBalanceDirection()) != null) {
             return parent.getBalanceDirection();
@@ -283,6 +317,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         };
     }
 
+    /**
+     * 解析分类。
+     */
     protected String resolveCategory(String subjectCategory) {
         String normalized = trimToNull(subjectCategory);
         if (normalized == null) {
@@ -295,6 +332,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return normalized;
     }
 
+    /**
+     * 解析NextSortOrder。
+     */
     protected Integer resolveNextSortOrder(String companyId, String parentSubjectCode) {
         var query = Wrappers.<FinanceAccountSubject>lambdaQuery()
                 .eq(FinanceAccountSubject::getCompanyId, companyId)
@@ -313,6 +353,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return (maxSortOrder == null ? 0 : maxSortOrder) + 10;
     }
 
+    /**
+     * 校验SavePayload。
+     */
     protected void validateSavePayload(FinanceAccountSubjectSaveDTO dto) {
         if (dto == null) {
             throw new IllegalArgumentException("科目数据不能为空");
@@ -321,6 +364,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         requireText(dto.getSubjectName(), "科目名称不能为空");
     }
 
+    /**
+     * 校验Parent可用ForEnable。
+     */
     protected void validateParentAvailableForEnable(FinanceAccountSubject subject) {
         String parentSubjectCode = trimToNull(subject.getParentSubjectCode());
         if (parentSubjectCode == null) {
@@ -332,6 +378,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         }
     }
 
+    /**
+     * 组装Auxiliary汇总。
+     */
     protected String buildAuxiliarySummary(FinanceAccountSubject subject) {
         List<String> tags = new ArrayList<>();
         if (isEnabled(subject.getBperson())) {
@@ -352,6 +401,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return tags.isEmpty() ? "无" : String.join(" / ", tags);
     }
 
+    /**
+     * 组装Cash银行汇总。
+     */
     protected String buildCashBankSummary(FinanceAccountSubject subject) {
         List<String> tags = new ArrayList<>();
         if (isEnabled(subject.getBcash())) {
@@ -369,6 +421,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return tags.isEmpty() ? "无" : String.join(" / ", tags);
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected FinanceAccountSubject requireSubject(String companyId, String subjectCode) {
         String normalizedCompanyId = requireCompanyId(companyId);
         String normalizedSubjectCode = requireText(subjectCode, "科目编码不能为空");
@@ -384,6 +439,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return subject;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected void requireEnabledCompany(String companyId) {
         SystemCompany company = systemCompanyMapper.selectById(companyId);
         if (company == null || !Objects.equals(company.getStatus(), 1)) {
@@ -391,6 +449,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         }
     }
 
+    /**
+     * 判断是否拥有Children。
+     */
     protected boolean hasChildren(String companyId, String subjectCode) {
         Long count = financeAccountSubjectMapper.selectCount(
                 Wrappers.<FinanceAccountSubject>lambdaQuery()
@@ -400,6 +461,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 判断是否拥有EnabledChildren。
+     */
     protected boolean hasEnabledChildren(String companyId, String subjectCode) {
         Long count = financeAccountSubjectMapper.selectCount(
                 Wrappers.<FinanceAccountSubject>lambdaQuery()
@@ -410,6 +474,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 判断是否拥有开立Children。
+     */
     protected boolean hasOpenChildren(String companyId, String subjectCode) {
         Long count = financeAccountSubjectMapper.selectCount(
                 Wrappers.<FinanceAccountSubject>lambdaQuery()
@@ -420,6 +487,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 判断是否拥有凭证Reference。
+     */
     protected boolean hasVoucherReference(String companyId, String subjectCode) {
         Long count = glAccvouchMapper.selectCount(
                 Wrappers.lambdaQuery(com.finex.auth.entity.GlAccvouch.class)
@@ -429,10 +499,16 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return count != null && count > 0;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected FinanceAccountSubject cloneSubject(FinanceAccountSubject source) {
         return objectMapper.convertValue(source, FinanceAccountSubject.class);
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected String defaultBookType(FinanceAccountSubject subject) {
         if (isEnabled(subject.getBcash())) {
             return "CASH";
@@ -443,46 +519,79 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return "GENERAL";
     }
 
+    /**
+     * 解析默认Property。
+     */
     protected int resolveDefaultProperty(String balanceDirection) {
         return BALANCE_DEBIT.equalsIgnoreCase(trimToNull(balanceDirection)) ? 1 : 0;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected int defaultCashSubjectFlag(FinanceAccountSubject subject) {
         return startsWithSubjectCode(subject, "1001") ? 1 : 0;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected int defaultBankSubjectFlag(FinanceAccountSubject subject) {
         return startsWithSubjectCode(subject, "1002") ? 1 : 0;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected int defaultCashBookFlag(FinanceAccountSubject subject) {
         return isEnabled(subject.getBcash()) || defaultCashSubjectFlag(subject) == 1 || defaultBankSubjectFlag(subject) == 1 ? 1 : 0;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected int defaultBankBookFlag(FinanceAccountSubject subject) {
         return isEnabled(subject.getBbank()) || defaultBankSubjectFlag(subject) == 1 ? 1 : 0;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected boolean startsWithSubjectCode(FinanceAccountSubject subject, String prefix) {
         return trimToNull(subject.getSubjectCode()) != null && subject.getSubjectCode().startsWith(prefix);
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected Integer defaultDefineFlag(Integer value) {
         return value == null ? 0 : normalizeFlag(value, 0);
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected Integer normalizeLeafFlag(Integer value, Integer defaultValue) {
         return normalizeFlag(value, defaultValue == null ? 1 : defaultValue);
     }
 
+    /**
+     * 判断Enabled是否成立。
+     */
     protected boolean isEnabled(Integer value) {
         return Objects.equals(normalizeFlag(value, 0), 1);
     }
 
+    /**
+     * 判断Closed是否成立。
+     */
     protected boolean isClosed(Integer value) {
         return Objects.equals(normalizeFlag(value, 0), 1);
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected Integer normalizeFlag(Integer value, Integer defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -493,6 +602,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return value;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected FinanceAccountSubjectOptionVO option(String value, String label) {
         FinanceAccountSubjectOptionVO option = new FinanceAccountSubjectOptionVO();
         option.setValue(value);
@@ -500,11 +612,17 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return option;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected String defaultText(String value, String defaultValue) {
         String normalized = trimToNull(value);
         return normalized == null ? defaultValue : normalized;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected String requireCompanyId(String companyId) {
         String normalized = trimToNull(companyId);
         if (normalized == null) {
@@ -513,6 +631,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return normalized;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected String requireText(String value, String message) {
         String normalized = trimToNull(value);
         if (normalized == null) {
@@ -521,6 +642,9 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return normalized;
     }
 
+    /**
+     * 处理财务账户科目档案中的这一步。
+     */
     protected String trimToNull(String value) {
         if (value == null) {
             return null;

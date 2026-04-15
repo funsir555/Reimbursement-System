@@ -112,7 +112,12 @@
 
             <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <el-form-item label="类型名称" required>
-                <el-input v-model="form.expenseName" placeholder="请输入费用类型名称" />
+                <el-input
+                  v-model="form.expenseName"
+                  :maxlength="PM_NAME_MAX_LENGTH"
+                  show-word-limit
+                  placeholder="请输入费用类型名称"
+                />
               </el-form-item>
 
               <el-form-item label="完整类型编码" required>
@@ -248,6 +253,7 @@ import {
   type ProcessExpenseTypeMeta,
   type ProcessExpenseTypeTreeNode
 } from '@/api'
+import { PM_NAME_MAX_LENGTH, validateMaxLength } from '@/views/process/pmValidation'
 
 type ExpenseTypeTreeInstance = {
   setCurrentKey: (key: number | null) => void
@@ -400,6 +406,11 @@ const saveExpenseType = async () => {
   }
   if (!form.value.expenseName.trim()) {
     ElMessage.warning('请先输入类型名称')
+    return
+  }
+  const expenseNameIssue = validateMaxLength(form.value.expenseName, PM_NAME_MAX_LENGTH, '费用类型名称')
+  if (expenseNameIssue) {
+    ElMessage.warning(expenseNameIssue)
     return
   }
   if (!/^\\d{6}(\\d{2})?$/.test(form.value.expenseCode.trim())) {

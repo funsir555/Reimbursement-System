@@ -48,7 +48,7 @@ class FinanceProjectArchiveServiceImplTest {
     }
 
     @Test
-    void createProjectClassRejectsNonTwoDigitCode() {
+    void createProjectClassRejectsNonNumericOrOverlongCode() {
         FinanceProjectClassSaveDTO dto = new FinanceProjectClassSaveDTO();
         dto.setProjectClassCode("A1");
         dto.setProjectClassName("市场项目");
@@ -56,7 +56,32 @@ class FinanceProjectArchiveServiceImplTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
                 service.createProjectClass("COMPANY_A", dto, "tester")
         );
-        assertEquals("项目分类编码必须为2位数字文本", exception.getMessage());
+        assertEquals("\u9879\u76ee\u5206\u7c7b\u7f16\u7801\u5fc5\u987b\u4e3a1-2\u4f4d\u6570\u5b57\u6587\u672c", exception.getMessage());
+    }
+
+
+    @Test
+    void createProjectClassAllowsSingleDigitCode() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setStatus(1);
+
+        FinanceProjectClass created = new FinanceProjectClass();
+        created.setCompanyId("COMPANY_A");
+        created.setProjectClassCode("7");
+        created.setProjectClassName("R&D Projects");
+        created.setStatus(1);
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(financeProjectClassMapper.selectOne(any())).thenReturn(null, created);
+        when(financeProjectClassMapper.selectCount(any())).thenReturn(0L);
+        when(financeProjectArchiveMapper.selectCount(any())).thenReturn(0L);
+
+        FinanceProjectClassSaveDTO dto = new FinanceProjectClassSaveDTO();
+        dto.setProjectClassCode("7");
+        dto.setProjectClassName("R&D Projects");
+
+        assertEquals("7", service.createProjectClass("COMPANY_A", dto, "tester").getProjectClassCode());
     }
 
     @Test
@@ -84,16 +109,52 @@ class FinanceProjectArchiveServiceImplTest {
     }
 
     @Test
-    void createProjectRejectsNonSixDigitCode() {
+    void createProjectRejectsNonNumericOrOverlongCode() {
         FinanceProjectSaveDTO dto = new FinanceProjectSaveDTO();
-        dto.setCitemcode("P001");
+        dto.setCitemcode("1234567");
         dto.setCitemname("项目一");
         dto.setCitemccode("01");
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
                 service.createProject("COMPANY_A", dto, "tester")
         );
-        assertEquals("项目编码必须为6位数字文本", exception.getMessage());
+        assertEquals("\u9879\u76ee\u7f16\u7801\u5fc5\u987b\u4e3a1-6\u4f4d\u6570\u5b57\u6587\u672c", exception.getMessage());
+    }
+
+
+    @Test
+    void createProjectAllowsShortNumericCode() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setStatus(1);
+
+        FinanceProjectClass projectClass = new FinanceProjectClass();
+        projectClass.setCompanyId("COMPANY_A");
+        projectClass.setProjectClassCode("7");
+        projectClass.setProjectClassName("R&D Projects");
+        projectClass.setStatus(1);
+
+        FinanceProjectArchive created = new FinanceProjectArchive();
+        created.setCompanyId("COMPANY_A");
+        created.setCitemcode("2002");
+        created.setCitemname("Project One");
+        created.setCitemccode("7");
+        created.setStatus(1);
+        created.setBclose(0);
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(financeProjectArchiveMapper.selectOne(any())).thenReturn(null, created);
+        when(financeProjectClassMapper.selectOne(any())).thenReturn(projectClass);
+        when(financeProjectArchiveMapper.selectCount(any())).thenReturn(0L);
+        when(financeProjectArchiveMapper.insert(any(FinanceProjectArchive.class))).thenReturn(1);
+        when(glAccvouchMapper.selectCount(any())).thenReturn(0L);
+
+        FinanceProjectSaveDTO dto = new FinanceProjectSaveDTO();
+        dto.setCitemcode("2002");
+        dto.setCitemname("Project One");
+        dto.setCitemccode("7");
+
+        assertEquals("2002", service.createProject("COMPANY_A", dto, "tester").getCitemcode());
     }
 
     @Test

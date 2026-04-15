@@ -1,3 +1,8 @@
+// 业务域：异步任务
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 异步提交、查询和通知相关接口，下游会继续协调 任务记录、状态更新和通知消息。
+// 风险提醒：改坏后最容易影响 任务重复提交、异步状态不准确和结果回传。
+
 package com.finex.auth.service.impl.asynctask;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,8 +23,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+/**
+ * AsyncTaskSubmissionDomainSupport：领域规则支撑类。
+ * 承接 异步任务提交的核心业务规则。
+ * 改这里时，要特别关注 任务重复提交、异步状态不准确和结果回传是否会被一起带坏。
+ */
 public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDomainSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public AsyncTaskSubmissionDomainSupport(
             AsyncTaskRecordMapper asyncTaskRecordMapper,
             DownloadRecordMapper downloadRecordMapper,
@@ -30,6 +43,9 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
         super(asyncTaskRecordMapper, downloadRecordMapper, notificationRecordMapper, asyncTaskWorker, objectMapper);
     }
 
+    /**
+     * 提交发票Export。
+     */
     public AsyncTaskSubmitResultVO submitInvoiceExport(Long userId) {
         DownloadRecord downloadRecord = new DownloadRecord();
         downloadRecord.setUserId(userId);
@@ -53,6 +69,9 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
         return toSubmitResult(task, "导出任务已提交，请到下载中心查看进度");
     }
 
+    /**
+     * 提交报销单Export。
+     */
     public AsyncTaskSubmitResultVO submitExpenseExport(Long userId, ExpenseExportSubmitDTO dto) {
         ExpenseExportSubmitDTO payload = normalizeExpenseExportPayload(dto);
         DownloadRecord downloadRecord = new DownloadRecord();
@@ -77,6 +96,9 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
         return toSubmitResult(task, "导出任务已提交，请到下载中心查看进度");
     }
 
+    /**
+     * 提交发票Verify。
+     */
     public AsyncTaskSubmitResultVO submitInvoiceVerify(Long userId, InvoiceTaskSubmitDTO dto) {
         String businessKey = AsyncTaskSupport.buildInvoiceBusinessKey(dto.getCode(), dto.getNumber());
         AsyncTaskRecord existing = findActiveTask(userId, AsyncTaskSupport.TASK_TYPE_INVOICE_VERIFY, businessKey);
@@ -97,6 +119,9 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
         return toSubmitResult(task, "发票验真任务已提交");
     }
 
+    /**
+     * 提交发票Ocr。
+     */
     public AsyncTaskSubmitResultVO submitInvoiceOcr(Long userId, InvoiceTaskSubmitDTO dto) {
         String businessKey = AsyncTaskSupport.buildInvoiceBusinessKey(dto.getCode(), dto.getNumber());
         AsyncTaskRecord existing = findActiveTask(userId, AsyncTaskSupport.TASK_TYPE_INVOICE_OCR, businessKey);
@@ -177,6 +202,9 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
         return List.copyOf(normalized);
     }
 
+    /**
+     * 解析报销单ExportFileName。
+     */
     private String resolveExpenseExportFileName(ExpenseExportSubmitDTO payload) {
         return switch (payload.getScene()) {
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES -> "我的报销-" + LocalDateTime.now().format(FILE_TIME_FORMATTER) + ".xlsx";
@@ -189,6 +217,9 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
         };
     }
 
+    /**
+     * 解析报销单Export业务类型。
+     */
     private String resolveExpenseExportBusinessType(ExpenseExportSubmitDTO payload) {
         return switch (payload.getScene()) {
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES -> "我的报销导出";
@@ -199,10 +230,16 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
         };
     }
 
+    /**
+     * 解析报销单ExportDisplayName。
+     */
     private String resolveExpenseExportDisplayName(ExpenseExportSubmitDTO payload) {
         return resolveExpenseExportBusinessType(payload);
     }
 
+    /**
+     * 解析报销单Export业务Key。
+     */
     private String resolveExpenseExportBusinessKey(ExpenseExportSubmitDTO payload) {
         return payload.getScene() + "#" + LocalDateTime.now().format(FILE_TIME_FORMATTER);
     }

@@ -1,3 +1,8 @@
+// 业务域：报销单录入、流转与查询
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+
 package com.finex.auth.service.impl.expense;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -36,6 +41,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * ExpensePaymentDomainSupport：领域规则支撑类。
+ * 承接 报销单付款的核心业务规则。
+ * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ */
 @Service
 @RequiredArgsConstructor
 public class ExpensePaymentDomainSupport {
@@ -54,6 +64,7 @@ public class ExpensePaymentDomainSupport {
     private static final String DOCUMENT_STATUS_PAYMENT_FINISHED = "PAYMENT_FINISHED";
     private static final String DOCUMENT_STATUS_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
     private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
     private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
 
@@ -73,6 +84,9 @@ public class ExpensePaymentDomainSupport {
     private final ExpenseAttachmentService expenseAttachmentService;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 查询付款Orders列表。
+     */
     public List<ExpensePaymentOrderVO> listPaymentOrders(Long userId, String status) {
         String normalizedStatus = normalizePaymentOrderStatus(status);
         List<ProcessDocumentTask> tasks = loadVisiblePaymentTasks(userId, normalizedStatus);
@@ -111,6 +125,9 @@ public class ExpensePaymentDomainSupport {
                 .toList();
     }
 
+    /**
+     * 查询银行Links列表。
+     */
     public List<ExpenseBankLinkSummaryVO> listBankLinks() {
         List<SystemCompanyBankAccount> accounts = systemCompanyBankAccountMapper.selectList(
                 Wrappers.<SystemCompanyBankAccount>lambdaQuery()
@@ -135,11 +152,17 @@ public class ExpensePaymentDomainSupport {
                 .toList();
     }
 
+    /**
+     * 获取银行Link。
+     */
     public ExpenseBankLinkConfigVO getBankLink(Long companyBankAccountId) {
         SystemCompanyBankAccount account = requireCompanyBankAccount(companyBankAccountId);
         return toBankLinkConfig(account, findCompanyName(account.getCompanyId()));
     }
 
+    /**
+     * 更新银行Link。
+     */
     public ExpenseBankLinkConfigVO updateBankLink(Long companyBankAccountId, ExpenseBankLinkSaveDTO dto) {
         if (dto == null) {
             throw new IllegalArgumentException("invalid-config");
@@ -185,6 +208,9 @@ public class ExpensePaymentDomainSupport {
         }
         return toBankLinkConfig(requireCompanyBankAccount(companyBankAccountId), findCompanyName(account.getCompanyId()));
     }
+    /**
+     * 处理报销单付款中的这一步。
+     */
     public ExpenseDocumentDetailVO handleCmbCloudCallback(ExpenseBankCallbackDTO dto) {
         PmBankPaymentRecord record = requireBankPaymentRecordForCallback(dto);
         SystemCompanyBankAccount account = record.getCompanyBankAccountId() == null
@@ -240,6 +266,9 @@ public class ExpensePaymentDomainSupport {
         );
     }
 
+    /**
+     * 执行银行回执Polling。
+     */
     public void runBankReceiptPolling() {
         List<PmBankPaymentRecord> records = pmBankPaymentRecordMapper.selectList(
                 Wrappers.<PmBankPaymentRecord>lambdaQuery()
@@ -267,6 +296,9 @@ public class ExpensePaymentDomainSupport {
         }
     }
 
+    /**
+     * 处理报销单付款中的这一步。
+     */
     public ExpenseDocumentDetailVO startPaymentTask(Long userId, String username, Long taskId) {
         ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
@@ -279,6 +311,9 @@ public class ExpensePaymentDomainSupport {
         throw new IllegalStateException("\u5F53\u524D\u4ED8\u6B3E\u4EFB\u52A1\u65E0\u6CD5\u53D1\u8D77\u652F\u4ED8");
     }
 
+    /**
+     * 处理报销单付款中的这一步。
+     */
     public ExpenseDocumentDetailVO completePaymentTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
@@ -304,6 +339,9 @@ public class ExpensePaymentDomainSupport {
         );
     }
 
+    /**
+     * 处理报销单付款中的这一步。
+     */
     public ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
@@ -335,6 +373,9 @@ public class ExpensePaymentDomainSupport {
         );
     }
 
+    /**
+     * 加载Visible付款任务。
+     */
     private List<ProcessDocumentTask> loadVisiblePaymentTasks(Long userId, String normalizedStatus) {
         List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -420,6 +461,9 @@ public class ExpensePaymentDomainSupport {
         return task;
     }
 
+    /**
+     * 推送付款任务To银行。
+     */
     private ExpenseDocumentDetailVO pushPaymentTaskToBank(
             Long userId,
             String username,
@@ -508,6 +552,9 @@ public class ExpensePaymentDomainSupport {
         );
     }
 
+    /**
+     * 查询AndAttach银行回执。
+     */
     private void queryAndAttachBankReceipt(
             PmBankPaymentRecord record,
             ProcessDocumentInstance instance,
@@ -550,6 +597,9 @@ public class ExpensePaymentDomainSupport {
         processDocumentInstanceMapper.updateById(instance);
     }
 
+    /**
+     * 组装回执Content。
+     */
     private String buildReceiptContent(ProcessDocumentInstance instance, PmBankPaymentRecord record, SystemCompanyBankAccount account) {
         List<String> lines = new ArrayList<>();
         lines.add("\u62DB\u5546\u94F6\u884C\u4E91\u76F4\u8FDE\u56DE\u5355");
@@ -563,10 +613,16 @@ public class ExpensePaymentDomainSupport {
         return String.join(System.lineSeparator(), lines);
     }
 
+    /**
+     * 组装回执FileName。
+     */
     private String buildReceiptFileName(String documentCode) {
         return defaultText(documentCode, "document") + "-\u94F6\u884C\u56DE\u5355.txt";
     }
 
+    /**
+     * 加载Latest银行Record映射。
+     */
     private Map<String, PmBankPaymentRecord> loadLatestBankRecordMap(List<String> documentCodes) {
         if (documentCodes == null || documentCodes.isEmpty()) {
             return Collections.emptyMap();
@@ -583,6 +639,9 @@ public class ExpensePaymentDomainSupport {
         ));
     }
 
+    /**
+     * 加载Latest银行Record按账户Id。
+     */
     private Map<Long, PmBankPaymentRecord> loadLatestBankRecordByAccountId(Set<Long> companyBankAccountIds) {
         if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
             return Collections.emptyMap();
@@ -598,6 +657,9 @@ public class ExpensePaymentDomainSupport {
                 LinkedHashMap::new
         ));
     }
+    /**
+     * 加载公司银行账户Name映射。
+     */
     private Map<Long, String> loadCompanyBankAccountNameMap(Set<Long> companyBankAccountIds) {
         if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
             return Collections.emptyMap();
@@ -692,6 +754,9 @@ public class ExpensePaymentDomainSupport {
         return record;
     }
 
+    /**
+     * 查询Latest银行付款Record。
+     */
     private PmBankPaymentRecord findLatestBankPaymentRecord(String documentCode) {
         if (trimToNull(documentCode) == null) {
             return null;
@@ -704,6 +769,9 @@ public class ExpensePaymentDomainSupport {
         );
     }
 
+    /**
+     * 查询Or创建银行付款Record。
+     */
     private PmBankPaymentRecord findOrCreateBankPaymentRecord(
             ProcessDocumentTask task,
             ProcessDocumentInstance instance,
@@ -724,6 +792,9 @@ public class ExpensePaymentDomainSupport {
         return record;
     }
 
+    /**
+     * 保存银行付款Record。
+     */
     private void saveBankPaymentRecord(PmBankPaymentRecord record) {
         if (record.getId() == null) {
             pmBankPaymentRecordMapper.insert(record);
@@ -732,10 +803,16 @@ public class ExpensePaymentDomainSupport {
         pmBankPaymentRecordMapper.updateById(record);
     }
 
+    /**
+     * 查询Active银行账户For单据。
+     */
     private SystemCompanyBankAccount findActiveBankAccountForDocument(ProcessDocumentInstance instance) {
         return findActiveBankAccountForDocument(instance, true);
     }
 
+    /**
+     * 查询Active银行账户For单据。
+     */
     private SystemCompanyBankAccount findActiveBankAccountForDocument(ProcessDocumentInstance instance, boolean required) {
         ExpenseSummaryAssembler.SummaryMetadata metadata = expenseSummaryAssembler
                 .buildSummaryEnrichmentData(List.of(instance))
@@ -793,6 +870,9 @@ public class ExpensePaymentDomainSupport {
             systemCompanyBankAccountMapper.updateById(account);
         }
     }
+    /**
+     * 组装公司Name映射。
+     */
     private Map<String, String> buildCompanyNameMap(Set<String> companyIds) {
         if (companyIds == null || companyIds.isEmpty()) {
             return Collections.emptyMap();
@@ -808,6 +888,9 @@ public class ExpensePaymentDomainSupport {
         ));
     }
 
+    /**
+     * 查询公司Name。
+     */
     private String findCompanyName(String companyId) {
         if (trimToNull(companyId) == null) {
             return "";
@@ -820,6 +903,9 @@ public class ExpensePaymentDomainSupport {
         return company == null ? companyId : defaultText(trimToNull(company.getCompanyName()), companyId);
     }
 
+    /**
+     * 校验CmbCallback。
+     */
     private void verifyCmbCallback(ExpenseBankCallbackDTO dto, SystemCompanyBankAccount account) {
         if (account == null) {
             throw new IllegalStateException("\u94F6\u884C\u56DE\u8C03\u672A\u7ED1\u5B9A\u516C\u53F8\u8D26\u6237");
@@ -830,6 +916,9 @@ public class ExpensePaymentDomainSupport {
         }
     }
 
+    /**
+     * 解析CallbackSuccess。
+     */
     private boolean resolveCallbackSuccess(ExpenseBankCallbackDTO dto) {
         if (dto == null) {
             return false;
@@ -841,6 +930,9 @@ public class ExpensePaymentDomainSupport {
         return Set.of("SUCCESS", "ACCEPTED", "00", "200").contains(resultCode);
     }
 
+    /**
+     * 解析回执StatusLabel。
+     */
     private String resolveReceiptStatusLabel(PmBankPaymentRecord record) {
         if (record == null) {
             return "闂佸搫鐗滄禍鐐哄极閹捐绠?";
@@ -855,6 +947,9 @@ public class ExpensePaymentDomainSupport {
         };
     }
 
+    /**
+     * 解析银行LinkStatusLabel。
+     */
     private String resolveBankLinkStatusLabel(SystemCompanyBankAccount account) {
         if (!isFlagEnabled(account.getDirectConnectEnabled())) {
             return "闂佸搫鐗滄禍婊堝箚鎼淬劍鍋?";
@@ -866,11 +961,17 @@ public class ExpensePaymentDomainSupport {
         return "閻庣懓鎲¤ぐ鍐箚鎼淬劍鍋?";
     }
 
+    /**
+     * 解析银行Link同步Status。
+     */
     private String resolveBankLinkSyncStatus(SystemCompanyBankAccount account) {
         String status = trimToNull(account.getDirectConnectLastSyncStatus());
         return status == null ? "闂佸搫鐗滄禍婵堟暜瑜版帗鐒?" : status;
     }
 
+    /**
+     * 判断回执查询Enabled是否成立。
+     */
     private boolean isReceiptQueryEnabled(SystemCompanyBankAccount account) {
         if (account == null) {
             return false;
@@ -885,6 +986,9 @@ public class ExpensePaymentDomainSupport {
         return result;
     }
 
+    /**
+     * 组装公司银行账户Name。
+     */
     private String buildCompanyBankAccountName(SystemCompanyBankAccount account) {
         if (account == null) {
             return null;
@@ -894,6 +998,9 @@ public class ExpensePaymentDomainSupport {
         return account.getAccountName() + (suffix == null ? "" : "\uFF08\u5C3E\u53F7 " + suffix + "\uFF09");
     }
 
+    /**
+     * 组装银行推送RequestNo。
+     */
     private String buildBankPushRequestNo(String documentCode) {
         return defaultText(documentCode, "DOC") + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
@@ -933,13 +1040,21 @@ public class ExpensePaymentDomainSupport {
         };
     }
 
+    /**
+     * 判断EffectiveApprovedStatus是否成立。
+     */
     private boolean isEffectiveApprovedStatus(String status) {
         String normalized = trimToNull(status);
         return DOCUMENT_STATUS_APPROVED.equals(normalized)
+                || DOCUMENT_STATUS_COMPLETED.equals(normalized)
+                || DOCUMENT_STATUS_PENDING_PAYMENT.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
     }
 
+    /**
+     * 解析模板类型Label。
+     */
     private String resolveTemplateTypeLabel(String templateType, String currentLabel) {
         if (trimToNull(currentLabel) != null) {
             return currentLabel;
@@ -952,6 +1067,9 @@ public class ExpensePaymentDomainSupport {
         };
     }
 
+    /**
+     * 解析StatusLabel。
+     */
     private String resolveStatusLabel(String status) {
         return switch (trimToNull(status) == null ? "" : status.trim()) {
             case DOCUMENT_STATUS_PENDING_PAYMENT -> "\u5F85\u652F\u4ED8";
@@ -959,7 +1077,7 @@ public class ExpensePaymentDomainSupport {
             case DOCUMENT_STATUS_PAYMENT_COMPLETED -> "\u5DF2\u652F\u4ED8";
             case DOCUMENT_STATUS_PAYMENT_FINISHED -> "\u5DF2\u5B8C\u6210";
             case DOCUMENT_STATUS_PAYMENT_EXCEPTION -> "\u652F\u4ED8\u5F02\u5E38";
-            case DOCUMENT_STATUS_APPROVED -> "\u5DF2\u901A\u8FC7";
+            case DOCUMENT_STATUS_APPROVED, DOCUMENT_STATUS_COMPLETED -> "\u5DF2\u5B8C\u6210";
             case DOCUMENT_STATUS_REJECTED -> "\u5DF2\u9A73\u56DE";
             case "DRAFT" -> "\u8349\u7A3F";
             case DOCUMENT_STATUS_EXCEPTION -> "\u6D41\u7A0B\u5F02\u5E38";
@@ -995,6 +1113,9 @@ public class ExpensePaymentDomainSupport {
         }
     }
 
+    /**
+     * 判断FlagEnabled是否成立。
+     */
     private boolean isFlagEnabled(Integer value) {
         return value != null && value == 1;
     }

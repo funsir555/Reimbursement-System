@@ -1,3 +1,8 @@
+// 涓氬姟鍩燂細鎶ラ攢鍑瘉鐢熸垚涓庢帹閫?
+// 鏂囦欢瑙掕壊锛氶鍩熻鍒欐敮鎾戠被
+// 涓婁笅娓稿叧绯伙細涓婃父閫氬父鏉ヨ嚜 鎶ラ攢鍗曞嚟璇佺敓鎴愭帴鍙ｅ拰璐㈠姟鎿嶄綔鍏ュ彛锛屼笅娓镐細缁х画鍗忚皟 鍑瘉鏄犲皠銆佹帹閫佽褰曞拰鎶ラ攢鍗曞嚟璇佺姸鎬併€?
+// 椋庨櫓鎻愰啋锛氭敼鍧忓悗鏈€瀹规槗褰卞搷 閲嶅鐢熸垚鍑瘉銆佸嚟璇佸唴瀹归敊璇拰鎺ㄩ€佽褰曚笉涓€鑷淬€?
+
 package com.finex.auth.service.impl.expensevoucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -30,12 +35,23 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * ExpenseVoucherPushDomainSupport锛氶鍩熻鍒欐敮鎾戠被銆?
+ * 鎵挎帴 鎶ラ攢鍗曞嚟璇佹帹閫佺殑鏍稿績涓氬姟瑙勫垯銆?
+ * 鏀硅繖閲屾椂锛岃鐗瑰埆鍏虫敞 閲嶅鐢熸垚鍑瘉銆佸嚟璇佸唴瀹归敊璇拰鎺ㄩ€佽褰曚笉涓€鑷存槸鍚︿細琚竴璧峰甫鍧忋€?
+ */
 public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGenerationSupport {
 
+    /**
+     * 鍒濆鍖栬繖涓被鎵€闇€鐨勪緷璧栫粍浠躲€?
+     */
     public ExpenseVoucherPushDomainSupport(Dependencies dependencies) {
         super(dependencies);
     }
 
+    /**
+     * 鑾峰彇鎺ㄩ€佸崟鎹€?
+     */
     public ExpenseVoucherPageVO<ExpenseVoucherPushDocumentVO> getPushDocuments(String companyId, String templateCode, String keyword, String pushStatus, String dateFrom, String dateTo, Integer page, Integer pageSize) {
         Map<String, String> companyMap = companyNameMap();
         Map<String, String> expenseTypeMap = expenseTypeNameMap();
@@ -86,13 +102,16 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         return buildPage(rows, page, pageSize);
     }
 
+    /**
+     * 鎺ㄩ€佸崟鎹€?
+     */
     public ExpenseVoucherPushBatchResultVO pushDocuments(ExpenseVoucherPushDTO dto, Long currentUserId, String currentUsername) {
         LinkedHashSet<String> documentCodes = dto == null ? new LinkedHashSet<>() : dto.getDocumentCodes().stream()
                 .map(this::trim)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (documentCodes.isEmpty()) {
-            throw new IllegalArgumentException("璇烽€夋嫨闇€瑕佹帹閫佺殑鍗曟嵁");
+            throw new IllegalArgumentException("鐠囩兘鈧瀚ㄩ棁鈧憰浣瑰腹闁胶娈戦崡鏇熷祦");
         }
 
         Map<String, ProcessDocumentInstance> documentMap = documentInstanceMapper.selectList(
@@ -108,7 +127,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         for (String documentCode : documentCodes) {
             ProcessDocumentInstance document = documentMap.get(documentCode);
             if (document == null) {
-                result.getResults().add(buildFailureResult(documentCode, null, null, null, "鍗曟嵁涓嶅瓨鍦紝鏃犳硶鎺ㄩ€佸嚟璇?"));
+                result.getResults().add(buildFailureResult(documentCode, null, null, null, "閸楁洘宓佹稉宥呯摠閸︻煉绱濋弮鐘崇《閹恒劑鈧礁鍤熺拠?"));
                 result.setFailureCount(result.getFailureCount() + 1);
                 continue;
             }
@@ -122,7 +141,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
                 result.getResults().add(pushResult);
                 result.setSuccessCount(result.getSuccessCount() + 1);
             } catch (Exception ex) {
-                String errorMessage = defaultText(ex.getMessage(), "鎺ㄩ€佸け璐?");
+                String errorMessage = defaultText(ex.getMessage(), "閹恒劑鈧礁銇戠拹?");
                 if (companyId != null) {
                     batchContext = batchContext == null ? batchMap.computeIfAbsent(companyId, key -> createBatchContext(key, currentUsername)) : batchContext;
                     saveFailedPushDocument(document, batchContext, errorMessage);
@@ -145,16 +164,19 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         result.setLatestBatchNo(latestBatchNo);
         return result;
     }
+    /**
+     * 鎺ㄩ€丱ne鍗曟嵁銆?
+     */
     private ExpenseVoucherPushResultVO pushOneDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, Long currentUserId, String currentUsername) {
-        if (!DOCUMENT_STATUS_APPROVED.equals(trim(document.getStatus()))) {
-            throw new IllegalStateException("当前单据未审批通过，不能生成凭证");
+        if (!isVoucherEligibleDocumentStatus(trim(document.getStatus()))) {
+            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u672a\u5904\u4e8e\u53ef\u751f\u6210\u51ed\u8bc1\u7684\u72b6\u6001");
         }
 
         String companyId = requireDocumentCompanyId(document);
         ExpVoucherTemplatePolicy templatePolicy = requireEnabledTemplatePolicy(companyId, document.getTemplateCode());
         List<ProcessDocumentExpenseDetail> details = listExpenseDetails(document.getDocumentCode());
         if (details.isEmpty()) {
-            throw new IllegalStateException("当前单据没有可生成凭证的费用明细");
+            throw new IllegalStateException("褰撳墠鍗曟嵁娌℃湁鍙敓鎴愬嚟璇佺殑璐圭敤鏄庣粏");
         }
 
         LinkedHashMap<String, BigDecimal> debitAmounts = aggregateExpenseAmounts(details);
@@ -163,7 +185,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
                 .collect(Collectors.toMap(ExpVoucherSubjectMapping::getExpenseTypeCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         for (String expenseTypeCode : debitAmounts.keySet()) {
             if (!subjectMap.containsKey(expenseTypeCode)) {
-                throw new IllegalStateException("未配置费用类型对应的会计科目: " + expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
+                throw new IllegalStateException("鏈厤缃垂鐢ㄧ被鍨嬪搴旂殑浼氳绉戠洰: " + expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
             }
         }
 
@@ -175,6 +197,9 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         batchContext.successCount += 1;
         return buildSuccessResult(document, companyId, saveResult);
     }
+    /**
+     * 缁勮鍑瘉SaveDTO銆?
+     */
     private FinanceVoucherSaveDTO buildVoucherSaveDTO(ProcessDocumentInstance document, String companyId, ExpVoucherTemplatePolicy templatePolicy, LinkedHashMap<String, BigDecimal> debitAmounts, Map<String, ExpVoucherSubjectMapping> subjectMap, Map<String, String> expenseTypeMap, String currentUsername) {
         LocalDate businessDate = resolveBusinessDate(document);
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
@@ -184,7 +209,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         dto.setCsign(defaultText(templatePolicy.getVoucherType(), DEFAULT_VOUCHER_TYPE));
         dto.setCbill(currentUsername);
         dto.setIdoc(0);
-        dto.setCtext1("鎶ラ攢鍑瘉-" + document.getDocumentCode());
+        dto.setCtext1("閹躲儵鏀㈤崙顓＄槈-" + document.getDocumentCode());
         dto.setCtext2(defaultText(document.getTemplateName(), document.getTemplateCode()));
 
         List<FinanceVoucherEntryDTO> entries = new ArrayList<>();
@@ -202,7 +227,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
             totalAmount = totalAmount.add(amount);
         }
         FinanceVoucherEntryDTO creditEntry = new FinanceVoucherEntryDTO();
-        creditEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, "閾惰绉戠洰"));
+        creditEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, "闁炬儼顢戠粔鎴犳窗"));
         creditEntry.setCcode(templatePolicy.getCreditAccountCode());
         creditEntry.setMd(ZERO);
         creditEntry.setMc(totalAmount);
@@ -211,6 +236,9 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         return dto;
     }
 
+    /**
+     * 淇濆瓨Success鎺ㄩ€佸崟鎹€?
+     */
     private ExpVoucherPushDocument saveSuccessPushDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, FinanceVoucherSaveResultVO saveResult) {
         ExpVoucherPushDocument row = findPushDocument(batchContext.batch.getCompanyId(), document.getDocumentCode());
         if (row == null) {
@@ -241,6 +269,9 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         return row;
     }
 
+    /**
+     * 淇濆瓨Failed鎺ㄩ€佸崟鎹€?
+     */
     private void saveFailedPushDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, String errorMessage) {
         ExpVoucherPushDocument row = findPushDocument(batchContext.batch.getCompanyId(), document.getDocumentCode());
         if (row == null) {
@@ -297,12 +328,15 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
                 entry.setExpenseTypeName(expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
             } else {
                 entry.setExpenseTypeCode(null);
-                entry.setExpenseTypeName(defaultText(templatePolicy.getTemplateName(), "缁熶竴璐锋柟绉戠洰"));
+                entry.setExpenseTypeName(defaultText(templatePolicy.getTemplateName(), "\u6a21\u677f"));
             }
             pushEntryMapper.insert(entry);
         }
     }
 
+    /**
+     * 鍒涘缓Batch涓婁笅鏂囥€?
+     */
     private CompanyBatchContext createBatchContext(String companyId, String currentUsername) {
         ExpVoucherPushBatch batch = new ExpVoucherPushBatch();
         batch.setCompanyId(companyId);
@@ -316,3 +350,4 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         return new CompanyBatchContext(batch);
     }
 }
+

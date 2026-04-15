@@ -1,3 +1,8 @@
+// 业务域：财务凭证
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 凭证查询、新建、修改等接口，下游会继续协调 凭证主表、分录、上下文数据与报销关联。
+// 风险提醒：改坏后最容易影响 凭证金额、分录科目和与单据的对应关系。
+
 package com.finex.auth.service.impl.voucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -15,6 +20,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * VoucherContextSupport：通用支撑类。
+ * 封装 凭证这块可复用的业务能力。
+ * 改这里时，要特别关注 凭证金额、分录科目和与单据的对应关系是否会被一起带坏。
+ */
 public final class VoucherContextSupport {
 
     private static final String ACCOUNT_SET_STATUS_ACTIVE = "ACTIVE";
@@ -23,6 +33,9 @@ public final class VoucherContextSupport {
     private final FinanceAccountSetMapper financeAccountSetMapper;
     private final UserService userService;
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public VoucherContextSupport(
             SystemCompanyMapper systemCompanyMapper,
             FinanceAccountSetMapper financeAccountSetMapper,
@@ -33,6 +46,9 @@ public final class VoucherContextSupport {
         this.userService = userService;
     }
 
+    /**
+     * 获取元数据。
+     */
     public FinanceContextMetaVO getMeta(Long currentUserId) {
         List<SystemCompany> companies = loadEnabledCompanies();
         Set<String> activeAccountSetCompanyIds = loadActiveAccountSetCompanyIds();
@@ -61,6 +77,9 @@ public final class VoucherContextSupport {
         return meta;
     }
 
+    /**
+     * 加载EnabledCompanies。
+     */
     public List<SystemCompany> loadEnabledCompanies() {
         return systemCompanyMapper.selectList(
                 Wrappers.<SystemCompany>lambdaQuery()
@@ -69,6 +88,9 @@ public final class VoucherContextSupport {
         );
     }
 
+    /**
+     * 加载Active账户Set公司Ids。
+     */
     private Set<String> loadActiveAccountSetCompanyIds() {
         return financeAccountSetMapper.selectList(
                         Wrappers.<FinanceAccountSet>lambdaQuery()

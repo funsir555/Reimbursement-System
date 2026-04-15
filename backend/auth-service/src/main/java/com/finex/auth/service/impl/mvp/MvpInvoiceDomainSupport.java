@@ -1,3 +1,8 @@
+// 业务域：首页看板与当前用户
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 MvpController 和首页页面请求，下游会继续协调 用户信息、待办汇总和发票等首页数据。
+// 风险提醒：改坏后最容易影响 首页统计、个人信息与待办展示。
+
 package com.finex.auth.service.impl.mvp;
 
 import com.finex.auth.dto.InvoiceSummaryVO;
@@ -12,8 +17,16 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * MvpInvoiceDomainSupport：领域规则支撑类。
+ * 承接 发票的核心业务规则。
+ * 改这里时，要特别关注 首页统计、个人信息与待办展示是否会被一起带坏。
+ */
 public class MvpInvoiceDomainSupport extends AbstractMvpDomainSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public MvpInvoiceDomainSupport(
             UserService userService,
             AsyncTaskRecordMapper asyncTaskRecordMapper,
@@ -22,6 +35,9 @@ public class MvpInvoiceDomainSupport extends AbstractMvpDomainSupport {
         super(userService, asyncTaskRecordMapper, expenseDocumentService);
     }
 
+    /**
+     * 查询发票列表。
+     */
     public List<InvoiceSummaryVO> listInvoices(Long userId) {
         var user = requireUser(userId);
         int userFactor = Math.max(1, userId.intValue());

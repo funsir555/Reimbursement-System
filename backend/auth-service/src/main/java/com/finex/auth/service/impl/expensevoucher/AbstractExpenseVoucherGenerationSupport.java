@@ -1,3 +1,8 @@
+// 业务域：报销凭证生成与推送
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 报销单凭证生成接口和财务操作入口，下游会继续协调 凭证映射、推送记录和报销单凭证状态。
+// 风险提醒：改坏后最容易影响 重复生成凭证、凭证内容错误和推送记录不一致。
+
 package com.finex.auth.service.impl.expensevoucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -56,9 +61,18 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * AbstractExpenseVoucherGenerationSupport：通用支撑类。
+ * 封装 报销单凭证Generation这块可复用的业务能力。
+ * 改这里时，要特别关注 重复生成凭证、凭证内容错误和推送记录不一致是否会被一起带坏。
+ */
 public abstract class AbstractExpenseVoucherGenerationSupport {
 
     protected static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    protected static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
+    protected static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
+    protected static final String DOCUMENT_STATUS_PAYMENT_COMPLETED = "PAYMENT_COMPLETED";
+    protected static final String DOCUMENT_STATUS_PAYMENT_FINISHED = "PAYMENT_FINISHED";
     protected static final String PUSH_STATUS_SUCCESS = "SUCCESS";
     protected static final String PUSH_STATUS_FAILED = "FAILED";
     protected static final String PUSH_STATUS_UNPUSHED = "UNPUSHED";
@@ -150,6 +164,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         }
     }
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     protected AbstractExpenseVoucherGenerationSupport(Dependencies dependencies) {
         this.templatePolicyMapper = dependencies.templatePolicyMapper;
         this.subjectMappingMapper = dependencies.subjectMappingMapper;
@@ -167,6 +184,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         this.objectMapper = dependencies.objectMapper;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     public static Dependencies dependencies(
             ExpVoucherTemplatePolicyMapper templatePolicyMapper,
             ExpVoucherSubjectMappingMapper subjectMappingMapper,
@@ -201,6 +221,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected ExpVoucherTemplatePolicy requireEnabledTemplatePolicy(String companyId, String templateCode) {
         ExpVoucherTemplatePolicy policy = templatePolicyMapper.selectOne(
                 Wrappers.<ExpVoucherTemplatePolicy>lambdaQuery()
@@ -215,6 +238,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return policy;
     }
 
+    /**
+     * 查询Enabled科目映射列表。
+     */
     protected List<ExpVoucherSubjectMapping> listEnabledSubjectMappings(String companyId, String templateCode) {
         return subjectMappingMapper.selectList(
                 Wrappers.<ExpVoucherSubjectMapping>lambdaQuery()
@@ -224,6 +250,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected LinkedHashMap<String, BigDecimal> aggregateExpenseAmounts(List<ProcessDocumentExpenseDetail> details) {
         LinkedHashMap<String, BigDecimal> result = new LinkedHashMap<>();
         for (ProcessDocumentExpenseDetail detail : details) {
@@ -240,6 +269,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return result;
     }
 
+    /**
+     * 解析明细Amount。
+     */
     protected BigDecimal resolveDetailAmount(ProcessDocumentExpenseDetail detail) {
         BigDecimal actualPaymentAmount = zero(detail.getActualPaymentAmount());
         if (actualPaymentAmount.compareTo(ZERO) > 0) {
@@ -248,11 +280,17 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return zero(detail.getInvoiceAmount());
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected String fallbackExpenseTypeCode(String formDataJson) {
         Object value = readMap(formDataJson).get("expenseTypeCode");
         return value == null ? null : trim(String.valueOf(value));
     }
 
+    /**
+     * 组装报销单汇总。
+     */
     protected String buildExpenseSummary(List<ProcessDocumentExpenseDetail> details, Map<String, String> expenseTypeMap) {
         LinkedHashMap<String, BigDecimal> summary = aggregateExpenseAmounts(details);
         if (summary.isEmpty()) {
@@ -263,8 +301,11 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
                 .collect(Collectors.joining(" / "));
     }
 
+    /**
+     * 判断是否可以执行推送。
+     */
     protected boolean canPush(ProcessDocumentInstance document, ExpVoucherPushDocument pushDocument, String companyId, List<ProcessDocumentExpenseDetail> details) {
-        if (!DOCUMENT_STATUS_APPROVED.equals(trim(document.getStatus()))) {
+        if (!isVoucherEligibleDocumentStatus(trim(document.getStatus()))) {
             return false;
         }
         if (!hasText(companyId)) {
@@ -292,6 +333,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         }
         return true;
     }
+    /**
+     * 查询Companies列表。
+     */
     protected List<SystemCompany> listCompanies() {
         return systemCompanyMapper.selectList(
                 Wrappers.<SystemCompany>lambdaQuery()
@@ -300,6 +344,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 查询模板列表。
+     */
     protected List<ProcessDocumentTemplate> listTemplates() {
         return documentTemplateMapper.selectList(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
@@ -308,6 +355,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 查询报销单类型列表。
+     */
     protected List<ProcessExpenseType> listExpenseTypes() {
         return expenseTypeMapper.selectList(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -316,14 +366,34 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 查询Approved单据列表。
+     */
     protected List<ProcessDocumentInstance> listApprovedDocuments() {
         return documentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .eq(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_APPROVED)
+                        .in(ProcessDocumentInstance::getStatus, List.of(
+                                DOCUMENT_STATUS_APPROVED,
+                                DOCUMENT_STATUS_COMPLETED,
+                                DOCUMENT_STATUS_PENDING_PAYMENT,
+                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                DOCUMENT_STATUS_PAYMENT_FINISHED
+                        ))
                         .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getId)
         );
     }
 
+    protected boolean isVoucherEligibleDocumentStatus(String status) {
+        return Objects.equals(status, DOCUMENT_STATUS_APPROVED)
+                || Objects.equals(status, DOCUMENT_STATUS_COMPLETED)
+                || Objects.equals(status, DOCUMENT_STATUS_PENDING_PAYMENT)
+                || Objects.equals(status, DOCUMENT_STATUS_PAYMENT_COMPLETED)
+                || Objects.equals(status, DOCUMENT_STATUS_PAYMENT_FINISHED);
+    }
+
+    /**
+     * 查询推送单据列表。
+     */
     protected List<ExpVoucherPushDocument> listPushDocuments() {
         return pushDocumentMapper.selectList(
                 Wrappers.<ExpVoucherPushDocument>lambdaQuery()
@@ -331,6 +401,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 查询报销单明细列表。
+     */
     protected List<ProcessDocumentExpenseDetail> listExpenseDetails(String documentCode) {
         return expenseDetailMapper.selectList(
                 Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
@@ -339,6 +412,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 查询推送单据。
+     */
     protected ExpVoucherPushDocument findPushDocument(String companyId, String documentCode) {
         return pushDocumentMapper.selectOne(
                 Wrappers.<ExpVoucherPushDocument>lambdaQuery()
@@ -348,14 +424,23 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         );
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected Map<String, String> companyNameMap() {
         return listCompanies().stream().collect(Collectors.toMap(SystemCompany::getCompanyId, SystemCompany::getCompanyName, (left, right) -> left, LinkedHashMap::new));
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected Map<String, String> expenseTypeNameMap() {
         return listExpenseTypes().stream().collect(Collectors.toMap(ProcessExpenseType::getExpenseCode, item -> defaultText(item.getExpenseName(), item.getExpenseCode()), (left, right) -> left, LinkedHashMap::new));
     }
 
+    /**
+     * 加载账户选项。
+     */
     protected List<FinanceVoucherOptionVO> loadAccountOptions() {
         LinkedHashMap<String, String> labels = new LinkedHashMap<>();
         for (OptionSeed seed : ACCOUNT_SEEDS) {
@@ -381,6 +466,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return labels.entrySet().stream().map(entry -> option(entry.getKey(), entry.getValue())).toList();
     }
 
+    /**
+     * 解析默认公司Id。
+     */
     protected String resolveDefaultCompanyId(Long currentUserId, List<SystemCompany> companies) {
         if (companies.isEmpty()) {
             return null;
@@ -396,6 +484,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return companies.get(0).getCompanyId();
     }
 
+    /**
+     * 解析LatestBatchNo。
+     */
     protected String resolveLatestBatchNo() {
         ExpVoucherPushBatch latestBatch = pushBatchMapper.selectOne(
                 Wrappers.<ExpVoucherPushBatch>lambdaQuery()
@@ -405,6 +496,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return latestBatch == null ? null : latestBatch.getBatchNo();
     }
 
+    /**
+     * 解析单据公司Id。
+     */
     protected String resolveDocumentCompanyId(ProcessDocumentInstance document) {
         Map<String, Object> formData = readMap(document.getFormDataJson());
         Map<String, Object> schema = readMap(document.getFormSchemaSnapshotJson());
@@ -421,6 +515,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return submitter == null ? null : trim(submitter.getCompanyId());
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected String requireDocumentCompanyId(ProcessDocumentInstance document) {
         String companyId = resolveDocumentCompanyId(document);
         if (companyId == null) {
@@ -429,6 +526,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return companyId;
     }
 
+    /**
+     * 查询业务Component字段Key。
+     */
     protected String findBusinessComponentFieldKey(Map<String, Object> schema, String componentCode) {
         Object rawBlocks = schema.get("blocks");
         if (!(rawBlocks instanceof List<?> blocks)) {
@@ -452,6 +552,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return null;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected Map<String, Object> readMap(String json) {
         if (!hasText(json)) {
             return new LinkedHashMap<>();
@@ -463,6 +566,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         }
     }
 
+    /**
+     * 解析业务Date。
+     */
     protected LocalDate resolveBusinessDate(ProcessDocumentInstance document) {
         if (document.getFinishedAt() != null) {
             return document.getFinishedAt().toLocalDate();
@@ -476,6 +582,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return LocalDate.now();
     }
 
+    /**
+     * 校验模板Policy。
+     */
     protected void validateTemplatePolicy(ExpenseVoucherTemplatePolicySaveDTO dto, Long currentId) {
         if (!hasText(dto.getCompanyId()) || systemCompanyMapper.selectById(trim(dto.getCompanyId())) == null) {
             throw new IllegalArgumentException("鍏徃涓嶅瓨鍦紝鏃犳硶淇濆瓨妯℃澘绉戠洰绛栫暐");
@@ -495,6 +604,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         }
     }
 
+    /**
+     * 校验科目映射。
+     */
     protected void validateSubjectMapping(ExpenseVoucherSubjectMappingSaveDTO dto, Long currentId) {
         if (!hasText(dto.getCompanyId()) || systemCompanyMapper.selectById(trim(dto.getCompanyId())) == null) {
             throw new IllegalArgumentException("鍏徃涓嶅瓨鍦紝鏃犳硶淇濆瓨璐圭敤绫诲瀷鏄犲皠");
@@ -518,6 +630,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         }
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected void applyTemplatePolicy(ExpenseVoucherTemplatePolicySaveDTO dto, ExpVoucherTemplatePolicy entity, String currentUsername) {
         entity.setCompanyId(trim(dto.getCompanyId()));
         entity.setTemplateCode(trim(dto.getTemplateCode()));
@@ -530,6 +645,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         entity.setUpdatedBy(currentUsername);
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected void applySubjectMapping(ExpenseVoucherSubjectMappingSaveDTO dto, ExpVoucherSubjectMapping entity, String currentUsername) {
         entity.setCompanyId(trim(dto.getCompanyId()));
         entity.setTemplateCode(trim(dto.getTemplateCode()));
@@ -542,6 +660,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         entity.setUpdatedBy(currentUsername);
     }
 
+    /**
+     * 判断模板是否已存在。
+     */
     protected boolean existsTemplate(String templateCode) {
         return documentTemplateMapper.selectOne(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
@@ -550,6 +671,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         ) != null;
     }
 
+    /**
+     * 判断报销单类型是否已存在。
+     */
     protected boolean existsExpenseType(String expenseTypeCode) {
         return expenseTypeMapper.selectOne(
                 Wrappers.<ProcessExpenseType>lambdaQuery()
@@ -558,6 +682,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         ) != null;
     }
 
+    /**
+     * 解析模板Name。
+     */
     protected String resolveTemplateName(String templateCode, String templateName) {
         if (hasText(templateName)) {
             return trim(templateName);
@@ -570,6 +697,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return template == null ? trim(templateCode) : defaultText(template.getTemplateName(), templateCode);
     }
 
+    /**
+     * 解析报销单类型Name。
+     */
     protected String resolveExpenseTypeName(String expenseTypeCode, String expenseTypeName) {
         if (hasText(expenseTypeName)) {
             return trim(expenseTypeName);
@@ -582,6 +712,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return expenseType == null ? trim(expenseTypeCode) : defaultText(expenseType.getExpenseName(), expenseTypeCode);
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected ExpVoucherTemplatePolicy requireTemplatePolicy(Long id) {
         ExpVoucherTemplatePolicy entity = templatePolicyMapper.selectById(id);
         if (entity == null) {
@@ -590,6 +723,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return entity;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected ExpVoucherSubjectMapping requireSubjectMapping(Long id) {
         ExpVoucherSubjectMapping entity = subjectMappingMapper.selectById(id);
         if (entity == null) {
@@ -598,6 +734,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return entity;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected ExpenseVoucherTemplatePolicyVO toTemplatePolicyVO(ExpVoucherTemplatePolicy entity, Map<String, String> companyMap) {
         ExpenseVoucherTemplatePolicyVO vo = new ExpenseVoucherTemplatePolicyVO();
         vo.setId(entity.getId());
@@ -615,6 +754,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return vo;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected ExpenseVoucherSubjectMappingVO toSubjectMappingVO(ExpVoucherSubjectMapping entity, Map<String, String> companyMap) {
         ExpenseVoucherSubjectMappingVO vo = new ExpenseVoucherSubjectMappingVO();
         vo.setId(entity.getId());
@@ -631,6 +773,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return vo;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected ExpenseVoucherGeneratedRecordVO toGeneratedRecordVO(ExpVoucherPushDocument entity, Map<String, String> companyMap) {
         ExpenseVoucherGeneratedRecordVO vo = new ExpenseVoucherGeneratedRecordVO();
         vo.setId(entity.getId());
@@ -653,6 +798,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return vo;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected ExpenseVoucherEntrySnapshotVO toEntrySnapshotVO(ExpVoucherPushEntry entity) {
         ExpenseVoucherEntrySnapshotVO vo = new ExpenseVoucherEntrySnapshotVO();
         vo.setEntryNo(entity.getEntryNo());
@@ -666,18 +814,30 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return vo;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected FinanceVoucherOptionVO toCompanyOption(SystemCompany company) {
         return option(company.getCompanyId(), hasText(company.getCompanyCode()) ? company.getCompanyCode() + " - " + company.getCompanyName() : company.getCompanyName());
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected FinanceVoucherOptionVO toTemplateOption(ProcessDocumentTemplate template) {
         return option(template.getTemplateCode(), defaultText(template.getTemplateName(), template.getTemplateCode()));
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected FinanceVoucherOptionVO toExpenseTypeOption(ProcessExpenseType expenseType) {
         return option(expenseType.getExpenseCode(), defaultText(expenseType.getExpenseName(), expenseType.getExpenseCode()));
     }
 
+    /**
+     * 解析汇总。
+     */
     protected String resolveSummary(String templateRule, ProcessDocumentInstance document, String expenseTypeName) {
         String summary = hasText(templateRule) ? trim(templateRule) : "鎶ラ攢鍗?{documentCode}-${expenseTypeName}";
         return summary
@@ -687,6 +847,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
                 .replace("${expenseTypeName}", defaultText(expenseTypeName, ""));
     }
 
+    /**
+     * 组装SuccessResult。
+     */
     protected ExpenseVoucherPushResultVO buildSuccessResult(ProcessDocumentInstance document, String companyId, FinanceVoucherSaveResultVO saveResult) {
         ExpenseVoucherPushResultVO result = new ExpenseVoucherPushResultVO();
         result.setDocumentCode(document.getDocumentCode());
@@ -698,6 +861,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return result;
     }
 
+    /**
+     * 组装FailureResult。
+     */
     protected ExpenseVoucherPushResultVO buildFailureResult(String documentCode, String companyId, String templateCode, String templateName, String errorMessage) {
         ExpenseVoucherPushResultVO result = new ExpenseVoucherPushResultVO();
         result.setDocumentCode(documentCode);
@@ -709,6 +875,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return result;
     }
 
+    /**
+     * 组装Page。
+     */
     protected <T> ExpenseVoucherPageVO<T> buildPage(List<T> rows, Integer page, Integer pageSize) {
         int safePage = page == null || page < 1 ? 1 : page;
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 100);
@@ -722,6 +891,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return result;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected FinanceVoucherOptionVO option(String value, String label) {
         FinanceVoucherOptionVO option = new FinanceVoucherOptionVO();
         option.setValue(value);
@@ -729,14 +901,23 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return option;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected List<FinanceVoucherOptionVO> toOptions(List<OptionSeed> seeds) {
         return seeds.stream().map(item -> option(item.value, item.label)).toList();
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected boolean matchesCompany(String actualCompanyId, String filterCompanyId) {
         return !hasText(filterCompanyId) || Objects.equals(trim(actualCompanyId), trim(filterCompanyId));
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected boolean matchesKeyword(String keyword, String... texts) {
         if (!hasText(keyword)) {
             return true;
@@ -750,10 +931,16 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return false;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected boolean containsIgnoreCase(String source, String keyword) {
         return hasText(source) && hasText(keyword) && source.toLowerCase(Locale.ROOT).contains(trim(keyword).toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected boolean matchesDateRange(LocalDate date, String dateFrom, String dateTo) {
         LocalDate from = parseDate(dateFrom);
         LocalDate to = parseDate(dateTo);
@@ -769,6 +956,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return true;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected LocalDate parseDate(String value) {
         if (!hasText(value)) {
             return null;
@@ -780,14 +970,23 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         }
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected String formatDate(LocalDate value) {
         return value == null ? null : value.format(DATE_FORMATTER);
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected String formatDateTime(LocalDateTime value) {
         return value == null ? null : value.toString().replace('T', ' ');
     }
 
+    /**
+     * 解析账户Name。
+     */
     protected String resolveAccountName(String accountCode) {
         String code = trim(accountCode);
         if (code == null) {
@@ -801,6 +1000,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return code + " 浼氳绉戠洰";
     }
 
+    /**
+     * 解析凭证类型Label。
+     */
     protected String resolveVoucherTypeLabel(String voucherType) {
         String value = trim(voucherType);
         if (value == null) {
@@ -814,6 +1016,9 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return value;
     }
 
+    /**
+     * 解析推送StatusLabel。
+     */
     protected String resolvePushStatusLabel(String pushStatus) {
         return switch (defaultText(pushStatus, PUSH_STATUS_UNPUSHED)) {
             case PUSH_STATUS_SUCCESS -> "鎺ㄩ€佹垚鍔?";
@@ -822,10 +1027,16 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         };
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected BigDecimal zero(BigDecimal value) {
         return value == null ? ZERO : value.setScale(2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected String trim(String value) {
         if (value == null) {
             return null;
@@ -834,10 +1045,16 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return text.isEmpty() ? null : text;
     }
 
+    /**
+     * 判断是否拥有Text。
+     */
     protected boolean hasText(String value) {
         return trim(value) != null;
     }
 
+    /**
+     * 处理报销单凭证Generation中的这一步。
+     */
     protected String defaultText(String value, String fallback) {
         return hasText(value) ? trim(value) : fallback;
     }

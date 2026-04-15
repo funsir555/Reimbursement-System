@@ -50,7 +50,7 @@
         <div class="space-y-6">
           <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.2fr),minmax(0,0.8fr)]">
             <el-form-item label="流程名称" required class="!mb-0">
-              <el-input v-model="working.flowName" placeholder="请输入流程名称" />
+              <el-input v-model="working.flowName" maxlength="64" show-word-limit placeholder="请输入流程名称" />
             </el-form-item>
             <el-form-item label="流程编码" class="!mb-0">
               <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
@@ -147,7 +147,7 @@
               </div>
 
               <el-form-item label="分支名称" class="!mb-0">
-                <el-input v-model="selectedRoute.routeName" placeholder="请输入分支名称" />
+                <el-input v-model="selectedRoute.routeName" maxlength="64" show-word-limit placeholder="请输入分支名称" />
               </el-form-item>
 
               <div class="route-pill-grid">
@@ -324,7 +324,7 @@
 
           <div v-else-if="selectedNode" class="space-y-6">
             <el-form-item label="节点名称" class="!mb-0">
-              <el-input v-model="selectedNode.nodeName" placeholder="请输入节点名称" />
+              <el-input v-model="selectedNode.nodeName" maxlength="64" show-word-limit placeholder="请输入节点名称" />
             </el-form-item>
 
             <div v-if="selectedNode.nodeType === 'APPROVAL'" class="space-y-6">
@@ -676,7 +676,7 @@
     <el-dialog v-model="sceneDialog.visible" title="新增流程场景" width="460px">
       <div class="space-y-4">
         <el-form-item label="场景名称" required class="!mb-0">
-          <el-input v-model="sceneDialog.sceneName" placeholder="请输入场景名称" />
+          <el-input v-model="sceneDialog.sceneName" maxlength="64" show-word-limit placeholder="请输入场景名称" />
         </el-form-item>
         <el-form-item label="场景说明" class="!mb-0">
           <el-input v-model="sceneDialog.sceneDescription" type="textarea" :rows="3" placeholder="请输入场景说明" />
@@ -726,6 +726,7 @@ import {
   type FlowMoveResult
 } from '@/views/process/processFlowDesignerHelper'
 import { persistFlowDraft, publishFlowAfterPersist } from '@/views/process/flowDesignerPersistence'
+import { PM_NAME_MAX_LENGTH, validateFlowPayload, validateMaxLength } from '@/views/process/pmValidation'
 
 type EditableProcessFlowCondition = Omit<ProcessFlowCondition, 'compareValue'> & {
   compareValue: any
@@ -1780,15 +1781,28 @@ function currentSelectionPreference(): SelectionPreference {
   return selectedRoute.value ? { routeKey: selectedRoute.value.routeKey } : { nodeKey: selectedNode.value?.nodeKey }
 }
 
+function validateFlowPayloadBeforeSave(payload: ProcessFlowSavePayload) {
+  const issues = validateFlowPayload(payload, metaOptions.value.branchConditionFields, metaOptions.value.sceneOptions)
+  if (issues.length) {
+    ElMessage.warning(issues[0])
+    return false
+  }
+  return true
+}
+
 async function persistCurrentFlow(showSuccessMessage = true) {
   if (!working.flowName?.trim()) {
     ElMessage.warning('\u8bf7\u5148\u586b\u5199\u6d41\u7a0b\u540d\u79f0')
     return null
   }
 
+  const payload = buildPayload()
+  if (!validateFlowPayloadBeforeSave(payload)) {
+    return null
+  }
+
   saving.value = true
   try {
-    const payload = buildPayload()
     const preferred = currentSelectionPreference()
     const detail = await persistFlowDraft(processApi, working.id, payload)
     Object.assign(working, normalizeFlowDetail(detail))
@@ -1816,9 +1830,13 @@ async function publishCurrentFlow() {
     return
   }
 
+  const payload = buildPayload()
+  if (!validateFlowPayloadBeforeSave(payload)) {
+    return
+  }
+
   publishing.value = true
   try {
-    const payload = buildPayload()
     const preferred = currentSelectionPreference()
     const result = await publishFlowAfterPersist(processApi, working.id, payload, async (detail) => {
       Object.assign(working, normalizeFlowDetail(detail))

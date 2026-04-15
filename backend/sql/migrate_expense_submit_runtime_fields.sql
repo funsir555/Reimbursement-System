@@ -26,7 +26,7 @@ DEALLOCATE PREPARE stmt;
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
-        'ALTER TABLE pm_document_instance ADD COLUMN current_node_name VARCHAR(100) NULL COMMENT ''current node name'' AFTER current_node_key',
+        'ALTER TABLE pm_document_instance ADD COLUMN current_node_name VARCHAR(64) NULL COMMENT ''current node name'' AFTER current_node_key',
         'SELECT 1'
     )
     FROM information_schema.COLUMNS
@@ -101,7 +101,7 @@ DEALLOCATE PREPARE stmt;
 SET @sql = (
     SELECT IF(
         COUNT(*) = 0,
-        'ALTER TABLE pm_document_task ADD COLUMN assignee_name VARCHAR(100) NULL COMMENT ''assignee name'' AFTER assignee_user_id',
+        'ALTER TABLE pm_document_task ADD COLUMN assignee_name VARCHAR(64) NULL COMMENT ''assignee name'' AFTER assignee_user_id',
         'SELECT 1'
     )
     FROM information_schema.COLUMNS

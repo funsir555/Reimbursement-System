@@ -1,3 +1,8 @@
+// 业务域：个人中心与下载
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 个人中心页面、下载中心接口，下游会继续协调 个人信息、银行卡账户和下载记录。
+// 风险提醒：改坏后最容易影响 个人信息展示、银行卡维护和下载留痕。
+
 package com.finex.auth.service.impl.profile;
 
 import cn.hutool.core.util.StrUtil;
@@ -18,8 +23,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * ProfileDownloadDomainSupport：领域规则支撑类。
+ * 承接 个人中心下载的核心业务规则。
+ * 改这里时，要特别关注 个人信息展示、银行卡维护和下载留痕是否会被一起带坏。
+ */
 public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSupport {
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     public ProfileDownloadDomainSupport(
             UserService userService,
             UserBankAccountMapper userBankAccountMapper,
@@ -29,6 +42,9 @@ public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSup
         super(userService, userBankAccountMapper, downloadRecordMapper, downloadStorageService);
     }
 
+    /**
+     * 获取下载中心。
+     */
     public DownloadCenterVO getDownloadCenter(Long userId) {
         List<DownloadRecord> records = downloadRecordMapper().selectList(
                 Wrappers.<DownloadRecord>lambdaQuery()
@@ -49,6 +65,9 @@ public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSup
         return center;
     }
 
+    /**
+     * 加载下载Content。
+     */
     public UserCenterService.DownloadContent loadDownloadContent(Long userId, Long downloadId) {
         DownloadRecord record = requireDownloadRecord(userId, downloadId);
         if (!AsyncTaskSupport.DOWNLOAD_STATUS_COMPLETED.equalsIgnoreCase(record.getStatus())) {
@@ -95,15 +114,24 @@ public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSup
         return vo;
     }
 
+    /**
+     * 判断Downloading是否成立。
+     */
     private boolean isDownloading(DownloadRecord record) {
         return AsyncTaskSupport.DOWNLOAD_STATUS_DOWNLOADING.equalsIgnoreCase(record.getStatus());
     }
 
+    /**
+     * 判断Downloadable是否成立。
+     */
     private boolean isDownloadable(DownloadRecord record) {
         return AsyncTaskSupport.DOWNLOAD_STATUS_COMPLETED.equalsIgnoreCase(record.getStatus())
                 && downloadStorageService().exists(record.getId());
     }
 
+    /**
+     * 解析下载Status。
+     */
     private String resolveDownloadStatus(String status) {
         if (AsyncTaskSupport.DOWNLOAD_STATUS_DOWNLOADING.equalsIgnoreCase(status)) {
             return "下载中";

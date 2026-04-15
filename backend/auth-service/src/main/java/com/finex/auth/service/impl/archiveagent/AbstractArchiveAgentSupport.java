@@ -1,3 +1,8 @@
+// 业务域：档案代理与归档任务
+// 文件角色：通用支撑类
+// 上下游关系：上游通常来自 档案代理配置接口和后台调度，下游会继续协调 归档规则、执行记录和调度计划。
+// 风险提醒：改坏后最容易影响 档案归集效果、执行漏掉和后续追溯。
+
 package com.finex.auth.service.impl.archiveagent;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -34,6 +39,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * AbstractArchiveAgentSupport：通用支撑类。
+ * 封装 档案代理这块可复用的业务能力。
+ * 改这里时，要特别关注 档案归集效果、执行漏掉和后续追溯是否会被一起带坏。
+ */
 public abstract class AbstractArchiveAgentSupport {
 
     protected static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -86,6 +96,9 @@ public abstract class AbstractArchiveAgentSupport {
         }
     }
 
+    /**
+     * 初始化这个类所需的依赖组件。
+     */
     protected AbstractArchiveAgentSupport(Dependencies dependencies) {
         this.archiveAgentDefinitionMapper = dependencies.archiveAgentDefinitionMapper;
         this.archiveAgentVersionMapper = dependencies.archiveAgentVersionMapper;
@@ -99,6 +112,9 @@ public abstract class AbstractArchiveAgentSupport {
         this.triggerDispatcher = dependencies.triggerDispatcher;
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     public static Dependencies dependencies(
             ArchiveAgentDefinitionMapper archiveAgentDefinitionMapper,
             ArchiveAgentVersionMapper archiveAgentVersionMapper,
@@ -125,6 +141,9 @@ public abstract class AbstractArchiveAgentSupport {
         );
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected ArchiveAgentDefinition requireOwnedAgent(Long ownerUserId, Long id) {
         ArchiveAgentDefinition definition = archiveAgentDefinitionMapper.selectById(id);
         if (definition == null) {
@@ -136,6 +155,9 @@ public abstract class AbstractArchiveAgentSupport {
         return definition;
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected ArchiveAgentVersion requireLatestVersion(Long agentId) {
         ArchiveAgentVersion version = archiveAgentVersionMapper.selectOne(
                 Wrappers.<ArchiveAgentVersion>lambdaQuery()
@@ -149,6 +171,9 @@ public abstract class AbstractArchiveAgentSupport {
         return version;
     }
 
+    /**
+     * 解析RunnableVersion。
+     */
     protected ArchiveAgentVersion resolveRunnableVersion(ArchiveAgentDefinition definition) {
         if (definition.getPublishedVersionId() != null) {
             ArchiveAgentVersion published = archiveAgentVersionMapper.selectById(definition.getPublishedVersionId());
@@ -159,6 +184,9 @@ public abstract class AbstractArchiveAgentSupport {
         return requireLatestVersion(definition.getId());
     }
 
+    /**
+     * 加载PublishedVersionNo。
+     */
     protected Map<Long, Integer> loadPublishedVersionNo(List<Long> versionIds) {
         if (versionIds == null || versionIds.isEmpty()) {
             return Map.of();
@@ -167,6 +195,9 @@ public abstract class AbstractArchiveAgentSupport {
                 .collect(Collectors.toMap(ArchiveAgentVersion::getId, ArchiveAgentVersion::getVersionNo, (left, right) -> left));
     }
 
+    /**
+     * 解析PublishedVersionNo。
+     */
     protected Integer resolvePublishedVersionNo(Long versionId) {
         if (versionId == null) {
             return null;
@@ -175,6 +206,9 @@ public abstract class AbstractArchiveAgentSupport {
         return version == null ? null : version.getVersionNo();
     }
 
+    /**
+     * 解析运行时Status。
+     */
     protected String resolveRuntimeStatus(ArchiveAgentDefinition agent) {
         if (ArchiveAgentSupport.AGENT_STATUS_DISABLED.equals(agent.getStatus())) {
             return "DISABLED";
@@ -191,6 +225,9 @@ public abstract class AbstractArchiveAgentSupport {
         return "DRAFT";
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected void dispatchAfterCommit(ArchiveAgentRun run) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -204,6 +241,9 @@ public abstract class AbstractArchiveAgentSupport {
         triggerDispatcher.dispatch(run);
     }
 
+    /**
+     * 创建Pending执行。
+     */
     protected ArchiveAgentRun createPendingRun(
             ArchiveAgentDefinition definition,
             ArchiveAgentVersion version,
@@ -228,6 +268,9 @@ public abstract class AbstractArchiveAgentSupport {
         return run;
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected ArchiveAgentRunVO toRunVo(ArchiveAgentRun run) {
         ArchiveAgentRunVO vo = new ArchiveAgentRunVO();
         vo.setId(run.getId());
@@ -244,6 +287,9 @@ public abstract class AbstractArchiveAgentSupport {
         return vo;
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected ArchiveAgentStepVO toStepVo(ArchiveAgentRunStep step) {
         ArchiveAgentStepVO vo = new ArchiveAgentStepVO();
         vo.setStepNo(step.getStepNo());
@@ -260,6 +306,9 @@ public abstract class AbstractArchiveAgentSupport {
         return vo;
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     @SuppressWarnings("unchecked")
     protected Map<String, Object> readMap(String rawJson) {
         if (rawJson == null || rawJson.isBlank()) {
@@ -273,6 +322,9 @@ public abstract class AbstractArchiveAgentSupport {
         }
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     @SuppressWarnings("unchecked")
     protected Map<String, Object> readNestedMap(Map<String, Object> source, String key) {
         Object value = source.get(key);
@@ -282,6 +334,9 @@ public abstract class AbstractArchiveAgentSupport {
         return new LinkedHashMap<>();
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     @SuppressWarnings("unchecked")
     protected List<Map<String, Object>> readList(Object value) {
         if (value instanceof List<?> list) {
@@ -296,6 +351,9 @@ public abstract class AbstractArchiveAgentSupport {
         return new ArrayList<>();
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected List<String> readStringList(String rawJson) {
         if (rawJson == null || rawJson.isBlank()) {
             return new ArrayList<>();
@@ -308,6 +366,9 @@ public abstract class AbstractArchiveAgentSupport {
         }
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -316,10 +377,16 @@ public abstract class AbstractArchiveAgentSupport {
         }
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected String formatDateTime(LocalDateTime value) {
         return value == null ? null : DATE_TIME_FORMATTER.format(value);
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected String trimToNull(String value) {
         if (value == null) {
             return null;
@@ -328,6 +395,9 @@ public abstract class AbstractArchiveAgentSupport {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected boolean asBoolean(Object value) {
         if (value instanceof Boolean bool) {
             return bool;
@@ -341,6 +411,9 @@ public abstract class AbstractArchiveAgentSupport {
         return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
     }
 
+    /**
+     * 处理档案代理中的这一步。
+     */
     protected Integer asInteger(Object value) {
         if (value instanceof Integer integer) {
             return integer;

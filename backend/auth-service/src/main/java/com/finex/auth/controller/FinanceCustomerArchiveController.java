@@ -39,6 +39,10 @@ public class FinanceCustomerArchiveController {
     private static final String CUSTOMER_CREATE = "finance:archives:customers:create";
     private static final String CUSTOMER_EDIT = "finance:archives:customers:edit";
     private static final String CUSTOMER_DELETE = "finance:archives:customers:delete";
+    private static final String MESSAGE_CREATED = "\u5ba2\u6237\u6863\u6848\u5df2\u521b\u5efa";
+    private static final String MESSAGE_UPDATED = "\u5ba2\u6237\u6863\u6848\u5df2\u66f4\u65b0";
+    private static final String MESSAGE_DISABLED = "\u5ba2\u6237\u6863\u6848\u5df2\u505c\u7528";
+    private static final String MESSAGE_USER_MISSING = "\u672a\u83b7\u53d6\u5230\u5f53\u524d\u7528\u6237\u4fe1\u606f";
 
     private final FinanceCustomerService financeCustomerService;
     private final AccessControlService accessControlService;
@@ -74,7 +78,7 @@ public class FinanceCustomerArchiveController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), CUSTOMER_CREATE, CUSTOMER_EDIT);
-        return Result.success("瀹㈡埛淇濆瓨鎴愬姛", financeCustomerService.createCustomer(companyId, dto, getCurrentUsername(request)));
+        return Result.success(MESSAGE_CREATED, financeCustomerService.createCustomer(companyId, dto, getCurrentUsername(request)));
     }
 
     // 处理 updateCustomer 请求。
@@ -86,7 +90,7 @@ public class FinanceCustomerArchiveController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), CUSTOMER_EDIT);
-        return Result.success("瀹㈡埛鏇存柊鎴愬姛", financeCustomerService.updateCustomer(companyId, customerCode, dto, getCurrentUsername(request)));
+        return Result.success(MESSAGE_UPDATED, financeCustomerService.updateCustomer(companyId, customerCode, dto, getCurrentUsername(request)));
     }
 
     // 处理 disableCustomer 请求。
@@ -97,7 +101,7 @@ public class FinanceCustomerArchiveController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), CUSTOMER_DELETE, CUSTOMER_EDIT);
-        return Result.success("瀹㈡埛宸插仠鐢?", financeCustomerService.disableCustomer(companyId, customerCode, getCurrentUsername(request)));
+        return Result.success(MESSAGE_DISABLED, financeCustomerService.disableCustomer(companyId, customerCode, getCurrentUsername(request)));
     }
 
     private Long getCurrentUserId(HttpServletRequest request) {
@@ -108,7 +112,7 @@ public class FinanceCustomerArchiveController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
+        throw new IllegalStateException(MESSAGE_USER_MISSING);
     }
 
     private String getCurrentUsername(HttpServletRequest request) {

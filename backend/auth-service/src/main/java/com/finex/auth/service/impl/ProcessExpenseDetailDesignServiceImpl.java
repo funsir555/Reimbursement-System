@@ -16,9 +16,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +30,8 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
 
     private static final DateTimeFormatter CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final int PM_NAME_MAX_LENGTH = 64;
+    private static final int PM_FIELD_KEY_MAX_LENGTH = 64;
 
     private final ProcessExpenseDetailDesignMapper processExpenseDetailDesignMapper;
     private final ProcessDocumentTemplateMapper processDocumentTemplateMapper;
@@ -75,7 +81,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
                         .eq(ProcessDocumentTemplate::getExpenseDetailDesignCode, detailDesign.getDetailCode())
         );
         if (referencedCount != null && referencedCount > 0) {
-            throw new IllegalStateException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
+            throw new IllegalStateException("\u5f53\u524d\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
         }
         processExpenseDetailDesignMapper.deleteById(id);
         return Boolean.TRUE;
@@ -84,7 +90,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
     @Override
     public Map<String, String> detailDesignLabelMap() {
         return listExpenseDetailDesigns().stream().collect(
-                java.util.LinkedHashMap::new,
+                LinkedHashMap::new,
                 (map, item) -> map.put(item.getDetailCode(), item.getDetailName()),
                 Map::putAll
         );
@@ -94,7 +100,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
     public String resolveExpenseDetailDesignCode(String detailCode) {
         String normalizedCode = trimToNull(detailCode);
         if (normalizedCode == null) {
-            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u8bbe\u8ba1\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u4e0d\u80fd\u4e3a\u7a7a");
         }
 
         ProcessExpenseDetailDesign detailDesign = processExpenseDetailDesignMapper.selectOne(
@@ -160,19 +166,57 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
 
     private void validateSave(ProcessExpenseDetailDesignSaveDTO dto, ProcessExpenseDetailDesign existing) {
         if (trimToNull(dto.getDetailName()) == null) {
-            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
         }
+        validatePmNameLength(dto.getDetailName(), "\u8d39\u7528\u660e\u7ec6\u8868\u5355\u540d\u79f0");
         if (trimToNull(dto.getDetailType()) == null) {
             throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u7c7b\u578b\u4e0d\u80fd\u4e3a\u7a7a");
         }
         String normalizedType = normalizeDetailType(dto.getDetailType());
         if (!Objects.equals(normalizedType, ExpenseDetailSystemFieldSupport.DETAIL_TYPE_NORMAL)
                 && !Objects.equals(normalizedType, ExpenseDetailSystemFieldSupport.DETAIL_TYPE_ENTERPRISE)) {
-            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u7c7b\u578b\u4e0d\u652f\u6301");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u7c7b\u578b\u4e0d\u5408\u6cd5");
         }
-        if (existing != null && isDetailDesignReferenced(existing.getDetailCode())
+        validateSchemaFieldKeys(
+                expenseDetailSystemFieldSupport.normalizeSchema(dto.getSchema(), normalizedType),
+                "\u8d39\u7528\u660e\u7ec6\u8868\u5355"
+        );
+        if (existing != null
+                && isDetailDesignReferenced(existing.getDetailCode())
                 && !Objects.equals(normalizeDetailType(existing.getDetailType()), normalizedType)) {
-            throw new IllegalStateException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u4fee\u6539\u660e\u7ec6\u7c7b\u578b");
+            throw new IllegalStateException("\u5f53\u524d\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u4fee\u6539\u660e\u7ec6\u7c7b\u578b");
+        }
+    }
+
+    private void validateSchemaFieldKeys(Map<String, Object> schema, String subjectLabel) {
+        Object rawBlocks = schema == null ? null : schema.get("blocks");
+        if (!(rawBlocks instanceof Collection<?> blocks)) {
+            return;
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        int index = 0;
+        for (Object rawBlock : blocks) {
+            index++;
+            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
+                continue;
+            }
+            String fieldKey = trimToNull(stringValue(blockMap.get("fieldKey")));
+            if (fieldKey == null) {
+                throw new IllegalArgumentException(subjectLabel + "\u7b2c " + index + " \u4e2a\u5b57\u6bb5\u6807\u8bc6\u4e0d\u80fd\u4e3a\u7a7a");
+            }
+            if (fieldKey.length() > PM_FIELD_KEY_MAX_LENGTH) {
+                throw new IllegalArgumentException("\u5b57\u6bb5\u6807\u8bc6 " + fieldKey + " \u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
+            }
+            if (!seen.add(fieldKey)) {
+                throw new IllegalArgumentException(subjectLabel + "\u5b57\u6bb5\u6807\u8bc6 " + fieldKey + " \u4e0d\u80fd\u91cd\u590d");
+            }
+        }
+    }
+
+    private void validatePmNameLength(String value, String label) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > PM_NAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
         }
     }
 
@@ -222,5 +266,13 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 }

@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS fin_project_class (
     PRIMARY KEY (id),
     UNIQUE KEY uk_fin_project_class_company_code (company_id, project_class_code),
     KEY idx_fin_project_class_company_status (company_id, status, sort_order),
-    CONSTRAINT ck_fin_project_class_code_format CHECK (project_class_code REGEXP '^[0-9]{2}$')
+    CONSTRAINT ck_fin_project_class_code_format CHECK (project_class_code REGEXP '^[0-9]{1,2}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目分类表';
 
 CREATE TABLE IF NOT EXISTS fin_project_archive (
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS fin_project_archive (
     UNIQUE KEY uk_fin_project_archive_company_code (company_id, citemcode),
     KEY idx_fin_project_archive_company_class (company_id, citemccode),
     KEY idx_fin_project_archive_company_status (company_id, status, bclose, sort_order),
-    CONSTRAINT ck_fin_project_archive_code_format CHECK (citemcode REGEXP '^[0-9]{6}$'),
-    CONSTRAINT ck_fin_project_archive_class_format CHECK (citemccode REGEXP '^[0-9]{2}$'),
+    CONSTRAINT ck_fin_project_archive_code_format CHECK (citemcode REGEXP '^[0-9]{1,6}$'),
+    CONSTRAINT ck_fin_project_archive_class_format CHECK (citemccode REGEXP '^[0-9]{1,2}$'),
     CONSTRAINT fk_fin_project_archive_class
         FOREIGN KEY (company_id, citemccode)
         REFERENCES fin_project_class (company_id, project_class_code)
