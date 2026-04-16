@@ -409,7 +409,7 @@ public abstract class AbstractFinanceVoucherSupport {
      */
     protected List<FinanceVoucherOptionVO> loadAccountOptions(String companyId) {
         return loadSelectableAccountMap(companyId).values().stream()
-                .map(item -> option(item.getSubjectCode(), item.getSubjectCode(), item.getSubjectName()))
+                .map(this::toAccountOption)
                 .toList();
     }
 
@@ -724,6 +724,17 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 处理财务凭证中的这一步。
      */
+    protected FinanceVoucherOptionVO toAccountOption(FinanceAccountSubject subject) {
+        FinanceVoucherOptionVO option = option(subject.getSubjectCode(), subject.getSubjectCode(), subject.getSubjectName());
+        option.setBperson(subject.getBperson());
+        option.setBcus(subject.getBcus());
+        option.setBsup(subject.getBsup());
+        option.setBdept(subject.getBdept());
+        option.setBitem(subject.getBitem());
+        option.setCassItem(trimToNull(subject.getCassItem()));
+        return option;
+    }
+
     protected List<FinanceVoucherOptionVO> toOptions(List<OptionSeed> seeds) {
         return seeds.stream().map(seed -> option(seed.value(), seed.label())).toList();
     }
@@ -1145,7 +1156,7 @@ public abstract class AbstractFinanceVoucherSupport {
                 .collect(Collectors.toMap(item -> String.valueOf(item.getId()), SystemDepartment::getDeptName));
         Map<String, String> employees = loadEnabledUsers().stream()
                 .collect(Collectors.toMap(item -> String.valueOf(item.getId()), this::resolveUserName));
-        Set<String> accounts = loadAccountCodeSet(companyId);
+        Map<String, FinanceAccountSubject> accounts = loadSelectableAccountMap(companyId);
         Set<String> customers = loadEnabledCustomerMap(companyId).keySet();
         Set<String> suppliers = loadEnabledSupplierMap(companyId).keySet();
         Map<String, FinanceProjectClass> projectClasses = loadEnabledProjectClassMap(companyId);
@@ -1169,7 +1180,8 @@ public abstract class AbstractFinanceVoucherSupport {
             if (trimToNull(entry.getCdigest()) == null) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6458\u8981\u4e0d\u80fd\u4e3a\u7a7a");
             }
-            if (trimToNull(entry.getCcode()) == null || !accounts.contains(entry.getCcode())) {
+            FinanceAccountSubject subject = trimToNull(entry.getCcode()) == null ? null : accounts.get(entry.getCcode());
+            if (subject == null) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u79d1\u76ee\u4e0d\u5b58\u5728");
             }
             validateSelectable(entry.getCdeptId(), departments.keySet(), "\u90e8\u95e8", rowNo);
@@ -1178,6 +1190,7 @@ public abstract class AbstractFinanceVoucherSupport {
             validateSelectable(entry.getCsupId(), suppliers, "\u4f9b\u5e94\u5546", rowNo);
             validateSelectable(entry.getCitemClass(), projectClasses.keySet(), "\u9879\u76ee\u5206\u7c7b", rowNo);
             validateSelectable(entry.getCitemId(), projects.keySet(), "\u9879\u76ee", rowNo);
+            validateAuxiliarySelection(entry, subject, rowNo);
             validateProjectSelection(entry, projectClasses, projects, rowNo);
 
             if (!currencies.contains(normalize(entry.getCexchName(), DEFAULT_CURRENCY))) {
@@ -1233,6 +1246,35 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 校验项目Selection。
      */
+    protected void validateAuxiliarySelection(FinanceVoucherEntryDTO entry, FinanceAccountSubject subject, int rowNo) {
+        validateAuxiliaryEnabled(entry.getCdeptId(), subject.getBdept(), "\u90e8\u95e8", rowNo);
+        validateAuxiliaryEnabled(entry.getCpersonId(), subject.getBperson(), "\u4eba\u5458", rowNo);
+        validateAuxiliaryEnabled(entry.getCcusId(), subject.getBcus(), "\u5ba2\u6237", rowNo);
+        validateAuxiliaryEnabled(entry.getCsupId(), subject.getBsup(), "\u4f9b\u5e94\u5546", rowNo);
+        String projectClassCode = trimToNull(entry.getCitemClass());
+        String projectCode = trimToNull(entry.getCitemId());
+        if (projectClassCode != null || projectCode != null) {
+            if (!isEnabled(subject.getBitem())) {
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u5f53\u524d\u79d1\u76ee\u672a\u542f\u7528\u9879\u76ee\u8f85\u52a9\u6838\u7b97");
+            }
+            String lockedProjectClassCode = trimToNull(subject.getCassItem());
+            if (lockedProjectClassCode != null && !Objects.equals(projectClassCode, lockedProjectClassCode)) {
+                throw new IllegalArgumentException(
+                        "\u7b2c " + rowNo + " \u884c\u9879\u76ee\u5206\u7c7b\u5fc5\u987b\u4e3a\u79d1\u76ee\u6302\u8f7d\u7684\u9879\u76ee\u5206\u7c7b\u3010" + lockedProjectClassCode + "\u3011"
+                );
+            }
+        }
+    }
+
+    protected void validateAuxiliaryEnabled(String value, Integer enabledFlag, String fieldName, int rowNo) {
+        if (trimToNull(value) == null) {
+            return;
+        }
+        if (!isEnabled(enabledFlag)) {
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u5f53\u524d\u79d1\u76ee\u672a\u542f\u7528" + fieldName + "\u8f85\u52a9\u6838\u7b97");
+        }
+    }
+
     protected void validateProjectSelection(
             FinanceVoucherEntryDTO entry,
             Map<String, FinanceProjectClass> projectClasses,
@@ -1536,6 +1578,10 @@ public abstract class AbstractFinanceVoucherSupport {
      */
     protected String formatAmountText(BigDecimal value) {
         return normalizeAmount(value).toPlainString();
+    }
+
+    protected boolean isEnabled(Integer value) {
+        return value != null && value == 1;
     }
 
     /**

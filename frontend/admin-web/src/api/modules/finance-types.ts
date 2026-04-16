@@ -10,6 +10,12 @@ export interface FinanceVoucherOption {
   name?: string
   label: string
   parentValue?: string
+  bperson?: number
+  bcus?: number
+  bsup?: number
+  bdept?: number
+  bitem?: number
+  cassItem?: string
 }
 
 export interface FinanceVoucherEntry {

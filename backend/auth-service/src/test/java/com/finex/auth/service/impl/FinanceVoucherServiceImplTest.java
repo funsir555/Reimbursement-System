@@ -132,7 +132,7 @@ class FinanceVoucherServiceImplTest {
         when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
         when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "广州分公司")));
         when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "员工甲", "COMP-001")));
-        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("1001", "库存现金")));
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("1001", "??????", 1, 1, 1, 1, 1, "7")));
         when(financeCustomerMapper.selectList(any())).thenReturn(List.of(buildCustomer("C00001", "华南客户", "COMP-001")));
         when(financeVendorMapper.selectList(any())).thenReturn(List.of(buildVendor("V00001", "核心供应商", "COMP-001")));
         when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("7", "Market Projects", "COMP-001")));
@@ -144,6 +144,10 @@ class FinanceVoucherServiceImplTest {
         assertEquals("C00001", meta.getCustomerOptions().get(0).getValue());
         assertEquals("C00001", meta.getCustomerOptions().get(0).getCode());
         assertEquals("华南客户", meta.getCustomerOptions().get(0).getName());
+        assertEquals(1, meta.getAccountOptions().get(0).getBperson());
+        assertEquals(1, meta.getAccountOptions().get(0).getBdept());
+        assertEquals(1, meta.getAccountOptions().get(0).getBitem());
+        assertEquals("7", meta.getAccountOptions().get(0).getCassItem());
         assertEquals("V00001", meta.getSupplierOptions().get(0).getValue());
         assertEquals("7", meta.getProjectClassOptions().get(0).getCode());
         assertEquals("2002", meta.getProjectOptions().get(0).getCode());
@@ -161,7 +165,7 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "Management Expense"),
+                buildSubject("5601", "Management Expense", 0, 0, 0, 0, 1, null),
                 buildSubject("1002", "Bank Deposit")
         ));
         when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("7", "Market Projects", "COMP-001")));
@@ -185,6 +189,67 @@ class FinanceVoucherServiceImplTest {
         assertEquals(2, insertedRows.size());
         assertEquals("7", insertedRows.get(0).getCitemClass());
         assertEquals("2002", insertedRows.get(0).getCitemId());
+    }
+
+    @Test
+    void saveVoucherRejectsDisabledAuxiliaryDimensionForSubject() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "Management Expense"),
+                buildSubject("1002", "Bank Deposit")
+        ));
+        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(buildDepartment(10L, "Finance Center")));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "5601", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "1002", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCdeptId("10");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u5f53\u524d\u79d1\u76ee\u672a\u542f\u7528\u90e8\u95e8\u8f85\u52a9\u6838\u7b97", exception.getMessage());
+    }
+
+    @Test
+    void saveVoucherRejectsProjectClassOutsideSubjectCassItemBinding() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "Management Expense", 0, 0, 0, 0, 1, "7"),
+                buildSubject("1002", "Bank Deposit")
+        ));
+        when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(
+                buildProjectClass("7", "Market Projects", "COMP-001"),
+                buildProjectClass("8", "Innovation Projects", "COMP-001")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "5601", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "1002", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCitemClass("8");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u9879\u76ee\u5206\u7c7b\u5fc5\u987b\u4e3a\u79d1\u76ee\u6302\u8f7d\u7684\u9879\u76ee\u5206\u7c7b\u30107\u3011", exception.getMessage());
     }
 
     @Test
@@ -355,12 +420,31 @@ class FinanceVoucherServiceImplTest {
     }
 
     private FinanceAccountSubject buildSubject(String code, String name) {
+        return buildSubject(code, name, 0, 0, 0, 0, 0, null);
+    }
+
+    private FinanceAccountSubject buildSubject(
+            String code,
+            String name,
+            Integer bperson,
+            Integer bcus,
+            Integer bsup,
+            Integer bdept,
+            Integer bitem,
+            String cassItem
+    ) {
         FinanceAccountSubject subject = new FinanceAccountSubject();
         subject.setCompanyId("COMP-001");
         subject.setSubjectCode(code);
         subject.setSubjectName(name);
         subject.setStatus(1);
         subject.setBclose(0);
+        subject.setBperson(bperson);
+        subject.setBcus(bcus);
+        subject.setBsup(bsup);
+        subject.setBdept(bdept);
+        subject.setBitem(bitem);
+        subject.setCassItem(cassItem);
         return subject;
     }
 

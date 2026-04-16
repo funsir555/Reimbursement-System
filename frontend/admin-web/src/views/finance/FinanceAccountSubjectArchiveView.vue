@@ -79,23 +79,22 @@
             <el-collapse-item name="basic">
               <template #title><span class="text-base font-semibold text-slate-800">编码与层级</span></template>
               <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <el-form-item label="父级科目" class="!mb-0"><el-select v-model="form.parent_subject_code" clearable filterable placeholder="根科目可不选" :disabled="!isCreateMode" @change="handleParentChange"><el-option v-for="item in parentOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+                <el-form-item label="父级科目" class="!mb-0"><el-input :model-value="parentDisplayText" disabled placeholder="请输入科目编码后自动匹配父级科目" /></el-form-item>
                 <el-form-item label="科目编码" class="!mb-0"><el-input v-model="form.subject_code" :disabled="!isCreateMode" placeholder="请输入科目编码" @input="syncDerivedFields" /></el-form-item>
                 <el-form-item label="科目名称" class="!mb-0"><el-input v-model="form.subject_name" :disabled="isDetailMode" placeholder="请输入科目名称" /></el-form-item>
-                <el-form-item label="层级" class="!mb-0"><el-input :model-value="String(subjectLevelPreview || '')" disabled /></el-form-item>
-                <el-form-item label="科目类别" class="!mb-0"><el-select v-model="form.subject_category" :disabled="isDetailMode" placeholder="请选择科目类别" @change="syncDerivedFields"><el-option v-for="item in meta.subjectCategoryOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+                <el-form-item label="层级" class="!mb-0"><el-input :model-value="subjectLevelPreviewText" disabled /></el-form-item>
+                <el-form-item label="科目类别" class="!mb-0"><el-input :model-value="categoryPreviewLabel" disabled placeholder="根据编码自动匹配" /></el-form-item>
                 <el-form-item label="助记码" class="!mb-0"><el-input v-model="form.chelp" :disabled="isDetailMode" placeholder="请输入助记码" /></el-form-item>
-                <el-form-item label="末级科目" class="!mb-0"><flag-switch v-model="form.leaf_flag" :disabled="isDetailMode || form.has_children" /></el-form-item>
                 <el-form-item label="余额方向" class="!mb-0"><el-input :model-value="balanceDirectionText(balanceDirectionPreview)" disabled /></el-form-item>
+                <div v-if="autoParentWarning" class="xl:col-span-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                  {{ autoParentWarning }}
+                </div>
               </div>
             </el-collapse-item>
 
             <el-collapse-item name="attribute">
               <template #title><span class="text-base font-semibold text-slate-800">科目属性</span></template>
               <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <el-form-item label="分析类型" class="!mb-0"><el-input v-model="form.cclassany" :disabled="isDetailMode" placeholder="请输入分析类型" /></el-form-item>
-                <el-form-item label="借贷属性" class="!mb-0"><el-select v-model="form.bproperty" :disabled="isDetailMode" placeholder="请选择借贷属性"><el-option label="借方" :value="1" /><el-option label="贷方" :value="0" /></el-select></el-form-item>
-                <el-form-item label="账簿类型" class="!mb-0"><el-input v-model="form.cbook_type" :disabled="isDetailMode" placeholder="GENERAL / CASH / BANK" /></el-form-item>
                 <el-form-item label="币种" class="!mb-0"><el-input v-model="form.cexch_name" :disabled="isDetailMode" placeholder="如 CNY" /></el-form-item>
                 <el-form-item label="计量单位" class="!mb-0"><el-input v-model="form.cmeasure" :disabled="isDetailMode" placeholder="请输入计量单位" /></el-form-item>
               </div>
@@ -109,7 +108,7 @@
                 <el-form-item label="供应商" class="!mb-0"><flag-switch v-model="form.bsup" :disabled="isDetailMode" /></el-form-item>
                 <el-form-item label="部门" class="!mb-0"><flag-switch v-model="form.bdept" :disabled="isDetailMode" /></el-form-item>
                 <el-form-item label="项目" class="!mb-0"><flag-switch v-model="form.bitem" :disabled="isDetailMode" /></el-form-item>
-                <el-form-item label="项目分类编码" class="!mb-0"><el-input v-model="form.cass_item" :disabled="isDetailMode" placeholder="请输入项目分类编码" /></el-form-item>
+                <el-form-item label="项目分类编码" class="!mb-0"><el-input v-model="form.cass_item" :disabled="isProjectClassBindingDisabled" placeholder="请输入项目分类编码" /></el-form-item>
               </div>
             </el-collapse-item>
 
@@ -181,6 +180,7 @@ const saving = ref(false)
 const drawerVisible = ref(false)
 const drawerMode = ref<DrawerMode>('detail')
 const editingSubjectCode = ref('')
+const createParentHintCode = ref('')
 const meta = reactive<FinanceAccountSubjectMeta>({ subjectCategoryOptions: [], statusOptions: [], closeStatusOptions: [], yesNoOptions: [] })
 const filters = reactive({ keyword: '', subjectCategory: '', status: undefined as number | undefined, bclose: undefined as number | undefined })
 const subjectTree = ref<FinanceAccountSubjectSummary[]>([])
@@ -208,13 +208,35 @@ const drawerTitle = computed(() => (drawerMode.value === 'create' ? '新增会�
 const allSubjects = computed(() => flattenTree(subjectTree.value))
 const parentOptions = computed<ParentOption[]>(() => allSubjects.value.filter((item) => item.subject_code !== editingSubjectCode.value).map((item) => ({ value: item.subject_code, label: `${item.subject_code} / ${item.subject_name}`, subject_category: item.subject_category, subject_level: item.subject_level, balance_direction: item.balance_direction })))
 const selectedParent = computed(() => parentOptions.value.find((item) => item.value === form.parent_subject_code))
-const subjectLevelPreview = computed(() => (selectedParent.value ? selectedParent.value.subject_level + 1 : 1))
+const hintedParent = computed(() => parentOptions.value.find((item) => item.value === createParentHintCode.value))
+const autoMatchedParent = computed(() => {
+  if (!isCreateMode.value) return undefined
+  const code = trimString(form.subject_code)
+  if (!code) return hintedParent.value
+  return findMatchedParent(code)
+})
+const effectiveParent = computed(() => isCreateMode.value ? autoMatchedParent.value : selectedParent.value)
+const subjectLevelPreview = computed(() => effectiveParent.value ? effectiveParent.value.subject_level + 1 : undefined)
+const subjectLevelPreviewText = computed(() => subjectLevelPreview.value ? String(subjectLevelPreview.value) : '')
+const categoryPreviewValue = computed(() => {
+  if (effectiveParent.value?.subject_category) {
+    return effectiveParent.value.subject_category
+  }
+  if (isCreateMode.value) {
+    return undefined
+  }
+  return trimString(form.subject_category) || undefined
+})
+const categoryPreviewLabel = computed(() => categoryPreviewValue.value ? categoryLabel(categoryPreviewValue.value) : '')
+const parentDisplayText = computed(() => effectiveParent.value?.label || '')
+const missingAutoParent = computed(() => isCreateMode.value && Boolean(trimString(form.subject_code)) && !autoMatchedParent.value)
+const autoParentWarning = computed(() => missingAutoParent.value ? '未匹配到已存在的上级科目，请先创建上级科目，再新增当前科目。' : '')
 const balanceDirectionPreview = computed(() => {
-  if (selectedParent.value?.balance_direction) return selectedParent.value.balance_direction
+  if (effectiveParent.value?.balance_direction) return effectiveParent.value.balance_direction
   const code = String(form.subject_code || '').trim()
   if (code.startsWith('1') || code.startsWith('4') || code.startsWith('6')) return 'DEBIT'
   if (code.startsWith('2') || code.startsWith('3') || code.startsWith('5')) return 'CREDIT'
-  if (form.subject_category === 'LIABILITY' || form.subject_category === 'EQUITY' || form.subject_category === 'PROFIT') return 'CREDIT'
+  if (categoryPreviewValue.value === 'LIABILITY' || categoryPreviewValue.value === 'EQUITY' || categoryPreviewValue.value === 'PROFIT') return 'CREDIT'
   return 'DEBIT'
 })
 const contextMessage = computed(() => {
@@ -224,11 +246,17 @@ const contextMessage = computed(() => {
   return ''
 })
 const contextMessageClass = computed(() => !currentCompanyId.value || !hasActiveAccountSet.value ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-sky-200 bg-sky-50 text-sky-700')
+const projectAssistEnabled = computed(() => normalizeNumber(form.bitem, 0) === 1)
+const isProjectClassBindingDisabled = computed(() => isDetailMode.value || !projectAssistEnabled.value)
 
 onMounted(registerCompanySwitchGuard)
 onActivated(registerCompanySwitchGuard)
 onDeactivated(unregisterCompanySwitchGuard)
 watch(() => financeCompany.currentCompanyId, async (companyId, previousCompanyId) => { if (!companyId) { subjectTree.value = []; return }; if (companyId !== previousCompanyId) closeDrawer(); await loadMeta(); await loadSubjects() }, { immediate: true })
+watch(() => form.bitem, (value) => { if (normalizeNumber(value, 0) !== 1) form.cass_item = '' })
+watch([() => form.subject_code, effectiveParent, () => isCreateMode.value], () => {
+  syncDerivedFields()
+})
 onBeforeUnmount(() => unregisterCompanySwitchGuard())
 
 function registerCompanySwitchGuard() { if (guardRegistered) return; financeCompany.registerSwitchGuard(COMPANY_SWITCH_GUARD_KEY, confirmCompanySwitch); guardRegistered = true }
@@ -238,20 +266,30 @@ async function loadMeta() { try { const res = await financeArchiveApi.getAccount
 async function loadSubjects() { if (!currentCompanyId.value || !hasActiveAccountSet.value) { subjectTree.value = []; return }; loading.value = true; try { const res = await financeArchiveApi.listAccountSubjects({ companyId: currentCompanyId.value, keyword: filters.keyword.trim() || undefined, subjectCategory: filters.subjectCategory || undefined, status: filters.status, bclose: filters.bclose }); subjectTree.value = normalizeTree(res.data || []) } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '加载会计科目列表失败')) } finally { loading.value = false } }
 function resetFilters() { filters.keyword = ''; filters.subjectCategory = ''; filters.status = undefined; filters.bclose = undefined; void loadSubjects() }
 function ensureCurrentCompanyReady(actionText: string) { if (!currentCompanyId.value) { ElMessage.warning(`当前未选择财务公司，无法${actionText}`); return false }; if (!hasActiveAccountSet.value) { ElMessage.warning('当前公司未创建账套，请切换公司或先建账。'); return false }; return true }
-function resetForm(parentSubjectCode = '') { Object.assign(form, createDefaultForm()); form.parent_subject_code = parentSubjectCode || ''; form.subject_level = parentSubjectCode ? subjectLevelPreview.value : 1; form.subject_category = selectedParent.value?.subject_category || 'ASSET'; form.cclassany = form.subject_category; form.bproperty = balanceDirectionPreview.value === 'DEBIT' ? 1 : 0; form.cbook_type = defaultBookType(); form.cexch_name = 'CNY' }
-function syncDerivedFields() { form.subject_level = subjectLevelPreview.value; if (!form.cclassany) form.cclassany = form.subject_category; if (!form.cbook_type) form.cbook_type = defaultBookType(); if (form.bproperty === undefined || form.bproperty === null) form.bproperty = balanceDirectionPreview.value === 'DEBIT' ? 1 : 0 }
-function handleParentChange() { form.subject_level = subjectLevelPreview.value; if (selectedParent.value?.subject_category) form.subject_category = selectedParent.value.subject_category; if (selectedParent.value?.balance_direction) form.bproperty = selectedParent.value.balance_direction === 'DEBIT' ? 1 : 0; form.cbook_type = defaultBookType() }
+function resetForm(parentSubjectCode = '') { Object.assign(form, createDefaultForm()); createParentHintCode.value = parentSubjectCode || ''; form.parent_subject_code = parentSubjectCode || ''; syncDerivedFields() }
+function syncDerivedFields() {
+  if (isCreateMode.value) {
+    form.parent_subject_code = effectiveParent.value?.value || ''
+    form.subject_level = subjectLevelPreview.value || 0
+    form.subject_category = categoryPreviewValue.value || ''
+  }
+  form.balance_direction = balanceDirectionPreview.value
+  form.cclassany = form.subject_category || ''
+  form.bproperty = balanceDirectionPreview.value === 'DEBIT' ? 1 : 0
+  form.cbook_type = defaultBookType()
+}
 function openCreateDrawer(parentSubjectCode = '') { if (!ensureCurrentCompanyReady('维护会计科目')) return; drawerMode.value = 'create'; editingSubjectCode.value = ''; resetForm(parentSubjectCode); activeSections.value = ['basic', 'attribute', 'auxiliary', 'cashBank', 'control']; drawerVisible.value = true }
 async function openDetailDrawer(subjectCode: string) { await loadSubjectDetail(subjectCode, 'detail') }
 async function openEditDrawer(subjectCode: string) { await loadSubjectDetail(subjectCode, 'edit') }
-async function loadSubjectDetail(subjectCode: string, mode: DrawerMode) { if (!ensureCurrentCompanyReady('查看会计科目')) return; drawerMode.value = mode; editingSubjectCode.value = subjectCode; drawerVisible.value = true; activeSections.value = ['basic', 'attribute', 'auxiliary', 'cashBank', 'control']; try { const res = await financeArchiveApi.getAccountSubjectDetail(currentCompanyId.value, subjectCode); Object.assign(form, createDefaultForm(), res.data); form.parent_subject_code = form.parent_subject_code || ''; form.has_children = Boolean(res.data.has_children) } catch (error: unknown) { drawerVisible.value = false; ElMessage.error(resolveErrorMessage(error, '加载会计科目详情失败')) } }
-async function saveSubject() { if (!ensureCurrentCompanyReady('保存会计科目')) return; if (!String(form.subject_code || '').trim()) { ElMessage.warning('科目编码不能为空'); return }; if (!String(form.subject_name || '').trim()) { ElMessage.warning('科目名称不能为空'); return }; saving.value = true; try { const payload = buildPayload(); if (drawerMode.value === 'create') { await financeArchiveApi.createAccountSubject(currentCompanyId.value, payload); ElMessage.success('会计科目创建成功') } else { await financeArchiveApi.updateAccountSubject(currentCompanyId.value, editingSubjectCode.value, payload); ElMessage.success('会计科目更新成功') }; closeDrawer(); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '保存会计科目失败')) } finally { saving.value = false } }
+async function loadSubjectDetail(subjectCode: string, mode: DrawerMode) { if (!ensureCurrentCompanyReady('查看会计科目')) return; drawerMode.value = mode; createParentHintCode.value = ''; editingSubjectCode.value = subjectCode; drawerVisible.value = true; activeSections.value = ['basic', 'attribute', 'auxiliary', 'cashBank', 'control']; try { const res = await financeArchiveApi.getAccountSubjectDetail(currentCompanyId.value, subjectCode); Object.assign(form, createDefaultForm(), res.data); form.parent_subject_code = form.parent_subject_code || ''; form.has_children = Boolean(res.data.has_children); syncDerivedFields() } catch (error: unknown) { drawerVisible.value = false; ElMessage.error(resolveErrorMessage(error, '加载会计科目详情失败')) } }
+async function saveSubject() { if (!ensureCurrentCompanyReady('保存会计科目')) return; if (!String(form.subject_code || '').trim()) { ElMessage.warning('科目编码不能为空'); return }; if (!String(form.subject_name || '').trim()) { ElMessage.warning('科目名称不能为空'); return }; if (isCreateMode.value && missingAutoParent.value) { ElMessage.warning('请先创建上级科目，再新增当前科目'); return }; saving.value = true; try { const payload = buildPayload(); if (drawerMode.value === 'create') { await financeArchiveApi.createAccountSubject(currentCompanyId.value, payload); ElMessage.success('会计科目创建成功') } else { await financeArchiveApi.updateAccountSubject(currentCompanyId.value, editingSubjectCode.value, payload); ElMessage.success('会计科目更新成功') }; closeDrawer(); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, '保存会计科目失败')) } finally { saving.value = false } }
 async function toggleStatus(row: FinanceAccountSubjectSummary) { if (!ensureCurrentCompanyReady('更新会计科目状态')) return; const nextStatus = row.status === 1 ? 0 : 1; const actionText = nextStatus === 1 ? '启用' : '停用'; try { await ElMessageBox.confirm(`确认${actionText}会计科目 ${row.subject_code} - ${row.subject_name} 吗？`, `${actionText}会计科目`, { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }) } catch { return } try { await financeArchiveApi.updateAccountSubjectStatus(currentCompanyId.value, row.subject_code, nextStatus); ElMessage.success(`会计科目${actionText}成功`); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, `${actionText}会计科目失败`)) } }
 async function toggleClose(row: FinanceAccountSubjectSummary) { if (!ensureCurrentCompanyReady('更新会计科目封存状态')) return; const nextClose = row.bclose === 1 ? 0 : 1; const actionText = nextClose === 1 ? '封存' : '解封'; try { await ElMessageBox.confirm(`确认${actionText}会计科目 ${row.subject_code} - ${row.subject_name} 吗？`, `${actionText}会计科目`, { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }) } catch { return } try { await financeArchiveApi.updateAccountSubjectClose(currentCompanyId.value, row.subject_code, nextClose); ElMessage.success(`会计科目${actionText}成功`); await loadSubjects() } catch (error: unknown) { ElMessage.error(resolveErrorMessage(error, `${actionText}会计科目失败`)) } }
-function buildPayload(): FinanceAccountSubjectSavePayload { return { subject_code: String(form.subject_code || '').trim(), subject_name: String(form.subject_name || '').trim(), parent_subject_code: form.parent_subject_code || undefined, subject_level: subjectLevelPreview.value, subject_category: form.subject_category || 'ASSET', cclassany: trimString(form.cclassany), bproperty: normalizeNumber(form.bproperty, balanceDirectionPreview.value === 'DEBIT' ? 1 : 0), cbook_type: trimString(form.cbook_type), chelp: trimString(form.chelp), cexch_name: trimString(form.cexch_name || 'CNY'), cmeasure: trimString(form.cmeasure), bperson: normalizeNumber(form.bperson, 0), bcus: normalizeNumber(form.bcus, 0), bsup: normalizeNumber(form.bsup, 0), bdept: normalizeNumber(form.bdept, 0), bitem: normalizeNumber(form.bitem, 0), cass_item: trimString(form.cass_item), br: normalizeNumber(form.br, 0), be: normalizeNumber(form.be, 0), cgather: String(form.cgather || '0'), leaf_flag: form.has_children ? 0 : normalizeNumber(form.leaf_flag, 1), bexchange: normalizeNumber(form.bexchange, 0), bcash: normalizeNumber(form.bcash, 0), bbank: normalizeNumber(form.bbank, 0), bused: normalizeNumber(form.bused, 0), bd_c: normalizeNumber(form.bd_c, 0), dbegin: trimString(form.dbegin), dend: trimString(form.dend), itrans: normalizeNumber(form.itrans, 0), cother: trimString(form.cother), iotherused: normalizeNumber(form.iotherused, 0), bReport: normalizeNumber(form.bReport, 0), bGCJS: normalizeNumber(form.bGCJS, 0), bCashItem: normalizeNumber(form.bCashItem, 0), iViewItem: normalizeNumber(form.iViewItem, 0) } }
-function closeDrawer() { drawerVisible.value = false; editingSubjectCode.value = ''; Object.assign(form, createDefaultForm()) }
+function buildPayload(): FinanceAccountSubjectSavePayload { return { subject_code: String(form.subject_code || '').trim(), subject_name: String(form.subject_name || '').trim(), parent_subject_code: trimString(form.parent_subject_code), subject_level: form.subject_level || undefined, subject_category: trimString(form.subject_category), chelp: trimString(form.chelp), cexch_name: trimString(form.cexch_name || 'CNY'), cmeasure: trimString(form.cmeasure), bperson: normalizeNumber(form.bperson, 0), bcus: normalizeNumber(form.bcus, 0), bsup: normalizeNumber(form.bsup, 0), bdept: normalizeNumber(form.bdept, 0), bitem: normalizeNumber(form.bitem, 0), cass_item: normalizeNumber(form.bitem, 0) === 1 ? trimString(form.cass_item) : undefined, br: normalizeNumber(form.br, 0), be: normalizeNumber(form.be, 0), cgather: String(form.cgather || '0'), bexchange: normalizeNumber(form.bexchange, 0), bcash: normalizeNumber(form.bcash, 0), bbank: normalizeNumber(form.bbank, 0), bused: normalizeNumber(form.bused, 0), bd_c: normalizeNumber(form.bd_c, 0), dbegin: trimString(form.dbegin), dend: trimString(form.dend), itrans: normalizeNumber(form.itrans, 0), cother: trimString(form.cother), iotherused: normalizeNumber(form.iotherused, 0), bReport: normalizeNumber(form.bReport, 0), bGCJS: normalizeNumber(form.bGCJS, 0), bCashItem: normalizeNumber(form.bCashItem, 0), iViewItem: normalizeNumber(form.iViewItem, 0) } }
+function closeDrawer() { drawerVisible.value = false; editingSubjectCode.value = ''; createParentHintCode.value = ''; Object.assign(form, createDefaultForm()) }
 function normalizeTree(nodes: FinanceAccountSubjectSummary[] = []): FinanceAccountSubjectSummary[] { return nodes.map((item) => ({ ...item, children: normalizeTree(item.children || []) })) }
 function flattenTree(nodes: FinanceAccountSubjectSummary[]): FinanceAccountSubjectSummary[] { const result: FinanceAccountSubjectSummary[] = []; nodes.forEach((node) => { result.push(node); if (node.children?.length) result.push(...flattenTree(node.children)) }); return result }
+function findMatchedParent(subjectCode: string) { const normalizedCode = trimString(subjectCode); if (!normalizedCode) return undefined; return parentOptions.value.reduce<ParentOption | undefined>((matched, candidate) => { if (candidate.value === normalizedCode || !normalizedCode.startsWith(candidate.value)) return matched; if (!matched || candidate.value.length > matched.value.length) return candidate; return matched }, undefined) }
 function categoryLabel(value?: string) { return meta.subjectCategoryOptions.find((item) => item.value === value)?.label || value || '-' }
 function balanceDirectionText(value?: string) { if (value === 'DEBIT') return '借方'; if (value === 'CREDIT') return '贷方'; return '-' }
 function subjectStatusText(value?: number) { return value === 0 ? '停用' : '启用' }
@@ -262,7 +300,7 @@ function trimString(value?: string) { const normalized = String(value || '').tri
 function resolveErrorMessage(error: unknown, fallback: string) { return error instanceof Error && error.message ? error.message : fallback }
 async function confirmCompanySwitch() { if (!drawerVisible.value) return true; try { await ElMessageBox.confirm('切换公司会关闭当前会计科目抽屉，是否继续？', '切换公司', { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }); return true } catch { return false } }
 function createDefaultForm(): AccountSubjectFormState { return { subject_code: '', subject_name: '', parent_subject_code: '', subject_level: 1, balance_direction: 'DEBIT', subject_category: 'ASSET', cclassany: 'ASSET', bproperty: 1, cbook_type: 'GENERAL', chelp: '', cexch_name: 'CNY', cmeasure: '', bperson: 0, bcus: 0, bsup: 0, bdept: 0, bitem: 0, cass_item: '', br: 0, be: 0, cgather: '0', leaf_flag: 1, bexchange: 0, bcash: 0, bbank: 0, bused: 0, bd_c: 0, dbegin: '', dend: '', itrans: 0, bclose: 0, cother: '', iotherused: 0, bReport: 0, bGCJS: 0, bCashItem: 0, iViewItem: 0, status: 1, has_children: false } }
-defineExpose({ filters, meta, form, subjectTree, loadSubjects, openCreateDrawer, buildPayload, toggleStatus, toggleClose })
+defineExpose({ filters, meta, form, subjectTree, loadSubjects, openCreateDrawer, buildPayload, toggleStatus, toggleClose, saveSubject, syncDerivedFields, balanceDirectionPreview, subjectLevelPreview, parentDisplayText, categoryPreviewValue, missingAutoParent })
 </script>
 
 <style scoped>

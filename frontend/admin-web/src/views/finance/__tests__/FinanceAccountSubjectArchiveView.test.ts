@@ -170,6 +170,32 @@ describe('FinanceAccountSubjectArchiveView', () => {
           auxiliary_summary: '?',
           cash_bank_summary: '???? / ???',
           children: []
+        },
+        {
+          subject_code: '2202',
+          subject_name: '应付账款',
+          subject_level: 1,
+          subject_category: 'LIABILITY',
+          balance_direction: 'CREDIT',
+          status: 1,
+          bclose: 0,
+          leaf_flag: 1,
+          auxiliary_summary: '无',
+          cash_bank_summary: '未设置',
+          children: []
+        },
+        {
+          subject_code: '6602',
+          subject_name: '管理费用',
+          subject_level: 1,
+          subject_category: 'PROFIT',
+          balance_direction: 'DEBIT',
+          status: 1,
+          bclose: 0,
+          leaf_flag: 1,
+          auxiliary_summary: '无',
+          cash_bank_summary: '未设置',
+          children: []
         }
       ]
     })
@@ -199,22 +225,57 @@ describe('FinanceAccountSubjectArchiveView', () => {
     wrapper.unmount()
   })
 
-  it('builds create payload with subject specific fields', async () => {
+  it('derives parent, category and balance direction from subject code', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCreateDrawer: (parentSubjectCode?: string) => void
+      form: Record<string, unknown>
+      syncDerivedFields: () => void
+      balanceDirectionPreview: string
+      subjectLevelPreview?: number
+      categoryPreviewValue?: string
+      parentDisplayText?: string
+    }
+
+    vm.openCreateDrawer()
+    vm.form.subject_code = '220201'
+    vm.syncDerivedFields()
+
+    expect(vm.form.parent_subject_code).toBe('2202')
+    expect(vm.subjectLevelPreview).toBe(2)
+    expect(vm.categoryPreviewValue).toBe('LIABILITY')
+    expect(vm.balanceDirectionPreview).toBe('CREDIT')
+    expect(vm.parentDisplayText).toContain('2202')
+
+    vm.form.subject_code = '660201'
+    vm.syncDerivedFields()
+
+    expect(vm.form.parent_subject_code).toBe('6602')
+    expect(vm.subjectLevelPreview).toBe(2)
+    expect(vm.categoryPreviewValue).toBe('PROFIT')
+    expect(vm.balanceDirectionPreview).toBe('DEBIT')
+
+    wrapper.unmount()
+  })
+
+  it('builds payload without controlled compatibility fields', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       openCreateDrawer: (parentSubjectCode?: string) => void
       form: Record<string, unknown>
       buildPayload: () => Record<string, unknown>
+      syncDerivedFields: () => void
     }
 
     vm.openCreateDrawer('1001')
     vm.form.subject_code = '100101'
     vm.form.subject_name = '???'
-    vm.form.subject_category = 'ASSET'
-    vm.form.cclassany = 'ASSET'
     vm.form.bcash = 1
     vm.form.br = 1
+    vm.form.bitem = 1
+    vm.form.cass_item = '01'
     vm.form.cgather = '1'
+    vm.syncDerivedFields()
 
     expect(vm.buildPayload()).toMatchObject({
       subject_code: '100101',
@@ -223,8 +284,43 @@ describe('FinanceAccountSubjectArchiveView', () => {
       subject_category: 'ASSET',
       bcash: 1,
       br: 1,
+      bitem: 1,
+      cass_item: '01',
       cgather: '1'
     })
+    expect(vm.buildPayload()).not.toHaveProperty('leaf_flag')
+    expect(vm.buildPayload()).not.toHaveProperty('cclassany')
+    expect(vm.buildPayload()).not.toHaveProperty('bproperty')
+    expect(vm.buildPayload()).not.toHaveProperty('cbook_type')
+
+    vm.form.bitem = 0
+    expect(vm.buildPayload().cass_item).toBeUndefined()
+
+    wrapper.unmount()
+  })
+
+  it('blocks saving when the subject code cannot match an existing parent', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCreateDrawer: (parentSubjectCode?: string) => void
+      form: Record<string, unknown>
+      saveSubject: () => Promise<void>
+      syncDerivedFields: () => void
+      missingAutoParent: boolean
+    }
+
+    vm.openCreateDrawer()
+    vm.form.subject_code = '990001'
+    vm.form.subject_name = '未匹配科目'
+    vm.syncDerivedFields()
+
+    expect(vm.missingAutoParent).toBe(true)
+
+    await vm.saveSubject()
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先创建上级科目，再新增当前科目')
+    expect(mocks.financeArchiveApi.createAccountSubject).not.toHaveBeenCalled()
 
     wrapper.unmount()
   })

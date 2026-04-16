@@ -55,29 +55,19 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
             throw new IllegalStateException("当前公司下已存在相同科目编码");
         }
 
-        FinanceAccountSubject parent = null;
-        String parentSubjectCode = trimToNull(dto.getParentSubjectCode());
-        if (parentSubjectCode != null) {
-            parent = requireSubject(normalizedCompanyId, parentSubjectCode);
-            if (!subjectCode.startsWith(parent.getSubjectCode())) {
-                throw new IllegalArgumentException("子科目编码必须以前级科目编码为前缀");
-            }
-            if (!isEnabled(parent.getStatus()) || isClosed(parent.getBclose())) {
-                throw new IllegalStateException("上级科目未启用或已封存，不能新增子科目");
-            }
+        FinanceAccountSubject parent = requireMatchedParentForCreate(normalizedCompanyId, subjectCode);
+        if (!isEnabled(parent.getStatus()) || isClosed(parent.getBclose())) {
+            throw new IllegalStateException("上级科目未启用或已封存，不能新增子科目");
         }
 
         FinanceAccountSubject subject = new FinanceAccountSubject();
         subject.setCompanyId(normalizedCompanyId);
         subject.setSubjectCode(subjectCode);
-        subject.setParentSubjectCode(parentSubjectCode);
-        subject.setSubjectLevel(resolveSubjectLevel(dto, parent));
-        subject.setSubjectName(requireText(dto.getSubjectName(), "科目名称不能为空"));
-        subject.setSubjectCategory(resolveCategory(dto.getSubjectCategory()));
-        subject.setBalanceDirection(resolveBalanceDirection(subjectCode, subject.getSubjectCategory(), parent));
+        applyDerivedStructure(subject, parent);
         subject.setTemplateCode(null);
-        subject.setSortOrder(resolveNextSortOrder(normalizedCompanyId, parentSubjectCode));
+        subject.setSortOrder(resolveNextSortOrder(normalizedCompanyId, parent.getSubjectCode()));
         applyMutableFields(subject, dto, true);
+        applyDerivedControlledFields(subject, true);
         if (parent != null) {
             parent.setLeafFlag(0);
             financeAccountSubjectMapper.updateById(parent);
@@ -98,20 +88,15 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
         if (!Objects.equals(normalizedSubjectCode, requireText(dto.getSubjectCode(), "科目编码不能为空"))) {
             throw new IllegalArgumentException("首版不支持修改科目编码");
         }
-        String payloadParentCode = trimToNull(dto.getParentSubjectCode());
-        if (!Objects.equals(trimToNull(existing.getParentSubjectCode()), payloadParentCode)) {
-            throw new IllegalArgumentException("首版不支持修改上级科目");
-        }
-        Integer payloadLevel = dto.getSubjectLevel();
-        if (payloadLevel != null && !Objects.equals(existing.getSubjectLevel(), payloadLevel)) {
-            throw new IllegalArgumentException("首版不支持修改科目级次");
-        }
-
         FinanceAccountSubject snapshot = cloneSubject(existing);
-        applyMutableFields(existing, dto, false);
-        if (hasChildren(normalizedCompanyId, normalizedSubjectCode)) {
-            existing.setLeafFlag(0);
+        FinanceAccountSubject parent = null;
+        String existingParentCode = trimToNull(existing.getParentSubjectCode());
+        if (existingParentCode != null) {
+            parent = requireSubject(normalizedCompanyId, existingParentCode);
         }
+        applyDerivedStructure(existing, parent);
+        applyMutableFields(existing, dto, false);
+        applyDerivedControlledFields(existing, false);
         validateControlledFieldChanges(snapshot, existing);
         financeAccountSubjectMapper.updateById(existing);
         return toDetail(requireSubject(normalizedCompanyId, normalizedSubjectCode));

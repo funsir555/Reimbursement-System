@@ -190,7 +190,31 @@ function buildMeta() {
     employeeOptions: [{ value: '2', code: '2', name: '员工甲', label: '2  员工甲' }],
     voucherTypeOptions: [{ value: '记', label: '记账凭证' }],
     currencyOptions: [{ value: 'CNY', label: '人民币' }],
-    accountOptions: [{ value: '1001', code: '1001', name: '库存现金', label: '1001  库存现金' }],
+    accountOptions: [
+      {
+        value: '1001',
+        code: '1001',
+        name: '搴撳瓨鐜伴噾',
+        label: '1001  搴撳瓨鐜伴噾',
+        bperson: 1,
+        bcus: 1,
+        bsup: 1,
+        bdept: 1,
+        bitem: 1,
+        cassItem: '01'
+      },
+      {
+        value: '6601',
+        code: '6601',
+        name: '绠＄悊璐圭敤',
+        label: '6601  绠＄悊璐圭敤',
+        bperson: 0,
+        bcus: 0,
+        bsup: 0,
+        bdept: 0,
+        bitem: 0
+      }
+    ],
     customerOptions: [{ value: 'C00001', code: 'C00001', name: '华南客户', label: 'C00001  华南客户' }],
     supplierOptions: [{ value: 'V00001', code: 'V00001', name: '核心供应商', label: 'V00001  核心供应商' }],
     projectClassOptions: [{ value: '01', code: '01', name: '市场项目', label: '01  市场项目' }],
@@ -276,23 +300,26 @@ describe('FinanceNewVoucherView', () => {
 
   it('renders archive options as code on the left and name on the right', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
+    const meta = buildMeta()
 
     const optionTexts = wrapper.findAll('option').map((option) => option.text())
-    expect(optionTexts).toContain('1001  库存现金')
-    expect(optionTexts).toContain('C00001  华南客户')
-    expect(optionTexts).toContain('V00001  核心供应商')
-    expect(optionTexts).toContain('01  市场项目')
-    expect(optionTexts).toContain('000001  华南推广项目')
+    expect(optionTexts).toContain(meta.accountOptions[0].label)
+    expect(optionTexts).toContain(meta.customerOptions[0].label)
+    expect(optionTexts).toContain(meta.supplierOptions[0].label)
+    expect(optionTexts).toContain(meta.projectClassOptions[0].label)
+    expect(optionTexts).toContain(meta.projectOptions[0].label)
   })
 
   it('filters project options by the selected project class', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
     const vm = wrapper.vm as unknown as {
-      form: { entries: Array<{ citemClass?: string }> }
+      form: { entries: Array<{ ccode?: string; citemClass?: string }> }
       getFilteredProjectOptions: () => Array<{ value: string }>
     }
 
+    vm.form.entries[0].ccode = '1001'
     vm.form.entries[0].citemClass = '01'
+    await flushPromises()
     await nextTick()
 
     expect(vm.getFilteredProjectOptions().map((item) => item.value)).toEqual(['000001'])
@@ -317,6 +344,69 @@ describe('FinanceNewVoucherView', () => {
 
     await treeSelect.setValue('11')
     expect(vm.selectedRow.cdeptId).toBe('11')
+  })
+
+  it('links assist control availability to the selected account subject and clears disabled values', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      selectedRow: {
+        ccode?: string
+        cdeptId?: string
+        cpersonId?: string
+        ccusId?: string
+        csupId?: string
+        citemClass?: string
+        citemId?: string
+      }
+      assistDisabledState: {
+        department: boolean
+        employee: boolean
+        customer: boolean
+        supplier: boolean
+        projectClass: boolean
+        project: boolean
+      }
+      currentAssistCapability: {
+        lockedProjectClassCode?: string
+      }
+    }
+
+    expect(vm.assistDisabledState.department).toBe(true)
+    expect(vm.assistDisabledState.project).toBe(true)
+
+    vm.selectedRow.ccode = '1001'
+    await flushPromises()
+    await nextTick()
+
+    expect(vm.assistDisabledState.department).toBe(false)
+    expect(vm.assistDisabledState.employee).toBe(false)
+    expect(vm.assistDisabledState.customer).toBe(false)
+    expect(vm.assistDisabledState.supplier).toBe(false)
+    expect(vm.assistDisabledState.projectClass).toBe(true)
+    expect(vm.assistDisabledState.project).toBe(false)
+    expect(vm.currentAssistCapability.lockedProjectClassCode).toBe('01')
+    expect(vm.selectedRow.citemClass).toBe('01')
+
+    vm.selectedRow.cdeptId = '11'
+    vm.selectedRow.cpersonId = '2'
+    vm.selectedRow.ccusId = 'C00001'
+    vm.selectedRow.csupId = 'V00001'
+    vm.selectedRow.citemId = '000001'
+    vm.selectedRow.ccode = '6601'
+    await flushPromises()
+    await nextTick()
+
+    expect(vm.assistDisabledState.department).toBe(true)
+    expect(vm.assistDisabledState.employee).toBe(true)
+    expect(vm.assistDisabledState.customer).toBe(true)
+    expect(vm.assistDisabledState.supplier).toBe(true)
+    expect(vm.assistDisabledState.project).toBe(true)
+    expect(vm.selectedRow.cdeptId).toBe('')
+    expect(vm.selectedRow.cpersonId).toBe('')
+    expect(vm.selectedRow.ccusId).toBe('')
+    expect(vm.selectedRow.csupId).toBe('')
+    expect(vm.selectedRow.citemClass).toBe('')
+    expect(vm.selectedRow.citemId).toBe('')
   })
 
   it('shows account code and snapshot name in detail mode even when the option is missing from meta', async () => {

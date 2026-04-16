@@ -195,10 +195,6 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
      */
     protected void applyMutableFields(FinanceAccountSubject target, FinanceAccountSubjectSaveDTO dto, boolean createMode) {
         target.setSubjectName(requireText(dto.getSubjectName(), "科目名称不能为空"));
-        target.setSubjectCategory(resolveCategory(dto.getSubjectCategory()));
-        target.setCclassany(defaultText(dto.getCclassany(), target.getSubjectCategory()));
-        target.setBproperty(normalizeFlag(dto.getBproperty(), resolveDefaultProperty(target.getBalanceDirection())));
-        target.setCbookType(defaultText(dto.getCbookType(), defaultBookType(target)));
         target.setChelp(defaultText(dto.getChelp(), target.getSubjectCode()));
         target.setCexchName(defaultText(dto.getCexchName(), "CNY"));
         target.setCmeasure(trimToNull(dto.getCmeasure()));
@@ -207,11 +203,10 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         target.setBsup(normalizeFlag(dto.getBsup(), 0));
         target.setBdept(normalizeFlag(dto.getBdept(), 0));
         target.setBitem(normalizeFlag(dto.getBitem(), 0));
-        target.setCassItem(trimToNull(dto.getCassItem()));
+        target.setCassItem(target.getBitem() == 1 ? trimToNull(dto.getCassItem()) : null);
         target.setBr(normalizeFlag(dto.getBr(), defaultCashBookFlag(target)));
         target.setBe(normalizeFlag(dto.getBe(), defaultBankBookFlag(target)));
         target.setCgather(defaultText(dto.getCgather(), "0"));
-        target.setLeafFlag(normalizeLeafFlag(dto.getLeafFlag(), createMode ? 1 : target.getLeafFlag()));
         target.setBexchange(normalizeFlag(dto.getBexchange(), 0));
         target.setBcash(normalizeFlag(dto.getBcash(), defaultCashSubjectFlag(target)));
         target.setBbank(normalizeFlag(dto.getBbank(), defaultBankSubjectFlag(target)));
@@ -248,6 +243,33 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         if (createMode) {
             target.setCreatedAt(LocalDateTime.now());
         }
+    }
+
+    /**
+     * 应用由科目编码和父级科目推导出的结构字段。
+     */
+    protected void applyDerivedStructure(FinanceAccountSubject target, FinanceAccountSubject parent) {
+        if (parent != null) {
+            target.setParentSubjectCode(parent.getSubjectCode());
+            target.setSubjectLevel((parent.getSubjectLevel() == null ? 1 : parent.getSubjectLevel()) + 1);
+            target.setSubjectCategory(resolveCategory(parent.getSubjectCategory()));
+            target.setBalanceDirection(resolveBalanceDirection(target.getSubjectCode(), parent.getSubjectCategory(), parent));
+            return;
+        }
+        target.setParentSubjectCode(null);
+        target.setSubjectLevel(target.getSubjectLevel() == null || target.getSubjectLevel() < 1 ? 1 : target.getSubjectLevel());
+        target.setSubjectCategory(resolveCategory(target.getSubjectCategory()));
+        target.setBalanceDirection(resolveBalanceDirection(target.getSubjectCode(), target.getSubjectCategory(), null));
+    }
+
+    /**
+     * 应用后端权威派生的受控字段。
+     */
+    protected void applyDerivedControlledFields(FinanceAccountSubject target, boolean createMode) {
+        target.setLeafFlag(createMode ? 1 : (hasChildren(target.getCompanyId(), target.getSubjectCode()) ? 0 : 1));
+        target.setCclassany(target.getSubjectCategory());
+        target.setBproperty(resolveDefaultProperty(target.getBalanceDirection()));
+        target.setCbookType(defaultBookType(target));
     }
 
     /**
@@ -291,6 +313,43 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
             throw new IllegalArgumentException("根科目级次必须为 1");
         }
         return 1;
+    }
+
+    /**
+     * 根据科目编码匹配最长前缀父级科目。
+     */
+    protected FinanceAccountSubject findMatchedParent(String companyId, String subjectCode, String excludedSubjectCode) {
+        String normalizedCompanyId = requireCompanyId(companyId);
+        String normalizedSubjectCode = requireText(subjectCode, "科目编码不能为空");
+        List<FinanceAccountSubject> candidates = financeAccountSubjectMapper.selectList(
+                Wrappers.<FinanceAccountSubject>lambdaQuery()
+                        .eq(FinanceAccountSubject::getCompanyId, normalizedCompanyId)
+        );
+        FinanceAccountSubject matched = null;
+        for (FinanceAccountSubject candidate : candidates) {
+            String candidateCode = trimToNull(candidate.getSubjectCode());
+            if (candidateCode == null || Objects.equals(candidateCode, trimToNull(excludedSubjectCode)) || Objects.equals(candidateCode, normalizedSubjectCode)) {
+                continue;
+            }
+            if (!normalizedSubjectCode.startsWith(candidateCode)) {
+                continue;
+            }
+            if (matched == null || candidateCode.length() > matched.getSubjectCode().length()) {
+                matched = candidate;
+            }
+        }
+        return matched;
+    }
+
+    /**
+     * 新增时要求必须匹配出已存在父级。
+     */
+    protected FinanceAccountSubject requireMatchedParentForCreate(String companyId, String subjectCode) {
+        FinanceAccountSubject parent = findMatchedParent(companyId, subjectCode, null);
+        if (parent == null) {
+            throw new IllegalArgumentException("请先创建上级科目，再新增当前科目");
+        }
+        return parent;
     }
 
     /**

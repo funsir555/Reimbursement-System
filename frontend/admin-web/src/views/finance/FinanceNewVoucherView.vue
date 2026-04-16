@@ -176,38 +176,38 @@
                   filterable
                   clearable
                   placeholder="请选择部门"
-                  :disabled="isReadonlyMode"
+                  :disabled="assistDisabledState.department"
                   :props="{ label: 'label', children: 'children', value: 'value' }"
                   :filter-node-method="filterDepartmentTreeNode"
                 />
               </label>
               <label class="assist-field">
                 <span>人员</span>
-                <el-select v-model="selectedRow.cpersonId" filterable clearable placeholder="请选择人员" :disabled="isReadonlyMode">
+                <el-select v-model="selectedRow.cpersonId" filterable clearable placeholder="请选择人员" :disabled="assistDisabledState.employee">
                   <el-option v-for="item in voucherMeta?.employeeOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>客户</span>
-                <el-select v-model="selectedRow.ccusId" filterable clearable placeholder="请选择客户" :disabled="isReadonlyMode">
+                <el-select v-model="selectedRow.ccusId" filterable clearable placeholder="请选择客户" :disabled="assistDisabledState.customer">
                   <el-option v-for="item in voucherMeta?.customerOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>供应商</span>
-                <el-select v-model="selectedRow.csupId" filterable clearable placeholder="请选择供应商" :disabled="isReadonlyMode">
+                <el-select v-model="selectedRow.csupId" filterable clearable placeholder="请选择供应商" :disabled="assistDisabledState.supplier">
                   <el-option v-for="item in voucherMeta?.supplierOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>项目分类</span>
-                <el-select v-model="selectedRow.citemClass" filterable clearable placeholder="请选择项目分类" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.projectClassOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
+                <el-select v-model="selectedRow.citemClass" filterable clearable placeholder="请选择项目分类" :disabled="assistDisabledState.projectClass">
+                  <el-option v-for="item in projectClassOptionsForDisplay" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span>项目</span>
-                <el-select v-model="selectedRow.citemId" filterable clearable placeholder="请选择项目" :disabled="isReadonlyMode">
+                <el-select v-model="selectedRow.citemId" filterable clearable placeholder="请选择项目" :disabled="assistDisabledState.project">
                   <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
@@ -278,6 +278,14 @@ type VoucherEntryRow = FinanceVoucherEntry & { localId: string }
 type DepartmentTreeOption = FinanceVoucherOption & { children: DepartmentTreeOption[] }
 type VoucherFormState = Omit<FinanceVoucherForm, 'entries'> & { entries: VoucherEntryRow[] }
 type VoucherPageMode = 'create' | 'detail'
+type VoucherAssistCapability = {
+  department: boolean
+  employee: boolean
+  customer: boolean
+  supplier: boolean
+  project: boolean
+  lockedProjectClassCode?: string
+}
 
 interface ToolbarAction {
   key: ToolbarActionKey
@@ -430,6 +438,21 @@ const currentCompanyHasActiveAccountSet = computed(() => {
 })
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
 const statusChipText = computed(() => (isDetailRoute.value ? voucherDetail.value?.statusLabel || '未记账' : hasDraft.value ? '已暂存' : '未暂存'))
+const accountOptionMap = computed(() => new Map((voucherMeta.value?.accountOptions || []).map((item) => [item.value, item] as const)))
+const selectedAccountOption = computed(() => {
+  const code = selectedRow.value?.ccode
+  return code ? accountOptionMap.value.get(code) : undefined
+})
+const currentAssistCapability = computed(() => resolveAssistCapability(selectedAccountOption.value))
+const assistDisabledState = computed(() => ({
+  department: isReadonlyMode.value || !currentAssistCapability.value.department,
+  employee: isReadonlyMode.value || !currentAssistCapability.value.employee,
+  customer: isReadonlyMode.value || !currentAssistCapability.value.customer,
+  supplier: isReadonlyMode.value || !currentAssistCapability.value.supplier,
+  projectClass:
+    isReadonlyMode.value || !currentAssistCapability.value.project || Boolean(currentAssistCapability.value.lockedProjectClassCode),
+  project: isReadonlyMode.value || !currentAssistCapability.value.project
+}))
 const accountOptionsForDisplay = computed(() => {
   const options = [...(voucherMeta.value?.accountOptions || [])]
   const existingValues = new Set(options.map((item) => item.value))
@@ -445,12 +468,15 @@ const accountOptionsForDisplay = computed(() => {
   })
   return options
 })
+const projectClassOptionsForDisplay = computed(() =>
+  appendDisplayOption(voucherMeta.value?.projectClassOptions || [], currentAssistCapability.value.lockedProjectClassCode || selectedRow.value?.citemClass)
+)
 const departmentTreeOptions = computed(() => buildDepartmentTreeOptions(voucherMeta.value?.departmentOptions || []))
 const filteredProjectOptions = computed(() => {
-  const projectClassCode = selectedRow.value?.citemClass
+  const projectClassCode = currentAssistCapability.value.lockedProjectClassCode || selectedRow.value?.citemClass
   const options = voucherMeta.value?.projectOptions || []
-  if (!projectClassCode) return options
-  return options.filter((item) => item.parentValue === projectClassCode)
+  const filtered = !projectClassCode ? options : options.filter((item) => item.parentValue === projectClassCode)
+  return appendDisplayOption(filtered, selectedRow.value?.citemId)
 })
 const voucherNoticeItems = computed<Array<{ level: 'warning' | 'danger' | 'info'; text: string }>>(() => {
   const notices: Array<{ level: 'warning' | 'danger' | 'info'; text: string }> = []
@@ -476,6 +502,10 @@ const voucherNoticeItems = computed<Array<{ level: 'warning' | 'danger' | 'info'
   }
   if (!voucherMeta.value.projectClassOptions?.length || !voucherMeta.value.projectOptions?.length) {
     notices.push({ level: 'info', text: '当前公司暂无项目档案数据。' })
+  }
+  const lockedProjectClassCode = currentAssistCapability.value.lockedProjectClassCode
+  if (lockedProjectClassCode && !(voucherMeta.value.projectClassOptions || []).some((item) => item.value === lockedProjectClassCode)) {
+    notices.push({ level: 'warning', text: `当前科目挂载的项目分类【${lockedProjectClassCode}】不存在或当前不可用，请先维护项目档案。` })
   }
   return notices
 })
@@ -507,18 +537,18 @@ watch(() => [form.dbillDate, form.csign] as const, async () => {
 })
 
 watch(
-  () => [selectedRowIndex.value, selectedRow.value?.citemClass, voucherMeta.value?.projectOptions] as const,
+  () =>
+    [
+      selectedRowIndex.value,
+      selectedRow.value?.ccode,
+      selectedRow.value?.citemClass,
+      selectedRow.value?.citemId,
+      voucherMeta.value?.accountOptions,
+      voucherMeta.value?.projectOptions,
+      isReadonlyMode.value
+    ] as const,
   () => {
-    const row = selectedRow.value
-    if (!row?.citemId) return
-    const project = (voucherMeta.value?.projectOptions || []).find((item) => item.value === row.citemId)
-    if (!project) {
-      row.citemId = ''
-      return
-    }
-    if (row.citemClass && project.parentValue && project.parentValue !== row.citemClass) {
-      row.citemId = ''
-    }
+    syncSelectedRowAssistState()
   }
 )
 
@@ -767,6 +797,70 @@ function normalizeText(value?: string | null) {
   return text || undefined
 }
 
+function isOptionEnabled(value?: number | null) {
+  return Number(value || 0) === 1
+}
+
+function resolveAssistCapability(option?: FinanceVoucherOption | null): VoucherAssistCapability {
+  return {
+    department: isOptionEnabled(option?.bdept),
+    employee: isOptionEnabled(option?.bperson),
+    customer: isOptionEnabled(option?.bcus),
+    supplier: isOptionEnabled(option?.bsup),
+    project: isOptionEnabled(option?.bitem),
+    lockedProjectClassCode: normalizeText(option?.cassItem)
+  }
+}
+
+function appendDisplayOption(options: FinanceVoucherOption[], value?: string, name?: string) {
+  const normalizedValue = normalizeText(value)
+  if (!normalizedValue || options.some((item) => item.value === normalizedValue)) {
+    return options
+  }
+  return [
+    ...options,
+    {
+      value: normalizedValue,
+      code: normalizedValue,
+      name,
+      label: name ? `${normalizedValue}  ${name}` : normalizedValue
+    }
+  ]
+}
+
+function clearDisabledAssistFields(row: VoucherEntryRow, capability: VoucherAssistCapability) {
+  if (!capability.department) row.cdeptId = ''
+  if (!capability.employee) row.cpersonId = ''
+  if (!capability.customer) row.ccusId = ''
+  if (!capability.supplier) row.csupId = ''
+  if (!capability.project) {
+    row.citemClass = ''
+    row.citemId = ''
+    return
+  }
+  if (capability.lockedProjectClassCode && row.citemClass !== capability.lockedProjectClassCode) {
+    row.citemClass = capability.lockedProjectClassCode
+  }
+}
+
+function syncSelectedRowAssistState() {
+  if (isReadonlyMode.value) return
+  const row = selectedRow.value
+  if (!row) return
+  const capability = resolveAssistCapability(accountOptionMap.value.get(row.ccode || ''))
+  clearDisabledAssistFields(row, capability)
+  if (!row.citemId) return
+  const project = (voucherMeta.value?.projectOptions || []).find((item) => item.value === row.citemId)
+  if (!project) {
+    row.citemId = ''
+    return
+  }
+  const projectClassCode = capability.lockedProjectClassCode || row.citemClass
+  if (projectClassCode && project.parentValue && project.parentValue !== projectClassCode) {
+    row.citemId = ''
+  }
+}
+
 function buildDepartmentTreeOptions(options: FinanceVoucherOption[]) {
   const nodeMap = new Map<string, DepartmentTreeOption>()
   const roots: DepartmentTreeOption[] = []
@@ -815,15 +909,17 @@ function validateEntrySelection(row: VoucherEntryRow, rowNo: number, errors: str
     return
   }
 
-  const accountValues = buildOptionValueSet(meta.accountOptions)
+  const accountMap = new Map((meta.accountOptions || []).map((item) => [item.value, item] as const))
   const departmentValues = buildOptionValueSet(meta.departmentOptions)
   const employeeValues = buildOptionValueSet(meta.employeeOptions)
   const customerValues = buildOptionValueSet(meta.customerOptions)
   const supplierValues = buildOptionValueSet(meta.supplierOptions)
   const projectClassValues = buildOptionValueSet(meta.projectClassOptions)
   const projectMap = new Map((meta.projectOptions || []).map((item) => [item.value, item] as const))
+  const account = row.ccode ? accountMap.get(row.ccode) : undefined
+  const capability = resolveAssistCapability(account)
 
-  if (row.ccode && !accountValues.has(row.ccode)) {
+  if (row.ccode && !account) {
     errors.push(`第 ${rowNo} 行科目不存在或当前不可用`)
   }
   if (row.cdeptId && !departmentValues.has(row.cdeptId)) {
@@ -838,8 +934,26 @@ function validateEntrySelection(row: VoucherEntryRow, rowNo: number, errors: str
   if (row.csupId && !supplierValues.has(row.csupId)) {
     errors.push(`第 ${rowNo} 行供应商不存在或当前不可用`)
   }
+  if (row.cdeptId && !capability.department) {
+    errors.push(`第 ${rowNo} 行当前科目未启用部门辅助核算`)
+  }
+  if (row.cpersonId && !capability.employee) {
+    errors.push(`第 ${rowNo} 行当前科目未启用人员辅助核算`)
+  }
+  if (row.ccusId && !capability.customer) {
+    errors.push(`第 ${rowNo} 行当前科目未启用客户辅助核算`)
+  }
+  if (row.csupId && !capability.supplier) {
+    errors.push(`第 ${rowNo} 行当前科目未启用供应商辅助核算`)
+  }
   if (row.citemClass && !projectClassValues.has(row.citemClass)) {
     errors.push(`第 ${rowNo} 行项目分类不存在或当前不可用`)
+  }
+  if ((row.citemClass || row.citemId) && !capability.project) {
+    errors.push(`第 ${rowNo} 行当前科目未启用项目辅助核算`)
+  }
+  if (capability.lockedProjectClassCode && row.citemClass && row.citemClass !== capability.lockedProjectClassCode) {
+    errors.push(`第 ${rowNo} 行项目分类必须为科目挂载的项目分类【${capability.lockedProjectClassCode}】`)
   }
   if (row.citemId) {
     if (!row.citemClass) {
@@ -1197,9 +1311,12 @@ function moneyText(value: string) {
 }
 
 defineExpose({
+  assistDisabledState,
+  currentAssistCapability,
   departmentTreeOptions,
   filteredProjectOptions,
   form,
+  projectClassOptionsForDisplay,
   selectedRow,
   getFilteredProjectOptions: () => filteredProjectOptions.value
 })
