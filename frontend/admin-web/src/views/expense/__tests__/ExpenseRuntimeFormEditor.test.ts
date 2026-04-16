@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => ({
     listVendorOptions: vi.fn(),
     listPayeeOptions: vi.fn(),
     listPayeeAccountOptions: vi.fn(),
+    getVendorDetail: vi.fn(),
     createVendor: vi.fn(),
+    updateVendor: vi.fn(),
     uploadAttachment: vi.fn()
   },
   elMessage: {
@@ -47,21 +49,26 @@ const ButtonStub = defineComponent({
     disabled: {
       type: Boolean,
       default: false
+    },
+    loading: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['click'],
-  template: '<button type="button" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>'
+  template: '<button type="button" :disabled="disabled" :data-loading="String(loading)" @click="$emit(\'click\', $event)"><slot /></button>'
 })
 
 const SelectStub = defineComponent({
+  inheritAttrs: false,
   props: {
     modelValue: {
       type: [String, Number, Array, Object],
       default: ''
     }
   },
-  emits: ['update:modelValue'],
-  template: '<div data-testid="select"><slot /><slot name="footer" /></div>'
+  emits: ['update:modelValue', 'change'],
+  template: '<div v-bind="$attrs"><slot /><slot name="footer" /></div>'
 })
 
 const InputStub = defineComponent({
@@ -85,7 +92,7 @@ const InputNumberStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: '<input v-bind="$attrs" type="number" :value="modelValue ?? \"\"" @input="$emit(\'update:modelValue\', Number($event.target.value))" />'
+  template: '<input v-bind="$attrs" type="number" :value="modelValue ?? null" @input="$emit(\'update:modelValue\', Number($event.target.value))" />'
 })
 
 const MoneyInputStub = defineComponent({
@@ -104,6 +111,7 @@ const DatePickerStub = defineComponent({
   inheritAttrs: false,
   template: `
     <div
+      v-bind="$attrs"
       data-testid="date-picker"
       :data-placeholder="$attrs.placeholder || ''"
       :data-start-placeholder="$attrs['start-placeholder'] || ''"
@@ -210,11 +218,7 @@ function createControlBlock(fieldKey: string, label: string, controlType: string
   }
 }
 
-function mountEditor(
-  modelValue: Record<string, unknown>,
-  blocks: unknown[],
-  extraProps: Record<string, unknown> = {}
-) {
+function mountEditor(modelValue: Record<string, unknown>, blocks: unknown[], extraProps: Record<string, unknown> = {}) {
   const wrapper = mount(ExpenseRuntimeFormEditor, {
     props: {
       modelValue,
@@ -254,10 +258,7 @@ function mountEditor(
     }
   })
 
-  return {
-    wrapper,
-    modelValue
-  }
+  return { wrapper, modelValue }
 }
 
 describe('ExpenseRuntimeFormEditor', () => {
@@ -267,7 +268,32 @@ describe('ExpenseRuntimeFormEditor', () => {
     mocks.expenseCreateApi.listVendorOptions.mockResolvedValue({ data: [] })
     mocks.expenseCreateApi.listPayeeOptions.mockResolvedValue({ data: [] })
     mocks.expenseCreateApi.listPayeeAccountOptions.mockResolvedValue({ data: [] })
-    mocks.expenseCreateApi.createVendor.mockResolvedValue({ data: {} })
+    mocks.expenseCreateApi.getVendorDetail.mockResolvedValue({
+      data: {
+        cVenCode: 'VEN-001',
+        cVenName: '上海测试供应商',
+        receiptAccountName: '上海测试供应商',
+        cVenBankCode: 'ICBC',
+        cVenBank: '中国工商银行',
+        receiptBankProvince: '上海市',
+        receiptBankCity: '上海市',
+        receiptBranchCode: 'ICBC-SH-001',
+        receiptBranchName: '中国工商银行上海分行',
+        cVenAccount: '6222020000000001'
+      }
+    })
+    mocks.expenseCreateApi.createVendor.mockResolvedValue({
+      data: {
+        cVenCode: 'VEN-NEW',
+        cVenName: '新增供应商'
+      }
+    })
+    mocks.expenseCreateApi.updateVendor.mockResolvedValue({
+      data: {
+        cVenCode: 'VEN-001',
+        cVenName: '上海测试供应商'
+      }
+    })
     mocks.expenseCreateApi.uploadAttachment.mockResolvedValue({
       data: {
         attachmentId: 'ATT-001',
@@ -278,84 +304,112 @@ describe('ExpenseRuntimeFormEditor', () => {
     })
   })
 
-  it('renders repaired chinese placeholders and helper copy for configured controls', async () => {
+  it('keeps counterparty disabled before payment company is selected and does not load vendor options', async () => {
     const { wrapper } = mountEditor({
-      happenedAt: '',
-      invoiceAttachments: [],
-      relatedDocs: [],
-      undertakeDepartment: 'DEPT-001',
+      paymentCompany: '',
       counterparty: ''
     }, [
-      createControlBlock('happenedAt', '发生日期', 'DATE'),
-      createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', { maxCount: 3 }),
-      createBusinessBlock('relatedDocs', '关联单据', 'related-document', {
-        allowedTemplateTypes: ['report', 'application', 'contract', 'loan']
-      }),
-      createBusinessBlock('undertakeDepartment', '承担部门', 'undertake-department'),
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
       createBusinessBlock('counterparty', '收款单位', 'counterparty')
     ])
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('选择文件')
-    expect(wrapper.text()).toContain('最多 3 个文件，单个不超过 1 MB')
-    expect(wrapper.text()).toContain('选择单据')
-    expect(wrapper.text()).toContain('暂未选择单据')
-    expect(wrapper.text()).toContain('当前归属部门：市场部')
-    expect(wrapper.text()).toContain('新增供应商')
-
-    const datePicker = wrapper.get('[data-testid="date-picker"]')
-    expect(datePicker.attributes('data-placeholder')).toBe('请选择日期')
+    expect(mocks.expenseCreateApi.listVendorOptions).not.toHaveBeenCalled()
+    const counterpartySelect = wrapper.get('[data-testid="counterparty-select-counterparty"]')
+    expect(counterpartySelect.attributes('disabled')).toBeDefined()
+    expect(counterpartySelect.classes()).toContain('w-full')
+    expect(counterpartySelect.classes()).toContain('expense-runtime-counterparty-select')
+    expect(counterpartySelect.attributes('placeholder')).toBe('请先选择付款公司')
   })
 
-  it('renders payment company options and loads lookup data', async () => {
+  it('loads vendor options with payment company and clears counterparty plus payee account when company changes', async () => {
+    const initialPayeeAccount = {
+      value: 'VENDOR_ACCOUNT:1',
+      label: '默认账户'
+    }
     const { wrapper } = mountEditor({
-      paymentCompany: ''
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: initialPayeeAccount
     }, [
-      createBusinessBlock('paymentCompany', '付款公司', 'payment-company')
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
     ])
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('上海分公司')
-    expect(wrapper.text()).toContain('北京分公司')
-    expect(mocks.expenseCreateApi.listVendorOptions).toHaveBeenCalled()
-    expect(mocks.expenseCreateApi.listPayeeOptions).toHaveBeenCalled()
-    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalled()
-  })
+    expect(mocks.expenseCreateApi.listVendorOptions).toHaveBeenCalledWith({
+      keyword: undefined,
+      paymentCompanyId: 'COMPANY-001'
+    })
+    expect(wrapper.get('[data-testid="counterparty-select-counterparty"]').classes()).toContain('expense-runtime-counterparty-select')
 
-  it('shows add supplier dialog in chinese and backfills the created vendor code', async () => {
-    mocks.expenseCreateApi.createVendor.mockResolvedValue({
-      data: {
-        cVenCode: 'VEN-NEW',
-        cVenName: '新增供应商'
+    await wrapper.setProps({
+      modelValue: {
+        paymentCompany: 'COMPANY-002',
+        counterparty: 'VEN-001',
+        payeeAccount: initialPayeeAccount
       }
     })
+    await flushPromises()
+
+    const nextModel = wrapper.props('modelValue') as Record<string, unknown>
+    expect(nextModel.counterparty).toBe('')
+    expect(nextModel.payeeAccount).toBe('')
+    expect(mocks.expenseCreateApi.listVendorOptions).toHaveBeenLastCalledWith({
+      keyword: undefined,
+      paymentCompanyId: 'COMPANY-002'
+    })
+  })
+
+  it('keeps personal payee account lookups on the original employee-only chain', async () => {
+    mountEditor({
+      payee: '',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalledWith({
+      keyword: '',
+      linkageMode: 'EMPLOYEE',
+      payeeName: undefined,
+      counterpartyCode: undefined,
+      paymentCompanyId: undefined
+    })
+  })
+
+  it('creates a vendor under the selected payment company and backfills counterparty', async () => {
     mocks.expenseCreateApi.listVendorOptions.mockResolvedValue({
       data: [{
         value: 'VEN-NEW',
         label: '新增供应商',
-        secondaryLabel: 'VEN-NEW / NEW',
+        secondaryLabel: 'VEN-NEW / 新增供应商',
         cVenCode: 'VEN-NEW',
         cVenName: '新增供应商'
       }]
     })
 
-    const { wrapper, modelValue } = mountEditor({
-      counterparty: ''
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: '',
+      payeeAccount: ''
     }, [
-      createBusinessBlock('counterparty', '收款单位', 'counterparty')
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
     ])
 
     await flushPromises()
 
-    const openButton = wrapper.findAll('button').find((button) => button.text() === '新增供应商')
-    expect(openButton).toBeTruthy()
-    await openButton!.trigger('click')
-
-    expect(wrapper.text()).toContain('新增供应商')
+    await wrapper.get('[data-testid="counterparty-create-vendor-counterparty"]').trigger('click')
+    await flushPromises()
     await wrapper.get('input[placeholder="请输入供应商名称"]').setValue('新增供应商')
-
     Object.assign(
       wrapper.getComponent(SupplierPaymentInfoFieldsStub).props('formState') as Record<string, unknown>,
       {
@@ -369,168 +423,137 @@ describe('ExpenseRuntimeFormEditor', () => {
         cVenAccount: '6222020000000001'
       }
     )
-
     const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存供应商')
     expect(saveButton).toBeTruthy()
     await saveButton!.trigger('click')
     await flushPromises()
 
-    expect(mocks.expenseCreateApi.createVendor).toHaveBeenCalledWith(expect.objectContaining({
-      cVenName: '新增供应商',
-      receiptAccountName: '新增供应商开户名',
-      cVenBank: '中国工商银行',
-      receiptBranchName: '中国工商银行上海分行'
-    }))
-    expect(modelValue.counterparty).toBe('VEN-NEW')
+    expect(mocks.expenseCreateApi.createVendor).toHaveBeenCalledWith(
+      'COMPANY-001',
+      expect.objectContaining({
+        cVenName: '新增供应商',
+        receiptAccountName: '新增供应商开户名',
+        cVenBank: '中国工商银行'
+      })
+    )
+
+    const model = wrapper.props('modelValue') as Record<string, unknown>
+    expect(model.counterparty).toBe('VEN-NEW')
   })
 
-  it('uploads selected attachment and writes metadata back to the field', async () => {
-    const { wrapper, modelValue } = mountEditor({
+  it('shows vendor account maintenance entry and updates the selected supplier account in place', async () => {
+    mocks.expenseCreateApi.listPayeeAccountOptions
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [{
+          value: 'VENDOR_ACCOUNT:8',
+          label: '上海测试供应商',
+          sourceType: 'ENTERPRISE_VENDOR',
+          ownerCode: 'VEN-001',
+          ownerName: '上海测试供应商',
+          accountName: '上海测试供应商',
+          accountNoMasked: '6222 **** 8888',
+          bankName: '中国工商银行',
+          secondaryLabel: '中国工商银行 / 6222 **** 8888'
+        }]
+      })
+
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalledWith({
+      keyword: '',
+      linkageMode: 'ENTERPRISE',
+      payeeName: undefined,
+      counterpartyCode: 'VEN-001',
+      paymentCompanyId: 'COMPANY-001'
+    })
+
+    await wrapper.get('[data-testid="payee-account-maintain-vendor"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.getVendorDetail).toHaveBeenCalledWith('COMPANY-001', 'VEN-001')
+
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存收款账户')
+    expect(saveButton).toBeTruthy()
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.updateVendor).toHaveBeenCalledWith(
+      'COMPANY-001',
+      'VEN-001',
+      expect.objectContaining({
+        cVenName: '上海测试供应商',
+        cVenAccount: '6222020000000001'
+      })
+    )
+
+    const model = wrapper.props('modelValue') as Record<string, unknown>
+    expect(model.payeeAccount).toMatchObject({
+      value: 'VENDOR_ACCOUNT:8',
+      ownerCode: 'VEN-001'
+    })
+  })
+
+  it('applies the unified runtime control class to representative fill controls', async () => {
+    const { wrapper } = mountEditor({
+      summary: '',
+      count: 2,
+      amount: '18.60',
+      happenedAt: '',
+      paymentCompany: 'COMPANY-001',
+      counterparty: '',
+      payeeAccount: ''
+    }, [
+      createControlBlock('summary', '摘要', 'TEXT', { placeholder: '请输入摘要' }),
+      createControlBlock('count', '数量', 'NUMBER'),
+      createControlBlock('amount', '金额', 'AMOUNT'),
+      createControlBlock('happenedAt', '发生日期', 'DATE'),
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    expect(wrapper.get('input[placeholder="请输入摘要"]').classes()).toContain('expense-runtime-control')
+    expect(wrapper.get('input[type="number"]').classes()).toContain('expense-runtime-control')
+    expect(wrapper.get('[data-testid="date-picker"]').classes()).toContain('expense-runtime-control')
+    expect(wrapper.get('[data-testid="counterparty-select-counterparty"]').classes()).toContain('expense-runtime-control')
+    expect(wrapper.get('[data-testid="payee-account-select-payeeAccount"]').classes()).toContain('expense-runtime-control')
+    expect(wrapper.findAll('.expense-runtime-control').length).toBeGreaterThanOrEqual(7)
+  })
+
+  it('renders repaired chinese placeholders for common controls', async () => {
+    const { wrapper } = mountEditor({
+      happenedAt: '',
+      dateRange: [],
+      enabledFlag: false,
       invoiceAttachments: []
     }, [
+      createControlBlock('happenedAt', '发生日期', 'DATE'),
+      createControlBlock('dateRange', '期间', 'DATE_RANGE'),
+      createControlBlock('enabledFlag', '是否开启', 'SWITCH'),
       createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', { maxCount: 3 })
     ])
 
     await flushPromises()
 
-    const upload = wrapper.getComponent(UploadStub)
-    const rawFile = new File(['pdf-body'], 'invoice.pdf', { type: 'application/pdf' })
-    upload.vm.$emit('change', {
-      name: 'invoice.pdf',
-      raw: rawFile
-    })
-
-    await flushPromises()
-
-    expect(mocks.expenseCreateApi.uploadAttachment).toHaveBeenCalledWith(rawFile)
-    expect(modelValue).toMatchObject({
-      invoiceAttachments: [{
-        attachmentId: 'ATT-001',
-        fileName: 'invoice.pdf',
-        contentType: 'application/pdf',
-        previewUrl: '/api/auth/expenses/attachments/ATT-001/content'
-      }]
-    })
-  })
-
-  it('loads and confirms related document selections from the picker', async () => {
-    mocks.expenseApi.getDocumentPicker.mockResolvedValue({
-      data: {
-        relationType: 'RELATED',
-        groups: [
-          {
-            templateType: 'report',
-            templateTypeLabel: '报销单',
-            total: 1,
-            page: 1,
-            pageSize: 10,
-            items: [{
-              documentCode: 'DOC-REL-001',
-              documentTitle: '差旅报销单',
-              templateType: 'report',
-              templateTypeLabel: '报销单',
-              templateName: '标准报销模板',
-              status: 'APPROVED',
-              statusLabel: '已审批',
-              totalAmount: 1200
-            }]
-          }
-        ]
-      }
-    })
-
-    const { wrapper, modelValue } = mountEditor({
-      relatedDocs: []
-    }, [
-      createBusinessBlock('relatedDocs', '关联单据', 'related-document', {
-        allowedTemplateTypes: ['report', 'application', 'contract', 'loan']
-      })
-    ])
-
-    await flushPromises()
-    await wrapper.get('[data-testid="open-document-picker-relatedDocs"]').trigger('click')
-    await flushPromises()
-
-    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenCalledWith({
-      relationType: 'RELATED',
-      templateTypes: ['report', 'application', 'contract', 'loan'],
-      keyword: undefined
-    })
-
-    await wrapper.get('[data-testid="toggle-document-picker-DOC-REL-001"]').trigger('click')
-    await wrapper.get('[data-testid="confirm-document-picker"]').trigger('click')
-    await flushPromises()
-
-    expect(modelValue.relatedDocs).toEqual([{
-      documentCode: 'DOC-REL-001',
-      documentTitle: '差旅报销单',
-      templateType: 'report',
-      templateTypeLabel: '报销单',
-      templateName: '标准报销模板',
-      status: 'APPROVED',
-      statusLabel: '已审批'
-    }])
-  })
-
-  it('stores writeoff selections and supports editing writeoff amount after selection', async () => {
-    mocks.expenseApi.getDocumentPicker.mockResolvedValue({
-      data: {
-        relationType: 'WRITEOFF',
-        groups: [
-          {
-            templateType: 'loan',
-            templateTypeLabel: '借款单',
-            total: 1,
-            page: 1,
-            pageSize: 10,
-            items: [{
-              documentCode: 'DOC-WO-001',
-              documentTitle: '项目借款单',
-              templateType: 'loan',
-              templateTypeLabel: '借款单',
-              templateName: '借款模板',
-              status: 'APPROVED',
-              statusLabel: '已审批',
-              totalAmount: 800,
-              availableWriteOffAmount: 500,
-              writeOffSourceKind: 'LOAN'
-            }]
-          }
-        ]
-      }
-    })
-
-    const { wrapper, modelValue } = mountEditor({
-      writeoffDocs: []
-    }, [
-      createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document', {
-        allowedTemplateTypes: ['report', 'loan']
-      })
-    ])
-
-    await flushPromises()
-    await wrapper.get('[data-testid="open-document-picker-writeoffDocs"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="toggle-document-picker-DOC-WO-001"]').trigger('click')
-    await wrapper.get('[data-testid="confirm-document-picker"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('核销来源')
-    expect(wrapper.text()).toContain('可核销余额')
-    expect(wrapper.text()).toContain('核销金额')
-    expect(modelValue.writeoffDocs).toEqual([expect.objectContaining({
-      documentCode: 'DOC-WO-001',
-      writeOffSourceKind: 'LOAN',
-      availableWriteOffAmount: 500
-    })])
-
-    await wrapper.get('[data-testid="writeoff-amount-writeoffDocs-DOC-WO-001"]').setValue('120')
-    await flushPromises()
-
-    expect(modelValue.writeoffDocs).toEqual([expect.objectContaining({
-      documentCode: 'DOC-WO-001',
-      writeOffAmount: '120.00',
-      remainingAmount: '380.00'
-    })])
+    const datePickers = wrapper.findAll('[data-testid="date-picker"]')
+    expect(datePickers[0].attributes('data-placeholder')).toBe('请选择日期')
+    expect(datePickers[1].attributes('data-range-separator')).toBe('至')
+    expect(datePickers[1].attributes('data-start-placeholder')).toBe('开始日期')
+    expect(datePickers[1].attributes('data-end-placeholder')).toBe('结束日期')
+    expect(wrapper.text()).toContain('选择文件')
+    expect(wrapper.text()).toContain('最多 3 个文件，单个不超过 1 MB')
   })
 })

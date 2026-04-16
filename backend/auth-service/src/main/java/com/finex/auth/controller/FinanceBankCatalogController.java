@@ -35,6 +35,9 @@ public class FinanceBankCatalogController {
     private static final String SUPPLIER_VIEW = "finance:archives:suppliers:view";
     private static final String SUPPLIER_CREATE = "finance:archives:suppliers:create";
     private static final String SUPPLIER_EDIT = "finance:archives:suppliers:edit";
+    private static final String COMPANY_ACCOUNT_VIEW = "settings:company_accounts:view";
+    private static final String COMPANY_ACCOUNT_CREATE = "settings:company_accounts:create";
+    private static final String COMPANY_ACCOUNT_EDIT = "settings:company_accounts:edit";
 
     private final FinanceBankCatalogService financeBankCatalogService;
     private final AccessControlService accessControlService;
@@ -43,10 +46,32 @@ public class FinanceBankCatalogController {
     @GetMapping("/banks")
     public Result<List<FinanceBankOptionVO>> listBanks(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String businessScope,
             HttpServletRequest request
     ) {
         requireBankLookupPermission(request);
-        return Result.success(financeBankCatalogService.listBanks(keyword));
+        return Result.success(financeBankCatalogService.listBanks(keyword, businessScope));
+    }
+
+    @GetMapping("/banks/provinces")
+    public Result<List<String>> listBankProvinces(
+            @RequestParam String bankCode,
+            @RequestParam(required = false) String businessScope,
+            HttpServletRequest request
+    ) {
+        requireBankLookupPermission(request);
+        return Result.success(financeBankCatalogService.listProvinces(bankCode, businessScope));
+    }
+
+    @GetMapping("/banks/cities")
+    public Result<List<String>> listBankCities(
+            @RequestParam String bankCode,
+            @RequestParam String province,
+            @RequestParam(required = false) String businessScope,
+            HttpServletRequest request
+    ) {
+        requireBankLookupPermission(request);
+        return Result.success(financeBankCatalogService.listCities(bankCode, province, businessScope));
     }
 
     // 处理 listBankBranches 请求。
@@ -56,10 +81,11 @@ public class FinanceBankCatalogController {
             @RequestParam(required = false) String province,
             @RequestParam(required = false) String city,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String businessScope,
             HttpServletRequest request
     ) {
         requireBankLookupPermission(request);
-        return Result.success(financeBankCatalogService.listBankBranches(bankCode, province, city, keyword));
+        return Result.success(financeBankCatalogService.listBankBranches(bankCode, province, city, keyword, businessScope));
     }
 
     // 处理 lookupByCnaps 请求。
@@ -81,7 +107,10 @@ public class FinanceBankCatalogController {
                 PROFILE_VIEW,
                 SUPPLIER_VIEW,
                 SUPPLIER_CREATE,
-                SUPPLIER_EDIT
+                SUPPLIER_EDIT,
+                COMPANY_ACCOUNT_VIEW,
+                COMPANY_ACCOUNT_CREATE,
+                COMPANY_ACCOUNT_EDIT
         );
     }
 

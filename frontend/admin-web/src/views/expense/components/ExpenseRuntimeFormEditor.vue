@@ -23,6 +23,7 @@
           <el-input
             v-if="controlType(block) === 'TEXT'"
             v-model="formData[block.fieldKey]"
+            class="expense-runtime-control"
             :maxlength="documentTitleMaxLength(block)"
             :show-word-limit="Boolean(documentTitleMaxLength(block))"
             :placeholder="placeholderOf(block)"
@@ -42,13 +43,13 @@
             v-else-if="controlType(block) === 'NUMBER'"
             v-model="formData[block.fieldKey]"
             :controls="false"
-            class="w-full"
+            class="w-full expense-runtime-control"
             :disabled="isReadOnly(block)"
           />
           <money-input
             v-else-if="controlType(block) === 'AMOUNT'"
             :model-value="toOptionalString(formData[block.fieldKey])"
-            class="w-full"
+            class="w-full expense-runtime-control"
             :disabled="isReadOnly(block)"
             @update:model-value="formData[block.fieldKey] = $event"
           />
@@ -57,7 +58,7 @@
             v-model="formData[block.fieldKey]"
             type="date"
             value-format="YYYY-MM-DDTHH:mm:ss"
-            class="w-full"
+            class="w-full expense-runtime-control"
             placeholder="请选择日期"
           />
           <el-date-picker
@@ -68,13 +69,13 @@
             range-separator="至"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
-            class="w-full"
+            class="w-full expense-runtime-control"
           />
           <el-select
             v-else-if="controlType(block) === 'SELECT'"
             v-model="formData[block.fieldKey]"
             :clearable="!isReadOnly(block)"
-            class="w-full"
+            class="w-full expense-runtime-control"
             :placeholder="placeholderOf(block)"
             :disabled="isReadOnly(block)"
           >
@@ -92,7 +93,7 @@
             :clearable="!isReadOnly(block)"
             collapse-tags
             collapse-tags-tooltip
-            class="w-full"
+            class="w-full expense-runtime-control"
             :placeholder="placeholderOf(block)"
             :disabled="isReadOnly(block)"
           >
@@ -162,49 +163,50 @@
           <el-input
             v-else
             v-model="formData[block.fieldKey]"
+            class="expense-runtime-control"
             :placeholder="placeholderOf(block)"
             :readonly="isReadOnly(block)"
           />
         </template>
 
         <template v-else-if="businessCode(block) === 'counterparty'">
-          <div class="space-y-3">
-            <el-select
-              v-model="formData[block.fieldKey]"
-              filterable
-              remote
-              reserve-keyword
-              clearable
-              class="w-full"
-              placeholder="请选择收款单位"
-              :remote-method="loadVendorOptions"
-              :loading="vendorOptionsLoading"
-              :disabled="isReadOnly(block)"
+          <el-select
+            v-model="formData[block.fieldKey]"
+            :data-testid="`counterparty-select-${block.fieldKey}`"
+            filterable
+            remote
+            reserve-keyword
+            clearable
+            class="w-full expense-runtime-control expense-runtime-counterparty-select"
+            :placeholder="counterpartyPlaceholder"
+            :remote-method="loadVendorOptions"
+            :loading="vendorOptionsLoading"
+            :disabled="isCounterpartyDisabled(block)"
+          >
+            <el-option
+              v-for="item in vendorOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
             >
-              <el-option
-                v-for="item in vendorOptions"
-                :key="item.value"
-                :label="item.label"
-                :value="item.value"
+              <div class="flex items-center justify-between gap-3">
+                <span class="truncate">{{ item.label }}</span>
+                <span class="text-xs text-slate-400">{{ item.secondaryLabel }}</span>
+              </div>
+            </el-option>
+            <template #footer>
+              <button
+                type="button"
+                :data-testid="`counterparty-create-vendor-${block.fieldKey}`"
+                class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                :disabled="!selectedPaymentCompanyId || isReadOnly(block)"
+                @click.stop="openVendorDialog(block.fieldKey)"
               >
-                <div class="flex items-center justify-between gap-3">
-                  <span class="truncate">{{ item.label }}</span>
-                  <span class="text-xs text-slate-400">{{ item.secondaryLabel }}</span>
-                </div>
-              </el-option>
-              <template #footer>
-                <button
-                  type="button"
-                  class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
-                  @click.stop="openVendorDialog(block.fieldKey)"
-                >
-                  新增供应商
-                </button>
-              </template>
-            </el-select>
-          </div>
+                新增供应商
+              </button>
+            </template>
+          </el-select>
         </template>
-
         <template v-else-if="businessCode(block) === 'payee'">
           <el-select
             v-model="formData[block.fieldKey]"
@@ -213,7 +215,7 @@
             remote
             reserve-keyword
             clearable
-            class="w-full"
+            class="w-full expense-runtime-control"
             :placeholder="PAYEE_PLACEHOLDER"
             :remote-method="loadPayeeOptions"
             :loading="payeeOptionsLoading"
@@ -237,16 +239,17 @@
         <template v-else-if="businessCode(block) === 'payee-account'">
           <el-select
             v-model="formData[block.fieldKey]"
+            :data-testid="`payee-account-select-${block.fieldKey}`"
             value-key="value"
             filterable
             remote
             reserve-keyword
             clearable
-            class="w-full"
-            :placeholder="PAYEE_ACCOUNT_PLACEHOLDER"
+            class="w-full expense-runtime-control"
+            :placeholder="payeeAccountPlaceholder"
             :remote-method="loadPayeeAccountOptions"
             :loading="payeeAccountOptionsLoading"
-            :disabled="isReadOnly(block)"
+            :disabled="isPayeeAccountDisabled(block)"
             @change="handlePayeeAccountSelection(block.fieldKey, $event)"
           >
             <el-option
@@ -263,15 +266,25 @@
                 <p class="truncate text-xs text-slate-400">{{ item.secondaryLabel }}</p>
               </div>
             </el-option>
+            <template v-if="showVendorAccountMaintenanceEntry" #footer>
+              <button
+                type="button"
+                data-testid="payee-account-maintain-vendor"
+                class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                :disabled="isReadOnly(block)"
+                @click.stop="openVendorAccountDialog"
+              >
+                维护收款账户
+              </button>
+            </template>
           </el-select>
         </template>
-
         <template v-else-if="businessCode(block) === 'undertake-department'">
           <el-select
             v-model="formData[block.fieldKey]"
             clearable
             filterable
-            class="w-full"
+            class="w-full expense-runtime-control"
             :placeholder="`请选择${block.label}`"
           >
             <el-option
@@ -291,7 +304,7 @@
             v-model="formData[block.fieldKey]"
             clearable
             filterable
-            class="w-full"
+            class="w-full expense-runtime-control"
             :placeholder="placeholderOf(block)"
           >
             <el-option
@@ -306,6 +319,7 @@
         <template v-else-if="businessCode(block) === 'bank-push-summary'">
           <el-input
             v-model="formData[block.fieldKey]"
+            class="expense-runtime-control"
             maxlength="120"
             show-word-limit
             placeholder="请输入银行推送摘要"
@@ -379,7 +393,7 @@
                     <p class="text-xs text-slate-400">核销金额</p>
                     <money-input
                       :model-value="item.writeOffAmount || ''"
-                      class="mt-2 w-full"
+                      class="mt-2 w-full expense-runtime-control"
                       :data-testid="`writeoff-amount-${block.fieldKey}-${item.documentCode}`"
                       :disabled="isReadOnly(block)"
                       @update:model-value="updateWriteOffAmount(block, item.documentCode, $event)"
@@ -402,7 +416,7 @@
           <el-select
             v-model="formData[block.fieldKey]"
             clearable
-            class="w-full"
+            class="w-full expense-runtime-control"
             :placeholder="`请选择${block.label}`"
           >
             <el-option
@@ -420,7 +434,7 @@
       </p>
     </div>
 
-    <el-dialog v-model="vendorDialogVisible" title="新增供应商" width="920px" destroy-on-close>
+    <el-dialog v-model="vendorDialogVisible" :title="vendorDialogTitle" width="920px" destroy-on-close>
       <div class="space-y-5">
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <el-form-item label="供应商名称" required class="!mb-0">
@@ -459,7 +473,7 @@
       <template #footer>
         <div class="flex justify-end gap-3">
           <el-button @click="closeVendorDialog">取消</el-button>
-          <el-button type="primary" :loading="vendorSaving" @click="createVendor">保存供应商</el-button>
+          <el-button type="primary" :loading="vendorDialogLoading || vendorSaving" @click="saveVendor">{{ vendorDialogSubmitText }}</el-button>
         </div>
       </template>
     </el-dialog>
@@ -563,6 +577,7 @@ import {
   type ExpenseDocumentPickerItem,
   type ExpenseRelatedDocumentValue,
   type ExpenseWriteOffDocumentValue,
+  type FinanceVendorDetail,
   type FinanceVendorSavePayload,
   type ProcessCustomArchiveDetail,
   type ProcessFormDesignBlock,
@@ -682,6 +697,9 @@ const documentPickerDialog = reactive<{
 const vendorDialogVisible = ref(false)
 const vendorDialogFieldKey = ref('')
 const vendorSaving = ref(false)
+const vendorDialogMode = ref<'create' | 'edit'>('create')
+const vendorDialogLoading = ref(false)
+const vendorDialogVendorCode = ref('')
 const EXPENSE_VENDOR_FIELD_MAX_LENGTH: Record<string, number> = {
   cVenName: 128,
   cVenAbbName: 64,
@@ -712,12 +730,42 @@ const emptyVendorDraft = (): FinanceVendorSavePayload => ({
   cMemo: ''
 })
 const vendorDraft = reactive<FinanceVendorSavePayload>(emptyVendorDraft())
+const paymentCompanyFieldKeys = computed(() => findBusinessFieldKeys('payment-company'))
 const payeeFieldKeys = computed(() => findBusinessFieldKeys('payee'))
 const counterpartyFieldKeys = computed(() => findBusinessFieldKeys('counterparty'))
 const payeeAccountFieldKeys = computed(() => findBusinessFieldKeys('payee-account'))
+const hasCounterpartyField = computed(() => counterpartyFieldKeys.value.length > 0)
+const selectedPaymentCompanyId = computed(() => resolveSelectedPaymentCompanyId())
 const selectedPayeeName = computed(() => resolveSelectedPayeeName())
 const selectedCounterpartyCode = computed(() => resolveSelectedCounterpartyCode())
 const payeeAccountLinkageMode = computed<PayeeAccountLinkageMode>(() => resolvePayeeAccountLinkageMode())
+const counterpartyPlaceholder = computed(() => (
+  selectedPaymentCompanyId.value ? '请选择收款单位' : '请先选择付款公司'
+))
+const payeeAccountPlaceholder = computed(() => {
+  if (payeeAccountLinkageMode.value === 'ENTERPRISE') {
+    if (!selectedPaymentCompanyId.value) {
+      return '请先选择付款公司'
+    }
+    if (!selectedCounterpartyCode.value) {
+      return '请先选择收款单位'
+    }
+  }
+  return PAYEE_ACCOUNT_PLACEHOLDER
+})
+const showVendorAccountMaintenanceEntry = computed(() => (
+  payeeAccountLinkageMode.value === 'ENTERPRISE'
+    && Boolean(selectedPaymentCompanyId.value)
+    && Boolean(selectedCounterpartyCode.value)
+    && !payeeAccountOptionsLoading.value
+    && payeeAccountOptions.value.length === 0
+))
+const vendorDialogTitle = computed(() => (
+  vendorDialogMode.value === 'edit' ? '维护收款账户' : '新增供应商'
+))
+const vendorDialogSubmitText = computed(() => (
+  vendorDialogMode.value === 'edit' ? '保存收款账户' : '保存供应商'
+))
 
 void loadVendorOptions('')
 void loadPayeeOptions('')
@@ -732,6 +780,23 @@ watch(
     ensureExpenseDetailFormDefaults(formData.value, props.schema, props.detailType, props.defaultBusinessScenario)
   },
   { immediate: true, deep: true }
+)
+
+watch(
+  () => selectedPaymentCompanyId.value,
+  (nextCompanyId, prevCompanyId) => {
+    if (nextCompanyId === prevCompanyId) {
+      return
+    }
+    clearCounterpartySelections()
+    clearPayeeAccountSelections()
+    vendorOptions.value = []
+    payeeAccountOptions.value = []
+    if (nextCompanyId) {
+      void loadVendorOptions('')
+    }
+  },
+  { immediate: false }
 )
 
 watch(
@@ -790,6 +855,16 @@ function resolveSelectedPayeeName() {
   return ''
 }
 
+function resolveSelectedPaymentCompanyId() {
+  for (const fieldKey of paymentCompanyFieldKeys.value) {
+    const value = resolveLookupValue(formData.value[fieldKey])
+    if (value) {
+      return value
+    }
+  }
+  return ''
+}
+
 function resolveSelectedCounterpartyCode() {
   for (const fieldKey of counterpartyFieldKeys.value) {
     const value = resolveLookupValue(formData.value[fieldKey])
@@ -801,16 +876,36 @@ function resolveSelectedCounterpartyCode() {
 }
 
 function resolvePayeeAccountLinkageMode(): PayeeAccountLinkageMode {
-  if (props.detailType === ENTERPRISE_DETAIL_TYPE) {
+  if (props.detailType === ENTERPRISE_DETAIL_TYPE || hasCounterpartyField.value) {
     return 'ENTERPRISE'
   }
-  return selectedCounterpartyCode.value ? 'ENTERPRISE' : 'EMPLOYEE'
+  return 'EMPLOYEE'
 }
 
 function clearPayeeAccountSelections() {
   payeeAccountFieldKeys.value.forEach((fieldKey) => {
     formData.value[fieldKey] = ''
   })
+}
+
+function clearCounterpartySelections() {
+  counterpartyFieldKeys.value.forEach((fieldKey) => {
+    formData.value[fieldKey] = ''
+  })
+}
+
+function isCounterpartyDisabled(block: ProcessFormDesignBlock) {
+  return isReadOnly(block) || !selectedPaymentCompanyId.value
+}
+
+function isPayeeAccountDisabled(block: ProcessFormDesignBlock) {
+  if (isReadOnly(block)) {
+    return true
+  }
+  if (payeeAccountLinkageMode.value === 'ENTERPRISE') {
+    return !selectedPaymentCompanyId.value || !selectedCounterpartyCode.value
+  }
+  return false
 }
 
 function buildPayeeSnapshot(option: ExpenseCreatePayeeOption): RuntimePayeeSnapshot {
@@ -1143,9 +1238,16 @@ function formatAmount(value: unknown) {
 }
 
 async function loadVendorOptions(keyword: string) {
+  if (!selectedPaymentCompanyId.value) {
+    vendorOptions.value = []
+    return
+  }
   vendorOptionsLoading.value = true
   try {
-    const res = await expenseCreateApi.listVendorOptions(keyword || undefined)
+    const res = await expenseCreateApi.listVendorOptions({
+      keyword: keyword || undefined,
+      paymentCompanyId: selectedPaymentCompanyId.value
+    })
     vendorOptions.value = res.data
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载收款单位失败'))
@@ -1170,13 +1272,20 @@ async function loadPayeeOptions(keyword: string) {
 }
 
 async function loadPayeeAccountOptions(keyword: string) {
+  if (payeeAccountLinkageMode.value === 'ENTERPRISE') {
+    if (!selectedPaymentCompanyId.value || !selectedCounterpartyCode.value) {
+      payeeAccountOptions.value = []
+      return
+    }
+  }
   payeeAccountOptionsLoading.value = true
   try {
     const res = await expenseCreateApi.listPayeeAccountOptions({
       keyword,
       linkageMode: payeeAccountLinkageMode.value,
       payeeName: selectedPayeeName.value || undefined,
-      counterpartyCode: selectedCounterpartyCode.value || undefined
+      counterpartyCode: selectedCounterpartyCode.value || undefined,
+      paymentCompanyId: selectedPaymentCompanyId.value || undefined
     })
     payeeAccountOptions.value = res.data
   } catch (error: unknown) {
@@ -1251,7 +1360,13 @@ function handleFileRemove(block: ProcessFormDesignBlock, uploadFile: UploadFile)
 }
 
 function openVendorDialog(fieldKey = '') {
+  if (!selectedPaymentCompanyId.value) {
+    ElMessage.warning('请先选择付款公司')
+    return
+  }
+  vendorDialogMode.value = 'create'
   vendorDialogFieldKey.value = fieldKey
+  vendorDialogVendorCode.value = ''
   Object.assign(vendorDraft, emptyVendorDraft())
   vendorDialogVisible.value = true
 }
@@ -1259,7 +1374,35 @@ function openVendorDialog(fieldKey = '') {
 function closeVendorDialog() {
   vendorDialogVisible.value = false
   vendorDialogFieldKey.value = ''
+  vendorDialogVendorCode.value = ''
+  vendorDialogMode.value = 'create'
+  vendorDialogLoading.value = false
   Object.assign(vendorDraft, emptyVendorDraft())
+}
+
+async function openVendorAccountDialog() {
+  if (!selectedPaymentCompanyId.value) {
+    ElMessage.warning('请先选择付款公司')
+    return
+  }
+  if (!selectedCounterpartyCode.value) {
+    ElMessage.warning('请先选择收款单位')
+    return
+  }
+  vendorDialogMode.value = 'edit'
+  vendorDialogFieldKey.value = ''
+  vendorDialogVendorCode.value = selectedCounterpartyCode.value
+  vendorDialogLoading.value = true
+  vendorDialogVisible.value = true
+  try {
+    const res = await expenseCreateApi.getVendorDetail(selectedPaymentCompanyId.value, selectedCounterpartyCode.value)
+    hydrateVendorDraft(res.data)
+  } catch (error: unknown) {
+    vendorDialogVisible.value = false
+    ElMessage.error(resolveErrorMessage(error, '加载供应商信息失败'))
+  } finally {
+    vendorDialogLoading.value = false
+  }
 }
 
 function validateVendorDraft() {
@@ -1301,7 +1444,45 @@ function validateVendorDraft() {
   return ''
 }
 
-async function createVendor() {
+function hydrateVendorDraft(detail: Partial<FinanceVendorDetail>) {
+  Object.assign(vendorDraft, emptyVendorDraft(), {
+    cVenName: detail.cVenName || '',
+    cVenAbbName: detail.cVenAbbName || '',
+    cVenRegCode: detail.cVenRegCode || '',
+    cVenPerson: detail.cVenPerson || '',
+    cVenPhone: detail.cVenPhone || '',
+    cVenAddress: detail.cVenAddress || '',
+    receiptAccountName: detail.receiptAccountName || '',
+    cVenBankCode: detail.cVenBankCode || '',
+    cVenBank: detail.cVenBank || '',
+    receiptBankProvince: detail.receiptBankProvince || '',
+    receiptBankCity: detail.receiptBankCity || '',
+    receiptBranchCode: detail.receiptBranchCode || '',
+    receiptBranchName: detail.receiptBranchName || '',
+    cVenAccount: detail.cVenAccount || '',
+    cVenBankNub: detail.cVenBankNub || '',
+    cMemo: detail.cMemo || ''
+  })
+}
+
+function buildVendorCreatePayload() {
+  return Object.fromEntries(
+    Object.entries(vendorDraft).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  ) as FinanceVendorSavePayload
+}
+
+function assignFirstPayeeAccountOption() {
+  const firstOption = payeeAccountOptions.value[0]
+  if (!firstOption) {
+    return
+  }
+  const snapshot = buildPayeeAccountSnapshot(firstOption)
+  payeeAccountFieldKeys.value.forEach((fieldKey) => {
+    formData.value[fieldKey] = snapshot
+  })
+}
+
+async function saveVendor() {
   const validationMessage = validateVendorDraft()
   if (validationMessage) {
     ElMessage.warning(validationMessage)
@@ -1309,18 +1490,37 @@ async function createVendor() {
   }
   vendorSaving.value = true
   try {
-    const payload = Object.fromEntries(
-      Object.entries(vendorDraft).filter(([, value]) => value !== undefined && value !== null && value !== '')
-    ) as FinanceVendorSavePayload
-    const res = await expenseCreateApi.createVendor(payload)
-    await loadVendorOptions(String(res.data.cVenName || res.data.cVenCode || ''))
-    if (vendorDialogFieldKey.value) {
-      formData.value[vendorDialogFieldKey.value] = res.data.cVenCode
+    if (!selectedPaymentCompanyId.value) {
+      ElMessage.warning('请先选择付款公司')
+      return
     }
-    ElMessage.success('供应商已新增')
+    if (vendorDialogMode.value === 'edit') {
+      const vendorCode = vendorDialogVendorCode.value || selectedCounterpartyCode.value
+      if (!vendorCode) {
+        ElMessage.warning('请先选择收款单位')
+        return
+      }
+      await expenseCreateApi.updateVendor(selectedPaymentCompanyId.value, vendorCode, { ...vendorDraft })
+      await loadVendorOptions(String(vendorDraft.cVenName || vendorCode))
+      await loadPayeeAccountOptions('')
+      assignFirstPayeeAccountOption()
+      ElMessage.success('收款账户已更新')
+    } else {
+      const res = await expenseCreateApi.createVendor(selectedPaymentCompanyId.value, buildVendorCreatePayload())
+      await loadVendorOptions(String(res.data.cVenName || res.data.cVenCode || ''))
+      if (vendorDialogFieldKey.value) {
+        formData.value[vendorDialogFieldKey.value] = res.data.cVenCode
+      }
+      clearPayeeAccountSelections()
+      await loadPayeeAccountOptions('')
+      ElMessage.success('供应商已新增')
+    }
     closeVendorDialog()
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '新增供应商失败'))
+    ElMessage.error(resolveErrorMessage(
+      error,
+      vendorDialogMode.value === 'edit' ? '维护收款账户失败' : '新增供应商失败'
+    ))
   } finally {
     vendorSaving.value = false
   }
@@ -1410,3 +1610,33 @@ function toOptionalString(value: unknown) {
   return undefined
 }
 </script>
+
+<style scoped>
+:deep(.expense-runtime-control) {
+  width: 100%;
+}
+
+:deep(.expense-runtime-control .el-input__wrapper),
+:deep(.expense-runtime-control .el-select__wrapper),
+:deep(.expense-runtime-control.el-date-editor.el-input__wrapper),
+:deep(.expense-runtime-control.el-date-editor--daterange) {
+  min-height: 40px;
+}
+
+:deep(.expense-runtime-control .el-select__selection),
+:deep(.expense-runtime-control .el-input__inner),
+:deep(.expense-runtime-control.el-date-editor .el-range-input),
+:deep(.expense-runtime-control.el-date-editor .el-range-separator) {
+  min-height: 38px;
+  line-height: 38px;
+  align-items: center;
+}
+
+:deep(.expense-runtime-control.el-input-number) {
+  width: 100%;
+}
+
+:deep(.expense-runtime-control.el-input-number .el-input__wrapper) {
+  min-height: 40px;
+}
+</style>

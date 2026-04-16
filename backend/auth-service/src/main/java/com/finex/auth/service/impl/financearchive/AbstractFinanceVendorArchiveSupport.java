@@ -137,8 +137,8 @@ public abstract class AbstractFinanceVendorArchiveSupport {
     protected ExpenseCreateVendorOptionVO toOption(FinanceVendor vendor) {
         ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
         option.setValue(vendor.getCVenCode());
-        option.setLabel(vendor.getCVenName());
-        option.setSecondaryLabel(buildVendorSecondaryLabel(vendor.getCVenCode(), vendor.getCVenAbbName()));
+        option.setLabel(firstNonBlank(vendor.getReceiptAccountName(), vendor.getCVenName(), vendor.getCVenCode()));
+        option.setSecondaryLabel(buildVendorSecondaryLabel(vendor));
         option.setCVenCode(vendor.getCVenCode());
         option.setCVenName(vendor.getCVenName());
         option.setCVenAbbName(vendor.getCVenAbbName());
@@ -171,13 +171,21 @@ public abstract class AbstractFinanceVendorArchiveSupport {
         return prefix + String.format("%04d", next);
     }
 
-    protected String buildVendorSecondaryLabel(String vendorCode, String vendorAbbName) {
-        String code = trimToNull(vendorCode);
-        String abbName = trimToNull(vendorAbbName);
-        if (code != null && abbName != null) {
-            return code + " / " + abbName;
+    protected String buildVendorSecondaryLabel(FinanceVendor vendor) {
+        String code = trimToNull(vendor.getCVenCode());
+        String vendorName = trimToNull(vendor.getCVenName());
+        String vendorAbbName = trimToNull(vendor.getCVenAbbName());
+        String receiptAccountName = trimToNull(vendor.getReceiptAccountName());
+
+        StringBuilder builder = new StringBuilder();
+        appendSecondaryPart(builder, code);
+        if (vendorName != null && !vendorName.equals(receiptAccountName)) {
+            appendSecondaryPart(builder, vendorName);
         }
-        return code != null ? code : (abbName == null ? "" : abbName);
+        if (vendorAbbName != null && !vendorAbbName.equals(vendorName) && !vendorAbbName.equals(receiptAccountName)) {
+            appendSecondaryPart(builder, vendorAbbName);
+        }
+        return builder.toString();
     }
 
     protected String defaultOperator(String operatorName) {
@@ -232,5 +240,25 @@ public abstract class AbstractFinanceVendorArchiveSupport {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    protected String firstNonBlank(String... values) {
+        for (String value : values) {
+            String normalized = trimToNull(value);
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
+    }
+
+    private void appendSecondaryPart(StringBuilder builder, String value) {
+        if (value == null) {
+            return;
+        }
+        if (builder.length() > 0) {
+            builder.append(" / ");
+        }
+        builder.append(value);
     }
 }

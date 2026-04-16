@@ -20,12 +20,16 @@ public interface FinanceBankCatalogService {
     /**
      * 查询银行列表。
      */
-    List<FinanceBankOptionVO> listBanks(String keyword);
+    List<FinanceBankOptionVO> listBanks(String keyword, String businessScope);
+
+    List<String> listProvinces(String bankCode, String businessScope);
+
+    List<String> listCities(String bankCode, String province, String businessScope);
 
     /**
      * 查询银行Branches列表。
      */
-    List<FinanceBankBranchVO> listBankBranches(String bankCode, String province, String city, String keyword);
+    List<FinanceBankBranchVO> listBankBranches(String bankCode, String province, String city, String keyword, String businessScope);
 
     FinanceBankBranchVO lookupBranchByCnaps(String cnapsCode);
 }

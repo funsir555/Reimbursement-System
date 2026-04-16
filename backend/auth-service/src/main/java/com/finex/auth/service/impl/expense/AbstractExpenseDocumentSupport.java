@@ -365,8 +365,17 @@ class AbstractExpenseDocumentSupport {
     /**
      * 查询供应商选项。
      */
-    List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
-        return financeVendorService.listActiveVendorOptions(requireCurrentUserCompanyId(userId), keyword, includeDisabled);
+    List<ExpenseCreateVendorOptionVO> listVendorOptions(
+            Long userId,
+            String keyword,
+            Boolean includeDisabled,
+            String paymentCompanyId
+    ) {
+        return financeVendorService.listActiveVendorOptions(
+                resolveExpenseCreateCompanyId(userId, paymentCompanyId),
+                keyword,
+                includeDisabled
+        );
     }
 
     /**
@@ -417,7 +426,8 @@ class AbstractExpenseDocumentSupport {
             String keyword,
             String linkageMode,
             String payeeName,
-            String counterpartyCode
+            String counterpartyCode,
+            String paymentCompanyId
     ) {
         String normalizedKeyword = trimToNull(keyword);
         String normalizedLinkageMode = trimToNull(linkageMode);
@@ -425,10 +435,15 @@ class AbstractExpenseDocumentSupport {
             return listPersonalPayeeAccountOptions(userId, normalizedKeyword, trimToNull(payeeName));
         }
         if ("ENTERPRISE".equalsIgnoreCase(normalizedLinkageMode)) {
-            return listCounterpartyPayeeAccountOptions(userId, normalizedKeyword, trimToNull(counterpartyCode));
+            return listCounterpartyPayeeAccountOptions(
+                    userId,
+                    normalizedKeyword,
+                    trimToNull(counterpartyCode),
+                    paymentCompanyId
+            );
         }
 
-        String currentCompanyId = requireCurrentUserCompanyId(userId);
+        String currentCompanyId = resolveExpenseCreateCompanyId(userId, paymentCompanyId);
         List<ExpenseCreatePayeeAccountOptionVO> options = new ArrayList<>();
 
         QueryWrapper<FinanceVendor> vendorQuery = new QueryWrapper<>();
@@ -441,6 +456,7 @@ class AbstractExpenseDocumentSupport {
                 .filter(item -> trimToNull(item.getCVenAccount()) != null)
                 .filter(item -> matchesKeyword(
                         normalizedKeyword,
+                        item.getReceiptAccountName(),
                         item.getCVenName(),
                         item.getCVenAbbName(),
                         item.getCVenBank(),
@@ -448,14 +464,15 @@ class AbstractExpenseDocumentSupport {
                         item.getCVenBankNub()
                 ))
                 .forEach(item -> {
+                    String accountName = firstNonBlank(item.getReceiptAccountName(), item.getCVenName());
                     ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
                     option.setValue("VENDOR:" + item.getCVenCode());
-                    option.setLabel(buildAccountLabel(item.getCVenName(), item.getCVenBank()));
+                    option.setLabel(buildAccountLabel(accountName, item.getCVenBank()));
                     option.setSourceType("VENDOR");
                     option.setOwnerCode(item.getCVenCode());
-                    option.setOwnerName(item.getCVenName());
+                    option.setOwnerName(accountName);
                     option.setBankName(item.getCVenBank());
-                    option.setAccountName(item.getCVenName());
+                    option.setAccountName(accountName);
                     option.setAccountNoMasked(maskAccountNo(item.getCVenAccount()));
                     option.setSecondaryLabel(buildVendorAccountSecondary(item));
                     options.add(option);
@@ -586,13 +603,14 @@ class AbstractExpenseDocumentSupport {
     private List<ExpenseCreatePayeeAccountOptionVO> listCounterpartyPayeeAccountOptions(
             Long userId,
             String normalizedKeyword,
-            String counterpartyCode
+            String counterpartyCode,
+            String paymentCompanyId
     ) {
         String normalizedVendorCode = trimToNull(counterpartyCode);
         if (normalizedVendorCode == null) {
             return Collections.emptyList();
         }
-        String currentCompanyId = requireCurrentUserCompanyId(userId);
+        String currentCompanyId = resolveExpenseCreateCompanyId(userId, paymentCompanyId);
         FinanceVendor vendor = financeVendorMapper.selectOne(
                 Wrappers.<FinanceVendor>lambdaQuery()
                         .eq(FinanceVendor::getCompanyId, currentCompanyId)
@@ -604,6 +622,7 @@ class AbstractExpenseDocumentSupport {
         }
         if (!matchesKeyword(
                 normalizedKeyword,
+                vendor.getReceiptAccountName(),
                 vendor.getCVenName(),
                 vendor.getCVenAbbName(),
                 vendor.getCVenBank(),
@@ -612,14 +631,15 @@ class AbstractExpenseDocumentSupport {
         )) {
             return Collections.emptyList();
         }
+        String accountName = firstNonBlank(vendor.getReceiptAccountName(), vendor.getCVenName());
         ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
         option.setValue("VENDOR:" + vendor.getCVenCode());
-        option.setLabel(buildAccountLabel(vendor.getCVenName(), vendor.getCVenBank()));
+        option.setLabel(buildAccountLabel(accountName, vendor.getCVenBank()));
         option.setSourceType("VENDOR");
         option.setOwnerCode(vendor.getCVenCode());
-        option.setOwnerName(vendor.getCVenName());
+        option.setOwnerName(accountName);
         option.setBankName(vendor.getCVenBank());
-        option.setAccountName(firstNonBlank(vendor.getReceiptAccountName(), vendor.getCVenName()));
+        option.setAccountName(accountName);
         option.setAccountNoMasked(maskAccountNo(vendor.getCVenAccount()));
         option.setSecondaryLabel(buildVendorAccountSecondary(vendor));
         return List.of(option);
@@ -4319,6 +4339,11 @@ class AbstractExpenseDocumentSupport {
             throw new IllegalStateException("瑜版挸澧犻悽銊﹀煕閺堫亞绮︾€规艾鍙曢崣闀愬瘜娴?");
         }
         return companyId;
+    }
+
+    private String resolveExpenseCreateCompanyId(Long userId, String paymentCompanyId) {
+        String explicitCompanyId = trimToNull(paymentCompanyId);
+        return explicitCompanyId != null ? explicitCompanyId : requireCurrentUserCompanyId(userId);
     }
 
     /**

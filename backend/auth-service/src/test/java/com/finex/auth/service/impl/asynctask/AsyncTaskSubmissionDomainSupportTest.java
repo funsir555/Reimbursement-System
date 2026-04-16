@@ -125,4 +125,34 @@ class AsyncTaskSubmissionDomainSupportTest {
         assertEquals(15L, result.getDownloadRecordId());
         assertNotNull(result.getTaskNo());
     }
+
+    @Test
+    void submitPaymentPendingExportNormalizesTaskIds() throws Exception {
+        when(downloadRecordMapper.insert(any())).thenAnswer(invocation -> {
+            DownloadRecord record = invocation.getArgument(0);
+            record.setId(18L);
+            return 1;
+        });
+        when(asyncTaskRecordMapper.insert(any())).thenAnswer(invocation -> {
+            AsyncTaskRecord task = invocation.getArgument(0);
+            task.setId(29L);
+            return 1;
+        });
+
+        ExpenseExportSubmitDTO dto = new ExpenseExportSubmitDTO();
+        dto.setScene(" payment_pending ");
+        dto.setTaskIds(List.of(9L, 9L, 10L));
+
+        AsyncTaskSubmitResultVO result = support.submitExpenseExport(9L, dto);
+
+        ArgumentCaptor<AsyncTaskRecord> taskCaptor = ArgumentCaptor.forClass(AsyncTaskRecord.class);
+        verify(asyncTaskRecordMapper).insert(taskCaptor.capture());
+        AsyncTaskRecord createdTask = taskCaptor.getValue();
+        ExpenseExportSubmitDTO payload = objectMapper.readValue(createdTask.getResultPayload(), ExpenseExportSubmitDTO.class);
+
+        assertEquals("PAYMENT_PENDING", payload.getScene());
+        assertEquals(List.of(9L, 10L), payload.getTaskIds());
+        assertEquals(18L, result.getDownloadRecordId());
+        verify(asyncTaskWorker).runExpenseExportTask(29L);
+    }
 }

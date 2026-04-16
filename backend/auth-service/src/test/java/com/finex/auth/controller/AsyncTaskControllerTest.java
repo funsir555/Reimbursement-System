@@ -153,6 +153,32 @@ class AsyncTaskControllerTest {
     }
 
     @Test
+    void exportExpensesUsesPaymentPermissionForPaymentPending() throws Exception {
+        AsyncTaskSubmitResultVO result = new AsyncTaskSubmitResultVO();
+        result.setTaskNo("TASK-EXP-005");
+        result.setTaskType("EXPORT");
+        result.setStatus("PENDING");
+
+        doNothing().when(accessControlService).requirePermission(1L, "expense:payment:payment_order:view");
+        when(asyncTaskService.submitExpenseExport(any(), any())).thenReturn(result);
+
+        mockMvc.perform(post("/auth/async-tasks/exports/expenses")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "scene":"PAYMENT_PENDING",
+                                  "taskIds":[10,11]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.taskNo").value("TASK-EXP-005"));
+
+        verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:view");
+    }
+
+    @Test
     void exportExpensesUsesDashboardPermissionForOutstanding() throws Exception {
         AsyncTaskSubmitResultVO result = new AsyncTaskSubmitResultVO();
         result.setTaskNo("TASK-EXP-004");

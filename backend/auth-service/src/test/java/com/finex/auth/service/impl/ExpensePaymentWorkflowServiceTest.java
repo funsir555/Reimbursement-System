@@ -62,4 +62,15 @@ class ExpensePaymentWorkflowServiceTest {
         verify(expensePaymentDomainSupport).completePaymentTask(1L, "tester", 5L, dto);
         verify(expensePaymentDomainSupport).runBankReceiptPolling();
     }
+
+    @Test
+    void rejectPaymentTasksDelegatesToMutationSupport() {
+        ExpenseApprovalActionDTO dto = new ExpenseApprovalActionDTO();
+        ExpensePaymentWorkflowService service = new ExpensePaymentWorkflowService(expensePaymentDomainSupport);
+        when(expensePaymentDomainSupport.rejectPaymentTasks(1L, "tester", List.of(5L, 6L), dto)).thenReturn(true);
+
+        org.junit.jupiter.api.Assertions.assertTrue(service.rejectPaymentTasks(1L, "tester", List.of(5L, 6L), dto));
+
+        verify(expensePaymentDomainSupport).rejectPaymentTasks(1L, "tester", List.of(5L, 6L), dto);
+    }
 }

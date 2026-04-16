@@ -40,6 +40,7 @@ public class AsyncTaskController {
     private static final String EXPENSE_LIST_VIEW = "expense:list:view";
     private static final String EXPENSE_APPROVAL_VIEW = "expense:approval:view";
     private static final String EXPENSE_DOCUMENTS_VIEW = "expense:documents:view";
+    private static final String EXPENSE_PAYMENT_VIEW = "expense:payment:payment_order:view";
     private static final String DASHBOARD_VIEW = "dashboard:view";
     private static final String INVOICE_VERIFY = "archives:invoices:verify";
     private static final String INVOICE_OCR = "archives:invoices:ocr";
@@ -73,6 +74,8 @@ public class AsyncTaskController {
                     accessControlService.requirePermission(userId, EXPENSE_APPROVAL_VIEW);
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY ->
                     accessControlService.requirePermission(userId, EXPENSE_DOCUMENTS_VIEW);
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING ->
+                    accessControlService.requirePermission(userId, EXPENSE_PAYMENT_VIEW);
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_OUTSTANDING ->
                     accessControlService.requirePermission(userId, DASHBOARD_VIEW);
             default -> throw new IllegalArgumentException("不支持的导出场景");

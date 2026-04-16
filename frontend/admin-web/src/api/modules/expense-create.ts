@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { ExpenseAttachmentMeta, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult } from './expense-create-types'
+import type { ExpenseAttachmentMeta, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseCreateVendorOptionsParams, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult } from './expense-create-types'
 import type { FinanceVendorDetail, FinanceVendorSavePayload } from './finance-archive-types'
 
 // 这一组方法供对应页面统一调用。
@@ -18,13 +18,25 @@ export const expenseCreateApi = {
       timeoutMs: 10000,
       timeoutMessage: '加载模板详情超时，请稍后重试'
     }),
-  listVendorOptions: (keyword?: string, includeDisabled?: boolean) =>
-    request<ExpenseCreateVendorOption[]>(`/auth/expenses/create/vendors/options${buildQueryString({ keyword, includeDisabled })}`),
-  createVendor: (payload: FinanceVendorSavePayload) =>
-    request<FinanceVendorDetail>('/auth/expenses/create/vendors', {
+  listVendorOptions: (params: ExpenseCreateVendorOptionsParams = {}) =>
+    request<ExpenseCreateVendorOption[]>(`/auth/expenses/create/vendors/options${buildQueryString(params)}`),
+  getVendorDetail: (paymentCompanyId: string, vendorCode: string) =>
+    request<FinanceVendorDetail>(
+      `/auth/expenses/create/vendors/${encodeURIComponent(vendorCode)}${buildQueryString({ paymentCompanyId })}`
+    ),
+  createVendor: (paymentCompanyId: string, payload: FinanceVendorSavePayload) =>
+    request<FinanceVendorDetail>(`/auth/expenses/create/vendors${buildQueryString({ paymentCompanyId })}`, {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
+  updateVendor: (paymentCompanyId: string, vendorCode: string, payload: FinanceVendorSavePayload) =>
+    request<FinanceVendorDetail>(
+      `/auth/expenses/create/vendors/${encodeURIComponent(vendorCode)}${buildQueryString({ paymentCompanyId })}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      }
+    ),
   listPayeeOptions: (params: ExpenseCreatePayeeOptionsParams = {}) =>
     request<ExpenseCreatePayeeOption[]>(`/auth/expenses/create/payees/options${buildQueryString(params)}`),
   listPayeeAccountOptions: (params: ExpenseCreatePayeeAccountOptionsParams = {}) =>

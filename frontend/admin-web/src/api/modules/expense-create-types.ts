@@ -25,6 +25,12 @@ export interface ExpenseCreateVendorOption {
   cVenAbbName?: string
 }
 
+export interface ExpenseCreateVendorOptionsParams {
+  keyword?: string
+  includeDisabled?: boolean
+  paymentCompanyId?: string
+}
+
 export interface ExpenseCreatePayeeOption {
   value: string
   label: string
@@ -57,6 +63,7 @@ export interface ExpenseCreatePayeeAccountOptionsParams {
   linkageMode?: ExpenseCreatePayeeAccountLinkageMode
   payeeName?: string
   counterpartyCode?: string
+  paymentCompanyId?: string
 }
 
 export interface ExpenseCreateTemplateDetail {

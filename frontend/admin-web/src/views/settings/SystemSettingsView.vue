@@ -1102,27 +1102,15 @@
                   />
                 </el-select>
               </el-form-item>
-              <el-form-item label="银行名称" required>
-                <el-input v-model="companyBankAccountForm.bankName" />
-              </el-form-item>
-              <el-form-item label="开户网点">
-                <el-input v-model="companyBankAccountForm.branchName" />
-              </el-form-item>
-              <el-form-item label="银行代码">
-                <el-input v-model="companyBankAccountForm.bankCode" />
-              </el-form-item>
-              <el-form-item label="网点代码">
-                <el-input v-model="companyBankAccountForm.branchCode" />
-              </el-form-item>
-              <el-form-item label="CNAPS 代码">
-                <el-input v-model="companyBankAccountForm.cnapsCode" />
-              </el-form-item>
-              <el-form-item label="账户名" required>
-                <el-input v-model="companyBankAccountForm.accountName" />
-              </el-form-item>
-              <el-form-item label="银行账号" required>
-                <el-input v-model="companyBankAccountForm.accountNo" />
-              </el-form-item>
+              <div class="md:col-span-2">
+                <SupplierPaymentInfoFields
+                  :form-state="companyBankAccountForm"
+                  :required="true"
+                  :field-map="companyBankAccountFieldMap"
+                  account-name-label="账户名"
+                  business-scope="PUBLIC"
+                />
+              </div>
               <el-form-item label="账户类型">
                 <el-input v-model="companyBankAccountForm.accountType" />
               </el-form-item>
@@ -1233,6 +1221,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { hasAnyPermission, hasPermission } from '@/utils/permissions'
+import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
 import {
   systemSettingsApi,
   type CompanyBankAccountRecord,
@@ -1354,12 +1343,26 @@ const companyForm = reactive<CompanySavePayload>({
 const companyBankAccountForm = reactive<CompanyBankAccountFormState>({
   companyId: '',
   bankName: '',
+  province: '',
+  city: '',
   accountName: '',
   accountNo: '',
   status: 1,
   defaultAccount: 0,
   directConnectEnabled: 0
 })
+
+const companyBankAccountFieldMap = {
+  accountName: 'accountName',
+  bankCode: 'bankCode',
+  bankName: 'bankName',
+  province: 'province',
+  city: 'city',
+  branchCode: 'branchCode',
+  branchName: 'branchName',
+  accountNo: 'accountNo',
+  cnapsCode: 'cnapsCode'
+} as const
 
 const sourceLabelMap: Record<string, string> = {
   MANUAL: '手工',
@@ -1631,6 +1634,8 @@ function openCompanyBankAccountDialog(item?: CompanyBankAccountRecord) {
   editingCompanyBankAccount.value = item
   companyBankAccountForm.companyId = item?.companyId || ''
   companyBankAccountForm.bankName = item?.bankName || ''
+  companyBankAccountForm.province = item?.province || ''
+  companyBankAccountForm.city = item?.city || ''
   companyBankAccountForm.branchName = item?.branchName
   companyBankAccountForm.bankCode = item?.bankCode
   companyBankAccountForm.branchCode = item?.branchCode
@@ -1775,6 +1780,11 @@ async function saveCompany(closeAfterSave: boolean) {
 }
 
 async function saveCompanyBankAccount() {
+  const validationMessage = validateCompanyBankAccountForm()
+  if (validationMessage) {
+    ElMessage.warning(validationMessage)
+    return
+  }
   const payload = buildCompanyBankAccountPayload(companyBankAccountForm)
   if (editingCompanyBankAccount.value?.id) {
     await systemSettingsApi.updateCompanyBankAccount(editingCompanyBankAccount.value.id, payload)
@@ -2037,6 +2047,8 @@ function resetCompanyBankAccountForm() {
   editingCompanyBankAccount.value = undefined
   companyBankAccountForm.companyId = ''
   companyBankAccountForm.bankName = ''
+  companyBankAccountForm.province = ''
+  companyBankAccountForm.city = ''
   companyBankAccountForm.branchName = undefined
   companyBankAccountForm.bankCode = undefined
   companyBankAccountForm.branchCode = undefined
@@ -2074,6 +2086,8 @@ function buildCompanyBankAccountPayload(
   return {
     companyId: source.companyId,
     bankName: source.bankName,
+    province: source.province || '',
+    city: source.city || '',
     branchName: source.branchName,
     bankCode: source.bankCode,
     branchCode: source.branchCode,
@@ -2104,6 +2118,22 @@ function buildCompanyBankAccountPayload(
     directConnectLastErrorMsg: source.directConnectLastErrorMsg,
     directConnectExtJson: source.directConnectExtJson
   }
+}
+
+function validateCompanyBankAccountForm() {
+  if (!String(companyBankAccountForm.companyId || '').trim()) return '请选择所属公司'
+  if (!String(companyBankAccountForm.bankCode || '').trim() || !String(companyBankAccountForm.bankName || '').trim()) {
+    return '请选择开户银行'
+  }
+  if (!String(companyBankAccountForm.province || '').trim() || !String(companyBankAccountForm.city || '').trim()) {
+    return '请选择开户省市'
+  }
+  if (!String(companyBankAccountForm.branchCode || '').trim() || !String(companyBankAccountForm.branchName || '').trim()) {
+    return '请选择分支行'
+  }
+  if (!String(companyBankAccountForm.accountName || '').trim()) return '请填写账户名'
+  if (!String(companyBankAccountForm.accountNo || '').trim()) return '请填写银行账号'
+  return ''
 }
 
 function maskAccountNo(accountNo?: string) {

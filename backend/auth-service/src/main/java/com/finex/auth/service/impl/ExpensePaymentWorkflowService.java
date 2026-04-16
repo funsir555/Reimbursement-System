@@ -91,4 +91,8 @@ public class ExpensePaymentWorkflowService {
     public ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         return expensePaymentDomainSupport.markPaymentTaskException(userId, username, taskId, dto);
     }
+
+    public boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto) {
+        return expensePaymentDomainSupport.rejectPaymentTasks(userId, username, taskIds, dto);
+    }
 }

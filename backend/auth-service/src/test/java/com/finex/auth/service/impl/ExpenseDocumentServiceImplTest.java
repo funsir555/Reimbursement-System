@@ -113,6 +113,24 @@ class ExpenseDocumentServiceImplTest {
     }
 
     @Test
+    void rejectPaymentTasksDelegatesToPaymentWorkflowService() {
+        ExpenseApprovalActionDTO dto = new ExpenseApprovalActionDTO();
+        ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(
+                expenseDocumentSubmissionService,
+                expenseDocumentQueryService,
+                expenseApprovalWorkflowService,
+                expensePaymentWorkflowService,
+                expenseMaintenanceService,
+                expenseRelationWriteOffService
+        );
+        when(expensePaymentWorkflowService.rejectPaymentTasks(1L, "tester", List.of(20L, 21L), dto)).thenReturn(true);
+
+        org.junit.jupiter.api.Assertions.assertTrue(service.rejectPaymentTasks(1L, "tester", List.of(20L, 21L), dto));
+
+        verify(expensePaymentWorkflowService).rejectPaymentTasks(1L, "tester", List.of(20L, 21L), dto);
+    }
+
+    @Test
     void repairMisapprovedDocumentsDelegatesToMaintenanceService() {
         List<String> expected = List.of("DOC-001");
         ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(

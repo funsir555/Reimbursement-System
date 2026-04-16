@@ -1,10 +1,10 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
-import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
-import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreatePayeeAccountOptionVO;
 import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
+import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
+import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.FinanceVendorDetailVO;
 import com.finex.auth.dto.FinanceVendorSaveDTO;
@@ -31,6 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -122,7 +123,7 @@ class ExpenseDocumentControllerTest {
     }
 
     @Test
-    void listVendorOptionsAllowsAnyExpenseCreateEntryPermission() throws Exception {
+    void listVendorOptionsPassesPaymentCompanyId() throws Exception {
         ExpenseCreateVendorOptionVO option = new ExpenseCreateVendorOptionVO();
         option.setValue("VENDOR-001");
         option.setLabel("Shanghai Test Vendor");
@@ -133,26 +134,48 @@ class ExpenseDocumentControllerTest {
                 "expense:create:create",
                 "expense:create:submit"
         );
-        when(expenseDocumentService.listVendorOptions(1L, "Shanghai", null)).thenReturn(List.of(option));
+        when(expenseDocumentService.listVendorOptions(1L, "Shanghai", null, "COMPANY-A"))
+                .thenReturn(List.of(option));
 
         mockMvc.perform(get("/auth/expenses/create/vendors/options")
                         .requestAttr("currentUserId", 1L)
-                        .param("keyword", "Shanghai"))
+                        .param("keyword", "Shanghai")
+                        .param("paymentCompanyId", "COMPANY-A"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].value").value("VENDOR-001"));
 
-        verify(accessControlService).requireAnyPermission(
+        verify(expenseDocumentService).listVendorOptions(1L, "Shanghai", null, "COMPANY-A");
+    }
+
+    @Test
+    void getVendorDetailUsesSelectedPaymentCompanyId() throws Exception {
+        FinanceVendorDetailVO detail = new FinanceVendorDetailVO();
+        detail.setCVenCode("VENDOR-001");
+        detail.setCompanyId("COMPANY-A");
+        detail.setCVenName("Selected Vendor");
+
+        doNothing().when(accessControlService).requireAnyPermission(
                 1L,
                 "expense:create:view",
                 "expense:create:create",
                 "expense:create:submit"
         );
-        verify(expenseDocumentService).listVendorOptions(1L, "Shanghai", null);
+        when(financeVendorService.getVendorDetail("COMPANY-A", "VENDOR-001")).thenReturn(detail);
+
+        mockMvc.perform(get("/auth/expenses/create/vendors/VENDOR-001")
+                        .requestAttr("currentUserId", 1L)
+                        .param("paymentCompanyId", "COMPANY-A"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.cVenCode").value("VENDOR-001"))
+                .andExpect(jsonPath("$.data.companyId").value("COMPANY-A"));
+
+        verify(financeVendorService).getVendorDetail("COMPANY-A", "VENDOR-001");
     }
 
     @Test
-    void createVendorUsesCurrentUserIdInsteadOfPayloadCompanyId() throws Exception {
+    void createVendorUsesSelectedPaymentCompanyId() throws Exception {
         FinanceVendorDetailVO detail = new FinanceVendorDetailVO();
         detail.setCVenCode("VEN202604050001");
         detail.setCompanyId("COMPANY_A");
@@ -162,23 +185,68 @@ class ExpenseDocumentControllerTest {
                 "expense:create:create",
                 "expense:create:submit"
         );
-        when(financeVendorService.createVendor(eq(1L), any(FinanceVendorSaveDTO.class), eq("tester"), eq(true))).thenReturn(detail);
+        when(financeVendorService.createVendor(eq("COMPANY_A"), any(FinanceVendorSaveDTO.class), eq("tester"), eq(true)))
+                .thenReturn(detail);
 
         mockMvc.perform(post("/auth/expenses/create/vendors")
                         .contentType(MediaType.APPLICATION_JSON)
                         .requestAttr("currentUserId", 1L)
                         .requestAttr("currentUsername", "tester")
+                        .param("paymentCompanyId", "COMPANY_A")
                         .content("""
                                 {
-                                  "cVenName": "Quick Vendor",
-                                  "companyId": "COMPANY_B"
+                                  "cVenName": "Quick Vendor"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.companyId").value("COMPANY_A"));
 
-        verify(financeVendorService).createVendor(eq(1L), any(FinanceVendorSaveDTO.class), eq("tester"), eq(true));
+        verify(financeVendorService).createVendor(eq("COMPANY_A"), any(FinanceVendorSaveDTO.class), eq("tester"), eq(true));
+    }
+
+    @Test
+    void updateVendorUsesSelectedPaymentCompanyId() throws Exception {
+        FinanceVendorDetailVO detail = new FinanceVendorDetailVO();
+        detail.setCVenCode("VEN202604050001");
+        detail.setCompanyId("COMPANY_A");
+        detail.setCVenAccount("6222020000000001");
+
+        doNothing().when(accessControlService).requireAnyPermission(
+                1L,
+                "expense:create:create",
+                "expense:create:submit"
+        );
+        when(financeVendorService.updateVendor(eq("COMPANY_A"), eq("VEN202604050001"), any(FinanceVendorSaveDTO.class), eq("tester"), eq(true)))
+                .thenReturn(detail);
+
+        mockMvc.perform(put("/auth/expenses/create/vendors/VEN202604050001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "tester")
+                        .param("paymentCompanyId", "COMPANY_A")
+                        .content("""
+                                {
+                                  "cVenName": "Quick Vendor",
+                                  "receiptAccountName": "Quick Vendor Account",
+                                  "cVenBank": "ICBC",
+                                  "cVenAccount": "6222020000000001",
+                                  "receiptBankProvince": "上海市",
+                                  "receiptBankCity": "上海市",
+                                  "receiptBranchName": "上海分行"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.companyId").value("COMPANY_A"));
+
+        verify(financeVendorService).updateVendor(
+                eq("COMPANY_A"),
+                eq("VEN202604050001"),
+                any(FinanceVendorSaveDTO.class),
+                eq("tester"),
+                eq(true)
+        );
     }
 
     @Test
@@ -209,11 +277,11 @@ class ExpenseDocumentControllerTest {
     }
 
     @Test
-    void listPayeeAccountOptionsPassesLinkageContext() throws Exception {
+    void listPayeeAccountOptionsPassesLinkageContextAndPaymentCompanyId() throws Exception {
         ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
-        option.setValue("USER_ACCOUNT:8");
-        option.setOwnerCode("1");
-        option.setOwnerName("张三");
+        option.setValue("VENDOR_ACCOUNT:8");
+        option.setOwnerCode("VENDOR-001");
+        option.setOwnerName("上海测试供应商");
         option.setAccountNoMasked("6222 **** 8888");
 
         doNothing().when(accessControlService).requireAnyPermission(
@@ -222,17 +290,32 @@ class ExpenseDocumentControllerTest {
                 "expense:create:create",
                 "expense:create:submit"
         );
-        when(expenseDocumentService.listPayeeAccountOptions(1L, "6222", "EMPLOYEE", "张三", null)).thenReturn(List.of(option));
+        when(expenseDocumentService.listPayeeAccountOptions(
+                1L,
+                "6222",
+                "ENTERPRISE",
+                null,
+                "VENDOR-001",
+                "COMPANY-A"
+        )).thenReturn(List.of(option));
 
         mockMvc.perform(get("/auth/expenses/create/payee-accounts/options")
                         .requestAttr("currentUserId", 1L)
                         .param("keyword", "6222")
-                        .param("linkageMode", "EMPLOYEE")
-                        .param("payeeName", "张三"))
+                        .param("linkageMode", "ENTERPRISE")
+                        .param("counterpartyCode", "VENDOR-001")
+                        .param("paymentCompanyId", "COMPANY-A"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data[0].value").value("USER_ACCOUNT:8"));
+                .andExpect(jsonPath("$.data[0].value").value("VENDOR_ACCOUNT:8"));
 
-        verify(expenseDocumentService).listPayeeAccountOptions(1L, "6222", "EMPLOYEE", "张三", null);
+        verify(expenseDocumentService).listPayeeAccountOptions(
+                1L,
+                "6222",
+                "ENTERPRISE",
+                null,
+                "VENDOR-001",
+                "COMPANY-A"
+        );
     }
 }

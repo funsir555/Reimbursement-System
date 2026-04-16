@@ -3,17 +3,22 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { FinanceBankBranchOption, FinanceBankOption } from './finance-bank-types'
+import type { FinanceBankBranchOption, FinanceBankBusinessScope, FinanceBankOption } from './finance-bank-types'
 
 // 这一组方法供对应页面统一调用。
 export const financeBankApi = {
-  listBanks: (keyword?: string) =>
-    request<FinanceBankOption[]>(`/auth/finance/banks${buildQueryString({ keyword })}`),
+  listBanks: (params?: { keyword?: string; businessScope?: FinanceBankBusinessScope }) =>
+    request<FinanceBankOption[]>(`/auth/finance/banks${buildQueryString(params || {})}`),
+  listBankProvinces: (params: { bankCode: string; businessScope?: FinanceBankBusinessScope }) =>
+    request<string[]>(`/auth/finance/banks/provinces${buildQueryString(params)}`),
+  listBankCities: (params: { bankCode: string; province: string; businessScope?: FinanceBankBusinessScope }) =>
+    request<string[]>(`/auth/finance/banks/cities${buildQueryString(params)}`),
   listBankBranches: (params: {
     bankCode?: string
     province?: string
     city?: string
     keyword?: string
+    businessScope?: FinanceBankBusinessScope
   }) =>
     request<FinanceBankBranchOption[]>(`/auth/finance/bank-branches${buildQueryString(params)}`),
   lookupBranchByCnaps: (cnapsCode: string) =>

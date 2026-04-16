@@ -6,6 +6,7 @@
 package com.finex.auth.service.impl.expense;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
 import com.finex.auth.dto.ExpenseBankCallbackDTO;
@@ -14,16 +15,20 @@ import com.finex.auth.dto.ExpenseBankLinkSaveDTO;
 import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
+import com.finex.auth.entity.FinanceVendor;
 import com.finex.auth.entity.PmBankPaymentRecord;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemCompanyBankAccount;
+import com.finex.auth.entity.UserBankAccount;
+import com.finex.auth.mapper.FinanceVendorMapper;
 import com.finex.auth.mapper.PmBankPaymentRecordMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.mapper.SystemCompanyBankAccountMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
+import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.service.ExpenseAttachmentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -53,6 +58,7 @@ public class ExpensePaymentDomainSupport {
     private static final String BANK_PROVIDER_CMB = "CMB";
     private static final String BANK_CHANNEL_CMB_CLOUD = "CMB_CLOUD";
     private static final String SYSTEM_OPERATOR = "SYSTEM";
+    private static final String PAYEE_ACCOUNT_COMPONENT_CODE = "payee-account";
 
     private static final String NODE_TYPE_PAYMENT = "PAYMENT";
     private static final String TASK_STATUS_PENDING = "PENDING";
@@ -81,6 +87,8 @@ public class ExpensePaymentDomainSupport {
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     private final SystemCompanyBankAccountMapper systemCompanyBankAccountMapper;
     private final SystemCompanyMapper systemCompanyMapper;
+    private final FinanceVendorMapper financeVendorMapper;
+    private final UserBankAccountMapper userBankAccountMapper;
     private final ExpenseAttachmentService expenseAttachmentService;
     private final ObjectMapper objectMapper;
 
@@ -376,6 +384,30 @@ public class ExpensePaymentDomainSupport {
     /**
      * 加载Visible付款任务。
      */
+    public boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto) {
+        List<Long> normalizedTaskIds = normalizeTaskIds(taskIds);
+        if (normalizedTaskIds.isEmpty()) {
+            throw new IllegalArgumentException("\u8bf7\u9009\u62e9\u5f85\u5904\u7406\u4ed8\u6b3e\u5355");
+        }
+        String comment = trimToNull(dto == null ? null : dto.getComment());
+        for (Long taskId : normalizedTaskIds) {
+            ProcessDocumentTask task = requireOpenPaymentTask(taskId, userId);
+            ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
+            if (!DOCUMENT_STATUS_PENDING_PAYMENT.equals(trimToNull(instance.getStatus()))) {
+                throw new IllegalStateException("\u5f53\u524d\u4ed8\u6b3e\u4efb\u52a1\u4e0d\u5728\u53ef\u9a73\u56de\u72b6\u6001");
+            }
+            expenseWorkflowRuntimeSupport.rejectPendingTask(instance, task, userId, username, comment);
+            expenseRelationWriteOffService.voidPendingWriteOffs(instance.getDocumentCode());
+            PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
+            if (record != null) {
+                record.setLastErrorMessage(firstNonBlank(comment, "\u4ed8\u6b3e\u9a73\u56de"));
+                record.setReceiptStatus(RECEIPT_STATUS_FAILED);
+                pmBankPaymentRecordMapper.updateById(record);
+            }
+        }
+        return true;
+    }
+
     private List<ProcessDocumentTask> loadVisiblePaymentTasks(Long userId, String normalizedStatus) {
         List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
@@ -442,8 +474,205 @@ public class ExpensePaymentDomainSupport {
         item.setCompanyBankAccountName(bankPaymentRecord == null ? null : companyBankAccountNameMap.get(bankPaymentRecord.getCompanyBankAccountId()));
         item.setTaskCreatedAt(formatTime(task.getCreatedAt()));
         item.setAllowRetry(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task));
+        PaymentReceiverInfo receiverInfo = resolvePaymentReceiverInfo(instance, metadata);
+        item.setPayeeOrCounterpartyName(receiverInfo.receiverName());
+        item.setPayeeAccountNo(receiverInfo.accountNo());
+        item.setPayeeBankName(receiverInfo.bankName());
         return item;
     }
+    private PaymentReceiverInfo resolvePaymentReceiverInfo(
+            ProcessDocumentInstance instance,
+            ExpenseSummaryAssembler.SummaryMetadata metadata
+    ) {
+        String receiverName = firstNonBlank(
+                metadata == null ? null : metadata.payeeName(),
+                metadata == null ? null : metadata.counterpartyName()
+        );
+        Map<String, Object> schema = readSchema(instance.getFormSchemaSnapshotJson());
+        Map<String, Object> formData = readMap(instance.getFormDataJson());
+        Object payeeAccountRawValue = extractFirstBusinessComponentRawValue(schema, formData, PAYEE_ACCOUNT_COMPONENT_CODE);
+        PaymentReceiverInfo accountInfo = resolvePayeeAccountInfo(payeeAccountRawValue);
+        if (receiverName == null) {
+            receiverName = firstNonBlank(accountInfo.receiverName(), accountInfo.accountName());
+        }
+        return new PaymentReceiverInfo(
+                receiverName,
+                accountInfo.accountNo(),
+                accountInfo.bankName(),
+                accountInfo.accountName()
+        );
+    }
+
+    private PaymentReceiverInfo resolvePayeeAccountInfo(Object rawValue) {
+        if (rawValue instanceof Map<?, ?> map) {
+            String sourceType = trimObjectToNull(map.get("sourceType"));
+            String value = firstNonBlank(
+                    trimObjectToNull(map.get("value")),
+                    trimObjectToNull(map.get("sourceCode")),
+                    trimObjectToNull(map.get("ownerCode"))
+            );
+            PaymentReceiverInfo snapshotInfo = new PaymentReceiverInfo(
+                    firstNonBlank(trimObjectToNull(map.get("ownerName")), trimObjectToNull(map.get("accountName"))),
+                    trimObjectToNull(map.get("accountNo")),
+                    trimObjectToNull(map.get("bankName")),
+                    trimObjectToNull(map.get("accountName"))
+            );
+            PaymentReceiverInfo resolved = resolvePayeeAccountInfoBySource(sourceType, value);
+            if (!resolved.isEmpty()) {
+                return resolved.merge(snapshotInfo);
+            }
+            return snapshotInfo.withAccountNo(firstNonBlank(snapshotInfo.accountNo(), trimObjectToNull(map.get("accountNoMasked"))));
+        }
+        if (rawValue instanceof List<?> items) {
+            for (Object item : items) {
+                PaymentReceiverInfo resolved = resolvePayeeAccountInfo(item);
+                if (!resolved.isEmpty()) {
+                    return resolved;
+                }
+            }
+            return emptyPaymentReceiverInfo();
+        }
+        return resolvePayeeAccountInfoBySource(null, trimToNull(rawValue == null ? null : String.valueOf(rawValue)));
+    }
+
+    private PaymentReceiverInfo resolvePayeeAccountInfoBySource(String sourceType, String value) {
+        String normalizedValue = trimToNull(value);
+        if (normalizedValue == null) {
+            return emptyPaymentReceiverInfo();
+        }
+        String normalizedSourceType = trimToNull(sourceType);
+        if ("VENDOR".equalsIgnoreCase(normalizedSourceType) || normalizedValue.startsWith("VENDOR:")) {
+            return resolveVendorReceiverInfo(normalizedValue);
+        }
+        if ("USER".equalsIgnoreCase(normalizedSourceType) || normalizedValue.startsWith("USER_ACCOUNT:")) {
+            return resolveUserReceiverInfo(normalizedValue);
+        }
+        return emptyPaymentReceiverInfo();
+    }
+
+    private PaymentReceiverInfo resolveVendorReceiverInfo(String value) {
+        String vendorCode = trimToNull(value);
+        if (vendorCode != null && vendorCode.startsWith("VENDOR:")) {
+            vendorCode = trimToNull(vendorCode.substring("VENDOR:".length()));
+        }
+        if (vendorCode == null) {
+            return emptyPaymentReceiverInfo();
+        }
+        FinanceVendor vendor = financeVendorMapper.selectOne(
+                Wrappers.<FinanceVendor>lambdaQuery()
+                        .eq(FinanceVendor::getCVenCode, vendorCode)
+                        .last("limit 1")
+        );
+        if (vendor == null) {
+            return emptyPaymentReceiverInfo();
+        }
+        return new PaymentReceiverInfo(
+                firstNonBlank(vendor.getCVenName(), vendor.getCVenAbbName(), vendorCode),
+                trimToNull(vendor.getCVenAccount()),
+                firstNonBlank(vendor.getReceiptBranchName(), vendor.getCVenBank()),
+                firstNonBlank(vendor.getReceiptAccountName(), vendor.getCVenName())
+        );
+    }
+
+    private PaymentReceiverInfo resolveUserReceiverInfo(String value) {
+        String rawId = trimToNull(value);
+        if (rawId != null && rawId.startsWith("USER_ACCOUNT:")) {
+            rawId = trimToNull(rawId.substring("USER_ACCOUNT:".length()));
+        }
+        Long accountId = toLong(rawId);
+        if (accountId == null) {
+            return emptyPaymentReceiverInfo();
+        }
+        UserBankAccount account = userBankAccountMapper.selectById(accountId);
+        if (account == null) {
+            return emptyPaymentReceiverInfo();
+        }
+        return new PaymentReceiverInfo(
+                trimToNull(account.getAccountName()),
+                trimToNull(account.getAccountNo()),
+                firstNonBlank(account.getBranchName(), account.getBankName()),
+                trimToNull(account.getAccountName())
+        );
+    }
+
+    private Object extractFirstBusinessComponentRawValue(Map<String, Object> schema, Map<String, Object> formData, String componentCode) {
+        if (schema == null || formData == null || trimToNull(componentCode) == null) {
+            return null;
+        }
+        Object rawBlocks = schema.get("blocks");
+        if (!(rawBlocks instanceof List<?> blocks)) {
+            return null;
+        }
+        for (Object rawBlock : blocks) {
+            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
+                continue;
+            }
+            if (!Objects.equals(String.valueOf(blockMap.get("kind")), "BUSINESS_COMPONENT")) {
+                continue;
+            }
+            Object rawProps = blockMap.get("props");
+            if (!(rawProps instanceof Map<?, ?> props)) {
+                continue;
+            }
+            if (!Objects.equals(String.valueOf(props.get("componentCode")), componentCode)) {
+                continue;
+            }
+            String fieldKey = trimToNull(String.valueOf(blockMap.get("fieldKey")));
+            if (fieldKey == null) {
+                continue;
+            }
+            Object value = formData.get(fieldKey);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> readSchema(String schemaJson) {
+        if (trimToNull(schemaJson) == null) {
+            return defaultSchema();
+        }
+        try {
+            return objectMapper.readValue(schemaJson, new TypeReference<LinkedHashMap<String, Object>>() {});
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to parse form schema", ex);
+        }
+    }
+
+    private Map<String, Object> defaultSchema() {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("layoutMode", "TWO_COLUMN");
+        schema.put("blocks", Collections.emptyList());
+        return schema;
+    }
+
+    private String trimObjectToNull(Object value) {
+        return trimToNull(value == null ? null : String.valueOf(value));
+    }
+
+    private Long toLong(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(normalized);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private List<Long> normalizeTaskIds(List<Long> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return List.of();
+        }
+        return taskIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
     private ProcessDocumentTask requireOpenPaymentTask(Long taskId, Long userId) {
         ProcessDocumentTask task = processDocumentTaskMapper.selectById(taskId);
         if (task == null) {
@@ -1129,6 +1358,60 @@ public class ExpensePaymentDomainSupport {
             return normalized;
         }
         return normalized.substring(0, 4) + " **** " + normalized.substring(normalized.length() - 4);
+    }
+
+    private PaymentReceiverInfo emptyPaymentReceiverInfo() {
+        return new PaymentReceiverInfo(null, null, null, null);
+    }
+
+    private final class PaymentReceiverInfo {
+        private final String receiverName;
+        private final String accountNo;
+        private final String bankName;
+        private final String accountName;
+
+        private PaymentReceiverInfo(String receiverName, String accountNo, String bankName, String accountName) {
+            this.receiverName = receiverName;
+            this.accountNo = accountNo;
+            this.bankName = bankName;
+            this.accountName = accountName;
+        }
+
+        private boolean isEmpty() {
+            return receiverName == null && accountNo == null && bankName == null && accountName == null;
+        }
+
+        private PaymentReceiverInfo merge(PaymentReceiverInfo fallback) {
+            if (fallback == null) {
+                return this;
+            }
+            return new PaymentReceiverInfo(
+                    firstNonBlank(receiverName, fallback.receiverName),
+                    firstNonBlank(accountNo, fallback.accountNo),
+                    firstNonBlank(bankName, fallback.bankName),
+                    firstNonBlank(accountName, fallback.accountName)
+            );
+        }
+
+        private PaymentReceiverInfo withAccountNo(String nextAccountNo) {
+            return new PaymentReceiverInfo(receiverName, nextAccountNo, bankName, accountName);
+        }
+
+        private String receiverName() {
+            return receiverName;
+        }
+
+        private String accountNo() {
+            return accountNo;
+        }
+
+        private String bankName() {
+            return bankName;
+        }
+
+        private String accountName() {
+            return accountName;
+        }
     }
 
     private String firstNonBlank(String... values) {

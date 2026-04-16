@@ -1,7 +1,3 @@
-// 这里是 ExpenseDocumentController 的后端接口入口。
-// 它主要负责接收请求、校验权限并调用下游 Service。
-// 如果改错，最容易影响这一组接口的查询、保存或状态流转。
-
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.ExpenseCreatePayeeAccountOptionVO;
@@ -24,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -31,11 +28,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * 这是 ExpenseDocumentController 控制器。
- * 它主要负责接收请求、校验权限并调用下游 Service。
- * 具体业务规则以 Service 层为准。
- */
 @RestController
 @RequestMapping("/auth/expenses/create")
 @RequiredArgsConstructor
@@ -49,14 +41,12 @@ public class ExpenseDocumentController {
     private final FinanceVendorService financeVendorService;
     private final AccessControlService accessControlService;
 
-    // 处理 listTemplates 请求。
     @GetMapping("/templates")
     public Result<List<ExpenseCreateTemplateSummaryVO>> listTemplates(HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(expenseDocumentService.listAvailableTemplates());
     }
 
-    // 处理 getTemplateDetail 请求。
     @GetMapping("/templates/{templateCode}")
     public Result<ExpenseCreateTemplateDetailVO> getTemplateDetail(
             @PathVariable String templateCode,
@@ -66,7 +56,6 @@ public class ExpenseDocumentController {
         return Result.success(expenseDocumentService.getTemplateDetail(getCurrentUserId(request), templateCode));
     }
 
-    // 处理 getExpenseDetail 请求。
     @GetMapping("/documents/{documentCode}/details/{detailNo}")
     public Result<ExpenseDetailInstanceDetailVO> getExpenseDetail(
             @PathVariable String documentCode,
@@ -77,28 +66,56 @@ public class ExpenseDocumentController {
         return Result.success(expenseDocumentService.getExpenseDetail(getCurrentUserId(request), documentCode, detailNo, false));
     }
 
-    // 处理 listVendorOptions 请求。
     @GetMapping("/vendors/options")
     public Result<List<ExpenseCreateVendorOptionVO>> listVendorOptions(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean includeDisabled,
+            @RequestParam(required = false) String paymentCompanyId,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success(expenseDocumentService.listVendorOptions(getCurrentUserId(request), keyword, includeDisabled));
+        return Result.success(expenseDocumentService.listVendorOptions(
+                getCurrentUserId(request),
+                keyword,
+                includeDisabled,
+                paymentCompanyId
+        ));
     }
 
-    // 处理 createVendor 请求。
+    @GetMapping("/vendors/{vendorCode}")
+    public Result<FinanceVendorDetailVO> getVendorDetail(
+            @PathVariable String vendorCode,
+            @RequestParam String paymentCompanyId,
+            HttpServletRequest request
+    ) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(financeVendorService.getVendorDetail(paymentCompanyId, vendorCode));
+    }
+
     @PostMapping("/vendors")
     public Result<FinanceVendorDetailVO> createVendor(
+            @RequestParam String paymentCompanyId,
             @Valid @RequestBody FinanceVendorSaveDTO dto,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success("往来单位已新增", financeVendorService.createVendor(getCurrentUserId(request), dto, getCurrentUsername(request), true));
+        return Result.success("供应商已保存", financeVendorService.createVendor(paymentCompanyId, dto, getCurrentUsername(request), true));
     }
 
-    // 处理 listPayeeOptions 请求。
+    @PutMapping("/vendors/{vendorCode}")
+    public Result<FinanceVendorDetailVO> updateVendor(
+            @PathVariable String vendorCode,
+            @RequestParam String paymentCompanyId,
+            @Valid @RequestBody FinanceVendorSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(
+                "供应商已保存",
+                financeVendorService.updateVendor(paymentCompanyId, vendorCode, dto, getCurrentUsername(request), true)
+        );
+    }
+
     @GetMapping("/payees/options")
     public Result<List<ExpenseCreatePayeeOptionVO>> listPayeeOptions(
             @RequestParam(required = false) String keyword,
@@ -109,13 +126,13 @@ public class ExpenseDocumentController {
         return Result.success(expenseDocumentService.listPayeeOptions(getCurrentUserId(request), keyword, personalOnly));
     }
 
-    // 处理 listPayeeAccountOptions 请求。
     @GetMapping("/payee-accounts/options")
     public Result<List<ExpenseCreatePayeeAccountOptionVO>> listPayeeAccountOptions(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String linkageMode,
             @RequestParam(required = false) String payeeName,
             @RequestParam(required = false) String counterpartyCode,
+            @RequestParam(required = false) String paymentCompanyId,
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
@@ -124,11 +141,11 @@ public class ExpenseDocumentController {
                 keyword,
                 linkageMode,
                 payeeName,
-                counterpartyCode
+                counterpartyCode,
+                paymentCompanyId
         ));
     }
 
-    // 处理 submitDocument 请求。
     @PostMapping("/documents")
     public Result<ExpenseDocumentSubmitResultVO> submitDocument(
             @Valid @RequestBody ExpenseDocumentSubmitDTO dto,
@@ -136,7 +153,7 @@ public class ExpenseDocumentController {
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(
-                "单据提交成功",
+                "提交成功",
                 expenseDocumentService.submitDocument(getCurrentUserId(request), getCurrentUsername(request), dto)
         );
     }
@@ -149,7 +166,7 @@ public class ExpenseDocumentController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("无法获取当前登录用户");
+        throw new IllegalStateException("未获取到当前登录用户");
     }
 
     private String getCurrentUsername(HttpServletRequest request) {
@@ -157,6 +174,6 @@ public class ExpenseDocumentController {
         if (username instanceof String value && !value.isBlank()) {
             return value;
         }
-        return "当前用户";
+        return "系统";
     }
 }

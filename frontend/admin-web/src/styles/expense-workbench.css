@@ -1117,15 +1117,15 @@
   border: 1px solid #dbe7fb;
   border-radius: 24px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  padding: 20px;
+  padding: 14px 16px;
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
 }
 
-.expense-wb-detail-card__meta {
+.expense-wb-detail-card__body {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 12px;
+  align-items: flex-start;
 }
 
 .expense-wb-empty-card {

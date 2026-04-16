@@ -47,8 +47,13 @@ public class ExpenseDocumentSubmissionService {
     /**
      * 查询供应商选项。
      */
-    public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
-        return expenseSubmissionDomainSupport.listVendorOptions(userId, keyword, includeDisabled);
+    public List<ExpenseCreateVendorOptionVO> listVendorOptions(
+            Long userId,
+            String keyword,
+            Boolean includeDisabled,
+            String paymentCompanyId
+    ) {
+        return expenseSubmissionDomainSupport.listVendorOptions(userId, keyword, includeDisabled, paymentCompanyId);
     }
 
     /**
@@ -66,14 +71,16 @@ public class ExpenseDocumentSubmissionService {
             String keyword,
             String linkageMode,
             String payeeName,
-            String counterpartyCode
+            String counterpartyCode,
+            String paymentCompanyId
     ) {
         return expenseSubmissionDomainSupport.listPayeeAccountOptions(
                 userId,
                 keyword,
                 linkageMode,
                 payeeName,
-                counterpartyCode
+                counterpartyCode,
+                paymentCompanyId
         );
     }
 

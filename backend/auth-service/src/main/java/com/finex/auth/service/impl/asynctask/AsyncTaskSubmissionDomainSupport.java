@@ -163,6 +163,11 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
                     throw new IllegalArgumentException("当前没有可导出的审批任务");
                 }
             }
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING -> {
+                if (payload.getTaskIds().isEmpty()) {
+                    throw new IllegalArgumentException("当前没有可导出的付款单任务");
+                }
+            }
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_OUTSTANDING -> {
                 if (payload.getDocumentCodes().isEmpty()) {
                     throw new IllegalArgumentException("当前没有可导出的待处理单据");
@@ -210,6 +215,7 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES -> "我的报销-" + LocalDateTime.now().format(FILE_TIME_FORMATTER) + ".xlsx";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PENDING_APPROVAL -> "待我审批-" + LocalDateTime.now().format(FILE_TIME_FORMATTER) + ".xlsx";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY -> "单据查询-" + LocalDateTime.now().format(FILE_TIME_FORMATTER) + ".xlsx";
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING -> "待支付付款单-" + LocalDateTime.now().format(FILE_TIME_FORMATTER) + ".xlsx";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_OUTSTANDING -> (
                     "LOAN".equals(payload.getKind()) ? "待还款单据-" : "待核销单据-"
             ) + LocalDateTime.now().format(FILE_TIME_FORMATTER) + ".xlsx";
@@ -225,6 +231,7 @@ public final class AsyncTaskSubmissionDomainSupport extends AbstractAsyncTaskDom
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES -> "我的报销导出";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PENDING_APPROVAL -> "待我审批导出";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY -> "单据查询导出";
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING -> "待支付付款单导出";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_OUTSTANDING -> "LOAN".equals(payload.getKind()) ? "待还款导出" : "待核销导出";
             default -> "报销导出";
         };

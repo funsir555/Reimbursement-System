@@ -230,11 +230,35 @@ describe('FinanceSupplierArchiveView', () => {
     expect(vm.vendors[0]?.cVenAbbName).toBe('核心简称')
   })
 
+  it('keeps vendor section order as basic, bank, contact, finance', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      vendorSections: Array<{ key: string }>
+    }
+
+    expect(vm.vendorSections.map((item) => item.key)).toEqual(['basic', 'bank', 'contact', 'finance'])
+  })
+
+  it('expands only basic and bank sections by default for create dialog', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCreateDialog: () => void
+      activeSections: string[]
+    }
+
+    vm.openCreateDialog()
+
+    expect(vm.activeSections).toEqual(['basic', 'bank'])
+    expect(vm.activeSections).not.toContain('contact')
+    expect(vm.activeSections).not.toContain('finance')
+  })
+
   it('opens supplier detail with the list code and hydrates the edit form', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       openEditDialog: (vendorCode: string) => Promise<void>
       vendorForm: Record<string, string | number | undefined>
+      activeSections: string[]
     }
 
     await vm.openEditDialog('VEN001')
@@ -244,6 +268,9 @@ describe('FinanceSupplierArchiveView', () => {
     expect(vm.vendorForm.cVenName).toBe('核心供应商')
     expect(vm.vendorForm.cVenAbbName).toBe('核心简称')
     expect(vm.vendorForm.receiptAccountName).toBe('核心收款名')
+    expect(vm.activeSections).toEqual(['basic', 'bank'])
+    expect(vm.activeSections).not.toContain('contact')
+    expect(vm.activeSections).not.toContain('finance')
   })
 
   it('updates supplier records with the same camel-case payload contract', async () => {

@@ -1,4 +1,4 @@
-import { defineComponent, nextTick, reactive } from 'vue'
+import { computed, defineComponent, nextTick, reactive } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FinanceNewVoucherView from '@/views/finance/FinanceNewVoucherView.vue'
@@ -109,6 +109,33 @@ const SelectStub = defineComponent({
   template: '<select :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
 })
 
+const TreeSelectStub = defineComponent({
+  props: {
+    modelValue: { type: [String, Number], default: '' },
+    disabled: { type: Boolean, default: false },
+    data: { type: Array, default: () => [] },
+    filterNodeMethod: { type: Function, default: undefined }
+  },
+  emits: ['update:modelValue'],
+  setup(props) {
+    const flattened = computed(() => {
+      const result: Array<{ value: string | number; label: string }> = []
+      const visit = (nodes: Array<any>) => {
+        nodes.forEach((node) => {
+          result.push({ value: node.value, label: node.label })
+          if (Array.isArray(node.children) && node.children.length) {
+            visit(node.children)
+          }
+        })
+      }
+      visit(props.data as Array<any>)
+      return result
+    })
+    return { flattened }
+  },
+  template: '<select data-testid="department-tree-select" :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="item in flattened" :key="item.value" :value="item.value">{{ item.label }}</option></select>'
+})
+
 const OptionStub = defineComponent({
   props: { label: { type: String, default: '' }, value: { type: [String, Number], default: '' } },
   template: '<option :value="value">{{ label }}</option>'
@@ -142,6 +169,7 @@ const mountOptions = {
       'el-button': ButtonStub,
       'el-input': InputStub,
       'el-select': SelectStub,
+      'el-tree-select': TreeSelectStub,
       'el-option': OptionStub,
       'el-input-number': NumberStub,
       'el-date-picker': InputStub,
@@ -155,7 +183,10 @@ const mountOptions = {
 function buildMeta() {
   return {
     companyOptions: [{ value: 'COMPANY_A', code: '001', name: '广州远智教育科技有限公司', label: '001  广州远智教育科技有限公司' }],
-    departmentOptions: [{ value: '10', code: 'D001', name: '财务部', label: 'D001  财务部' }],
+    departmentOptions: [
+      { value: '10', code: 'D001', name: 'Finance Center', label: 'D001  Finance Center' },
+      { value: '11', code: 'D002', name: 'Expense Admin', label: 'D002  Expense Admin', parentValue: '10' }
+    ],
     employeeOptions: [{ value: '2', code: '2', name: '员工甲', label: '2  员工甲' }],
     voucherTypeOptions: [{ value: '记', label: '记账凭证' }],
     currencyOptions: [{ value: 'CNY', label: '人民币' }],
@@ -265,6 +296,27 @@ describe('FinanceNewVoucherView', () => {
     await nextTick()
 
     expect(vm.getFilteredProjectOptions().map((item) => item.value)).toEqual(['000001'])
+  })
+
+
+  it('renders the department selector as a tree and keeps code/name filtering', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const treeSelect = wrapper.getComponent(TreeSelectStub)
+    const vm = wrapper.vm as unknown as {
+      selectedRow: { cdeptId?: string }
+      departmentTreeOptions: Array<{ value: string; children: Array<{ value: string }> }>
+    }
+
+    expect(vm.departmentTreeOptions.map((item) => item.value)).toEqual(['10'])
+    expect(vm.departmentTreeOptions[0]?.children.map((item) => item.value)).toEqual(['11'])
+
+    const filterNodeMethod = treeSelect.props('filterNodeMethod') as ((query: string, data: { code?: string; name?: string; label?: string }) => boolean) | undefined
+    expect(filterNodeMethod?.('D002', { code: 'D002', name: 'Expense Admin', label: 'D002  Expense Admin' })).toBe(true)
+    expect(filterNodeMethod?.('Expense', { code: 'D002', name: 'Expense Admin', label: 'D002  Expense Admin' })).toBe(true)
+    expect(filterNodeMethod?.('missing', { code: 'D002', name: 'Expense Admin', label: 'D002  Expense Admin' })).toBe(false)
+
+    await treeSelect.setValue('11')
+    expect(vm.selectedRow.cdeptId).toBe('11')
   })
 
   it('shows account code and snapshot name in detail mode even when the option is missing from meta', async () => {

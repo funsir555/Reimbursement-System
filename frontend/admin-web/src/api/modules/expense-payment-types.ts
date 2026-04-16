@@ -31,6 +31,9 @@ export interface ExpensePaymentOrder {
   companyBankAccountName?: string
   taskCreatedAt?: string
   allowRetry?: boolean
+  payeeOrCounterpartyName?: string
+  payeeAccountNo?: string
+  payeeBankName?: string
 }
 
 export interface ExpenseBankLinkSummary {

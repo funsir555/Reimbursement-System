@@ -709,7 +709,8 @@ public abstract class AbstractFinanceVoucherSupport {
     protected FinanceVoucherOptionVO toDepartmentOption(SystemDepartment department) {
         String deptCode = trimToNull(department.getDeptCode());
         String deptName = trimToNull(department.getDeptName());
-        return option(String.valueOf(department.getId()), normalize(deptCode, String.valueOf(department.getId())), deptName);
+        String parentValue = department.getParentId() == null ? null : String.valueOf(department.getParentId());
+        return option(String.valueOf(department.getId()), normalize(deptCode, String.valueOf(department.getId())), deptName, parentValue);
     }
 
     /**

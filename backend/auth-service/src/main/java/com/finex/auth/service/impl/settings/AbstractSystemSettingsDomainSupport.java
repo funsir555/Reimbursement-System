@@ -1163,6 +1163,8 @@ abstract class AbstractSystemSettingsDomainSupport {
         vo.setCompanyId(account.getCompanyId());
         vo.setCompanyName(resolveMapValue(companyNameMap, account.getCompanyId(), ""));
         vo.setBankName(account.getBankName());
+        vo.setProvince(account.getProvince());
+        vo.setCity(account.getCity());
         vo.setBranchName(account.getBranchName());
         vo.setBankCode(account.getBankCode());
         vo.setBranchCode(account.getBranchCode());
@@ -1653,6 +1655,11 @@ abstract class AbstractSystemSettingsDomainSupport {
     private void applyCompanyBankAccount(SystemCompanyBankAccount account, CompanyBankAccountSaveDTO dto) {
         String companyId = trimToNull(dto.getCompanyId());
         String bankName = trimToNull(dto.getBankName());
+        String bankCode = trimToNull(dto.getBankCode());
+        String province = trimToNull(dto.getProvince());
+        String city = trimToNull(dto.getCity());
+        String branchName = trimToNull(dto.getBranchName());
+        String branchCode = trimToNull(dto.getBranchCode());
         String accountName = trimToNull(dto.getAccountName());
         String accountNo = trimToNull(dto.getAccountNo());
         if (companyId == null) {
@@ -1660,6 +1667,21 @@ abstract class AbstractSystemSettingsDomainSupport {
         }
         if (bankName == null) {
             throw new IllegalArgumentException("\u5f00\u6237\u94f6\u884c\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (bankCode == null) {
+            throw new IllegalArgumentException("\u5f00\u6237\u94f6\u884c\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (province == null) {
+            throw new IllegalArgumentException("\u5f00\u6237\u7701\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (city == null) {
+            throw new IllegalArgumentException("\u5f00\u6237\u5e02\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (branchName == null) {
+            throw new IllegalArgumentException("\u5206\u652f\u884c\u4e0d\u80fd\u4e3a\u7a7a");
+        }
+        if (branchCode == null) {
+            throw new IllegalArgumentException("\u5206\u652f\u884c\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
         }
         if (accountName == null) {
             throw new IllegalArgumentException("\u8d26\u6237\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
@@ -1670,9 +1692,11 @@ abstract class AbstractSystemSettingsDomainSupport {
         requireCompany(companyId);
         account.setCompanyId(companyId);
         account.setBankName(bankName);
-        account.setBranchName(trimToNull(dto.getBranchName()));
-        account.setBankCode(trimToNull(dto.getBankCode()));
-        account.setBranchCode(trimToNull(dto.getBranchCode()));
+        account.setBankCode(bankCode);
+        account.setProvince(province);
+        account.setCity(city);
+        account.setBranchName(branchName);
+        account.setBranchCode(branchCode);
         account.setCnapsCode(trimToNull(dto.getCnapsCode()));
         account.setAccountName(accountName);
         account.setAccountNo(accountNo);

@@ -18,6 +18,10 @@ public class SystemCompanyBankAccount {
 
     private String bankName;
 
+    private String province;
+
+    private String city;
+
     private String branchName;
 
     private String bankCode;

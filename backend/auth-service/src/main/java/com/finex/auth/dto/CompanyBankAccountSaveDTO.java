@@ -14,10 +14,18 @@ public class CompanyBankAccountSaveDTO {
     @NotBlank(message = "Bank name is required")
     private String bankName;
 
-    private String branchName;
-
+    @NotBlank(message = "Bank code is required")
     private String bankCode;
 
+    @NotBlank(message = "Province is required")
+    private String province;
+
+    @NotBlank(message = "City is required")
+    private String city;
+
+    private String branchName;
+
+    @NotBlank(message = "Branch code is required")
     private String branchCode;
 
     private String cnapsCode;

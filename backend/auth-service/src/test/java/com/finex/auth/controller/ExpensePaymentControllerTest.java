@@ -1,10 +1,12 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
+import com.finex.auth.dto.AsyncTaskSubmitResultVO;
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
 import com.finex.auth.dto.ExpenseBankLinkConfigVO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.service.AccessControlService;
+import com.finex.auth.service.AsyncTaskService;
 import com.finex.auth.service.ExpenseDocumentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,8 @@ class ExpensePaymentControllerTest {
     private ExpenseDocumentService expenseDocumentService;
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private AsyncTaskService asyncTaskService;
 
     private MockMvc mockMvc;
 
@@ -44,7 +48,7 @@ class ExpensePaymentControllerTest {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ExpensePaymentController(expenseDocumentService, accessControlService))
+                .standaloneSetup(new ExpensePaymentController(expenseDocumentService, asyncTaskService, accessControlService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -82,6 +86,53 @@ class ExpensePaymentControllerTest {
 
         verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
         verify(expenseDocumentService).completePaymentTask(eq(1L), eq("tester"), eq(7L), any(ExpenseApprovalActionDTO.class));
+    }
+
+    @Test
+    void exportOrdersSubmitsAsyncTask() throws Exception {
+        AsyncTaskSubmitResultVO result = new AsyncTaskSubmitResultVO();
+        result.setTaskNo("TASK-PAY-001");
+        doNothing().when(accessControlService).requirePermission(1L, "expense:payment:payment_order:view");
+        when(asyncTaskService.submitExpenseExport(eq(1L), any())).thenReturn(result);
+
+        mockMvc.perform(post("/auth/expense-payment/orders/export")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskIds":[7,8]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.taskNo").value("TASK-PAY-001"));
+
+        verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:view");
+        verify(asyncTaskService).submitExpenseExport(eq(1L), any());
+    }
+
+    @Test
+    void rejectTasksUsesCurrentUserIdentity() throws Exception {
+        doNothing().when(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
+        when(expenseDocumentService.rejectPaymentTasks(eq(1L), eq("tester"), eq(List.of(7L, 8L)), any(ExpenseApprovalActionDTO.class)))
+                .thenReturn(true);
+
+        mockMvc.perform(post("/auth/expense-payment/tasks/reject")
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "tester")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskIds":[7,8],
+                                  "comment":"驳回原因"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(true));
+
+        verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
+        verify(expenseDocumentService).rejectPaymentTasks(eq(1L), eq("tester"), eq(List.of(7L, 8L)), any(ExpenseApprovalActionDTO.class));
     }
 
     @Test

@@ -4,6 +4,7 @@
 
 import request, { buildQueryString } from './core'
 import type { ExpenseApprovalActionPayload } from './expense-approval-types'
+import type { AsyncTaskSubmitResult } from './async-task-types'
 import type { ExpenseBankLinkConfig, ExpenseBankLinkSavePayload, ExpenseBankLinkSummary, ExpensePaymentOrder } from './expense-payment-types'
 import type { ExpenseDocumentDetail } from './expense-types'
 
@@ -24,6 +25,19 @@ export const expensePaymentApi = {
     request<ExpenseDocumentDetail>(`/auth/expense-payment/tasks/${taskId}/exception`, {
       method: 'POST',
       body: JSON.stringify(payload)
+    }),
+  submitOrderExport: (taskIds: number[]) =>
+    request<AsyncTaskSubmitResult>('/auth/expense-payment/orders/export', {
+      method: 'POST',
+      body: JSON.stringify({ taskIds })
+    }),
+  rejectTasks: (taskIds: number[], payload: ExpenseApprovalActionPayload = {}) =>
+    request<boolean>('/auth/expense-payment/tasks/reject', {
+      method: 'POST',
+      body: JSON.stringify({
+        taskIds,
+        comment: payload.comment || ''
+      })
     }),
   listBankLinks: () => request<ExpenseBankLinkSummary[]>('/auth/expense-payment/bank-links'),
   getBankLink: (companyBankAccountId: number) =>

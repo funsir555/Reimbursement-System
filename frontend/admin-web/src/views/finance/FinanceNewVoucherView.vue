@@ -168,9 +168,18 @@
             <div class="assist-grid">
               <label class="assist-field">
                 <span>部门</span>
-                <el-select v-model="selectedRow.cdeptId" filterable clearable placeholder="请选择部门" :disabled="isReadonlyMode">
-                  <el-option v-for="item in voucherMeta?.departmentOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
-                </el-select>
+                <el-tree-select
+                  v-model="selectedRow.cdeptId"
+                  :data="departmentTreeOptions"
+                  node-key="value"
+                  check-strictly
+                  filterable
+                  clearable
+                  placeholder="请选择部门"
+                  :disabled="isReadonlyMode"
+                  :props="{ label: 'label', children: 'children', value: 'value' }"
+                  :filter-node-method="filterDepartmentTreeNode"
+                />
               </label>
               <label class="assist-field">
                 <span>人员</span>
@@ -266,6 +275,7 @@ import { absMoney, addMoney, formatMoney, isZeroMoney, normalizeMoneyValue } fro
 
 type ToolbarActionKey = 'new' | 'modify' | 'print' | 'export' | 'copy' | 'reverse' | 'void' | 'insert' | 'delete' | 'searchReplace' | 'cashFlow' | 'save' | 'assist' | 'balance' | 'calculator'
 type VoucherEntryRow = FinanceVoucherEntry & { localId: string }
+type DepartmentTreeOption = FinanceVoucherOption & { children: DepartmentTreeOption[] }
 type VoucherFormState = Omit<FinanceVoucherForm, 'entries'> & { entries: VoucherEntryRow[] }
 type VoucherPageMode = 'create' | 'detail'
 
@@ -435,6 +445,7 @@ const accountOptionsForDisplay = computed(() => {
   })
   return options
 })
+const departmentTreeOptions = computed(() => buildDepartmentTreeOptions(voucherMeta.value?.departmentOptions || []))
 const filteredProjectOptions = computed(() => {
   const projectClassCode = selectedRow.value?.citemClass
   const options = voucherMeta.value?.projectOptions || []
@@ -751,6 +762,40 @@ function buildOptionValueSet(options?: FinanceVoucherOption[]) {
   return new Set((options || []).map((item) => item.value).filter((value): value is string => Boolean(value)))
 }
 
+function normalizeText(value?: string | null) {
+  const text = String(value || '').trim()
+  return text || undefined
+}
+
+function buildDepartmentTreeOptions(options: FinanceVoucherOption[]) {
+  const nodeMap = new Map<string, DepartmentTreeOption>()
+  const roots: DepartmentTreeOption[] = []
+
+  options.forEach((item) => {
+    nodeMap.set(item.value, {
+      ...item,
+      label: formatVoucherOptionLabel(item),
+      children: []
+    })
+  })
+
+  options.forEach((item) => {
+    const node = nodeMap.get(item.value)
+    if (!node) return
+    const parentValue = normalizeText(item.parentValue)
+    if (parentValue && parentValue !== item.value) {
+      const parentNode = nodeMap.get(parentValue)
+      if (parentNode) {
+        parentNode.children.push(node)
+        return
+      }
+    }
+    roots.push(node)
+  })
+
+  return roots
+}
+
 function validateEntryLength(row: VoucherEntryRow, rowNo: number, errors: string[]) {
   ;(Object.entries(ENTRY_FIELD_MAX_LENGTH) as Array<[keyof typeof ENTRY_FIELD_MAX_LENGTH, number]>).forEach(([fieldKey, maxLength]) => {
     const value = row[fieldKey]
@@ -1044,6 +1089,14 @@ function formatVoucherOptionLabel(option?: FinanceVoucherOption | null) {
   return option.label || option.value
 }
 
+function filterDepartmentTreeNode(query: string, data?: DepartmentTreeOption) {
+  const keyword = normalizeText(query)?.toLowerCase()
+  if (!keyword) return true
+  return [data?.label, data?.code, data?.name, data?.value]
+    .filter((item): item is string => Boolean(item))
+    .some((item) => item.toLowerCase().includes(keyword))
+}
+
 function resolveAccountLabel(code?: string, accountName?: string) {
   if (!code) return '当前行'
   const matched = voucherMeta.value?.accountOptions.find((item) => item.value === code)
@@ -1144,6 +1197,7 @@ function moneyText(value: string) {
 }
 
 defineExpose({
+  departmentTreeOptions,
   filteredProjectOptions,
   form,
   selectedRow,

@@ -58,7 +58,7 @@ async function loadReadonlyPayeeLookups(schema: ProcessFormDesignSchema) {
 
   const [vendorResult, payeeResult, payeeAccountResult] = await Promise.allSettled([
     needsVendor
-      ? expenseCreateApi.listVendorOptions('', true)
+      ? expenseCreateApi.listVendorOptions({ keyword: '', includeDisabled: true })
       : Promise.resolve({ data: [] as ExpenseCreateVendorOption[] }),
     needsPayee
       ? expenseCreateApi.listPayeeOptions({ keyword: '' })

@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -188,19 +189,25 @@ class FinanceVoucherServiceImplTest {
 
     @Test
     void getMetaLoadsSharedEmployeesAndDepartmentsAcrossCompanies() {
-        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
-        when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
-        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "广州分公司")));
-        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(buildDepartment(10L, "财务部")));
-        when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "共享员工", "COMP-OTHER")));
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "Guangzhou Branch")));
+        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(
+                buildDepartment(10L, "Finance Center"),
+                buildDepartment(11L, "Expense Admin", 10L)
+        ));
+        when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "Shared Employee", "COMP-OTHER")));
         when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
 
-        FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "记");
+        FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "\u8bb0");
 
         assertEquals("10", meta.getDepartmentOptions().get(0).getValue());
-        assertEquals("财务部", meta.getDepartmentOptions().get(0).getName());
+        assertEquals("Finance Center", meta.getDepartmentOptions().get(0).getName());
+        assertNull(meta.getDepartmentOptions().get(0).getParentValue());
+        assertEquals("11", meta.getDepartmentOptions().get(1).getValue());
+        assertEquals("10", meta.getDepartmentOptions().get(1).getParentValue());
         assertEquals("2", meta.getEmployeeOptions().get(0).getValue());
-        assertEquals("共享员工", meta.getEmployeeOptions().get(0).getName());
+        assertEquals("Shared Employee", meta.getEmployeeOptions().get(0).getName());
     }
 
     @Test
@@ -415,9 +422,14 @@ class FinanceVoucherServiceImplTest {
     }
 
     private SystemDepartment buildDepartment(Long id, String deptName) {
+        return buildDepartment(id, deptName, null);
+    }
+
+    private SystemDepartment buildDepartment(Long id, String deptName, Long parentId) {
         SystemDepartment department = new SystemDepartment();
         department.setId(id);
         department.setDeptName(deptName);
+        department.setParentId(parentId);
         department.setStatus(1);
         return department;
     }

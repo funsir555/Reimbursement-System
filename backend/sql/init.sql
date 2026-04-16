@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS sys_company_bank_account (
     bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
     branch_name VARCHAR(200) NULL COMMENT 'branch name',
     bank_code VARCHAR(64) NULL COMMENT 'bank code',
+    province VARCHAR(64) NULL COMMENT 'province',
+    city VARCHAR(64) NULL COMMENT 'city',
     branch_code VARCHAR(64) NULL COMMENT 'branch code',
     cnaps_code VARCHAR(64) NULL COMMENT 'cnaps code',
     account_name VARCHAR(200) NOT NULL COMMENT 'account name',
@@ -64,6 +66,7 @@ CREATE TABLE IF NOT EXISTS sys_company_bank_account (
 CREATE TABLE IF NOT EXISTS sys_bank_catalog (
     bank_code VARCHAR(64) NOT NULL COMMENT 'bank code',
     bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
+    business_scope VARCHAR(16) NOT NULL DEFAULT 'BOTH' COMMENT 'business scope:PRIVATE/PUBLIC/BOTH',
     status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
     sort_order INT NOT NULL DEFAULT 0 COMMENT 'sort order',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',

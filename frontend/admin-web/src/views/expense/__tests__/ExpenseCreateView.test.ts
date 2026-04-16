@@ -497,6 +497,37 @@ describe('ExpenseCreateView', () => {
     expect(wrapper.text()).toContain('¥ 0.30')
   })
 
+  it('renders compact expense detail cards without obsolete detail metadata text', async () => {
+    mocks.route.query = { templateCode: 'TPL-001', draftKey: 'draft-report-details' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-001&draftKey=draft-report-details'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: buildTemplateDetail()
+    })
+    writeDraft('draft-report-details', 'TPL-001', {
+      expenseDetails: [
+        {
+          detailNo: 'DETAIL-001',
+          detailTitle: '差旅行程',
+          detailType: 'COMMON',
+          sortOrder: 1,
+          formData: {
+            actualPaymentAmount: '12.30'
+          }
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const detailCard = wrapper.get('.expense-wb-detail-card')
+
+    expect(detailCard.find('.expense-wb-detail-card__body').exists()).toBe(true)
+    expect(detailCard.text()).toContain('差旅行程')
+    expect(detailCard.text()).toContain('编辑')
+    expect(detailCard.text()).toContain('删除')
+    expect(wrapper.text()).not.toContain('明细编号')
+    expect(wrapper.text()).not.toContain('排序')
+  })
+
   it('falls back to summing main form amount controls when the template has no expense details', async () => {
     mocks.route.query = { templateCode: 'TPL-003', draftKey: 'draft-contract-amount' }
     mocks.route.fullPath = '/expense/create?templateCode=TPL-003&draftKey=draft-contract-amount'

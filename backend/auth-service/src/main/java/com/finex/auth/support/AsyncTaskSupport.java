@@ -25,6 +25,7 @@ public final class AsyncTaskSupport {
     public static final String EXPENSE_EXPORT_SCENE_PENDING_APPROVAL = "PENDING_APPROVAL";
     public static final String EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY = "DOCUMENT_QUERY";
     public static final String EXPENSE_EXPORT_SCENE_OUTSTANDING = "OUTSTANDING";
+    public static final String EXPENSE_EXPORT_SCENE_PAYMENT_PENDING = "PAYMENT_PENDING";
 
     public static final String DOWNLOAD_STATUS_DOWNLOADING = "DOWNLOADING";
     public static final String DOWNLOAD_STATUS_COMPLETED = "COMPLETED";

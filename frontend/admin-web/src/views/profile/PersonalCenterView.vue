@@ -232,6 +232,7 @@
           :required="true"
           :field-map="bankFieldMap"
           account-name-label="收款人姓名/账户名"
+          business-scope="PRIVATE"
         />
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -428,9 +429,9 @@ function closeBankDialog() {
 function validateBankForm() {
   if (!String(bankForm.accountName || '').trim()) return '请填写收款人姓名/账户名'
   if (!String(bankForm.accountNo || '').trim()) return '请填写银行账号'
-  if (!String(bankForm.bankName || '').trim()) return '请选择开户银行'
+  if (!String(bankForm.bankCode || '').trim() || !String(bankForm.bankName || '').trim()) return '请选择开户银行'
   if (!String(bankForm.province || '').trim() || !String(bankForm.city || '').trim()) return '请选择开户省市'
-  if (!String(bankForm.branchName || '').trim()) return '请选择分支行'
+  if (!String(bankForm.branchCode || '').trim() || !String(bankForm.branchName || '').trim()) return '请选择分支行'
   return ''
 }
 

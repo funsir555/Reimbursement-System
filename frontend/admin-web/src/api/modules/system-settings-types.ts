@@ -139,6 +139,8 @@ export interface CompanyBankAccountRecord {
   companyId: string
   companyName?: string
   bankName: string
+  province?: string
+  city?: string
   branchName?: string
   bankCode?: string
   branchCode?: string
@@ -184,6 +186,8 @@ export interface CompanySavePayload {
 export interface CompanyBankAccountSavePayload {
   companyId: string
   bankName: string
+  province: string
+  city: string
   branchName?: string
   bankCode?: string
   branchCode?: string

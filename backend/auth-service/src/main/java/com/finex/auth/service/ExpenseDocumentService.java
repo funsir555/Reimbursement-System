@@ -54,7 +54,12 @@ public interface ExpenseDocumentService {
     /**
      * 查询供应商选项。
      */
-    List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled);
+    List<ExpenseCreateVendorOptionVO> listVendorOptions(
+            Long userId,
+            String keyword,
+            Boolean includeDisabled,
+            String paymentCompanyId
+    );
 
     /**
      * 查询收款方选项。
@@ -69,7 +74,8 @@ public interface ExpenseDocumentService {
             String keyword,
             String linkageMode,
             String payeeName,
-            String counterpartyCode
+            String counterpartyCode,
+            String paymentCompanyId
     );
 
     /**
@@ -197,6 +203,8 @@ public interface ExpenseDocumentService {
     ExpenseDocumentDetailVO completePaymentTask(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto);
 
     ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto);
+
+    boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto);
 
     /**
      * 获取任务Modify上下文。

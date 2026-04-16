@@ -9,6 +9,8 @@ public class FinanceBankOptionVO {
 
     private String bankName;
 
+    private String businessScope;
+
     private String value;
 
     private String label;

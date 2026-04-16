@@ -277,18 +277,14 @@
               :key="detail.detailNo"
               class="expense-wb-detail-card"
             >
-              <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
+              <div class="expense-wb-detail-card__body flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2">
                     <p class="text-base font-semibold text-slate-800">{{ detail.detailTitle || detail.detailNo }}</p>
                     <el-tag effect="plain">{{ detailTypeLabel(detail.detailType) }}</el-tag>
                     <el-tag v-if="detail.enterpriseMode" type="warning" effect="plain">
                       {{ enterpriseModeLabel(detail.enterpriseMode) }}
                     </el-tag>
-                  </div>
-                  <div class="expense-wb-detail-card__meta">
-                    <span class="expense-wb-soft-badge">明细编号 {{ detail.detailNo }}</span>
-                    <span class="expense-wb-soft-badge expense-wb-soft-badge--success">排序 {{ detail.sortOrder || '-' }}</span>
                   </div>
                 </div>
 

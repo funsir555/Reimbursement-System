@@ -1,11 +1,18 @@
-<template>
+﻿<template>
   <div class="space-y-4">
     <div v-if="showSectionHeader" class="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-sky-700">
       <p class="font-semibold">收款信息</p>
       <p class="mt-1 text-xs leading-6 text-sky-600">
-        联行号可选；填写后会自动反查开户银行、省市与分支行。
+        银行、省、市与分支行均需从银行目录中选择；联行号会在选择分支行后自动带出。
       </p>
     </div>
+
+    <el-alert
+      v-if="needsBankReselection"
+      type="warning"
+      :closable="false"
+      title="当前记录的银行目录编码不完整，请重新选择开户银行、省市与分支行后再保存。"
+    />
 
     <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
       <el-form-item :label="accountNameLabel" :required="required" class="!mb-0">
@@ -18,11 +25,10 @@
 
       <el-form-item label="联行号" class="!mb-0">
         <el-input
-          v-model="cnapsCodeModel"
-          :maxlength="64"
-          placeholder="请输入联行号"
-          :suffix-icon="Search"
-          @blur="handleCnapsLookup"
+          :model-value="cnapsCodeModel"
+          disabled
+          readonly
+          placeholder="选择分支行后自动带出"
         />
       </el-form-item>
 
@@ -123,10 +129,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
 import {
   financeBankApi,
   type FinanceBankBranchOption,
+  type FinanceBankBusinessScope,
   type FinanceBankOption
 } from '@/api'
 
@@ -161,12 +167,14 @@ const props = withDefaults(defineProps<{
   accountNameLabel?: string
   fieldMap?: Partial<PaymentFieldMap>
   autoFillSourceKey?: string
+  businessScope?: FinanceBankBusinessScope
 }>(), {
   required: false,
   showSectionHeader: false,
   accountNameLabel: '开户名',
   fieldMap: () => ({}),
-  autoFillSourceKey: ''
+  autoFillSourceKey: '',
+  businessScope: 'BOTH'
 })
 
 const resolvedFieldMap = computed<PaymentFieldMap>(() => ({
@@ -175,12 +183,11 @@ const resolvedFieldMap = computed<PaymentFieldMap>(() => ({
 }))
 
 const bankOptions = ref<FinanceBankOption[]>([])
+const provinceOptions = ref<string[]>([])
+const cityOptions = ref<string[]>([])
 const branchOptions = ref<FinanceBankBranchOption[]>([])
-const provinceSource = ref<FinanceBankBranchOption[]>([])
-const citySource = ref<FinanceBankBranchOption[]>([])
 const bankOptionsLoading = ref(false)
 const branchOptionsLoading = ref(false)
-const cnapsLookupLoading = ref(false)
 
 const accountNameModel = computed({
   get: () => mappedStringValue('accountName'),
@@ -222,8 +229,24 @@ const branchCodeModel = computed({
   set: (value: string) => setMappedField('branchCode', value)
 })
 
-const provinceOptions = computed(() => uniqueValues(provinceSource.value.map((item) => item.province)))
-const cityOptions = computed(() => uniqueValues(citySource.value.map((item) => item.city)))
+const branchNameModel = computed({
+  get: () => mappedStringValue('branchName'),
+  set: (value: string) => setMappedField('branchName', value)
+})
+
+const needsBankReselection = computed(() => {
+  const hasAnyBankValue = [
+    bankNameModel.value,
+    provinceModel.value,
+    cityModel.value,
+    branchNameModel.value,
+    cnapsCodeModel.value
+  ].some((item) => !!item)
+  if (!hasAnyBankValue) {
+    return false
+  }
+  return !bankCodeModel.value || !provinceModel.value || !cityModel.value || !branchCodeModel.value
+})
 
 watch(
   () => autoFillSourceValue(),
@@ -242,15 +265,15 @@ watch(
   () => bankCodeModel.value,
   async (value) => {
     if (!value) {
-      provinceSource.value = []
-      citySource.value = []
+      provinceOptions.value = []
+      cityOptions.value = []
       branchOptions.value = []
       return
     }
     await ensureBankOptionLoaded()
-    await preloadProvinceOptions()
+    await loadProvinceOptions()
     if (provinceModel.value) {
-      await preloadCityOptions()
+      await loadCityOptions()
     }
     if (provinceModel.value && cityModel.value) {
       await loadBranchOptions('')
@@ -263,11 +286,11 @@ watch(
   () => [provinceModel.value, cityModel.value],
   async ([province, city]) => {
     if (!bankCodeModel.value || !province) {
-      citySource.value = []
+      cityOptions.value = []
       branchOptions.value = []
       return
     }
-    await preloadCityOptions()
+    await loadCityOptions()
     if (city) {
       await loadBranchOptions('')
     }
@@ -280,32 +303,15 @@ void loadBankOptions('')
 async function loadBankOptions(keyword: string) {
   bankOptionsLoading.value = true
   try {
-    const res = await financeBankApi.listBanks(keyword || undefined)
+    const res = await financeBankApi.listBanks({
+      keyword: keyword || undefined,
+      businessScope: props.businessScope
+    })
     bankOptions.value = res.data
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载开户银行失败'))
   } finally {
     bankOptionsLoading.value = false
-  }
-}
-
-async function handleCnapsLookup() {
-  const cnapsCode = cnapsCodeModel.value.trim()
-  if (!cnapsCode) {
-    return
-  }
-  cnapsLookupLoading.value = true
-  try {
-    const res = await financeBankApi.lookupBranchByCnaps(cnapsCode)
-    if (!res.data) {
-      return
-    }
-    applyBranchSelection(res.data)
-    await ensureBankOptionLoaded(res.data.bankCode, res.data.bankName)
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '联行号反查失败'))
-  } finally {
-    cnapsLookupLoading.value = false
   }
 }
 
@@ -315,24 +321,61 @@ async function handleBankChange(nextBankCode: string | undefined) {
   provinceModel.value = ''
   cityModel.value = ''
   branchCodeModel.value = ''
-  setMappedField('branchName', '')
+  branchNameModel.value = ''
+  cnapsCodeModel.value = ''
   if (!nextBankCode) {
     setMappedField('bankCode', '')
+    setMappedField('bankName', '')
   }
-  await preloadProvinceOptions()
+  await loadProvinceOptions()
 }
 
 async function handleProvinceChange() {
   cityModel.value = ''
   branchCodeModel.value = ''
-  setMappedField('branchName', '')
-  await preloadCityOptions()
+  branchNameModel.value = ''
+  cnapsCodeModel.value = ''
+  await loadCityOptions()
 }
 
 async function handleCityChange() {
   branchCodeModel.value = ''
-  setMappedField('branchName', '')
+  branchNameModel.value = ''
+  cnapsCodeModel.value = ''
   await loadBranchOptions('')
+}
+
+async function loadProvinceOptions() {
+  if (!bankCodeModel.value) {
+    provinceOptions.value = []
+    return
+  }
+  try {
+    const res = await financeBankApi.listBankProvinces({
+      bankCode: bankCodeModel.value,
+      businessScope: props.businessScope
+    })
+    provinceOptions.value = res.data
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '加载开户地址失败'))
+  }
+}
+
+async function loadCityOptions() {
+  if (!bankCodeModel.value || !provinceModel.value) {
+    cityOptions.value = []
+    return
+  }
+  try {
+    const res = await financeBankApi.listBankCities({
+      bankCode: bankCodeModel.value,
+      province: provinceModel.value,
+      businessScope: props.businessScope
+    })
+    cityOptions.value = res.data
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '加载开户城市失败'))
+  }
 }
 
 async function loadBranchOptions(keyword: string) {
@@ -346,7 +389,8 @@ async function loadBranchOptions(keyword: string) {
       bankCode: bankCodeModel.value,
       province: provinceModel.value,
       city: cityModel.value,
-      keyword: keyword || undefined
+      keyword: keyword || undefined,
+      businessScope: props.businessScope
     })
     branchOptions.value = res.data
   } catch (error: unknown) {
@@ -361,40 +405,10 @@ function handleBranchChange(nextBranchCode: string | undefined) {
   if (!branch) {
     setMappedField('branchCode', '')
     setMappedField('branchName', '')
+    setMappedField('cnapsCode', '')
     return
   }
   applyBranchSelection(branch)
-}
-
-async function preloadProvinceOptions() {
-  if (!bankCodeModel.value) {
-    provinceSource.value = []
-    return
-  }
-  try {
-    const res = await financeBankApi.listBankBranches({
-      bankCode: bankCodeModel.value
-    })
-    provinceSource.value = res.data
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载开户地址失败'))
-  }
-}
-
-async function preloadCityOptions() {
-  if (!bankCodeModel.value || !provinceModel.value) {
-    citySource.value = []
-    return
-  }
-  try {
-    const res = await financeBankApi.listBankBranches({
-      bankCode: bankCodeModel.value,
-      province: provinceModel.value
-    })
-    citySource.value = res.data
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载开户城市失败'))
-  }
 }
 
 async function ensureBankOptionLoaded(bankCode = bankCodeModel.value, bankName = bankNameModel.value) {
@@ -405,7 +419,10 @@ async function ensureBankOptionLoaded(bankCode = bankCodeModel.value, bankName =
     return
   }
   try {
-    const res = await financeBankApi.listBanks(bankName || bankCode || undefined)
+    const res = await financeBankApi.listBanks({
+      keyword: bankName || bankCode || undefined,
+      businessScope: props.businessScope
+    })
     bankOptions.value = mergeBankOptions(bankOptions.value, res.data)
     const matched = res.data.find((item) => item.bankCode === bankCode || item.bankName === bankName)
     if (matched) {
@@ -424,7 +441,7 @@ function applyBranchSelection(branch: FinanceBankBranchOption) {
   setMappedField('city', branch.city)
   setMappedField('branchCode', branch.branchCode)
   setMappedField('branchName', branch.branchName)
-  setMappedField('cnapsCode', branch.cnapsCode || cnapsCodeModel.value)
+  setMappedField('cnapsCode', branch.cnapsCode || '')
 }
 
 function mappedStringValue(key: keyof PaymentFieldMap) {
@@ -450,10 +467,6 @@ function mergeBankOptions(current: FinanceBankOption[], next: FinanceBankOption[
 function stringValue(key: string) {
   const raw = props.formState[key]
   return typeof raw === 'string' ? raw : raw == null ? '' : String(raw)
-}
-
-function uniqueValues(values: string[]) {
-  return Array.from(new Set(values.filter(Boolean)))
 }
 
 function resolveErrorMessage(error: unknown, fallback: string) {

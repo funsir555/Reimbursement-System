@@ -18,6 +18,9 @@ public class SystemBankCatalog {
     @TableField("bank_name")
     private String bankName;
 
+    @TableField("business_scope")
+    private String businessScope;
+
     @TableField("status")
     private Integer status;
 

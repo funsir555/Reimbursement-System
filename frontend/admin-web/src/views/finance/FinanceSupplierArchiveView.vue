@@ -92,6 +92,7 @@
                   :form-state="vendorForm"
                   auto-fill-source-key="cVenName"
                   account-name-label="开户名"
+                  business-scope="PUBLIC"
                 />
               </div>
               <template v-for="field in section.fields" :key="field.key">
@@ -211,7 +212,7 @@ const keyword = ref('')
 const includeDisabled = ref(false)
 const vendors = ref<FinanceVendorSummary[]>([])
 const editingVendorCode = ref('')
-const activeSections = ref(['basic', 'contact', 'bank', 'finance'])
+const activeSections = ref(['basic', 'bank'])
 const vendorForm = reactive<Record<string, string | number | undefined>>({})
 const financeCompany = useFinanceCompanyStore()
 const COMPANY_SWITCH_GUARD_KEY = 'finance-supplier-archive'
@@ -240,6 +241,21 @@ const vendorSections: Array<{ key: string; label: string; fields: VendorFieldCon
     ]
   },
   {
+    key: 'bank',
+    label: '收款与税务',
+    fields: [
+      { key: 'cTaxCode', label: '税号', type: 'text' },
+      { key: 'cVenDCode', label: '地区编码', type: 'text' },
+      { key: 'cPayCode', label: '付款条件编码', type: 'text' },
+      { key: 'cSCCode', label: '结算方式编码', type: 'text' },
+      { key: 'bVenTax', label: '一般纳税人', type: 'switch' },
+      { key: 'bProxyVen', label: '代理供应商', type: 'switch' },
+      { key: 'bImportVen', label: '进口供应商', type: 'switch' },
+      { key: 'bVenOverseas', label: '境外供应商', type: 'switch' },
+      { key: 'cVenMne', label: '助记码', type: 'text' }
+    ]
+  },
+  {
     key: 'contact',
     label: '联系信息',
     fields: [
@@ -255,21 +271,6 @@ const vendorSections: Array<{ key: string; label: string; fields: VendorFieldCon
       { key: 'cVenLPerson', label: '\u6cd5\u4eba\u4ee3\u8868', type: 'text', maxLength: 64 },
       { key: 'cVenPPerson', label: '\u91c7\u8d2d\u8054\u7cfb\u4eba', type: 'text', maxLength: 64 },
       { key: 'cVenDepart', label: '所属部门', type: 'text' }
-    ]
-  },
-  {
-    key: 'bank',
-    label: '收款与税务',
-    fields: [
-      { key: 'cTaxCode', label: '税号', type: 'text' },
-      { key: 'cVenDCode', label: '地区编码', type: 'text' },
-      { key: 'cPayCode', label: '付款条件编码', type: 'text' },
-      { key: 'cSCCode', label: '结算方式编码', type: 'text' },
-      { key: 'bVenTax', label: '一般纳税人', type: 'switch' },
-      { key: 'bProxyVen', label: '代理供应商', type: 'switch' },
-      { key: 'bImportVen', label: '进口供应商', type: 'switch' },
-      { key: 'bVenOverseas', label: '境外供应商', type: 'switch' },
-      { key: 'cVenMne', label: '助记码', type: 'text' }
     ]
   },
   {
@@ -441,7 +442,7 @@ function openCreateDialog() {
   }
   editingVendorCode.value = ''
   resetVendorForm()
-  activeSections.value = ['basic', 'contact', 'bank', 'finance']
+  activeSections.value = ['basic', 'bank']
   dialogVisible.value = true
 }
 
@@ -461,7 +462,7 @@ async function openEditDialog(vendorCode: string) {
     defaultSwitchFields.forEach((key) => {
       vendorForm[key] = Number(vendorForm[key] || 0)
     })
-    activeSections.value = ['basic', 'contact', 'bank', 'finance']
+    activeSections.value = ['basic', 'bank']
   } catch (error: unknown) {
     dialogVisible.value = false
     ElMessage.error(resolveErrorMessage(error, '加载供应商详情失败'))

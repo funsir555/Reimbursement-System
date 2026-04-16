@@ -111,9 +111,11 @@ class ProfileBankAccountDomainSupportTest {
         UserBankAccountSaveDTO dto = new UserBankAccountSaveDTO();
         dto.setAccountName("New User");
         dto.setAccountNo("6222020202020202");
+        dto.setBankCode("CMB");
         dto.setBankName("招商银行");
         dto.setProvince("广东");
         dto.setCity("深圳");
+        dto.setBranchCode("CMB-SZ");
         dto.setBranchName("深圳分行");
         dto.setStatus(1);
         dto.setDefaultAccount(1);

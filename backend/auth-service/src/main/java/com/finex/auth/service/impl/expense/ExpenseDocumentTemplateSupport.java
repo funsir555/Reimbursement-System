@@ -45,8 +45,18 @@ public class ExpenseDocumentTemplateSupport {
     /**
      * 查询供应商选项。
      */
-    public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
-        return expenseDocumentTemplateDomainSupport.listVendorOptions(userId, keyword, includeDisabled);
+    public List<ExpenseCreateVendorOptionVO> listVendorOptions(
+            Long userId,
+            String keyword,
+            Boolean includeDisabled,
+            String paymentCompanyId
+    ) {
+        return expenseDocumentTemplateDomainSupport.listVendorOptions(
+                userId,
+                keyword,
+                includeDisabled,
+                paymentCompanyId
+        );
     }
 
     /**
@@ -64,14 +74,16 @@ public class ExpenseDocumentTemplateSupport {
             String keyword,
             String linkageMode,
             String payeeName,
-            String counterpartyCode
+            String counterpartyCode,
+            String paymentCompanyId
     ) {
         return expenseDocumentTemplateDomainSupport.listPayeeAccountOptions(
                 userId,
                 keyword,
                 linkageMode,
                 payeeName,
-                counterpartyCode
+                counterpartyCode,
+                paymentCompanyId
         );
     }
 

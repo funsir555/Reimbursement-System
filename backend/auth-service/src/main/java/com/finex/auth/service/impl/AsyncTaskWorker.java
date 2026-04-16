@@ -8,6 +8,7 @@ package com.finex.auth.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseApprovalPendingItemVO;
 import com.finex.auth.dto.ExpenseExportSubmitDTO;
+import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.entity.DownloadRecord;
@@ -112,6 +113,10 @@ public class AsyncTaskWorker {
                 updateTask(task, 45, "正在汇总审批任务");
                 List<ExpenseApprovalPendingItemVO> rows = loadPendingApprovalRows(task.getUserId(), payload);
                 workbookBytes = buildPendingApprovalWorkbook(resolveSheetName(payload), rows);
+            } else if (AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING.equals(payload.getScene())) {
+                updateTask(task, 45, "\u6b63\u5728\u6c47\u603b\u4ed8\u6b3e\u5355\u6570\u636e");
+                List<ExpensePaymentOrderVO> rows = loadPaymentPendingRows(task.getUserId(), payload);
+                workbookBytes = buildPaymentPendingWorkbook(resolveSheetName(payload), rows);
             } else {
                 updateTask(task, 45, "正在汇总单据数据");
                 List<ExpenseSummaryVO> rows = loadExpenseSummaryRows(task.getUserId(), payload);
@@ -228,6 +233,47 @@ public class AsyncTaskWorker {
     /**
      * 加载报销单汇总Rows。
      */
+    private List<ExpensePaymentOrderVO> loadPaymentPendingRows(Long userId, ExpenseExportSubmitDTO payload) {
+        Set<Long> taskIds = payload.getTaskIds() == null ? Set.of() : Set.copyOf(payload.getTaskIds());
+        List<ExpensePaymentOrderVO> filtered = expenseDocumentService.listPaymentOrders(userId, "PENDING_PAYMENT").stream()
+                .filter(item -> item.getTaskId() != null && taskIds.contains(item.getTaskId()))
+                .toList();
+        if (filtered.isEmpty()) {
+            throw new IllegalArgumentException("\u5f53\u524d\u6ca1\u6709\u53ef\u5bfc\u51fa\u7684\u6570\u636e");
+        }
+        return filtered;
+    }
+
+    private byte[] buildPaymentPendingWorkbook(String sheetName, List<ExpensePaymentOrderVO> rows) {
+        String[] headers = new String[] {
+                "\u5355\u636e\u7f16\u53f7", "\u5355\u636e\u540d\u79f0", "\u5355\u636e\u7c7b\u578b", "\u63d0\u5355\u4eba", "\u4ed8\u6b3e\u516c\u53f8",
+                "\u6536\u6b3e\u4ebaor\u6536\u6b3e\u5355\u4f4d", "\u6536\u6b3e\u8d26\u53f7", "\u5f00\u6237\u884c", "\u652f\u4ed8\u91d1\u989d", "\u5355\u636e\u72b6\u6001"
+        };
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet(sheetName);
+            prepareSheet(sheet, headers, workbook);
+            int rowIndex = 1;
+            for (ExpensePaymentOrderVO item : rows) {
+                Row row = sheet.createRow(rowIndex++);
+                int cellIndex = 0;
+                writeCell(row, cellIndex++, item.getDocumentCode());
+                writeCell(row, cellIndex++, item.getDocumentTitle());
+                writeCell(row, cellIndex++, item.getTemplateTypeLabel());
+                writeCell(row, cellIndex++, item.getSubmitterName());
+                writeCell(row, cellIndex++, item.getPaymentCompanyName());
+                writeCell(row, cellIndex++, item.getPayeeOrCounterpartyName());
+                writeCell(row, cellIndex++, item.getPayeeAccountNo());
+                writeCell(row, cellIndex++, item.getPayeeBankName());
+                writeCell(row, cellIndex++, decimalText(item.getAmount()));
+                writeCell(row, cellIndex, firstNonBlank(item.getPaymentStatusLabel(), item.getDocumentStatusLabel()));
+            }
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        } catch (IOException ex) {
+            throw new IllegalStateException("\u751f\u6210\u4ed8\u6b3e\u5355\u5bfc\u51fa Excel \u5931\u8d25", ex);
+        }
+    }
+
     private List<ExpenseSummaryVO> loadExpenseSummaryRows(Long userId, ExpenseExportSubmitDTO payload) {
         Set<String> documentCodes = payload.getDocumentCodes() == null ? Set.of() : Set.copyOf(payload.getDocumentCodes());
         List<ExpenseSummaryVO> rows = switch (payload.getScene()) {
@@ -403,6 +449,7 @@ public class AsyncTaskWorker {
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES -> "我的报销";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PENDING_APPROVAL -> "待我审批";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY -> "单据查询";
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING -> "待支付付款单";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_OUTSTANDING -> "LOAN".equals(payload.getKind()) ? "待还款" : "待核销";
             default -> "导出结果";
         };

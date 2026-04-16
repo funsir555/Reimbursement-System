@@ -34,11 +34,12 @@ class FinanceVendorOptionDomainSupportTest {
     }
 
     @Test
-    void listActiveVendorOptionsFiltersOtherCompaniesAndBuildsSecondaryLabel() {
+    void listActiveVendorOptionsUsesReceiptAccountNameAsCounterpartyLabel() {
         FinanceVendor current = new FinanceVendor();
         current.setCVenCode("VEN_A");
         current.setCVenName("Vendor A");
         current.setCVenAbbName("VA");
+        current.setReceiptAccountName("Vendor A Receipt");
         current.setCompanyId("COMPANY_A");
 
         FinanceVendor other = new FinanceVendor();
@@ -52,6 +53,7 @@ class FinanceVendorOptionDomainSupportTest {
 
         assertEquals(1, result.size());
         assertEquals("VEN_A", result.get(0).getValue());
-        assertEquals("VEN_A / VA", result.get(0).getSecondaryLabel());
+        assertEquals("Vendor A Receipt", result.get(0).getLabel());
+        assertEquals("VEN_A / Vendor A / VA", result.get(0).getSecondaryLabel());
     }
 }

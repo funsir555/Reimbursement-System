@@ -276,7 +276,8 @@ async function mountView() {
         'el-table': TableStub,
         'el-table-column': TableColumnStub,
         'el-tag': SimpleContainer,
-        'el-dialog': SimpleContainer
+        'el-dialog': SimpleContainer,
+        SupplierPaymentInfoFields: true
       },
       directives: {
         loading: () => undefined

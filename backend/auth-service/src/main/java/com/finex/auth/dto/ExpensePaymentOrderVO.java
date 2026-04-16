@@ -58,4 +58,10 @@ public class ExpensePaymentOrderVO {
     private String taskCreatedAt;
 
     private boolean allowRetry;
+
+    private String payeeOrCounterpartyName;
+
+    private String payeeAccountNo;
+
+    private String payeeBankName;
 }

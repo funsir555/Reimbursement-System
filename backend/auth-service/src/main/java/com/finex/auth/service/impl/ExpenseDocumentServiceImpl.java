@@ -78,8 +78,13 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
      * 查询供应商选项。
      */
     @Override
-    public List<ExpenseCreateVendorOptionVO> listVendorOptions(Long userId, String keyword, Boolean includeDisabled) {
-        return expenseDocumentSubmissionService.listVendorOptions(userId, keyword, includeDisabled);
+    public List<ExpenseCreateVendorOptionVO> listVendorOptions(
+            Long userId,
+            String keyword,
+            Boolean includeDisabled,
+            String paymentCompanyId
+    ) {
+        return expenseDocumentSubmissionService.listVendorOptions(userId, keyword, includeDisabled, paymentCompanyId);
     }
 
     /**
@@ -99,9 +104,17 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
             String keyword,
             String linkageMode,
             String payeeName,
-            String counterpartyCode
+            String counterpartyCode,
+            String paymentCompanyId
     ) {
-        return expenseDocumentSubmissionService.listPayeeAccountOptions(userId, keyword, linkageMode, payeeName, counterpartyCode);
+        return expenseDocumentSubmissionService.listPayeeAccountOptions(
+                userId,
+                keyword,
+                linkageMode,
+                payeeName,
+                counterpartyCode,
+                paymentCompanyId
+        );
     }
 
     /**
@@ -370,6 +383,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     @Transactional(rollbackFor = Exception.class)
     public ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto) {
         return expensePaymentWorkflowService.markPaymentTaskException(userId, username, taskId, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto) {
+        return expensePaymentWorkflowService.rejectPaymentTasks(userId, username, taskIds, dto);
     }
 
     /**

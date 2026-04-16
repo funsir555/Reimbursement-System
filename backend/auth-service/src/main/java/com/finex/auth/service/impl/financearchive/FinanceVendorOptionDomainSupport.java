@@ -44,6 +44,8 @@ public class FinanceVendorOptionDomainSupport extends AbstractFinanceVendorArchi
             query.and(wrapper -> wrapper
                     .like("cVenCode", normalizedKeyword)
                     .or()
+                    .like("receiptAccountName", normalizedKeyword)
+                    .or()
                     .like("cVenName", normalizedKeyword)
                     .or()
                     .like("cVenAbbName", normalizedKeyword));

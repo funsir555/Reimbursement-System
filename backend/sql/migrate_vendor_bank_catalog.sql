@@ -5,6 +5,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS sys_bank_catalog (
     bank_code VARCHAR(64) NOT NULL COMMENT 'bank code',
     bank_name VARCHAR(200) NOT NULL COMMENT 'bank name',
+    business_scope VARCHAR(16) NOT NULL DEFAULT 'BOTH' COMMENT 'business scope:PRIVATE/PUBLIC/BOTH',
     status TINYINT NOT NULL DEFAULT 1 COMMENT 'status:1 enabled 0 disabled',
     sort_order INT NOT NULL DEFAULT 0 COMMENT 'sort order',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created at',
@@ -47,14 +48,15 @@ ALTER TABLE gl_Vender
 ALTER TABLE gl_Vender
     ADD COLUMN IF NOT EXISTS receipt_branch_name VARCHAR(128) NULL COMMENT '收款分支行名称' AFTER receipt_branch_code;
 
-INSERT INTO sys_bank_catalog (bank_code, bank_name, status, sort_order) VALUES
-    ('ICBC', '中国工商银行', 1, 10),
-    ('ABC', '中国农业银行', 1, 20),
-    ('BOC', '中国银行', 1, 30),
-    ('CCB', '中国建设银行', 1, 40),
-    ('CMB', '招商银行', 1, 50)
+INSERT INTO sys_bank_catalog (bank_code, bank_name, business_scope, status, sort_order) VALUES
+    ('ICBC', '中国工商银行', 'BOTH', 1, 10),
+    ('ABC', '中国农业银行', 'BOTH', 1, 20),
+    ('BOC', '中国银行', 'BOTH', 1, 30),
+    ('CCB', '中国建设银行', 'BOTH', 1, 40),
+    ('CMB', '招商银行', 'BOTH', 1, 50)
 ON DUPLICATE KEY UPDATE
     bank_name = VALUES(bank_name),
+    business_scope = VALUES(business_scope),
     status = VALUES(status),
     sort_order = VALUES(sort_order);
 
@@ -174,6 +176,7 @@ ALTER TABLE gl_vender
 ALTER TABLE sys_bank_catalog
     MODIFY COLUMN bank_code varchar(64) NOT NULL COMMENT '银行编码',
     MODIFY COLUMN bank_name varchar(200) NOT NULL COMMENT '银行名称',
+    MODIFY COLUMN business_scope varchar(16) NOT NULL DEFAULT 'BOTH' COMMENT '业务范围:PRIVATE/PUBLIC/BOTH',
     MODIFY COLUMN status tinyint NOT NULL DEFAULT 1 COMMENT '状态:1启用 0停用',
     MODIFY COLUMN sort_order int NOT NULL DEFAULT 0 COMMENT '排序号',
     MODIFY COLUMN created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

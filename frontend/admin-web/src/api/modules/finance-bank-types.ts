@@ -3,9 +3,12 @@
 // 如果改错，最容易影响列表、表单和接口联调。
 
 // 这是 FinanceBankOption 的数据结构。
+export type FinanceBankBusinessScope = 'PRIVATE' | 'PUBLIC' | 'BOTH'
+
 export interface FinanceBankOption {
   bankCode: string
   bankName: string
+  businessScope: FinanceBankBusinessScope
   value: string
   label: string
 }

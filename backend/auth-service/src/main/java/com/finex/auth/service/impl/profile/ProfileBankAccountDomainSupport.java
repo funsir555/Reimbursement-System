@@ -161,11 +161,11 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         account.setAccountName(requireText(dto.getAccountName(), "账户名不能为空"));
         account.setAccountNo(requireText(dto.getAccountNo(), "银行账号不能为空"));
         account.setAccountType(defaultText(trimToNull(dto.getAccountType()), "对私账户"));
-        account.setBankCode(trimToNull(dto.getBankCode()));
+        account.setBankCode(requireText(dto.getBankCode(), "开户银行编码不能为空"));
         account.setBankName(requireText(dto.getBankName(), "开户银行不能为空"));
         account.setProvince(requireText(dto.getProvince(), "开户省不能为空"));
         account.setCity(requireText(dto.getCity(), "开户市不能为空"));
-        account.setBranchCode(trimToNull(dto.getBranchCode()));
+        account.setBranchCode(requireText(dto.getBranchCode(), "分支行编码不能为空"));
         account.setBranchName(requireText(dto.getBranchName(), "分支行不能为空"));
         account.setCnapsCode(trimToNull(dto.getCnapsCode()));
         account.setStatus(normalizeStatus(dto.getStatus()));

@@ -140,9 +140,11 @@ class UserCenterControllerTest {
                                 {
                                   "accountName": "测试账户",
                                   "accountNo": "6222020202020202",
+                                  "bankCode": "BOC",
                                   "bankName": "中国银行",
                                   "province": "上海市",
                                   "city": "上海市",
+                                  "branchCode": "BOC-SH",
                                   "branchName": "中国银行上海分行",
                                   "status": 1
                                 }

@@ -122,6 +122,11 @@ class SystemSettingsServiceImplTest {
         CompanyBankAccountSaveDTO dto = new CompanyBankAccountSaveDTO();
         dto.setCompanyId("COMPANY_A");
         dto.setBankName("Bank A");
+        dto.setBankCode("BANK_A");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchName("深圳支行");
+        dto.setBranchCode("BANK_A_SZ");
         dto.setAccountName("Primary Account");
         dto.setAccountNo("622200001");
         dto.setStatus(1);
@@ -162,6 +167,11 @@ class SystemSettingsServiceImplTest {
         CompanyBankAccountSaveDTO dto = new CompanyBankAccountSaveDTO();
         dto.setCompanyId("COMPANY_A");
         dto.setBankName("Bank A");
+        dto.setBankCode("BANK_A");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchName("深圳支行");
+        dto.setBranchCode("BANK_A_SZ");
         dto.setAccountName("Primary Account");
         dto.setAccountNo("622200001");
         dto.setStatus(0);
