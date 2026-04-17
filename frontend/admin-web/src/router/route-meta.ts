@@ -270,6 +270,24 @@ export const ROUTE_META_REGISTRY = {
     description: '审核总账凭证',
     permissionCode: 'finance:general_ledger:review_voucher:view'
   }),
+  'finance-post-voucher': routeMeta({
+    title: '记账',
+    tabTitle: '记账',
+    menuTitle: '记账',
+    description: '总账记账功能建设中',
+    placeholderTitle: '记账',
+    placeholderDescription: '总账记账功能建设中',
+    permissionCode: 'finance:general_ledger:post_voucher:view'
+  }),
+  'finance-close-ledger': routeMeta({
+    title: '结账',
+    tabTitle: '结账',
+    menuTitle: '结账',
+    description: '总账结账功能建设中',
+    placeholderTitle: '结账',
+    placeholderDescription: '总账结账功能建设中',
+    permissionCode: 'finance:general_ledger:close_ledger:view'
+  }),
   'finance-review-voucher-detail': routeMeta({
     title: '审核凭证详情',
     tabTitle: '审核凭证详情',
@@ -277,12 +295,12 @@ export const ROUTE_META_REGISTRY = {
     permissionCode: 'finance:general_ledger:review_voucher:view'
   }),
   'finance-ledger-balance-sheet': routeMeta({
-    title: '总账余额表',
-    tabTitle: '总账余额表',
-    menuTitle: '总账余额表',
-    description: '查看总账余额表',
-    placeholderTitle: '总账余额表',
-    placeholderDescription: '查看总账余额表',
+    title: '余额表',
+    tabTitle: '余额表',
+    menuTitle: '余额表',
+    description: '查看余额表',
+    placeholderTitle: '余额表',
+    placeholderDescription: '查看余额表',
     permissionCode: 'finance:general_ledger:balance_sheet:view'
   }),
   'finance-detail-ledger': routeMeta({

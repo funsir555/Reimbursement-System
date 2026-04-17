@@ -128,6 +128,8 @@ export const MAIN_NAVIGATION_MENU: NavigationMenuNode[] = [
           createRouteMenuNode('finance-new-voucher'),
           createRouteMenuNode('finance-query-voucher'),
           createRouteMenuNode('finance-review-voucher'),
+          createRouteMenuNode('finance-post-voucher'),
+          createRouteMenuNode('finance-close-ledger'),
           createRouteMenuNode('finance-ledger-balance-sheet'),
           createRouteMenuNode('finance-detail-ledger'),
           createRouteMenuNode('finance-general-ledger-book'),

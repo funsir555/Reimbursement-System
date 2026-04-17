@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   },
   systemSettingsApi: {
     getBootstrap: vi.fn(),
+    updateDepartment: vi.fn(),
     updateSyncConnector: vi.fn(),
     runSync: vi.fn()
   },
@@ -254,6 +255,99 @@ function createBootstrap() {
   }
 }
 
+function createDepartmentTree() {
+  return [
+    {
+      id: 1,
+      companyId: 'COMPANY_A',
+      deptCode: 'ROOT_A',
+      deptName: '\u4e00\u7ea7A',
+      parentId: undefined,
+      leaderUserId: undefined,
+      leaderName: '',
+      syncSource: 'MANUAL',
+      syncManaged: false,
+      syncEnabled: true,
+      syncStatus: 'MANUAL',
+      syncRemark: '',
+      status: 1,
+      sortOrder: 1,
+      children: [
+        {
+          id: 2,
+          companyId: 'COMPANY_A',
+          deptCode: 'A_CHILD',
+          deptName: '\u4e8c\u7ea7A',
+          parentId: 1,
+          leaderUserId: undefined,
+          leaderName: '',
+          syncSource: 'MANUAL',
+          syncManaged: false,
+          syncEnabled: true,
+          syncStatus: 'MANUAL',
+          syncRemark: '',
+          status: 1,
+          sortOrder: 1,
+          children: [
+            {
+              id: 3,
+              companyId: 'COMPANY_A',
+              deptCode: 'A_GRAND',
+              deptName: '\u4e09\u7ea7A',
+              parentId: 2,
+              leaderUserId: undefined,
+              leaderName: '',
+              syncSource: 'MANUAL',
+              syncManaged: false,
+              syncEnabled: true,
+              syncStatus: 'MANUAL',
+              syncRemark: '',
+              status: 1,
+              sortOrder: 1,
+              children: []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      id: 4,
+      companyId: 'COMPANY_B',
+      deptCode: 'ROOT_B',
+      deptName: '\u4e00\u7ea7B',
+      parentId: undefined,
+      leaderUserId: undefined,
+      leaderName: '',
+      syncSource: 'MANUAL',
+      syncManaged: false,
+      syncEnabled: true,
+      syncStatus: 'MANUAL',
+      syncRemark: '',
+      status: 1,
+      sortOrder: 2,
+      children: [
+        {
+          id: 5,
+          companyId: 'COMPANY_B',
+          deptCode: 'B_CHILD',
+          deptName: '\u4e8c\u7ea7B',
+          parentId: 4,
+          leaderUserId: undefined,
+          leaderName: '',
+          syncSource: 'MANUAL',
+          syncManaged: false,
+          syncEnabled: true,
+          syncStatus: 'MANUAL',
+          syncRemark: '',
+          status: 1,
+          sortOrder: 1,
+          children: []
+        }
+      ]
+    }
+  ]
+}
+
 async function mountView() {
   const wrapper = mount(SystemSettingsView, {
     global: {
@@ -295,6 +389,7 @@ describe('SystemSettingsView', () => {
     mocks.router.replace.mockResolvedValue(undefined)
     mocks.router.push.mockResolvedValue(undefined)
     mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: createBootstrap() })
+    mocks.systemSettingsApi.updateDepartment.mockResolvedValue({})
     mocks.systemSettingsApi.updateSyncConnector.mockResolvedValue({})
     mocks.systemSettingsApi.runSync.mockResolvedValue({})
   })
@@ -394,5 +489,54 @@ describe('SystemSettingsView', () => {
     expect(vm.departmentStatEditable).toBe(true)
     expect(deptNameInput.attributes('disabled')).toBeDefined()
     expect(statDepartmentInput.attributes('disabled')).toBeUndefined()
+  })
+
+  it('keeps department tree collapsed to level-1 on initial load', async () => {
+    const bootstrap = createBootstrap()
+    bootstrap.currentUser.permissionCodes.push('settings:organization:edit')
+    bootstrap.departments = createDepartmentTree()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValueOnce({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    expect(vm.departmentExpandedKeys).toEqual([])
+  })
+
+  it('expands only ancestor path after saving a non-top-level department config', async () => {
+    const bootstrap = createBootstrap()
+    bootstrap.currentUser.permissionCodes.push('settings:organization:edit')
+    bootstrap.departments = createDepartmentTree()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.handleDepartmentSelect(bootstrap.departments[0].children[0].children[0])
+    await flushPromises()
+
+    await vm.saveDepartmentConfig()
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateDepartment).toHaveBeenCalledWith(3, expect.any(Object))
+    expect(vm.departmentExpandedKeys).toEqual([1, 2, 3])
+    expect(vm.departmentExpandedKeys).not.toContain(4)
+  })
+
+  it('resets to level-1 collapsed after saving a top-level department config', async () => {
+    const bootstrap = createBootstrap()
+    bootstrap.currentUser.permissionCodes.push('settings:organization:edit')
+    bootstrap.departments = createDepartmentTree()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.handleDepartmentSelect(bootstrap.departments[0])
+    await flushPromises()
+
+    await vm.saveDepartmentConfig()
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateDepartment).toHaveBeenCalledWith(1, expect.any(Object))
+    expect(vm.departmentExpandedKeys).toEqual([])
   })
 })

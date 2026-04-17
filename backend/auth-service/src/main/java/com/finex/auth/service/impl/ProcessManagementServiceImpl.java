@@ -213,6 +213,12 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
         return processTemplateDomainSupport.updateTemplate(id, dto, operatorName);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessTemplateSaveResultVO copyTemplate(Long id, String operatorName) {
+        return processTemplateDomainSupport.copyTemplate(id, operatorName);
+    }
+
     /**
      * 删除模板。
      */

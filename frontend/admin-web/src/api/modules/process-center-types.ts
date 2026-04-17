@@ -30,6 +30,8 @@ export interface ProcessTemplateCard {
   formName?: string
   expenseDetailDesignCode?: string
   expenseDetailDesignName?: string
+  status: string
+  statusLabel: string
   updatedAt: string
   owner: string
   color: string

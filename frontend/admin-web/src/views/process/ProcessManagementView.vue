@@ -86,7 +86,16 @@
                     </div>
                   </div>
 
-                  <el-tag size="small" type="primary" effect="plain">{{ template.templateCode }}</el-tag>
+                  <div class="flex shrink-0 flex-col items-end gap-2">
+                    <el-tag size="small" type="primary" effect="plain">{{ template.templateCode }}</el-tag>
+                    <el-tag
+                      size="small"
+                      :type="template.status === 'ENABLED' ? 'success' : 'warning'"
+                      effect="light"
+                    >
+                      {{ template.statusLabel }}
+                    </el-tag>
+                  </div>
                 </div>
 
                 <p class="mt-3 min-h-[40px] text-sm leading-5 text-slate-500">{{ template.description }}</p>
@@ -139,7 +148,14 @@
                     删除模板
                   </el-button>
                   <el-button type="primary" text @click="openTemplateEdit(template)">修改配置</el-button>
-                  <el-button v-if="canEditTemplates" text>复制模板</el-button>
+                  <el-button
+                    v-if="canEditTemplates"
+                    text
+                    :loading="isCopyingTemplate(template.id)"
+                    @click="handleCopyTemplate(template)"
+                  >
+                    复制模板
+                  </el-button>
                 </div>
               </el-card>
             </div>
@@ -226,6 +242,7 @@ const templateDialogVisible = ref(false)
 const searchKeyword = ref('')
 const activeCategory = ref('all')
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
+const copyingTemplateIds = ref<number[]>([])
 
 const canCreateTemplates = computed(() => hasPermission('expense:process_management:create', permissionCodes.value))
 const canEditTemplates = computed(() =>
@@ -369,6 +386,24 @@ const openTemplateEdit = (template: ProcessTemplateCard) => {
       templateId: String(template.id)
     }
   })
+}
+
+const isCopyingTemplate = (templateId: number) => copyingTemplateIds.value.includes(templateId)
+
+const handleCopyTemplate = async (template: ProcessTemplateCard) => {
+  if (isCopyingTemplate(template.id)) {
+    return
+  }
+  copyingTemplateIds.value = [...copyingTemplateIds.value, template.id]
+  try {
+    await processApi.copyTemplate(template.id)
+    ElMessage.success('模板副本已创建')
+    await loadOverview()
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '复制模板失败'))
+  } finally {
+    copyingTemplateIds.value = copyingTemplateIds.value.filter((item) => item !== template.id)
+  }
 }
 
 const hasEditableFlow = (template: ProcessTemplateCard) => {

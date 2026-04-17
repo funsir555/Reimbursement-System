@@ -6,6 +6,7 @@ import FinanceAccountSubjectArchiveView from '@/views/finance/FinanceAccountSubj
 const mocks = vi.hoisted(() => ({
   financeArchiveApi: {
     getAccountSubjectMeta: vi.fn(),
+    getProjectArchiveMeta: vi.fn(),
     listAccountSubjects: vi.fn(),
     getAccountSubjectDetail: vi.fn(),
     getAccountSubjectDerivedDefaults: vi.fn(),
@@ -64,29 +65,14 @@ const SimpleStub = defineComponent({
   template: '<div><slot /><slot name="append" /><slot name="footer" /><slot name="title" /></div>'
 })
 
-const CheckboxGroupStub = defineComponent({
-  props: {
-    modelValue: {
-      type: Array,
-      default: () => []
-    },
-    disabled: {
-      type: Boolean,
-      default: false
-    }
-  },
-  emits: ['update:modelValue'],
-  template: '<div><slot /></div>'
-})
-
-const CheckboxStub = defineComponent({
+const FormItemStub = defineComponent({
   props: {
     label: {
       type: String,
       default: ''
     }
   },
-  template: '<label><slot /></label>'
+  template: '<div><span v-if="label">{{ label }}</span><slot /></div>'
 })
 
 const TableStub = defineComponent({
@@ -178,14 +164,12 @@ async function mountView() {
         'el-tag': SimpleStub,
         'el-drawer': SimpleStub,
         'el-form': SimpleStub,
-        'el-form-item': SimpleStub,
+        'el-form-item': FormItemStub,
         'el-collapse': SimpleStub,
         'el-collapse-item': SimpleStub,
         'el-date-picker': SimpleStub,
         'el-input-number': SimpleStub,
         'el-switch': SimpleStub,
-        'el-checkbox-group': CheckboxGroupStub,
-        'el-checkbox': CheckboxStub,
         'el-pagination': PaginationStub
       },
       directives: {
@@ -223,6 +207,16 @@ describe('FinanceAccountSubjectArchiveView', () => {
         yesNoOptions: [
           { value: '1', label: '是' },
           { value: '0', label: '否' }
+        ]
+      }
+    })
+    mocks.financeArchiveApi.getProjectArchiveMeta.mockResolvedValue({
+      data: {
+        statusOptions: [],
+        closeStatusOptions: [],
+        projectClassOptions: [
+          { value: '01', label: '01 / 市场项目' },
+          { value: '97', label: '97 / 研发项目' }
         ]
       }
     })
@@ -353,6 +347,26 @@ describe('FinanceAccountSubjectArchiveView', () => {
       }
     })
     mocks.financeArchiveApi.createAccountSubject.mockResolvedValue({ data: {} })
+    mocks.financeArchiveApi.getAccountSubjectDetail.mockResolvedValue({
+      data: {
+        subject_code: '100101',
+        subject_name: '库存现金-子科目',
+        parent_subject_code: '1001',
+        subject_level: 2,
+        subject_category: 'ASSET',
+        balance_direction: 'DEBIT',
+        bperson: 1,
+        bitem: 1,
+        cass_item: '77',
+        itrans: 8,
+        bReport: 1,
+        bGCJS: 1,
+        iViewItem: 3,
+        cother: 'ERP',
+        iotherused: 5,
+        bCashItem: 1
+      }
+    })
     mocks.financeArchiveApi.updateAccountSubjectStatus.mockResolvedValue({ data: true })
     mocks.financeArchiveApi.updateAccountSubjectClose.mockResolvedValue({ data: true })
   })
@@ -365,6 +379,7 @@ describe('FinanceAccountSubjectArchiveView', () => {
     }
 
     expect(mocks.financeArchiveApi.getAccountSubjectMeta).toHaveBeenCalledTimes(1)
+    expect(mocks.financeArchiveApi.getProjectArchiveMeta).toHaveBeenCalledWith('COMPANY_A')
     expect(mocks.financeArchiveApi.listAccountSubjects).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       keyword: undefined,
@@ -498,13 +513,14 @@ describe('FinanceAccountSubjectArchiveView', () => {
     wrapper.unmount()
   })
 
-  it('maps auxiliary checkbox selections to 0/1 payload values and clears cass_item when project is unchecked', async () => {
+  it('uses direct 0/1 auxiliary switches and clears cass_item when project accounting is disabled', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       openCreateDrawer: (parentSubjectCode?: string) => void
       loadDerivedDefaults: () => Promise<void>
       form: Record<string, unknown>
-      auxiliarySelections: string[]
+      projectClassOptionsForDisplay: Array<{ value: string; label: string }>
+      updateAuxiliaryFlag: (field: string, value: number) => void
       buildPayload: () => Record<string, unknown>
     }
 
@@ -514,9 +530,14 @@ describe('FinanceAccountSubjectArchiveView', () => {
     await vm.loadDerivedDefaults()
     await flushPromises()
 
-    vm.auxiliarySelections = ['bperson', 'bitem']
+    vm.form.bperson = 1
+    vm.form.bcus = 0
+    vm.form.bsup = 0
+    vm.form.bdept = 0
+    vm.form.bitem = 1
     vm.form.cass_item = '01'
 
+    expect(vm.projectClassOptionsForDisplay.map((item) => item.value)).toEqual(['01', '97'])
     expect(vm.buildPayload()).toMatchObject({
       parent_subject_code: '1001',
       bperson: 1,
@@ -527,7 +548,7 @@ describe('FinanceAccountSubjectArchiveView', () => {
       cass_item: '01'
     })
 
-    vm.auxiliarySelections = ['bperson']
+    vm.updateAuxiliaryFlag('bitem', 0)
     await flushPromises()
 
     expect(vm.form.cass_item).toBe('')
@@ -536,6 +557,49 @@ describe('FinanceAccountSubjectArchiveView', () => {
       bitem: 0
     })
     expect(vm.buildPayload().cass_item).toBeUndefined()
+
+    wrapper.unmount()
+  })
+
+  it('keeps hidden control values in payload and preserves legacy cass_item display in edit mode', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      form: Record<string, unknown>
+      projectClassOptionsForDisplay: Array<{ value: string; label: string }>
+      buildPayload: () => Record<string, unknown>
+    }
+
+    Object.assign(vm.form, {
+      bitem: 1,
+      cass_item: '77',
+      itrans: 8,
+      bReport: 1,
+      bGCJS: 1,
+      iViewItem: 3,
+      cother: 'ERP',
+      iotherused: 5,
+      bCashItem: 1
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('特殊标记')
+    expect(wrapper.text()).not.toContain('视图项目类型')
+    expect(wrapper.text()).not.toContain('工程结算')
+    expect(wrapper.text()).not.toContain('转账通知')
+    expect(wrapper.text()).toContain('受控系统')
+    expect(wrapper.text()).toContain('其他系统已使用')
+    expect(wrapper.text()).toContain('现金流量科目')
+    expect(vm.projectClassOptionsForDisplay[0]).toEqual({ value: '77', label: '77' })
+    expect(vm.buildPayload()).toMatchObject({
+      cass_item: '77',
+      itrans: 8,
+      bReport: 1,
+      bGCJS: 1,
+      iViewItem: 3,
+      cother: 'ERP',
+      iotherused: 5,
+      bCashItem: 1
+    })
 
     wrapper.unmount()
   })

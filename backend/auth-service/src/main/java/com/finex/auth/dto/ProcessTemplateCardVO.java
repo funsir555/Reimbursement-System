@@ -38,6 +38,10 @@ public class ProcessTemplateCardVO {
 
     private String expenseDetailDesignName;
 
+    private String status;
+
+    private String statusLabel;
+
     private String updatedAt;
 
     private String owner;

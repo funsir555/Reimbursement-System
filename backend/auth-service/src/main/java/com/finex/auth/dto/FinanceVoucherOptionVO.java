@@ -26,4 +26,6 @@ public class FinanceVoucherOptionVO {
     private Integer bitem;
 
     private String cassItem;
+
+    private Integer leafFlag;
 }

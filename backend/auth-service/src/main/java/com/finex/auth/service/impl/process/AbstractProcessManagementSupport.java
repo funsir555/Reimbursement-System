@@ -120,6 +120,10 @@ abstract class AbstractProcessManagementSupport {
     private static final String DEFAULT_NUMBERING_RULE_CODE = "FX_DATE_4SEQ";
     private static final String DEFAULT_NUMBERING_RULE_PREVIEW = "FX+\u5e74+\u6708+\u65e5+4\u4f4d\u6570\u5b57\uff08\u5982\uff1aFX202503251234\uff09";
     private static final String DEFAULT_TEMPLATE_COLOR = "blue";
+    private static final String TEMPLATE_STATUS_ENABLED = "ENABLED";
+    private static final String TEMPLATE_STATUS_DRAFT = "DRAFT";
+    private static final String TEMPLATE_STATUS_DELETED = "DELETED";
+    private static final String TEMPLATE_COPY_SUFFIX = "\u0020-\u0020\u526f\u672c";
     private static final String SCOPE_TYPE_DEPARTMENT = "SCOPE_DEPARTMENT";
     private static final String SCOPE_TYPE_EXPENSE_TYPE = "SCOPE_EXPENSE_TYPE";
     private static final String SCOPE_TYPE_AMOUNT_MIN = "SCOPE_AMOUNT_MIN";
@@ -227,7 +231,7 @@ abstract class AbstractProcessManagementSupport {
         );
         List<ProcessDocumentTemplate> templates = templateMapper.selectList(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
-                        .eq(ProcessDocumentTemplate::getEnabled, 1)
+                        .in(ProcessDocumentTemplate::getPublishStatus, TEMPLATE_STATUS_ENABLED, TEMPLATE_STATUS_DRAFT)
                         .orderByAsc(ProcessDocumentTemplate::getSortOrder, ProcessDocumentTemplate::getId)
         );
 
@@ -316,7 +320,7 @@ abstract class AbstractProcessManagementSupport {
      * 获取模板明细。
      */
     protected ProcessTemplateDetailVO getTemplateDetail(Long id) {
-        return buildTemplateDetail(requireActiveTemplate(id));
+        return buildTemplateDetail(requireVisibleTemplate(id));
     }
 
     /**
@@ -417,7 +421,7 @@ abstract class AbstractProcessManagementSupport {
             template.setExpenseDetailModeDefault(expenseDetailModeDefault);
             template.setIconColor(DEFAULT_TEMPLATE_COLOR);
             template.setEnabled(enabled ? 1 : 0);
-            template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
+            template.setPublishStatus(enabled ? TEMPLATE_STATUS_ENABLED : TEMPLATE_STATUS_DRAFT);
             template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
             template.setApprovalFlow(approvalFlowCode);
             template.setFlowName(flowLabelMap.get(approvalFlowCode));
@@ -491,8 +495,8 @@ abstract class AbstractProcessManagementSupport {
 
         try {
             long stageStartedAt = System.nanoTime();
-            ProcessDocumentTemplate template = requireActiveTemplate(id);
-            logTemplateSaveStage(traceId, "updateTemplate", "requireActiveTemplate", stageStartedAt);
+            ProcessDocumentTemplate template = requireVisibleTemplate(id);
+            logTemplateSaveStage(traceId, "updateTemplate", "requireVisibleTemplate", stageStartedAt);
 
             String categoryCode = normalize(dto.getCategory(), template.getCategoryCode());
             String templateType = normalize(dto.getTemplateType(), template.getTemplateType());
@@ -558,7 +562,7 @@ abstract class AbstractProcessManagementSupport {
             template.setExpenseDetailModeDefault(expenseDetailModeDefault);
             template.setIconColor(DEFAULT_TEMPLATE_COLOR);
             template.setEnabled(enabled ? 1 : 0);
-            template.setPublishStatus(enabled ? "ENABLED" : "DRAFT");
+            template.setPublishStatus(enabled ? TEMPLATE_STATUS_ENABLED : TEMPLATE_STATUS_DRAFT);
             template.setPrintMode(normalize(dto.getPrintMode(), "default-print"));
             template.setApprovalFlow(approvalFlowCode);
             template.setFlowName(flowLabelMap.get(approvalFlowCode));
@@ -611,13 +615,44 @@ abstract class AbstractProcessManagementSupport {
     }
 
     /**
+     * 复制模板。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    protected ProcessTemplateSaveResultVO copyTemplate(Long id, String operatorName) {
+        ProcessDocumentTemplate source = requireVisibleTemplate(id);
+        Map<String, List<ProcessTemplateScope>> scopeMap = loadTemplateScopeMap(source.getId());
+
+        ProcessTemplateSaveDTO dto = new ProcessTemplateSaveDTO();
+        dto.setTemplateType(source.getTemplateType());
+        dto.setTemplateName(buildTemplateCopyName(source.getTemplateName()));
+        dto.setTemplateDescription(source.getTemplateDescription());
+        dto.setCategory(source.getCategoryCode());
+        dto.setEnabled(Boolean.FALSE);
+        dto.setFormDesign(source.getFormDesignCode());
+        dto.setExpenseDetailDesign(source.getExpenseDetailDesignCode());
+        dto.setExpenseDetailModeDefault(source.getExpenseDetailModeDefault());
+        dto.setPrintMode(source.getPrintMode());
+        dto.setApprovalFlow(source.getApprovalFlow());
+        dto.setPaymentMode(source.getPaymentMode());
+        dto.setAllocationForm(source.getAllocationForm());
+        dto.setAiAuditMode(source.getAiAuditMode());
+        dto.setScopeDeptIds(new ArrayList<>(extractScopeCodes(scopeMap.get(SCOPE_TYPE_DEPARTMENT))));
+        dto.setScopeExpenseTypeCodes(new ArrayList<>(extractScopeCodes(scopeMap.get(SCOPE_TYPE_EXPENSE_TYPE))));
+        dto.setAmountMin(parseScopeAmount(scopeMap.get(SCOPE_TYPE_AMOUNT_MIN)));
+        dto.setAmountMax(parseScopeAmount(scopeMap.get(SCOPE_TYPE_AMOUNT_MAX)));
+        dto.setTagOption(resolveArchiveScopeCode(scopeMap.get(SCOPE_TYPE_TAG_ARCHIVE), scopeMap.get("TAG_OPTION")));
+        dto.setInstallmentOption(resolveArchiveScopeCode(scopeMap.get(SCOPE_TYPE_INSTALLMENT_ARCHIVE), scopeMap.get("INSTALLMENT_OPTION")));
+        return saveTemplate(dto, operatorName);
+    }
+
+    /**
      * 删除模板。
      */
     @Transactional(rollbackFor = Exception.class)
     protected Boolean deleteTemplate(Long id) {
         ProcessDocumentTemplate template = requireTemplate(id);
         template.setEnabled(0);
-        template.setPublishStatus("DRAFT");
+        template.setPublishStatus(TEMPLATE_STATUS_DELETED);
         templateMapper.updateById(template);
         scopeMapper.delete(
                 Wrappers.<ProcessTemplateScope>lambdaQuery()
@@ -1056,7 +1091,7 @@ abstract class AbstractProcessManagementSupport {
         ProcessCenterSummaryVO summary = new ProcessCenterSummaryVO();
         summary.setTotalTemplates(templates.size());
         summary.setEnabledTemplates((int) templates.stream().filter(item -> Objects.equals(item.getEnabled(), 1)).count());
-        summary.setDraftTemplates((int) templates.stream().filter(item -> !"ENABLED".equals(item.getPublishStatus())).count());
+        summary.setDraftTemplates((int) templates.stream().filter(item -> TEMPLATE_STATUS_DRAFT.equals(item.getPublishStatus())).count());
         summary.setAiAuditTemplates((int) templates.stream()
                 .filter(item -> !"disabled".equalsIgnoreCase(normalize(item.getAiAuditMode(), "disabled")))
                 .count());
@@ -1135,6 +1170,8 @@ abstract class AbstractProcessManagementSupport {
             card.setFormName(normalize(formNameMap.get(formCode), "\u672a\u7ed1\u5b9a\u8868\u5355"));
             card.setExpenseDetailDesignCode(expenseDetailDesignCode);
             card.setExpenseDetailDesignName(normalize(expenseDetailDesignNameMap.get(expenseDetailDesignCode), "\u672a\u7ed1\u5b9a\u660e\u7ec6\u8868\u5355"));
+            card.setStatus(template.getPublishStatus());
+            card.setStatusLabel(resolveTemplateStatusLabel(template.getPublishStatus()));
             card.setUpdatedAt(formatDateTime(template.getUpdatedAt()));
             card.setOwner(normalize(template.getOwnerName(), "\u6d41\u7a0b\u7ba1\u7406\u5458"));
             card.setColor(resolveColor(template.getIconColor()));
@@ -1746,7 +1783,15 @@ abstract class AbstractProcessManagementSupport {
     private ProcessDocumentTemplate requireTemplate(Long id) {
         ProcessDocumentTemplate template = templateMapper.selectById(id);
         if (template == null) {
-            throw new IllegalStateException("妯℃澘涓嶅瓨鍦?");
+            throw new IllegalStateException("\u6a21\u677f\u4e0d\u5b58\u5728");
+        }
+        return template;
+    }
+
+    private ProcessDocumentTemplate requireVisibleTemplate(Long id) {
+        ProcessDocumentTemplate template = requireTemplate(id);
+        if (TEMPLATE_STATUS_DELETED.equals(template.getPublishStatus())) {
+            throw new IllegalStateException("\u6a21\u677f\u5df2\u5220\u9664\uff0c\u65e0\u6cd5\u7ee7\u7eed\u64cd\u4f5c");
         }
         return template;
     }
@@ -1754,7 +1799,7 @@ abstract class AbstractProcessManagementSupport {
     private ProcessDocumentTemplate requireActiveTemplate(Long id) {
         ProcessDocumentTemplate template = requireTemplate(id);
         if (!Objects.equals(template.getEnabled(), 1)) {
-            throw new IllegalStateException("妯℃澘涓嶅瓨鍦ㄦ垨宸插仠鐢?");
+            throw new IllegalStateException("\u5f53\u524d\u6a21\u677f\u672a\u542f\u7528\uff0c\u65e0\u6cd5\u6267\u884c\u8be5\u64cd\u4f5c");
         }
         return template;
     }
@@ -2528,6 +2573,100 @@ abstract class AbstractProcessManagementSupport {
     private String normalize(String value, String defaultValue) {
         String normalizedValue = trimToNull(value);
         return normalizedValue == null ? defaultValue : normalizedValue;
+    }
+
+    private String resolveTemplateStatusLabel(String status) {
+        if (TEMPLATE_STATUS_ENABLED.equals(status)) {
+            return "\u5df2\u542f\u7528";
+        }
+        if (TEMPLATE_STATUS_DRAFT.equals(status)) {
+            return "\u8349\u7a3f";
+        }
+        if (TEMPLATE_STATUS_DELETED.equals(status)) {
+            return "\u5df2\u5220\u9664";
+        }
+        return "\u8349\u7a3f";
+    }
+
+    private String buildTemplateCopyName(String sourceName) {
+        String baseName = trimToNull(sourceName);
+        if (baseName == null) {
+            baseName = "\u672a\u547d\u540d\u6a21\u677f";
+        }
+        String normalizedBase = trimTemplateCopyBase(baseName);
+        String candidate = buildTemplateCopyCandidate(normalizedBase, TEMPLATE_COPY_SUFFIX);
+        if (!templateNameExists(candidate)) {
+            return candidate;
+        }
+        for (int index = 2; index < 1000; index++) {
+            candidate = buildTemplateCopyCandidate(normalizedBase, TEMPLATE_COPY_SUFFIX + index);
+            if (!templateNameExists(candidate)) {
+                return candidate;
+            }
+        }
+        throw new IllegalStateException("\u6a21\u677f\u526f\u672c\u540d\u79f0\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5");
+    }
+
+    private String buildTemplateCopyCandidate(String baseName, String suffix) {
+        String normalizedBase = trimToNull(baseName);
+        String normalizedSuffix = suffix == null ? null : suffix;
+        if (normalizedBase == null) {
+            normalizedBase = "\u672a\u547d\u540d\u6a21\u677f";
+        }
+        if (normalizedSuffix == null || normalizedSuffix.isBlank()) {
+            return trimTemplateNameToLength(normalizedBase);
+        }
+        int maxBaseLength = Math.max(1, PM_NAME_MAX_LENGTH - normalizedSuffix.length());
+        String trimmedBase = normalizedBase.length() <= maxBaseLength
+                ? normalizedBase
+                : normalizedBase.substring(0, maxBaseLength).trim();
+        if (trimmedBase.isEmpty()) {
+            trimmedBase = normalizedBase.substring(0, Math.min(normalizedBase.length(), maxBaseLength));
+        }
+        return trimmedBase + normalizedSuffix;
+    }
+
+    private String trimTemplateCopyBase(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return "\u672a\u547d\u540d\u6a21\u677f";
+        }
+        if (normalized.endsWith(TEMPLATE_COPY_SUFFIX)) {
+            return normalized.substring(0, normalized.length() - TEMPLATE_COPY_SUFFIX.length()).trim();
+        }
+        for (int index = normalized.length() - 1; index >= 0; index--) {
+            if (!Character.isDigit(normalized.charAt(index))) {
+                String prefix = normalized.substring(0, index + 1);
+                String suffix = normalized.substring(index + 1);
+                if (prefix.endsWith(TEMPLATE_COPY_SUFFIX) && !suffix.isEmpty()) {
+                    return prefix.substring(0, prefix.length() - TEMPLATE_COPY_SUFFIX.length()).trim();
+                }
+                break;
+            }
+        }
+        return normalized;
+    }
+
+    private String trimTemplateNameToLength(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) {
+            return "\u672a\u547d\u540d\u6a21\u677f";
+        }
+        return normalized.length() <= PM_NAME_MAX_LENGTH
+                ? normalized
+                : normalized.substring(0, PM_NAME_MAX_LENGTH).trim();
+    }
+
+    private boolean templateNameExists(String templateName) {
+        String normalized = trimToNull(templateName);
+        if (normalized == null) {
+            return false;
+        }
+        return templateMapper.selectCount(
+                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .eq(ProcessDocumentTemplate::getTemplateName, normalized)
+                        .ne(ProcessDocumentTemplate::getPublishStatus, TEMPLATE_STATUS_DELETED)
+        ) > 0;
     }
 
     private void validatePmNameLength(String value, String label) {

@@ -161,3 +161,16 @@ html, body, #app {
 .menu-level-3.el-menu-item {
   color: #6b7280 !important;
 }
+
+.business-warning-dialog .el-message-box__header {
+  border-bottom: 1px solid #fde68a;
+}
+
+.business-warning-dialog .el-message-box__content {
+  color: #92400e;
+}
+
+.business-warning-dialog .el-message-box__btns .el-button--primary {
+  background: #d97706;
+  border-color: #d97706;
+}

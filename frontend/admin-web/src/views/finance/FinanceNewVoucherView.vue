@@ -32,11 +32,11 @@
           <div class="voucher-info-main">
             <div class="voucher-info-grid">
               <label class="voucher-info-field voucher-info-company">
-                <span>公司</span>
+                <span class="voucher-field-label">公司</span>
                 <div class="voucher-code-box voucher-company-box">{{ currentCompanyName }}</div>
               </label>
               <label class="voucher-info-field voucher-info-code">
-                <span>凭证编号</span>
+                <span class="voucher-field-label">凭证编号</span>
                 <div class="voucher-number-group">
                   <el-select v-model="form.csign" placeholder="类别" :disabled="voucherHeaderLocked">
                     <el-option v-for="item in voucherMeta?.voucherTypeOptions || []" :key="item.value" :label="item.label" :value="item.value" />
@@ -46,25 +46,26 @@
                 </div>
               </label>
               <label class="voucher-info-field voucher-info-date">
-                <span>制单日期</span>
+                <span class="voucher-field-label">制单日期</span>
                 <el-date-picker v-model="form.dbillDate" type="date" value-format="YYYY-MM-DD" format="YYYY-MM-DD" :disabled="isReadonlyMode" />
               </label>
               <label class="voucher-info-field voucher-info-period">
-                <span>期间</span>
+                <span class="voucher-field-label">期间</span>
                 <el-input-number v-model="form.iperiod" :min="1" :max="12" :controls="false" :disabled="voucherHeaderLocked" />
               </label>
               <label class="voucher-info-field voucher-info-maker">
-                <span>制单人</span>
+                <span class="voucher-field-label">制单人</span>
                 <el-input v-model="form.cbill" readonly />
               </label>
               <label class="voucher-info-field voucher-info-docs">
-                <span>附件张数</span>
+                <span class="voucher-field-label">附件张数</span>
                 <el-input-number v-model="form.idoc" :min="0" :controls="false" :disabled="isReadonlyMode" />
               </label>
               <label class="voucher-info-field voucher-info-field-note">
-                <span>备注</span>
+                <span class="voucher-field-label">备注</span>
                 <el-input v-model="remarkText" placeholder="请输入备注" :readonly="isReadonlyMode" />
               </label>
+              <div class="voucher-info-spacer" aria-hidden="true"></div>
             </div>
           </div>
         </section>
@@ -81,15 +82,6 @@
         </section>
 
         <section class="voucher-ledger-card">
-          <div class="voucher-ledger-header">
-            <div class="voucher-ledger-title">凭证明细</div>
-            <div class="voucher-ledger-summary">
-              <span>借方合计 {{ moneyText(totalDebit) }}</span>
-              <span>贷方合计 {{ moneyText(totalCredit) }}</span>
-              <span :class="isZeroMoney(balanceGap) ? 'text-emerald-600' : 'text-amber-600'">差额 {{ moneyText(absMoney(balanceGap)) }}</span>
-            </div>
-          </div>
-
           <div class="voucher-grid">
             <div class="voucher-grid-header voucher-grid-layout">
               <div>摘要</div>
@@ -117,20 +109,30 @@
                       placeholder="请输入摘要"
                       :readonly="isReadonlyMode"
                       :maxlength="255"
-                      @focus="selectRow(index)"
+                      @focus="handleEntryFieldFocus(index)"
                     />
                   </div>
                 </div>
                 <div class="voucher-cell">
-                  <el-select v-model="row.ccode" filterable clearable placeholder="请选择科目" :disabled="isReadonlyMode" @focus="selectRow(index)" @visible-change="selectRow(index)">
+                  <el-select
+                    v-model="row.ccode"
+                    filterable
+                    clearable
+                    placeholder="请选择科目"
+                    :disabled="isReadonlyMode"
+                    :data-subject-row-id="row.localId"
+                    @focus="handleSubjectFieldFocus(index)"
+                    @change="handleSubjectChange(index, $event)"
+                    @visible-change="handleSubjectDropdownVisibleChange(index, $event)"
+                  >
                     <el-option v-for="item in accountOptionsForDisplay" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                   </el-select>
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="selectRow(index)" @keydown="handleAmountKeydown($event, index, 'md')" />
+                  <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @keydown="handleAmountKeydown($event, index, 'md')" />
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.mc" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="selectRow(index)" @keydown="handleAmountKeydown($event, index, 'mc')" />
+                  <money-input v-model="row.mc" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @keydown="handleAmountKeydown($event, index, 'mc')" />
                 </div>
               </div>
             </div>
@@ -146,14 +148,9 @@
 
         <section class="voucher-lower voucher-lower-full">
           <div class="voucher-assist-card">
-            <div class="voucher-section-head">
-              <h2>辅助核算</h2>
-              <div class="voucher-current-row">当前行 {{ selectedRowIndex + 1 }}</div>
-            </div>
-
             <div class="assist-grid">
               <label class="assist-field">
-                <span>部门</span>
+                <span class="voucher-field-label">部门</span>
                 <el-tree-select
                   v-model="selectedRow.cdeptId"
                   :data="departmentTreeOptions"
@@ -165,35 +162,36 @@
                   :disabled="assistDisabledState.department"
                   :props="{ label: 'label', children: 'children', value: 'value' }"
                   :filter-node-method="filterDepartmentTreeNode"
+                  @focus="handleAssistFieldFocus"
                 />
               </label>
               <label class="assist-field">
-                <span>人员</span>
-                <el-select v-model="selectedRow.cpersonId" filterable clearable placeholder="请选择人员" :disabled="assistDisabledState.employee">
+                <span class="voucher-field-label">人员</span>
+                <el-select v-model="selectedRow.cpersonId" filterable clearable placeholder="请选择人员" :disabled="assistDisabledState.employee" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in voucherMeta?.employeeOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
-                <span>客户</span>
-                <el-select v-model="selectedRow.ccusId" filterable clearable placeholder="请选择客户" :disabled="assistDisabledState.customer">
+                <span class="voucher-field-label">客户</span>
+                <el-select v-model="selectedRow.ccusId" filterable clearable placeholder="请选择客户" :disabled="assistDisabledState.customer" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in voucherMeta?.customerOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
-                <span>供应商</span>
-                <el-select v-model="selectedRow.csupId" filterable clearable placeholder="请选择供应商" :disabled="assistDisabledState.supplier">
+                <span class="voucher-field-label">供应商</span>
+                <el-select v-model="selectedRow.csupId" filterable clearable placeholder="请选择供应商" :disabled="assistDisabledState.supplier" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in voucherMeta?.supplierOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
-                <span>项目分类</span>
-                <el-select v-model="selectedRow.citemClass" filterable clearable placeholder="请选择项目分类" :disabled="assistDisabledState.projectClass">
+                <span class="voucher-field-label">项目分类</span>
+                <el-select v-model="selectedRow.citemClass" filterable clearable placeholder="请选择项目分类" :disabled="assistDisabledState.projectClass" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in projectClassOptionsForDisplay" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
-                <span>项目</span>
-                <el-select v-model="selectedRow.citemId" filterable clearable placeholder="请选择项目" :disabled="assistDisabledState.project">
+                <span class="voucher-field-label">项目</span>
+                <el-select v-model="selectedRow.citemId" filterable clearable placeholder="请选择项目" :disabled="assistDisabledState.project" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
@@ -224,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -256,6 +254,7 @@ import {
 } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
+import { showBusinessWarning } from '@/utils/businessWarning'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { absMoney, addMoney, formatMoney, isZeroMoney, normalizeMoneyValue } from '@/utils/money'
 
@@ -271,6 +270,10 @@ type VoucherAssistCapability = {
   supplier: boolean
   project: boolean
   lockedProjectClassCode?: string
+}
+type LeafSubjectSnapshot = {
+  code: string
+  name?: string
 }
 
 interface ToolbarAction {
@@ -328,6 +331,8 @@ const selectedRowIndex = ref(0)
 const editingExisting = ref(false)
 const lastCommittedSnapshot = ref('')
 const actionDialog = reactive({ visible: false, title: '', description: '' })
+const lastValidLeafSubjectByRow = reactive<Record<string, LeafSubjectSnapshot | undefined>>({})
+const leafSubjectWarningVisible = ref(false)
 const viewActive = ref(false)
 let entrySeed = 0
 let loadSequence = 0
@@ -439,7 +444,7 @@ const currentCompanyOption = computed(() =>
   financeCompany.companyOptions?.find((item) => item.companyId === (financeCompany.currentCompanyId || form.companyId))
 )
 const currentRowLabel = computed(() => {
-  if (!selectedRow.value?.ccode) return '当前行'
+  if (!selectedRow.value?.ccode) return ''
   return resolveAccountLabel(selectedRow.value.ccode, selectedRow.value.ccodeName)
 })
 const currentCompanyName = computed(() => financeCompany.currentCompanyName || currentCompanyOption.value?.companyName || resolveCompanyName(form.companyId))
@@ -685,6 +690,7 @@ function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.
   form.ctext1 = ''
   form.ctext2 = ''
   form.entries = ensureMinimumRows([createEntry(meta.defaultCurrency, 1), createEntry(meta.defaultCurrency, 2)], meta.defaultCurrency)
+  resetLeafSubjectHistory(form.entries, meta.accountOptions)
   selectedRowIndex.value = 0
 }
 
@@ -699,6 +705,7 @@ function applyDraft(draft: FinanceVoucherSavePayload, meta: FinanceVoucherMeta, 
   form.ctext1 = draft.ctext1 || ''
   form.ctext2 = draft.ctext2 || ''
   form.entries = ensureMinimumRows((draft.entries?.length ? draft.entries : [createEntry(meta.defaultCurrency, 1), createEntry(meta.defaultCurrency, 2)]).map((item, index) => createEntryFromValue(item, meta.defaultCurrency, index + 1)), meta.defaultCurrency)
+  resetLeafSubjectHistory(form.entries, meta.accountOptions)
   selectedRowIndex.value = 0
 }
 
@@ -713,6 +720,7 @@ function applyDetail(detail: FinanceVoucherDetail, meta: FinanceVoucherMeta) {
   form.ctext1 = detail.ctext1 || ''
   form.ctext2 = detail.ctext2 || ''
   form.entries = ensureMinimumRows(detail.entries.map((item, index) => createEntryFromValue(item, meta.defaultCurrency, index + 1)), meta.defaultCurrency, Math.max(detail.entries.length, 2))
+  resetLeafSubjectHistory(form.entries, meta.accountOptions)
   selectedRowIndex.value = 0
 }
 function createEntry(defaultCurrency: string, rowNo: number): VoucherEntryRow {
@@ -814,6 +822,122 @@ function normalizeText(value?: string | null) {
 
 function isOptionEnabled(value?: number | null) {
   return Number(value || 0) === 1
+}
+
+function isLeafAccountOption(option?: FinanceVoucherOption | null) {
+  return Number(option?.leafFlag || 0) === 1
+}
+
+function findAccountOptionByCode(code?: string | null, options = voucherMeta.value?.accountOptions || []) {
+  const normalizedCode = normalizeText(code)
+  return normalizedCode ? options.find((item) => item.value === normalizedCode) : undefined
+}
+
+function rememberLeafSubject(row: VoucherEntryRow, option?: FinanceVoucherOption | null) {
+  if (!option || !isLeafAccountOption(option)) {
+    delete lastValidLeafSubjectByRow[row.localId]
+    return
+  }
+  lastValidLeafSubjectByRow[row.localId] = {
+    code: option.value,
+    name: option.name
+  }
+}
+
+function clearAssistSelections(row: VoucherEntryRow) {
+  row.cdeptId = ''
+  row.cpersonId = ''
+  row.ccusId = ''
+  row.csupId = ''
+  row.citemClass = ''
+  row.citemId = ''
+}
+
+function syncRowAccountState(row: VoucherEntryRow, options = voucherMeta.value?.accountOptions || []) {
+  const option = findAccountOptionByCode(row.ccode, options)
+  if (option?.name) {
+    row.ccodeName = option.name
+  } else if (!row.ccode) {
+    row.ccodeName = ''
+  }
+  if (!row.ccode) {
+    delete lastValidLeafSubjectByRow[row.localId]
+    return
+  }
+  if (isLeafAccountOption(option)) {
+    rememberLeafSubject(row, option)
+    return
+  }
+  delete lastValidLeafSubjectByRow[row.localId]
+}
+
+function resetLeafSubjectHistory(entries: VoucherEntryRow[], options = voucherMeta.value?.accountOptions || []) {
+  Object.keys(lastValidLeafSubjectByRow).forEach((key) => {
+    delete lastValidLeafSubjectByRow[key]
+  })
+  entries.forEach((row) => {
+    syncRowAccountState(row, options)
+  })
+}
+
+function focusSubjectField(row: VoucherEntryRow) {
+  if (typeof document === 'undefined') return
+  const selector = `[data-subject-row-id="${row.localId}"]`
+  const host = document.querySelector(selector)
+  if (!(host instanceof HTMLElement)) return
+  const focusTarget = host.matches('input,select,[tabindex]') ? host : host.querySelector<HTMLElement>('input,select,[tabindex],.el-select__wrapper')
+  focusTarget?.focus?.()
+}
+
+async function restoreInvalidLeafSubject(row: VoucherEntryRow, rowIndex = selectedRowIndex.value) {
+  if (leafSubjectWarningVisible.value) {
+    return false
+  }
+  const invalidLabel = resolveAccountLabel(row.ccode, row.ccodeName)
+  const previousLeafSubject = lastValidLeafSubjectByRow[row.localId]
+  leafSubjectWarningVisible.value = true
+  try {
+    await showBusinessWarning({
+      title: '科目不可录入',
+      message: `当前科目【${invalidLabel}】不是末级科目，不允许录入凭证，请重新选择末级科目。`,
+      confirmButtonText: '返回科目'
+    })
+  } finally {
+    leafSubjectWarningVisible.value = false
+  }
+
+  if (previousLeafSubject) {
+    row.ccode = previousLeafSubject.code
+    row.ccodeName = previousLeafSubject.name || findAccountOptionByCode(previousLeafSubject.code)?.name || ''
+  } else {
+    row.ccode = ''
+    row.ccodeName = ''
+  }
+  clearAssistSelections(row)
+  clearDisabledAssistFields(row, resolveAssistCapability(findAccountOptionByCode(row.ccode)))
+  selectedRowIndex.value = Math.max(0, Math.min(rowIndex, form.entries.length - 1))
+  await nextTick()
+  focusSubjectField(row)
+  return false
+}
+
+async function ensureSelectedRowUsesLeafSubject() {
+  if (isReadonlyMode.value) return true
+  const row = selectedRow.value
+  if (!row?.ccode) return true
+  const option = findAccountOptionByCode(row.ccode)
+  if (!option || isLeafAccountOption(option)) {
+    return true
+  }
+  return restoreInvalidLeafSubject(row, selectedRowIndex.value)
+}
+
+async function tryLeaveSubjectField(nextRowIndex = selectedRowIndex.value) {
+  const canLeave = await ensureSelectedRowUsesLeafSubject()
+  if (canLeave) {
+    selectRow(nextRowIndex)
+  }
+  return canLeave
 }
 
 function resolveAssistCapability(option?: FinanceVoucherOption | null): VoucherAssistCapability {
@@ -937,6 +1061,9 @@ function validateEntrySelection(row: VoucherEntryRow, rowNo: number, errors: str
   if (row.ccode && !account) {
     errors.push(`第 ${rowNo} 行科目不存在或当前不可用`)
   }
+  if (account && !isLeafAccountOption(account)) {
+    errors.push(`第 ${rowNo} 行科目【${formatVoucherOptionLabel(account)}】不是末级科目，不允许录入凭证`)
+  }
   if (row.cdeptId && !departmentValues.has(row.cdeptId)) {
     errors.push(`第 ${rowNo} 行部门不存在或当前不可用`)
   }
@@ -1056,6 +1183,7 @@ async function refreshSuggestedVoucherNo() {
     const companyId = financeCompany.currentCompanyId || form.companyId
     const res = await financeApi.getVoucherMeta({ companyId, billDate: form.dbillDate, csign: form.csign })
     voucherMeta.value = res.data
+    resetLeafSubjectHistory(form.entries, res.data.accountOptions)
     form.companyId = companyId || ''
     form.inoId = res.data.suggestedVoucherNo
     if (!form.cbill) form.cbill = res.data.defaultMaker
@@ -1067,11 +1195,50 @@ function selectRow(index: number) {
   selectedRowIndex.value = Math.max(0, Math.min(index, form.entries.length - 1))
 }
 
+function handleSubjectChange(index: number, value?: string | number) {
+  selectRow(index)
+  const row = form.entries[index]
+  if (!row) return
+  row.ccode = normalizeText(typeof value === 'number' ? String(value) : value) || ''
+  const option = findAccountOptionByCode(row.ccode)
+  row.ccodeName = option?.name || ''
+  if (!row.ccode) {
+    delete lastValidLeafSubjectByRow[row.localId]
+    clearAssistSelections(row)
+    return
+  }
+  if (isLeafAccountOption(option)) {
+    rememberLeafSubject(row, option)
+  }
+}
+
+function handleSubjectFieldFocus(index: number) {
+  if (index === selectedRowIndex.value) {
+    selectRow(index)
+    return
+  }
+  void tryLeaveSubjectField(index)
+}
+
+function handleSubjectDropdownVisibleChange(index: number, visible: boolean) {
+  if (!visible) return
+  handleSubjectFieldFocus(index)
+}
+
+function handleEntryFieldFocus(index: number) {
+  void tryLeaveSubjectField(index)
+}
+
+function handleAssistFieldFocus() {
+  void ensureSelectedRowUsesLeafSubject()
+}
+
 function insertEntryAfter(index: number) {
   if (isReadonlyMode.value) return
   const currency = voucherMeta.value?.defaultCurrency || 'CNY'
   form.entries.splice(index + 1, 0, createEntry(currency, index + 2))
   form.entries = ensureMinimumRows(form.entries, currency, Math.max(form.entries.length, MIN_ENTRY_ROWS))
+  resetLeafSubjectHistory(form.entries)
   selectRow(index + 1)
 }
 
@@ -1083,6 +1250,7 @@ function removeSelectedEntry() {
   }
   form.entries.splice(selectedRowIndex.value, 1)
   form.entries = ensureMinimumRows(form.entries, voucherMeta.value?.defaultCurrency || 'CNY', Math.max(form.entries.length, 2))
+  resetLeafSubjectHistory(form.entries)
   selectRow(Math.max(0, selectedRowIndex.value - 1))
 }
 
@@ -1128,6 +1296,7 @@ function enterEditMode() {
 }
 
 async function handleSave() {
+  if (!(await ensureSelectedRowUsesLeafSubject())) return
   if (!validateVoucher(true)) return
 
   saving.value = true
@@ -1285,11 +1454,11 @@ function handleToolbarAction(action: ToolbarActionKey) {
 function handleGridKeydown(event: KeyboardEvent, index: number) {
   if (event.key === 'ArrowUp') {
     event.preventDefault()
-    selectRow(index - 1)
+    void tryLeaveSubjectField(index - 1)
   }
   if (event.key === 'ArrowDown') {
     event.preventDefault()
-    selectRow(index + 1)
+    void tryLeaveSubjectField(index + 1)
   }
   if (!isReadonlyMode.value && event.key === 'Insert') {
     event.preventDefault()
@@ -1440,76 +1609,75 @@ defineExpose({
 })
 </script>
 <style scoped>
-.voucher-page { height: 100%; display: flex; min-height: 0; flex-direction: column; gap: 12px; overflow: hidden; }
+.voucher-page { height: 100%; display: flex; min-height: 0; flex-direction: column; gap: 10px; overflow: hidden; }
 .voucher-content-scroll { min-height: 0; flex: 1; overflow: auto; padding-bottom: 8px; }
-.voucher-shell { display: flex; min-height: 100%; flex-direction: column; gap: 16px; border-radius: 28px; background: radial-gradient(circle at top right, rgba(96,165,250,.1), transparent 28%), linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%); padding: 18px; }
-.voucher-notice-panel { display: flex; flex-direction: column; gap: 10px; }
+.voucher-shell { display: flex; min-height: 100%; flex-direction: column; gap: 12px; border-radius: 28px; background: radial-gradient(circle at top right, rgba(96,165,250,.1), transparent 28%), linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%); padding: 14px; }
+.voucher-notice-panel { display: flex; flex-direction: column; gap: 8px; }
 .voucher-notice-item { border-radius: 18px; border: 1px solid #d8e2f0; padding: 12px 14px; font-size: 13px; font-weight: 600; line-height: 1.6; }
 .voucher-notice-item-warning { border-color: #f5d38b; background: linear-gradient(180deg, #fff8e8 0%, #fff3da 100%); color: #8a5a12; }
 .voucher-notice-item-danger { border-color: #f1b4b4; background: linear-gradient(180deg, #fff3f3 0%, #ffe6e6 100%); color: #a63535; }
 .voucher-notice-item-info { border-color: #bfd4f2; background: linear-gradient(180deg, #f3f8ff 0%, #e9f1ff 100%); color: #325985; }
 .voucher-page-header { display: flex; justify-content: center; }
-.voucher-page-header h1 { font-size: 28px; font-weight: 700; color: #1e3a5f; letter-spacing: .28em; }
-.voucher-toolbar-panel { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid rgba(216,226,240,.9); border-radius: 22px; background: rgba(255,255,255,.92); padding: 14px 16px; backdrop-filter: blur(10px); box-shadow: 0 16px 30px rgba(15,23,42,.08); }
-.toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.toolbar-group + .toolbar-group { position: relative; padding-left: 16px; }
-.toolbar-group + .toolbar-group::before { position: absolute; left: 0; top: 6px; height: 36px; width: 1px; background: linear-gradient(180deg, transparent 0%, #d5deea 22%, #d5deea 78%, transparent 100%); content: ''; }
-.toolbar-button { height: 40px; min-width: 96px; border-radius: 14px; border-color: #d6e0ec; background: #fff; color: #365070; font-weight: 600; }
-.toolbar-button-large { height: 52px; min-width: 130px; padding: 0 20px; font-size: 15px; }
+.voucher-page-header h1 { font-size: 21px; font-weight: 700; color: #1e3a5f; letter-spacing: .2em; line-height: 1.15; }
+.voucher-toolbar-panel { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 11px; border-bottom: 1px solid rgba(216,226,240,.9); border-radius: 22px; background: rgba(255,255,255,.92); padding: 11px 13px; backdrop-filter: blur(10px); box-shadow: 0 12px 24px rgba(15,23,42,.07); }
+.toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.toolbar-group + .toolbar-group { position: relative; padding-left: 13px; }
+.toolbar-group + .toolbar-group::before { position: absolute; left: 0; top: 4px; height: 28px; width: 1px; background: linear-gradient(180deg, transparent 0%, #d5deea 22%, #d5deea 78%, transparent 100%); content: ''; }
+.toolbar-button { height: 32px; min-width: 88px; border-radius: 12px; border-color: #d6e0ec; background: #fff; color: #365070; font-weight: 600; padding: 0 12px; }
+.toolbar-button-large { height: 42px; min-width: 116px; padding: 0 16px; font-size: 14px; }
 .toolbar-button-accent { border-color: #9cbbe3; background: linear-gradient(180deg, #f0f7ff 0%, #e4efff 100%); color: #24528a; box-shadow: 0 12px 24px rgba(59,130,246,.14); }
 .toolbar-button-primary { box-shadow: 0 16px 30px rgba(37,99,235,.2); }
-.voucher-info-band { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
-.voucher-lower { display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 16px; }
+.voucher-info-band { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; }
+.voucher-lower { display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 10px; }
 .voucher-lower-full { grid-template-columns: minmax(0,1fr); }
-.voucher-info-main, .voucher-ledger-card, .voucher-assist-card, .voucher-side-card { border-radius: 24px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.94); box-shadow: 0 12px 28px rgba(15,23,42,.04); padding: 18px; }
-.voucher-info-grid, .assist-grid { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 12px 14px; }
-.voucher-info-field, .assist-field { display: flex; flex-direction: column; gap: 8px; grid-column: span 3; }
-.voucher-info-field span, .assist-field span { font-size: 12px; font-weight: 600; color: #5f7391; }
-.voucher-info-company, .voucher-info-code { grid-column: span 4; }
-.voucher-info-date, .voucher-info-period { grid-column: span 2; }
-.voucher-info-maker, .voucher-info-docs { grid-column: span 3; }
-.voucher-info-field-note { grid-column: span 6; }
-.voucher-code-box { display: flex; height: 40px; align-items: center; justify-content: center; border-radius: 14px; border: 1px solid #cfe0f5; background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); font-weight: 700; color: #24466f; }
+.voucher-info-main, .voucher-ledger-card, .voucher-assist-card, .voucher-side-card { border-radius: 22px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.94); box-shadow: 0 10px 24px rgba(15,23,42,.04); padding: 14px; }
+.voucher-info-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px 12px; }
+.assist-grid { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 8px 12px; }
+.voucher-info-field, .assist-field { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.voucher-field-label { flex: 0 0 auto; min-width: 56px; font-size: 12px; font-weight: 600; color: #5f7391; line-height: 1.2; }
+.assist-field { grid-column: span 3; }
+.voucher-info-spacer { min-height: 34px; }
+.voucher-info-field > :not(.voucher-field-label), .assist-field > :not(.voucher-field-label) { flex: 1 1 auto; min-width: 0; }
+.voucher-code-box { display: flex; height: 34px; align-items: center; justify-content: center; border-radius: 12px; border: 1px solid #cfe0f5; background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); font-weight: 700; color: #24466f; }
 .voucher-company-box { justify-content: flex-start; padding: 0 14px; font-weight: 600; }
-.voucher-number-group { display: grid; grid-template-columns: minmax(88px,108px) auto minmax(0,1fr); align-items: center; gap: 8px; }
+.voucher-number-group { display: grid; grid-template-columns: minmax(84px,96px) auto minmax(0,1fr); align-items: center; gap: 6px; }
 .voucher-number-separator { display: inline-flex; align-items: center; justify-content: center; color: #5f7391; font-weight: 700; }
 .voucher-ledger-card { display: flex; min-height: 0; flex-direction: column; }
-.voucher-ledger-header, .voucher-section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.voucher-ledger-title, .voucher-section-head h2 { font-size: 18px; font-weight: 700; color: #1d3557; }
-.voucher-section-head p, .voucher-ledger-summary { color: #5d7491; font-size: 13px; }
-.voucher-ledger-summary { display: flex; flex-wrap: wrap; gap: 14px; }
-.voucher-grid { margin-top: 14px; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: 20px; border: 1px solid #d7e0eb; background: #fdfefe; }
+.voucher-grid { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: 18px; border: 1px solid #d7e0eb; background: #fdfefe; }
 .voucher-grid-layout { display: grid; grid-template-columns: minmax(220px,1.2fr) minmax(280px,1.4fr) minmax(160px,.8fr) minmax(160px,.8fr); }
 .voucher-grid-header, .voucher-grid-footer { flex-shrink: 0; background: linear-gradient(180deg, #f3f7fd 0%, #edf3fb 100%); color: #49627f; font-size: 13px; font-weight: 700; }
-.voucher-grid-header > div, .voucher-grid-footer > div { padding: 10px 14px; }
+.voucher-grid-header > div, .voucher-grid-footer > div { padding: 8px 12px; }
 .voucher-grid-body { min-height: 0; flex: 1; overflow: auto; background: linear-gradient(180deg, rgba(248,251,255,.56) 0%, rgba(255,255,255,.92) 100%); }
-.voucher-grid-row { min-height: 58px; border-top: 1px solid #e4ebf4; transition: background-color .16s ease, box-shadow .16s ease; }
+.voucher-grid-row { min-height: 41px; border-top: 1px solid #e4ebf4; transition: background-color .16s ease, box-shadow .16s ease; }
 .voucher-grid-row:hover { background: rgba(239,246,255,.72); }
 .voucher-grid-row-active { background: rgba(219,234,254,.5); box-shadow: inset 4px 0 0 #4f8ad8; }
 .voucher-grid-row-readonly:hover { background: rgba(219,234,254,.5); }
 .voucher-grid-row:focus { outline: none; }
-.voucher-cell { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 7px 12px; }
+.voucher-cell { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 4px 10px; }
 .voucher-cell-digest { padding-right: 6px; }
-.voucher-inline-field { display: flex; align-items: center; gap: 10px; }
+.voucher-inline-field { display: flex; align-items: center; gap: 7px; }
 .voucher-row-index { display: inline-flex; min-width: 22px; align-items: center; justify-content: center; color: #788ca6; font-size: 12px; font-weight: 700; }
 .voucher-footer-amount { text-align: right; color: #173a61; font-family: Consolas, Monaco, monospace; }
-.voucher-current-row { border-radius: 999px; background: #edf4ff; padding: 6px 11px; color: #31598d; font-size: 12px; font-weight: 700; }
-.voucher-signature { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-radius: 18px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.92); padding: 14px 16px; color: #4a627f; font-size: 13px; }
+.voucher-signature { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; border-radius: 18px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.92); padding: 12px 14px; color: #4a627f; font-size: 13px; }
 .action-dialog-content { color: #506680; line-height: 1.8; }
 .action-dialog-subtle { margin-top: 8px; color: #8a9bb1; font-size: 12px; }
 :deep(.voucher-info-field .el-input__wrapper), :deep(.voucher-info-field .el-select__wrapper), :deep(.voucher-info-field .el-date-editor), :deep(.assist-field .el-input__wrapper), :deep(.assist-field .el-select__wrapper), :deep(.voucher-cell .el-input__wrapper), :deep(.voucher-cell .el-select__wrapper) { border-radius: 12px; box-shadow: 0 0 0 1px #d8e2f0 inset; }
 :deep(.voucher-cell .el-input-number), :deep(.voucher-cell .el-input-number .el-input__wrapper), :deep(.assist-field .el-input-number), :deep(.assist-field .el-input-number .el-input__wrapper), :deep(.voucher-info-field .el-input-number), :deep(.voucher-info-field .el-input-number .el-input__wrapper) { width: 100%; }
-:deep(.voucher-number-group .el-select__wrapper), :deep(.voucher-number-group .el-input__wrapper) { min-height: 40px; }
-:deep(.voucher-cell .el-input__wrapper), :deep(.voucher-cell .el-select__wrapper), :deep(.voucher-cell .money-input__control) { min-height: 38px; }
+:deep(.voucher-info-field .el-input__wrapper), :deep(.voucher-info-field .el-select__wrapper), :deep(.voucher-info-field .el-date-editor), :deep(.voucher-info-field .el-input-number .el-input__wrapper), :deep(.assist-field .el-input__wrapper), :deep(.assist-field .el-select__wrapper), :deep(.assist-field .el-input-number .el-input__wrapper) { min-height: 34px; }
+:deep(.voucher-number-group .el-select__wrapper), :deep(.voucher-number-group .el-input__wrapper) { min-height: 34px; }
+:deep(.voucher-cell .el-input__wrapper), :deep(.voucher-cell .el-select__wrapper), :deep(.voucher-cell .money-input__control), :deep(.voucher-cell .el-input-number .el-input__wrapper) { min-height: 32px; }
 @media (max-width: 1440px) { .voucher-lower { grid-template-columns: 1fr; } }
-@media (max-width: 1024px) { .voucher-info-grid, .assist-grid { grid-template-columns: repeat(6, minmax(0,1fr)); } .voucher-info-field, .assist-field, .voucher-info-field-note { grid-column: span 3; } .voucher-info-company, .voucher-info-code { grid-column: span 6; } .voucher-grid-layout { min-width: 860px; } }
+@media (max-width: 1024px) { .voucher-info-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .assist-grid { grid-template-columns: repeat(6, minmax(0,1fr)); } .assist-field { grid-column: span 3; } .voucher-info-spacer { display: none; } .voucher-grid-layout { min-width: 860px; } }
 @media (max-width: 768px) {
-  .voucher-page-header h1 { font-size: 24px; letter-spacing: .18em; }
+  .voucher-page-header h1 { font-size: 18px; letter-spacing: .12em; }
   .toolbar-group { width: 100%; }
-  .toolbar-group + .toolbar-group { padding-left: 0; padding-top: 10px; }
+  .toolbar-group + .toolbar-group { padding-left: 0; padding-top: 8px; }
   .toolbar-group + .toolbar-group::before { left: 0; top: 0; height: 1px; width: 100%; }
   .voucher-info-grid, .assist-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .voucher-info-field, .assist-field, .voucher-info-company, .voucher-info-code, .voucher-info-date, .voucher-info-period, .voucher-info-maker, .voucher-info-docs, .voucher-info-field-note { grid-column: span 2; }
+  .voucher-info-field, .assist-field { grid-column: span 2; }
+  .voucher-info-spacer { display: none; }
+  .voucher-info-field, .assist-field { gap: 8px; }
+  .voucher-field-label { min-width: 52px; }
   .voucher-signature { flex-direction: column; align-items: flex-start; }
 }
 </style>

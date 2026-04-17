@@ -27,6 +27,12 @@ describe('navigation configuration', () => {
     expect(resolveRouteTabTitle({ tabTitle: '财务系统管理', title: '财务系统管理' })).toBe('财务系统管理')
     expect(resolvePlaceholderTitle(resolveRouteMeta('finance-review-voucher'))).toBe('审核凭证')
     expect(resolvePlaceholderDescription(resolveRouteMeta('finance-review-voucher'))).toBe('审核总账凭证')
+    expect(resolvePlaceholderTitle(resolveRouteMeta('finance-post-voucher'))).toBe('记账')
+    expect(resolvePlaceholderDescription(resolveRouteMeta('finance-post-voucher'))).toBe('总账记账功能建设中')
+    expect(resolvePlaceholderTitle(resolveRouteMeta('finance-close-ledger'))).toBe('结账')
+    expect(resolvePlaceholderDescription(resolveRouteMeta('finance-close-ledger'))).toBe('总账结账功能建设中')
+    expect(resolvePlaceholderTitle(resolveRouteMeta('finance-ledger-balance-sheet'))).toBe('余额表')
+    expect(resolvePlaceholderDescription(resolveRouteMeta('finance-ledger-balance-sheet'))).toBe('查看余额表')
   })
 
   it('derives dashboard recent modules from shared navigation metadata', () => {
@@ -36,6 +42,21 @@ describe('navigation configuration', () => {
 
     expect(voucherGeneration?.label).toBe('凭证生成')
     expect(voucherGeneration?.permissionCodes).toEqual(getRouteMenuPermissionCodes(resolveRouteMeta('expense-voucher-generation')))
+  })
+
+  it('keeps general ledger menu order aligned with placeholder additions', () => {
+    const financeGroup = MAIN_NAVIGATION_MENU.find((item) => item.index === '/finance')
+    const ledgerGroup = financeGroup?.children?.find((item) => item.index === '/finance/general-ledger')
+    const ledgerKeys = ledgerGroup?.children?.map((item) => item.key)
+
+    expect(ledgerKeys?.slice(0, 6)).toEqual([
+      'finance-new-voucher',
+      'finance-query-voucher',
+      'finance-review-voucher',
+      'finance-post-voucher',
+      'finance-close-ledger',
+      'finance-ledger-balance-sheet'
+    ])
   })
 })
 

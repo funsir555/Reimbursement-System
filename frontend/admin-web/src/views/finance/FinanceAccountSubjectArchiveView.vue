@@ -110,14 +110,31 @@
             </el-collapse-item>
 
             <el-collapse-item name="auxiliary">
-              <template #title><span class="text-base font-semibold text-slate-800">辅助核算</span></template>
+              <template #title><span class="text-base font-semibold text-slate-800">&#36741;&#21161;&#26680;&#31639;</span></template>
               <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <el-form-item label="辅助核算项" class="!mb-0 xl:col-span-3">
-                  <el-checkbox-group v-model="auxiliarySelections" :disabled="isDetailMode">
-                    <el-checkbox v-for="option in AUXILIARY_OPTIONS" :key="option.value" :label="option.value">{{ option.label }}</el-checkbox>
-                  </el-checkbox-group>
+                <el-form-item v-for="option in AUXILIARY_SWITCHES" :key="option.value" :label="option.label" class="!mb-0">
+                  <flag-switch
+                    :model-value="form[option.value]"
+                    :disabled="isDetailMode"
+                    @update:modelValue="updateAuxiliaryFlag(option.value, $event)"
+                  />
                 </el-form-item>
-                <el-form-item label="项目分类编码" class="!mb-0"><el-input v-model="form.cass_item" :disabled="isProjectClassBindingDisabled" placeholder="勾选项目后可填写" /></el-form-item>
+                <el-form-item label="&#39033;&#30446;&#20998;&#31867;&#32534;&#30721;" class="!mb-0">
+                  <el-select
+                    v-model="form.cass_item"
+                    :disabled="isProjectClassBindingDisabled"
+                    clearable
+                    filterable
+                    placeholder="&#24320;&#21551;&#39033;&#30446;&#26680;&#31639;&#21518;&#21487;&#36873;&#25321;&#39033;&#30446;&#22823;&#31867;"
+                  >
+                    <el-option
+                      v-for="item in projectClassOptionsForDisplay"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                </el-form-item>
               </div>
             </el-collapse-item>
 
@@ -137,16 +154,12 @@
             </el-collapse-item>
 
             <el-collapse-item name="control">
-              <template #title><span class="text-base font-semibold text-slate-800">控制与状态</span></template>
+              <template #title><span class="text-base font-semibold text-slate-800">&#25511;&#21046;&#19982;&#29366;&#24577;</span></template>
               <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <el-form-item label="汇总打印" class="!mb-0"><el-switch v-model="form.cgather" :disabled="isDetailMode" active-value="1" inactive-value="0" inline-prompt active-text="是" inactive-text="否" /></el-form-item>
-                <el-form-item label="特殊标记" class="!mb-0"><el-input-number v-model="form.itrans" :disabled="isDetailMode" :min="0" :max="9" class="w-full" /></el-form-item>
-                <el-form-item label="受控系统" class="!mb-0"><el-input v-model="form.cother" :disabled="isDetailMode" placeholder="请输入受控系统标记" /></el-form-item>
-                <el-form-item label="其他系统已使用" class="!mb-0"><el-input-number v-model="form.iotherused" :disabled="isDetailMode" :min="0" class="w-full" /></el-form-item>
-                <el-form-item label="转账通知" class="!mb-0"><flag-switch v-model="form.bReport" :disabled="isDetailMode" /></el-form-item>
-                <el-form-item label="工程结算" class="!mb-0"><flag-switch v-model="form.bGCJS" :disabled="isDetailMode" /></el-form-item>
-                <el-form-item label="现金流量科目" class="!mb-0"><flag-switch v-model="form.bCashItem" :disabled="isDetailMode" /></el-form-item>
-                <el-form-item label="视图项目类型" class="!mb-0"><el-input-number v-model="form.iViewItem" :disabled="isDetailMode" :min="0" class="w-full" /></el-form-item>
+                <el-form-item label="&#27719;&#24635;&#25171;&#21360;" class="!mb-0"><el-switch v-model="form.cgather" :disabled="isDetailMode" active-value="1" inactive-value="0" inline-prompt active-text="&#26159;" inactive-text="&#21542;" /></el-form-item>
+                <el-form-item label="&#21463;&#25511;&#31995;&#32479;" class="!mb-0"><el-input v-model="form.cother" :disabled="isDetailMode" placeholder="&#35831;&#36755;&#20837;&#21463;&#25511;&#31995;&#32479;&#26631;&#35760;" /></el-form-item>
+                <el-form-item label="&#20854;&#20182;&#31995;&#32479;&#24050;&#20351;&#29992;" class="!mb-0"><el-input-number v-model="form.iotherused" :disabled="isDetailMode" :min="0" class="w-full" /></el-form-item>
+                <el-form-item label="&#29616;&#37329;&#27969;&#37327;&#31185;&#30446;" class="!mb-0"><flag-switch v-model="form.bCashItem" :disabled="isDetailMode" /></el-form-item>
               </div>
             </el-collapse-item>
           </el-collapse>
@@ -161,7 +174,7 @@
 import { computed, defineComponent, h, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, resolveComponent, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
-import { financeArchiveApi, type FinanceAccountSubjectDerivedDefaults, type FinanceAccountSubjectDetail, type FinanceAccountSubjectMeta, type FinanceAccountSubjectSavePayload, type FinanceAccountSubjectSummary } from '@/api'
+import { financeArchiveApi, type FinanceAccountSubjectDerivedDefaults, type FinanceAccountSubjectDetail, type FinanceAccountSubjectMeta, type FinanceAccountSubjectSavePayload, type FinanceAccountSubjectSummary, type FinanceProjectArchiveOption } from '@/api'
 import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
@@ -180,12 +193,12 @@ type ParentOption = { value: string; label: string; subject_category?: string; s
 type AccountSubjectFormState = FinanceAccountSubjectDetail & { has_children?: boolean }
 type AuxiliaryFieldKey = 'bperson' | 'bcus' | 'bsup' | 'bdept' | 'bitem'
 
-const AUXILIARY_OPTIONS: Array<{ value: AuxiliaryFieldKey; label: string }> = [
-  { value: 'bperson', label: '人员' },
-  { value: 'bcus', label: '客户' },
-  { value: 'bsup', label: '供应商' },
-  { value: 'bdept', label: '部门' },
-  { value: 'bitem', label: '项目' }
+const AUXILIARY_SWITCHES: Array<{ value: AuxiliaryFieldKey; label: string }> = [
+  { value: 'bperson', label: '人员核算' },
+  { value: 'bcus', label: '客户核算' },
+  { value: 'bsup', label: '供应商核算' },
+  { value: 'bdept', label: '部门核算' },
+  { value: 'bitem', label: '项目核算' }
 ]
 
 const DERIVED_MATCH_LABELS: Record<string, string> = {
@@ -208,6 +221,7 @@ const drawerMode = ref<DrawerMode>('detail')
 const editingSubjectCode = ref('')
 const createParentHintCode = ref('')
 const meta = reactive<FinanceAccountSubjectMeta>({ subjectCategoryOptions: [], statusOptions: [], closeStatusOptions: [], yesNoOptions: [] })
+const projectClassOptions = ref<FinanceProjectArchiveOption[]>([])
 const filters = reactive({ keyword: '', subjectCategory: '', status: undefined as number | undefined, bclose: undefined as number | undefined })
 const subjectTree = ref<FinanceAccountSubjectSummary[]>([])
 const subjectPagination = useLocalPagination(subjectTree)
@@ -303,16 +317,7 @@ const contextMessage = computed(() => {
 const contextMessageClass = computed(() => !currentCompanyId.value || !hasActiveAccountSet.value ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-sky-200 bg-sky-50 text-sky-700')
 const projectAssistEnabled = computed(() => normalizeNumber(form.bitem, 0) === 1)
 const isProjectClassBindingDisabled = computed(() => isDetailMode.value || !projectAssistEnabled.value)
-const auxiliarySelections = computed<AuxiliaryFieldKey[]>({
-  get: () => AUXILIARY_OPTIONS.filter((option) => normalizeNumber(form[option.value] as number | undefined, 0) === 1).map((option) => option.value),
-  set: (values) => {
-    const selectedValues = new Set(values)
-    AUXILIARY_OPTIONS.forEach((option) => {
-      form[option.value] = selectedValues.has(option.value) ? 1 : 0
-    })
-    if (!selectedValues.has('bitem')) form.cass_item = ''
-  }
-})
+const projectClassOptionsForDisplay = computed(() => appendProjectClassOption(projectClassOptions.value, trimString(form.cass_item)))
 
 onMounted(registerCompanySwitchGuard)
 onActivated(registerCompanySwitchGuard)
@@ -320,11 +325,13 @@ onDeactivated(unregisterCompanySwitchGuard)
 watch(() => financeCompany.currentCompanyId, async (companyId, previousCompanyId) => {
   if (!companyId) {
     subjectTree.value = []
+    projectClassOptions.value = []
     subjectPagination.clampCurrentPage()
     return
   }
   if (companyId !== previousCompanyId) closeDrawer()
   await loadMeta()
+  await loadProjectClassOptions(companyId)
   await loadSubjects(true)
 }, { immediate: true })
 watch([() => drawerVisible.value, () => isCreateMode.value, () => currentCompanyId.value, () => form.subject_code], async ([visible, createMode]) => {
@@ -343,6 +350,10 @@ watch(hintedParent, () => {
 })
 onBeforeUnmount(() => unregisterCompanySwitchGuard())
 
+function updateAuxiliaryFlag(field: AuxiliaryFieldKey, value: number) {
+  form[field] = value
+  if (field === 'bitem' && normalizeNumber(value, 0) !== 1) form.cass_item = ''
+}
 function registerCompanySwitchGuard() { if (guardRegistered) return; financeCompany.registerSwitchGuard(COMPANY_SWITCH_GUARD_KEY, confirmCompanySwitch); guardRegistered = true }
 function unregisterCompanySwitchGuard() { if (!guardRegistered) return; financeCompany.unregisterSwitchGuard(COMPANY_SWITCH_GUARD_KEY); guardRegistered = false }
 async function loadMeta() {
@@ -354,6 +365,19 @@ async function loadMeta() {
     meta.yesNoOptions = res.data.yesNoOptions || []
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载会计科目元数据失败'))
+  }
+}
+async function loadProjectClassOptions(companyId?: string) {
+  if (!companyId || !hasActiveAccountSet.value) {
+    projectClassOptions.value = []
+    return
+  }
+  try {
+    const res = await financeArchiveApi.getProjectArchiveMeta(companyId)
+    projectClassOptions.value = res.data.projectClassOptions || []
+  } catch (error: unknown) {
+    projectClassOptions.value = []
+    ElMessage.error(resolveErrorMessage(error, '\u52a0\u8f7d\u9879\u76ee\u5927\u7c7b\u9009\u9879\u5931\u8d25'))
   }
 }
 async function loadSubjects(resetPage = false) {
@@ -498,6 +522,12 @@ async function toggleClose(row: FinanceAccountSubjectSummary) {
   }
 }
 function buildPayload(): FinanceAccountSubjectSavePayload { return { subject_code: String(form.subject_code || '').trim(), subject_name: String(form.subject_name || '').trim(), parent_subject_code: trimString(form.parent_subject_code), subject_level: form.subject_level || undefined, subject_category: trimString(form.subject_category), chelp: trimString(form.chelp), cexch_name: trimString(form.cexch_name || 'CNY'), cmeasure: trimString(form.cmeasure), bperson: normalizeNumber(form.bperson, 0), bcus: normalizeNumber(form.bcus, 0), bsup: normalizeNumber(form.bsup, 0), bdept: normalizeNumber(form.bdept, 0), bitem: normalizeNumber(form.bitem, 0), cass_item: normalizeNumber(form.bitem, 0) === 1 ? trimString(form.cass_item) : undefined, br: normalizeNumber(form.br, 0), be: normalizeNumber(form.be, 0), cgather: String(form.cgather || '0'), bexchange: normalizeNumber(form.bexchange, 0), bcash: normalizeNumber(form.bcash, 0), bbank: normalizeNumber(form.bbank, 0), bused: normalizeNumber(form.bused, 0), bd_c: normalizeNumber(form.bd_c, 0), dbegin: trimString(form.dbegin), dend: trimString(form.dend), itrans: normalizeNumber(form.itrans, 0), cother: trimString(form.cother), iotherused: normalizeNumber(form.iotherused, 0), bReport: normalizeNumber(form.bReport, 0), bGCJS: normalizeNumber(form.bGCJS, 0), bCashItem: normalizeNumber(form.bCashItem, 0), iViewItem: normalizeNumber(form.iViewItem, 0) } }
+function appendProjectClassOption(options: FinanceProjectArchiveOption[], currentValue?: string) {
+  const normalizedValue = trimString(currentValue)
+  if (!normalizedValue) return options
+  if (options.some((item) => item.value === normalizedValue)) return options
+  return [{ value: normalizedValue, label: normalizedValue }, ...options]
+}
 function closeDrawer() { derivedRequestId += 1; drawerVisible.value = false; editingSubjectCode.value = ''; createParentHintCode.value = ''; derivedDefaults.value = null; Object.assign(form, createDefaultForm()) }
 function normalizeTree(nodes: FinanceAccountSubjectSummary[] = []): FinanceAccountSubjectSummary[] { return nodes.map((item) => ({ ...item, children: normalizeTree(item.children || []) })) }
 function flattenTree(nodes: FinanceAccountSubjectSummary[]): FinanceAccountSubjectSummary[] { const result: FinanceAccountSubjectSummary[] = []; nodes.forEach((node) => { result.push(node); if (node.children?.length) result.push(...flattenTree(node.children)) }); return result }
@@ -523,7 +553,7 @@ async function confirmCompanySwitch() {
   }
 }
 function createDefaultForm(): AccountSubjectFormState { return { subject_code: '', subject_name: '', parent_subject_code: '', subject_level: 1, balance_direction: 'DEBIT', subject_category: 'ASSET', cclassany: 'ASSET', bproperty: 1, cbook_type: 'GENERAL', chelp: '', cexch_name: 'CNY', cmeasure: '', bperson: 0, bcus: 0, bsup: 0, bdept: 0, bitem: 0, cass_item: '', br: 0, be: 0, cgather: '0', leaf_flag: 1, bexchange: 0, bcash: 0, bbank: 0, bused: 0, bd_c: 0, dbegin: '', dend: '', itrans: 0, bclose: 0, cother: '', iotherused: 0, bReport: 0, bGCJS: 0, bCashItem: 0, iViewItem: 0, status: 1, has_children: false } }
-defineExpose({ filters, meta, form, subjectTree, paginatedSubjectTree, subjectPagination, derivedDefaults, auxiliarySelections, loadSubjects, loadDerivedDefaults, openCreateDrawer, buildPayload, toggleStatus, toggleClose, saveSubject, syncDerivedFields, balanceDirectionPreview, subjectLevelPreview, leafFlagPreviewText, parentDisplayText, categoryPreviewValue, missingAutoParent })
+defineExpose({ filters, meta, form, subjectTree, paginatedSubjectTree, subjectPagination, derivedDefaults, projectClassOptions, projectClassOptionsForDisplay, loadSubjects, loadDerivedDefaults, openCreateDrawer, buildPayload, toggleStatus, toggleClose, saveSubject, syncDerivedFields, updateAuxiliaryFlag, balanceDirectionPreview, subjectLevelPreview, leafFlagPreviewText, parentDisplayText, categoryPreviewValue, missingAutoParent })
 </script>
 
 <style scoped>

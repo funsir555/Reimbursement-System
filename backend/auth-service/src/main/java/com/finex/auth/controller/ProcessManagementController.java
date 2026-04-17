@@ -120,12 +120,11 @@ public class ProcessManagementController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
         return Result.success(
-                "妯℃澘淇濆瓨鎴愬姛",
+                "\u6a21\u677f\u5df2\u4fdd\u5b58",
                 traceCreateTemplate(request, dto)
         );
     }
 
-    // 处理 updateTemplate 请求。
     @PutMapping("/templates/{id}")
     public Result<ProcessTemplateSaveResultVO> updateTemplate(
             @PathVariable Long id,
@@ -134,19 +133,29 @@ public class ProcessManagementController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
         return Result.success(
-                "妯℃澘鏇存柊鎴愬姛",
+                "\u6a21\u677f\u5df2\u66f4\u65b0",
                 traceUpdateTemplate(id, request, dto)
         );
     }
 
-    // 处理 deleteTemplate 请求。
+    @PostMapping("/templates/{id}/copy")
+    public Result<ProcessTemplateSaveResultVO> copyTemplate(
+            @PathVariable Long id,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success(
+                "\u6a21\u677f\u526f\u672c\u5df2\u521b\u5efa",
+                processManagementService.copyTemplate(id, getCurrentUsername(request))
+        );
+    }
+
     @DeleteMapping("/templates/{id}")
     public Result<Boolean> deleteTemplate(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
-        return Result.success("濡剝婢橀崚鐘绘珟閹存劕濮?", processManagementService.deleteTemplate(id));
+        return Result.success("\u6a21\u677f\u5df2\u5220\u9664", processManagementService.deleteTemplate(id));
     }
 
-    // 处理 listCustomArchives 请求。
     @GetMapping("/custom-archives")
     public Result<List<ProcessCustomArchiveSummaryVO>> listCustomArchives(HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);

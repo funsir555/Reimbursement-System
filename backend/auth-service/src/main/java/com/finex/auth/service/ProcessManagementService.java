@@ -75,6 +75,8 @@ public interface ProcessManagementService {
      */
     ProcessTemplateSaveResultVO updateTemplate(Long id, ProcessTemplateSaveDTO dto, String operatorName);
 
+    ProcessTemplateSaveResultVO copyTemplate(Long id, String operatorName);
+
     /**
      * 删除模板。
      */

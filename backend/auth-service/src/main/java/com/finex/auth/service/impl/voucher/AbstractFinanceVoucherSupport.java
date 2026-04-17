@@ -971,6 +971,7 @@ public abstract class AbstractFinanceVoucherSupport {
         option.setBdept(subject.getBdept());
         option.setBitem(subject.getBitem());
         option.setCassItem(trimToNull(subject.getCassItem()));
+        option.setLeafFlag(subject.getLeafFlag());
         return option;
     }
 
@@ -1427,6 +1428,7 @@ public abstract class AbstractFinanceVoucherSupport {
             if (subject == null) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u79d1\u76ee\u4e0d\u5b58\u5728");
             }
+            validateLeafSubject(subject, rowNo);
             validateSelectable(entry.getCdeptId(), departments.keySet(), "\u90e8\u95e8", rowNo);
             validateSelectable(entry.getCpersonId(), employees.keySet(), "\u4eba\u5458", rowNo);
             validateSelectable(entry.getCcusId(), customers, "\u5ba2\u6237", rowNo);
@@ -1516,6 +1518,18 @@ public abstract class AbstractFinanceVoucherSupport {
         if (!isEnabled(enabledFlag)) {
             throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u5f53\u524d\u79d1\u76ee\u672a\u542f\u7528" + fieldName + "\u8f85\u52a9\u6838\u7b97");
         }
+    }
+
+    protected void validateLeafSubject(FinanceAccountSubject subject, int rowNo) {
+        if (isEnabled(subject.getLeafFlag())) {
+            return;
+        }
+        String subjectCode = normalize(subject.getSubjectCode(), "");
+        String subjectName = trimToNull(subject.getSubjectName());
+        String subjectLabel = subjectName == null ? subjectCode : subjectCode + " " + subjectName;
+        throw new IllegalArgumentException(
+                "\u7b2c " + rowNo + " \u884c\u79d1\u76ee\u3010" + subjectLabel + "\u3011\u4e0d\u662f\u672b\u7ea7\u79d1\u76ee\uff0c\u4e0d\u5141\u8bb8\u5f55\u5165\u51ed\u8bc1"
+        );
     }
 
     protected void validateProjectSelection(

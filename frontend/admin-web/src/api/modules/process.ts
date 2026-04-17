@@ -33,6 +33,12 @@ export const processApi = {
       timeoutMs: 15000,
       timeoutMessage: '保存模板超时，请检查后端服务或稍后重试'
     }),
+  copyTemplate: (id: number) =>
+    request<ProcessTemplateSaveResult>(`/auth/process-management/templates/${id}/copy`, {
+      method: 'POST',
+      timeoutMs: 15000,
+      timeoutMessage: '\u590d\u5236\u6a21\u677f\u8d85\u65f6\uff0c\u8bf7\u68c0\u67e5\u540e\u7aef\u670d\u52a1\u6216\u7a0d\u540e\u91cd\u8bd5'
+    }),
   deleteTemplate: (id: number) =>
     request<boolean>(`/auth/process-management/templates/${id}`, {
       method: 'DELETE'

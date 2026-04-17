@@ -29,6 +29,8 @@ public class FinanceContextController {
             "finance:general_ledger:new_voucher:view",
             "finance:general_ledger:query_voucher:view",
             "finance:general_ledger:review_voucher:view",
+            "finance:general_ledger:post_voucher:view",
+            "finance:general_ledger:close_ledger:view",
             "finance:general_ledger:balance_sheet:view",
             "finance:general_ledger:detail_ledger:view",
             "finance:general_ledger:general_ledger:view",

@@ -75,6 +75,10 @@ public final class ProcessTemplateDomainSupport extends AbstractProcessManagemen
         return super.updateTemplate(id, dto, operatorName);
     }
 
+    public ProcessTemplateSaveResultVO copyTemplate(Long id, String operatorName) {
+        return super.copyTemplate(id, operatorName);
+    }
+
     /**
      * 删除模板。
      */

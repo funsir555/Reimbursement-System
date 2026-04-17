@@ -205,8 +205,8 @@ class FinanceVoucherControllerTest {
                   "csign": "%s",
                   "dbillDate": "2026-03-28",
                   "entries": [
-                    { "inid": 1, "cdigest": "%s", "ccode": "5601", "md": "1280.00" },
-                    { "inid": 2, "cdigest": "\u529e\u516c\u7528\u54c1", "ccode": "1002", "mc": "1280.00" }
+                    { "inid": 1, "cdigest": "%s", "ccode": "560101", "md": "1280.00" },
+                    { "inid": 2, "cdigest": "\u529e\u516c\u7528\u54c1", "ccode": "100201", "mc": "1280.00" }
                   ]
                 }
                 """.formatted(VOUCHER_TYPE, "A".repeat(256));
@@ -387,16 +387,17 @@ class FinanceVoucherControllerTest {
         FinanceVoucherEntryDTO debitEntry = new FinanceVoucherEntryDTO();
         debitEntry.setInid(1);
         debitEntry.setCdigest("\u529e\u516c\u8d39\u7528");
-        debitEntry.setCcode("5601");
+        debitEntry.setCcode("560101");
         debitEntry.setMd(new BigDecimal("1280.00"));
 
         FinanceVoucherEntryDTO creditEntry = new FinanceVoucherEntryDTO();
         creditEntry.setInid(2);
         creditEntry.setCdigest("\u94f6\u884c\u4ed8\u6b3e");
-        creditEntry.setCcode("1002");
+        creditEntry.setCcode("100201");
         creditEntry.setMc(new BigDecimal("1280.00"));
 
         dto.setEntries(List.of(debitEntry, creditEntry));
         return dto;
     }
 }
+

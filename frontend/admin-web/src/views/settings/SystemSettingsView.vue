@@ -79,7 +79,7 @@
                 :data="departments"
                 node-key="id"
                 highlight-current
-                default-expand-all
+                :default-expanded-keys="departmentExpandedKeys"
                 :current-node-key="selectedDepartmentId"
                 @node-click="handleDepartmentSelect"
               >
@@ -1242,6 +1242,7 @@ import {
 } from '@/api'
 
 type FlatCompanyRecord = CompanyRecord & { level: number; label: string }
+type DepartmentTreeExpandStrategy = 'default' | 'focusPath'
 type CompanyBankAccountFormState = CompanyBankAccountSavePayload & {
   status: number
   defaultAccount: number
@@ -1267,6 +1268,9 @@ const jobs = ref<SyncJobRecord[]>([])
 const currentUser = ref<SystemSettingsBootstrapData['currentUser'] | null>(null)
 
 const selectedDepartmentId = ref<number>()
+const departmentExpandedKeys = ref<number[]>([])
+const nextDepartmentExpandStrategy = ref<DepartmentTreeExpandStrategy>('default')
+const nextDepartmentFocusId = ref<number>()
 const selectedEmployee = ref<EmployeeRecord>()
 const selectedRole = ref<RoleRecord>()
 const selectedCompany = ref<CompanyRecord>()
@@ -1560,6 +1564,7 @@ async function loadBootstrap() {
     if (!selectedDepartmentId.value && data.departments[0]) {
       selectedDepartmentId.value = data.departments[0].id
     }
+    applyDepartmentTreeExpandedKeys(data.departments)
 
     syncTabFromRoute()
   } catch (error: any) {
@@ -1696,6 +1701,13 @@ async function saveDepartmentConfig() {
     syncEnabled: selectedDepartment.value.syncEnabled ? 1 : 0
   }
   await systemSettingsApi.updateDepartment(selectedDepartment.value.id, payload)
+  if (isTopLevelDepartment(selectedDepartment.value)) {
+    nextDepartmentExpandStrategy.value = 'default'
+    nextDepartmentFocusId.value = undefined
+  } else {
+    nextDepartmentExpandStrategy.value = 'focusPath'
+    nextDepartmentFocusId.value = selectedDepartment.value.id
+  }
   ElMessage.success('部门配置已保存')
   await loadBootstrap()
 }
@@ -1989,6 +2001,46 @@ function removeDepartmentNode(tree: DepartmentTreeNode[], id?: number): Departme
       ...item,
       children: removeDepartmentNode(item.children || [], id)
     }))
+}
+
+function applyDepartmentTreeExpandedKeys(tree: DepartmentTreeNode[]) {
+  if (nextDepartmentExpandStrategy.value === 'focusPath' && nextDepartmentFocusId.value) {
+    departmentExpandedKeys.value = buildDepartmentPathIds(tree, nextDepartmentFocusId.value)
+  } else {
+    departmentExpandedKeys.value = []
+  }
+  nextDepartmentExpandStrategy.value = 'default'
+  nextDepartmentFocusId.value = undefined
+}
+
+function buildDepartmentPathIds(tree: DepartmentTreeNode[], departmentId: number): number[] {
+  const path: number[] = []
+  if (collectDepartmentPathIds(tree, departmentId, path)) {
+    return path
+  }
+  return []
+}
+
+function collectDepartmentPathIds(
+  tree: DepartmentTreeNode[],
+  departmentId: number,
+  path: number[]
+): boolean {
+  for (const node of tree) {
+    path.push(node.id)
+    if (node.id === departmentId) {
+      return true
+    }
+    if (collectDepartmentPathIds(node.children || [], departmentId, path)) {
+      return true
+    }
+    path.pop()
+  }
+  return false
+}
+
+function isTopLevelDepartment(department: DepartmentTreeNode) {
+  return department.parentId === undefined || department.parentId === null
 }
 
 function fillDepartmentConfigForm(item?: DepartmentTreeNode) {

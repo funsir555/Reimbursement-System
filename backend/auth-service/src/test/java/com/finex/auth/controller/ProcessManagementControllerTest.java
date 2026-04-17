@@ -285,4 +285,28 @@ class ProcessManagementControllerTest {
         );
         verify(processManagementService).publishFlow(10L);
     }
+
+    @Test
+    void copyTemplateCreatesDraftCopyAndChecksPermission() throws Exception {
+        ProcessTemplateSaveResultVO result = new ProcessTemplateSaveResultVO();
+        result.setId(77L);
+        result.setTemplateCode("TPL-077");
+        result.setTemplateName("\u5dee\u65c5\u62a5\u9500\u5355 - \u526f\u672c");
+        result.setStatus("DRAFT");
+
+        doNothing().when(accessControlService).requirePermission(1L, "expense:process_management:edit");
+        when(processManagementService.copyTemplate(12L, "Operator")).thenReturn(result);
+
+        mockMvc.perform(post("/auth/process-management/templates/12/copy")
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "Operator"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.templateCode").value("TPL-077"))
+                .andExpect(jsonPath("$.data.status").value("DRAFT"));
+
+        verify(accessControlService).requirePermission(1L, "expense:process_management:edit");
+        verify(processManagementService).copyTemplate(12L, "Operator");
+    }
+
 }

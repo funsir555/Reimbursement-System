@@ -1,4 +1,4 @@
-import { computed, defineComponent, nextTick, reactive } from 'vue'
+﻿import { computed, defineComponent, nextTick, reactive } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FinanceNewVoucherView from '@/views/finance/FinanceNewVoucherView.vue'
@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn()
   },
   elMessageBox: {
+    alert: vi.fn(),
     confirm: vi.fn()
   }
 }))
@@ -101,8 +102,8 @@ const InputStub = defineComponent({
     readonly: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false }
   },
-  emits: ['update:modelValue'],
-  template: '<input :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  emits: ['focus', 'update:modelValue'],
+  template: '<input :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @focus="$emit(\'focus\')" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
 const SelectStub = defineComponent({
@@ -110,8 +111,8 @@ const SelectStub = defineComponent({
     modelValue: { type: [String, Number], default: '' },
     disabled: { type: Boolean, default: false }
   },
-  emits: ['update:modelValue', 'visible-change'],
-  template: '<select :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
+  emits: ['change', 'focus', 'update:modelValue', 'visible-change'],
+  template: '<select :value="modelValue" :disabled="disabled" @focus="$emit(\'focus\')" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>'
 })
 
 const TreeSelectStub = defineComponent({
@@ -121,7 +122,7 @@ const TreeSelectStub = defineComponent({
     data: { type: Array, default: () => [] },
     filterNodeMethod: { type: Function, default: undefined }
   },
-  emits: ['update:modelValue'],
+  emits: ['focus', 'update:modelValue'],
   setup(props) {
     const flattened = computed(() => {
       const result: Array<{ value: string | number; label: string }> = []
@@ -138,7 +139,7 @@ const TreeSelectStub = defineComponent({
     })
     return { flattened }
   },
-  template: '<select data-testid="department-tree-select" :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="item in flattened" :key="item.value" :value="item.value">{{ item.label }}</option></select>'
+  template: '<select data-testid="department-tree-select" :value="modelValue" :disabled="disabled" @focus="$emit(\'focus\')" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="item in flattened" :key="item.value" :value="item.value">{{ item.label }}</option></select>'
 })
 
 const OptionStub = defineComponent({
@@ -199,8 +200,9 @@ function buildMeta() {
       {
         value: '1001',
         code: '1001',
-        name: '搴撳瓨鐜伴噾',
-        label: '1001  搴撳瓨鐜伴噾',
+        name: '库存现金',
+        label: '1001  库存现金',
+        leafFlag: 1,
         bperson: 1,
         bcus: 1,
         bsup: 1,
@@ -211,8 +213,9 @@ function buildMeta() {
       {
         value: '6601',
         code: '6601',
-        name: '绠＄悊璐圭敤',
-        label: '6601  绠＄悊璐圭敤',
+        name: '管理费用',
+        label: '6601  管理费用',
+        leafFlag: 0,
         bperson: 0,
         bcus: 0,
         bsup: 0,
@@ -240,8 +243,8 @@ function buildMeta() {
 
 function buildDetail() {
   return {
-    voucherNo: 'COMPANY_A~4~记~12',
-    displayVoucherNo: '记-0012',
+    voucherNo: 'COMPANY_A~4~璁皛12',
+    displayVoucherNo: '记0012',
     companyId: 'COMPANY_A',
     iperiod: 4,
     csign: '记',
@@ -260,7 +263,7 @@ function buildDetail() {
     totalCredit: '100.00',
     entries: [
       { inid: 1, cdigest: '摘要 A', ccode: '1001', ccodeName: '库存现金', md: '100.00', mc: '' },
-      { inid: 2, cdigest: '摘要 B', ccode: '1002', ccodeName: '银行存款', md: '', mc: '100.00' }
+      { inid: 2, cdigest: '摘要 B', ccode: '100201', ccodeName: '银行存款', md: '', mc: '100.00' }
     ]
   }
 }
@@ -297,18 +300,18 @@ describe('FinanceNewVoucherView', () => {
     mocks.financeApi.reviewVoucher.mockResolvedValue({
       data: {
         action: 'REVIEW',
-        voucherNo: 'COMPANY_A~4~记~12',
+        voucherNo: 'COMPANY_A~4~记0012',
         status: 'REVIEWED',
         statusLabel: '已审核',
         checkerName: '审核人甲',
-        nextVoucherNo: 'COMPANY_A~4~记~13',
+        nextVoucherNo: 'COMPANY_A~4~璁皛13',
         lastVoucherOfMonth: false
       }
     })
     mocks.financeApi.unreviewVoucher.mockResolvedValue({
       data: {
         action: 'UNREVIEW',
-        voucherNo: 'COMPANY_A~4~记~12',
+        voucherNo: 'COMPANY_A~4~璁皛12',
         status: 'UNPOSTED',
         statusLabel: '未记账'
       }
@@ -316,7 +319,7 @@ describe('FinanceNewVoucherView', () => {
     mocks.financeApi.markVoucherError.mockResolvedValue({
       data: {
         action: 'MARK_ERROR',
-        voucherNo: 'COMPANY_A~4~记~12',
+        voucherNo: 'COMPANY_A~4~璁皛12',
         status: 'ERROR',
         statusLabel: '已标记错误'
       }
@@ -324,7 +327,7 @@ describe('FinanceNewVoucherView', () => {
     mocks.financeApi.clearVoucherError.mockResolvedValue({
       data: {
         action: 'CLEAR_ERROR',
-        voucherNo: 'COMPANY_A~4~记~12',
+        voucherNo: 'COMPANY_A~4~璁皛12',
         status: 'UNPOSTED',
         statusLabel: '未记账'
       }
@@ -340,9 +343,10 @@ describe('FinanceNewVoucherView', () => {
     expect(wrapper.text()).toContain('备注')
   })
 
-  it('renders a single document card without status chips and shows company name only', async () => {
+  it('renders a compact document card without redundant section headings and shows company name only', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
     const companyBox = wrapper.get('.voucher-company-box')
+    const infoGridChildren = wrapper.get('.voucher-info-grid').element.children
 
     expect(wrapper.find('.voucher-info-side').exists()).toBe(false)
     expect(wrapper.findAll('.status-chip')).toHaveLength(0)
@@ -355,6 +359,17 @@ describe('FinanceNewVoucherView', () => {
     expect(wrapper.find('.voucher-info-maker').exists()).toBe(true)
     expect(wrapper.find('.voucher-info-docs').exists()).toBe(true)
     expect(wrapper.find('.voucher-info-field-note').exists()).toBe(true)
+    expect(wrapper.find('.voucher-info-spacer').exists()).toBe(true)
+    expect(infoGridChildren).toHaveLength(8)
+    expect(infoGridChildren[1]?.className).toContain('voucher-info-code')
+    expect(wrapper.find('.voucher-info-code .voucher-number-group').exists()).toBe(true)
+    expect(wrapper.findAll('.voucher-field-label').length).toBeGreaterThan(0)
+    expect(wrapper.find('.voucher-ledger-header').exists()).toBe(false)
+    expect(wrapper.find('.voucher-section-head').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('凭证明细')
+    expect(wrapper.text()).not.toContain('借方合计')
+    expect(wrapper.text()).not.toContain('贷方合计')
+    expect(wrapper.text()).not.toContain('当前行')
   })
 
   it('renders archive options as code on the left and name on the right', async () => {
@@ -473,10 +488,14 @@ describe('FinanceNewVoucherView', () => {
     meta.accountOptions = [{ value: '1001', code: '1001', name: '库存现金', label: '1001  库存现金' }]
     mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: meta })
 
-    const wrapper = await mountView({ pageMode: 'detail', voucherNo: 'COMPANY_A~4~记~12' })
+    const wrapper = await mountView({ pageMode: 'detail', voucherNo: 'COMPANY_A~4~璁皛12' })
 
-    expect(mocks.financeApi.getVoucherDetail).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
-    expect(wrapper.text()).toContain('1002  银行存款')
+    expect(mocks.financeApi.getVoucherDetail).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~璁皛12')
+    expect(wrapper.text()).toContain('100201  银行存款')
+    expect(wrapper.find('.voucher-ledger-header').exists()).toBe(false)
+    expect(wrapper.find('.voucher-section-head').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('凭证明细')
+    expect(wrapper.text()).not.toContain('当前行')
   })
 
   it('renders review mode toolbar with review actions and keeps the form readonly', async () => {
@@ -485,7 +504,7 @@ describe('FinanceNewVoucherView', () => {
     detail.statusLabel = '未记账'
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: detail })
 
-    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~璁皛12' })
 
     expect(wrapper.text()).toContain('审核凭证')
     expect(wrapper.text()).toContain('审核')
@@ -496,18 +515,22 @@ describe('FinanceNewVoucherView', () => {
     expect(wrapper.text()).not.toContain('保存')
     expect(wrapper.text()).not.toContain('修改')
     expect(wrapper.text()).toContain('审核：未审核')
+    expect(wrapper.find('.voucher-ledger-header').exists()).toBe(false)
+    expect(wrapper.find('.voucher-section-head').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('凭证明细')
+    expect(wrapper.text()).not.toContain('当前行')
   })
 
   it('reviews the current voucher and jumps to the next reviewable voucher', async () => {
-    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~璁皛12' })
 
     await wrapper.findAll('button').find((button) => button.text() === '审核')?.trigger('click')
     await flushPromises()
 
-    expect(mocks.financeApi.reviewVoucher).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
+    expect(mocks.financeApi.reviewVoucher).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~璁皛12')
     expect(mocks.router.replace).toHaveBeenCalledWith({
       name: 'finance-review-voucher-detail',
-      params: { voucherNo: 'COMPANY_A~4~记~13' }
+      params: { voucherNo: 'COMPANY_A~4~璁皛13' }
     })
   })
 
@@ -515,7 +538,7 @@ describe('FinanceNewVoucherView', () => {
     mocks.financeApi.reviewVoucher.mockResolvedValueOnce({
       data: {
         action: 'REVIEW',
-        voucherNo: 'COMPANY_A~4~记~12',
+        voucherNo: 'COMPANY_A~4~璁皛12',
         status: 'REVIEWED',
         statusLabel: '已审核',
         checkerName: '审核人甲',
@@ -530,7 +553,7 @@ describe('FinanceNewVoucherView', () => {
     detail.checkerName = '审核人甲'
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: detail })
 
-    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~璁皛12' })
 
     await wrapper.findAll('button').find((button) => button.text() === '审核')?.trigger('click')
     await flushPromises()
@@ -545,24 +568,24 @@ describe('FinanceNewVoucherView', () => {
     detail.checkerName = '审核人甲'
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: detail })
 
-    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~璁皛12' })
 
     expect(wrapper.text()).toContain('取消错误')
 
     await wrapper.findAll('button').find((button) => button.text() === '取消错误')?.trigger('click')
     await flushPromises()
 
-    expect(mocks.financeApi.clearVoucherError).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
+    expect(mocks.financeApi.clearVoucherError).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~璁皛12')
   })
 
   it('exports the current voucher and finds a matching row in review mode', async () => {
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce('银行')
-    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~璁皛12' })
     const vm = wrapper.vm as unknown as { selectedRow: { cdigest?: string } }
 
     await wrapper.findAll('button').find((button) => button.text() === '导出')?.trigger('click')
     await flushPromises()
-    expect(mocks.financeApi.exportVouchers).toHaveBeenCalledWith({ companyId: 'COMPANY_A', voucherNo: 'COMPANY_A~4~记~12' })
+    expect(mocks.financeApi.exportVouchers).toHaveBeenCalledWith({ companyId: 'COMPANY_A', voucherNo: 'COMPANY_A~4~璁皛12' })
 
     await wrapper.findAll('button').find((button) => button.text() === '查找')?.trigger('click')
     await flushPromises()
@@ -611,7 +634,7 @@ describe('FinanceNewVoucherView', () => {
   it('saves vouchers through the current finance company context', async () => {
     mocks.financeApi.createVoucher.mockResolvedValue({
       data: {
-        voucherNo: 'COMPANY_A~4~记~12',
+        voucherNo: 'COMPANY_A~4~璁皛12',
         companyId: 'COMPANY_A',
         iperiod: 4,
         csign: '记',
@@ -757,12 +780,12 @@ describe('FinanceNewVoucherView', () => {
       }
     }
 
-    vm.form.entries[0].cdigest = '??? A'
+    vm.form.entries[0].cdigest = '摘要 A'
     vm.form.entries[0].ccode = '1001'
     vm.form.entries[0].citemClass = '01'
     vm.form.entries[0].citemId = '000002'
     vm.form.entries[0].md = '100.00'
-    vm.form.entries[1].cdigest = '??? B'
+    vm.form.entries[1].cdigest = '摘要 B'
     vm.form.entries[1].ccode = '1001'
     vm.form.entries[1].mc = '100.00'
     await flushPromises()
@@ -770,4 +793,68 @@ describe('FinanceNewVoucherView', () => {
 
     expect(vm.form.entries[0].citemId).toBe('')
   })
+
+  it('warns and restores the previous leaf subject when leaving a non-leaf subject field', async () => {
+    mocks.elMessageBox.alert.mockResolvedValue(undefined)
+    const wrapper = await mountView({ pageMode: 'create' })
+    const subjectSelect = wrapper.findAll('select[data-subject-row-id]')[0]
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          ccode: string
+          ccodeName?: string
+          cdeptId?: string
+          md?: string
+        }>
+      }
+    }
+
+    await subjectSelect?.trigger('focus')
+    await subjectSelect?.setValue('1001')
+    vm.form.entries[0].cdeptId = '11'
+    await flushPromises()
+
+    await subjectSelect?.setValue('6601')
+    await flushPromises()
+
+    await wrapper.findAll('input').find((input) => input.attributes('placeholder') === '0.00')?.trigger('focus')
+    await flushPromises()
+    await nextTick()
+
+    expect(mocks.elMessageBox.alert).toHaveBeenCalledTimes(1)
+    expect(vm.form.entries[0].ccode).toBe('1001')
+    expect(vm.form.entries[0].cdeptId).toBe('')
+  })
+
+  it('blocks save when the current row uses a non-leaf subject', async () => {
+    mocks.elMessageBox.alert.mockResolvedValue(undefined)
+    const wrapper = await mountView({ pageMode: 'create' })
+    const subjectSelect = wrapper.findAll('select[data-subject-row-id]')[0]
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].mc = '100.00'
+    await subjectSelect?.trigger('focus')
+    await subjectSelect?.setValue('6601')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.alert).toHaveBeenCalledTimes(1)
+    expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
+  })
 })
+

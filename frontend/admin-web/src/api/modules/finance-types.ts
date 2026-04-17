@@ -16,6 +16,7 @@ export interface FinanceVoucherOption {
   bdept?: number
   bitem?: number
   cassItem?: string
+  leafFlag?: number
 }
 
 export interface FinanceVoucherEntry {

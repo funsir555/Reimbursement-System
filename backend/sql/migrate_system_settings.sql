@@ -475,7 +475,9 @@ FROM (
     UNION ALL SELECT 'finance:general_ledger:new_voucher:view', 'Finance New Voucher', 'MENU', p.id, 'finance', '/finance/general-ledger/new-voucher', 401, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:general_ledger:query_voucher:view', 'Finance Query Voucher', 'MENU', p.id, 'finance', '/finance/general-ledger/query-voucher', 402, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:general_ledger:review_voucher:view', 'Finance Review Voucher', 'MENU', p.id, 'finance', '/finance/general-ledger/review-voucher', 403, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
-    UNION ALL SELECT 'finance:general_ledger:balance_sheet:view', 'Finance Ledger Balance Sheet', 'MENU', p.id, 'finance', '/finance/general-ledger/balance-sheet', 404, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
+    UNION ALL SELECT 'finance:general_ledger:post_voucher:view', 'Finance Post Voucher', 'MENU', p.id, 'finance', '/finance/general-ledger/post-voucher', 4035, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
+    UNION ALL SELECT 'finance:general_ledger:close_ledger:view', 'Finance Close Ledger', 'MENU', p.id, 'finance', '/finance/general-ledger/close-ledger', 4036, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
+    UNION ALL SELECT 'finance:general_ledger:balance_sheet:view', 'Finance Balance Sheet', 'MENU', p.id, 'finance', '/finance/general-ledger/balance-sheet', 404, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:fixed_assets:view', 'Finance Fixed Assets', 'MENU', p.id, 'finance', '/finance/fixed-assets', 405, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:reports:balance_sheet:view', 'Finance Balance Sheet Report', 'MENU', p.id, 'finance', '/finance/reports/balance-sheet', 406, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
     UNION ALL SELECT 'finance:reports:income_statement:view', 'Finance Income Statement', 'MENU', p.id, 'finance', '/finance/reports/income-statement', 407, 1 FROM sys_permission p WHERE p.permission_code = 'finance:menu'
@@ -547,7 +549,7 @@ FROM (
     UNION ALL SELECT 'finance:general_ledger:review_voucher:review', 'Finance Review Voucher Review', p.id, 'finance', 441 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:review_voucher:view'
     UNION ALL SELECT 'finance:general_ledger:review_voucher:unreview', 'Finance Review Voucher Unreview', p.id, 'finance', 442 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:review_voucher:view'
     UNION ALL SELECT 'finance:general_ledger:review_voucher:mark_error', 'Finance Review Voucher Mark Error', p.id, 'finance', 443 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:review_voucher:view'
-    UNION ALL SELECT 'finance:general_ledger:balance_sheet:export', 'Finance Ledger Balance Sheet Export', p.id, 'finance', 451 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:balance_sheet:view'
+    UNION ALL SELECT 'finance:general_ledger:balance_sheet:export', 'Finance Balance Sheet Export', p.id, 'finance', 451 FROM sys_permission p WHERE p.permission_code = 'finance:general_ledger:balance_sheet:view'
     UNION ALL SELECT 'finance:fixed_assets:create', 'Finance Fixed Assets Create', p.id, 'finance', 461 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
     UNION ALL SELECT 'finance:fixed_assets:edit', 'Finance Fixed Assets Edit', p.id, 'finance', 462 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
     UNION ALL SELECT 'finance:fixed_assets:delete', 'Finance Fixed Assets Delete', p.id, 'finance', 463 FROM sys_permission p WHERE p.permission_code = 'finance:fixed_assets:view'
@@ -703,8 +705,10 @@ INSERT INTO tmp_permission_seed (
     ('finance:general_ledger:review_voucher:review', '审核通过', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40131, 1),
     ('finance:general_ledger:review_voucher:unreview', '取消审核', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40132, 1),
     ('finance:general_ledger:review_voucher:mark_error', '标记错误', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40133, 1),
-    ('finance:general_ledger:balance_sheet:view', '总账余额表', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/balance-sheet', 4014, 1),
-    ('finance:general_ledger:balance_sheet:export', '导出总账余额表', 'BUTTON', 'finance:general_ledger:balance_sheet:view', 'finance', NULL, 40141, 1),
+    ('finance:general_ledger:post_voucher:view', '记账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/post-voucher', 40135, 1),
+    ('finance:general_ledger:close_ledger:view', '结账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/close-ledger', 40136, 1),
+    ('finance:general_ledger:balance_sheet:view', '余额表', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/balance-sheet', 4014, 1),
+    ('finance:general_ledger:balance_sheet:export', '导出余额表', 'BUTTON', 'finance:general_ledger:balance_sheet:view', 'finance', NULL, 40141, 1),
     ('finance:general_ledger:detail_ledger:view', '明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/detail-ledger', 4015, 1),
     ('finance:general_ledger:general_ledger:view', '总分类账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/general-ledger', 4016, 1),
     ('finance:general_ledger:project_detail_ledger:view', '项目明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/project-detail-ledger', 4017, 1),

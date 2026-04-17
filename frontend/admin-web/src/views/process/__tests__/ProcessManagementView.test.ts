@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     listFlows: vi.fn(),
     listFormDesigns: vi.fn(),
     listExpenseDetailDesigns: vi.fn(),
+    copyTemplate: vi.fn(),
     deleteTemplate: vi.fn()
   },
   elMessage: {
@@ -139,8 +140,8 @@ function buildOverview(templates: Array<Record<string, unknown>>) {
     navItems: [],
     summary: {
       totalTemplates: templates.length,
-      enabledTemplates: templates.length,
-      draftTemplates: 0,
+      enabledTemplates: templates.filter((item) => item.status === 'ENABLED').length,
+      draftTemplates: templates.filter((item) => item.status === 'DRAFT').length,
       aiAuditTemplates: 0
     },
     categories: [
@@ -194,6 +195,8 @@ function buildTemplate(overrides: Record<string, unknown> = {}) {
     formName: '差旅报销表单',
     expenseDetailDesignCode: 'EDD-001',
     expenseDetailDesignName: '差旅费用明细表单',
+    status: 'ENABLED',
+    statusLabel: '\u5df2\u542f\u7528',
     updatedAt: '2026-04-02 10:00',
     owner: '流程管理员',
     color: '#2563eb',
@@ -207,6 +210,7 @@ describe('ProcessManagementView', () => {
     mocks.route.query = {}
     mocks.router.push.mockResolvedValue(undefined)
     mocks.router.replace.mockResolvedValue(undefined)
+    mocks.processApi.copyTemplate.mockResolvedValue({ data: { id: 101, templateCode: 'FX202604170099', templateName: '\u526f\u672c', status: 'DRAFT' } })
   })
 
   it('keeps the compact template grid and removes highlight pills', async () => {
@@ -311,4 +315,30 @@ describe('ProcessManagementView', () => {
     expect(clickableTexts).not.toContain('缺失明细表单')
     expect(mocks.router.push).not.toHaveBeenCalled()
   })
+
+  it('renders draft template status labels on cards', async () => {
+    const wrapper = await mountView([
+      buildTemplate({
+        status: 'DRAFT',
+        statusLabel: '\u8349\u7a3f'
+      })
+    ])
+
+    expect(wrapper.text()).toContain('\u8349\u7a3f')
+  })
+
+  it('copies a template, shows success, and reloads the overview', async () => {
+    const wrapper = await mountView([buildTemplate()])
+    const copyButton = wrapper.findAll('button').find((item) => item.text() === '\u590d\u5236\u6a21\u677f')
+
+    expect(copyButton).toBeTruthy()
+
+    await copyButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.copyTemplate).toHaveBeenCalledWith(1)
+    expect(mocks.processApi.getOverview).toHaveBeenCalledTimes(2)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('\u6a21\u677f\u526f\u672c\u5df2\u521b\u5efa')
+  })
+
 })

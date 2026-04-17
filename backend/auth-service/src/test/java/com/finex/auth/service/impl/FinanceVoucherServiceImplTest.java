@@ -118,7 +118,10 @@ class FinanceVoucherServiceImplTest {
         lenient().when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeCustomerMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeVendorMapper.selectList(any())).thenReturn(List.of());
-        lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("5601", "绠＄悊璐圭敤"), buildSubject("1002", "閾惰瀛樻")));
+        lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("560101", "管理费用"),
+                buildSubject("100201", "银行存款")
+        ));
         lenient().when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
     }
 
@@ -126,8 +129,8 @@ class FinanceVoucherServiceImplTest {
     void queryVouchersBuildsVoucherHeadSummary() {
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
-                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u529e\u516c\u8d39", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
-                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u652f\u4ed8\u529e\u516c\u8d39", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u529e\u516c\u8d39", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u652f\u4ed8\u529e\u516c\u8d39", "100201", BigDecimal.ZERO, new BigDecimal("1280.00"))
         ));
 
         FinanceVoucherQueryDTO dto = new FinanceVoucherQueryDTO();
@@ -163,10 +166,38 @@ class FinanceVoucherServiceImplTest {
         assertEquals(1, meta.getAccountOptions().get(0).getBdept());
         assertEquals(1, meta.getAccountOptions().get(0).getBitem());
         assertEquals("7", meta.getAccountOptions().get(0).getCassItem());
+        assertEquals(1, meta.getAccountOptions().get(0).getLeafFlag());
         assertEquals("V00001", meta.getSupplierOptions().get(0).getValue());
         assertEquals("7", meta.getProjectClassOptions().get(0).getCode());
         assertEquals("2002", meta.getProjectOptions().get(0).getCode());
         assertEquals("7", meta.getProjectOptions().get(0).getParentValue());
+    }
+
+    @Test
+    void saveVoucherRejectsNonLeafSubjects() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "Management Expense", 0, 0, 0, 0, 0, null, 0),
+                buildSubject("1002", "Bank Deposit", 0, 0, 0, 0, 0, null, 0)
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "5601", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "1002", null, "100.00")
+        ));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u79d1\u76ee\u30105601 Management Expense\u3011\u4e0d\u662f\u672b\u7ea7\u79d1\u76ee\uff0c\u4e0d\u5141\u8bb8\u5f55\u5165\u51ed\u8bc1", exception.getMessage());
     }
 
     @Test
@@ -180,8 +211,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "Management Expense", 0, 0, 0, 0, 1, null),
-                buildSubject("1002", "Bank Deposit")
+                buildSubject("560101", "Management Expense", 0, 0, 0, 0, 1, null),
+                buildSubject("100201", "Bank Deposit")
         ));
         when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("7", "Market Projects", "COMP-001")));
         when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of(buildProject("2002", "South Campaign", "7", "COMP-001")));
@@ -193,8 +224,8 @@ class FinanceVoucherServiceImplTest {
         dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("Office Expense", "5601", "100.00", null),
-                buildSaveEntry("Pay Office Expense", "1002", null, "100.00")
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "100201", null, "100.00")
         ));
         dto.getEntries().get(0).setCitemClass("7");
         dto.getEntries().get(0).setCitemId("2002");
@@ -211,8 +242,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "Management Expense"),
-                buildSubject("1002", "Bank Deposit")
+                buildSubject("560101", "Management Expense"),
+                buildSubject("100201", "Bank Deposit")
         ));
         when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(buildDepartment(10L, "Finance Center")));
 
@@ -222,8 +253,8 @@ class FinanceVoucherServiceImplTest {
         dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("Office Expense", "5601", "100.00", null),
-                buildSaveEntry("Pay Office Expense", "1002", null, "100.00")
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "100201", null, "100.00")
         ));
         dto.getEntries().get(0).setCdeptId("10");
 
@@ -240,8 +271,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "Management Expense", 0, 0, 0, 0, 1, "7"),
-                buildSubject("1002", "Bank Deposit")
+                buildSubject("560101", "Management Expense", 0, 0, 0, 0, 1, "7"),
+                buildSubject("100201", "Bank Deposit")
         ));
         when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(
                 buildProjectClass("7", "Market Projects", "COMP-001"),
@@ -254,8 +285,8 @@ class FinanceVoucherServiceImplTest {
         dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("Office Expense", "5601", "100.00", null),
-                buildSaveEntry("Pay Office Expense", "1002", null, "100.00")
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "100201", null, "100.00")
         ));
         dto.getEntries().get(0).setCitemClass("8");
 
@@ -301,8 +332,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
-                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
+                buildSubject("560101", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("100201", "\u94f6\u884c\u5b58\u6b3e")
         ));
         when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
 
@@ -312,8 +343,8 @@ class FinanceVoucherServiceImplTest {
         dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "100.00", null),
-                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "560101", "100.00", null),
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "100201", null, "100.00")
         ));
 
         service.saveVoucher(dto, 1L, "alice");
@@ -328,8 +359,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
-                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
+                buildSubject("560101", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("100201", "\u94f6\u884c\u5b58\u6b3e")
         ));
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
@@ -338,8 +369,8 @@ class FinanceVoucherServiceImplTest {
         dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("A".repeat(256), "5601", "100.00", null),
-                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
+                buildSaveEntry("A".repeat(256), "560101", "100.00", null),
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "100201", null, "100.00")
         ));
 
         IllegalArgumentException exception = assertThrows(
@@ -355,8 +386,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "\u79d1".repeat(129)),
-                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
+                buildSubject("560101", "\u79d1".repeat(129)),
+                buildSubject("100201", "\u94f6\u884c\u5b58\u6b3e")
         ));
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
@@ -365,8 +396,8 @@ class FinanceVoucherServiceImplTest {
         dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "100.00", null),
-                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "560101", "100.00", null),
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "100201", null, "100.00")
         ));
 
         IllegalArgumentException exception = assertThrows(
@@ -374,7 +405,7 @@ class FinanceVoucherServiceImplTest {
                 () -> service.saveVoucher(dto, 1L, "alice")
         );
 
-        assertEquals("\u79d1\u76ee\u30105601\u3011\u540d\u79f0\u957f\u5ea6\u8d85\u8fc7 128\uff0c\u8bf7\u5148\u7ef4\u62a4\u4f1a\u8ba1\u79d1\u76ee\u6863\u6848", exception.getMessage());
+        assertEquals("\u79d1\u76ee\u3010560101\u3011\u540d\u79f0\u957f\u5ea6\u8d85\u8fc7 128\uff0c\u8bf7\u5148\u7ef4\u62a4\u4f1a\u8ba1\u79d1\u76ee\u6863\u6848", exception.getMessage());
     }
 
     @Test
@@ -382,8 +413,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
-                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
+                buildSubject("560101", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("100201", "\u94f6\u884c\u5b58\u6b3e")
         ));
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
@@ -392,8 +423,8 @@ class FinanceVoucherServiceImplTest {
         dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "100.00", null),
-                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "560101", "100.00", null),
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "100201", null, "100.00")
         ));
         dto.getEntries().get(0).setCexchName("C".repeat(33));
 
@@ -414,13 +445,13 @@ class FinanceVoucherServiceImplTest {
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
         when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
-                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u539f\u59cb\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
-                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u539f\u59cb\u6458\u8981", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u539f\u59cb\u6458\u8981", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u539f\u59cb\u6458\u8981", "100201", BigDecimal.ZERO, new BigDecimal("1280.00"))
         ));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
-                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
+                buildSubject("560101", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("100201", "\u94f6\u884c\u5b58\u6b3e")
         ));
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
@@ -430,8 +461,8 @@ class FinanceVoucherServiceImplTest {
         dto.setInoId(8);
         dto.setDbillDate("2026-03-28");
         dto.setEntries(List.of(
-                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "1280.00", null),
-                buildSaveEntry("\u94f6\u884c\u4ed8\u6b3e", "1002", null, "1280.00")
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "560101", "1280.00", null),
+                buildSaveEntry("\u94f6\u884c\u4ed8\u6b3e", "100201", null, "1280.00")
         ));
 
         FinanceVoucherSaveResultVO result = service.updateVoucher("COMP-001", "COMP-001~3~\u8bb0~8", dto, 1L, "alice");
@@ -445,8 +476,8 @@ class FinanceVoucherServiceImplTest {
         assertEquals(2, insertedRows.size());
         assertEquals("\u529e\u516c\u8d39\u7528", insertedRows.get(0).getCdigest());
         assertEquals("\u94f6\u884c\u4ed8\u6b3e", insertedRows.get(1).getCdigest());
-        assertEquals("5601", insertedRows.get(0).getCcode());
-        assertEquals("1002", insertedRows.get(1).getCcode());
+        assertEquals("560101", insertedRows.get(0).getCcode());
+        assertEquals("100201", insertedRows.get(1).getCcode());
     }
 
     @Test
@@ -470,7 +501,7 @@ class FinanceVoucherServiceImplTest {
     @Test
     void queryVouchersResolvesErrorStatusBeforeReviewed() {
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
-        GlAccvouch errorRow = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u51ed\u8bc1", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO);
+        GlAccvouch errorRow = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u51ed\u8bc1", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO);
         errorRow.setCcheck("\u5ba1\u6838\u4eba");
         errorRow.setIflag(1);
         when(glAccvouchMapper.selectList(any())).thenReturn(List.of(errorRow));
@@ -490,13 +521,13 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
 
         List<GlAccvouch> currentRows = List.of(
-                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
-                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "100201", BigDecimal.ZERO, new BigDecimal("1280.00"))
         );
         List<GlAccvouch> nextRows = List.of(
                 buildReviewedVoucherRow(9, 3, "\u8bb0", "2026-03-28"),
                 buildErrorVoucherRow(10, 3, "\u8bb0", "2026-03-28"),
-                buildRow(5, "COMP-001", 3, "\u8bb0", 11, 1, "2026-03-28", "\u4e0b\u4e00\u5f20\u51ed\u8bc1", "5601", new BigDecimal("256.00"), BigDecimal.ZERO)
+                buildRow(5, "COMP-001", 3, "\u8bb0", 11, 1, "2026-03-28", "\u4e0b\u4e00\u5f20\u51ed\u8bc1", "560101", new BigDecimal("256.00"), BigDecimal.ZERO)
         );
         List<GlAccvouch> refreshedRows = List.of(
                 buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28"),
@@ -523,7 +554,7 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
 
         List<GlAccvouch> currentRows = List.of(
-                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO)
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO)
         );
         List<GlAccvouch> refreshedRows = List.of(buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28"));
         refreshedRows.get(0).setCcheck("\u8d22\u52a1\u5c0f\u738b");
@@ -540,7 +571,7 @@ class FinanceVoucherServiceImplTest {
     @Test
     void unreviewVoucherClearsChecker() {
         List<GlAccvouch> currentRows = List.of(buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28"));
-        List<GlAccvouch> refreshedRows = List.of(buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u53cd\u5ba1\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO));
+        List<GlAccvouch> refreshedRows = List.of(buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u53cd\u5ba1\u6458\u8981", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO));
 
         when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, refreshedRows);
 
@@ -556,7 +587,7 @@ class FinanceVoucherServiceImplTest {
 
     @Test
     void markVoucherErrorSetsErrorFlag() {
-        List<GlAccvouch> currentRows = List.of(buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u6807\u9519\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO));
+        List<GlAccvouch> currentRows = List.of(buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u6807\u9519\u6458\u8981", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO));
         List<GlAccvouch> refreshedRows = List.of(buildErrorVoucherRow(8, 3, "\u8bb0", "2026-03-28"));
 
         when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, refreshedRows);
@@ -615,6 +646,20 @@ class FinanceVoucherServiceImplTest {
             Integer bitem,
             String cassItem
     ) {
+        return buildSubject(code, name, bperson, bcus, bsup, bdept, bitem, cassItem, 1);
+    }
+
+    private FinanceAccountSubject buildSubject(
+            String code,
+            String name,
+            Integer bperson,
+            Integer bcus,
+            Integer bsup,
+            Integer bdept,
+            Integer bitem,
+            String cassItem,
+            Integer leafFlag
+    ) {
         FinanceAccountSubject subject = new FinanceAccountSubject();
         subject.setCompanyId("COMP-001");
         subject.setSubjectCode(code);
@@ -627,6 +672,7 @@ class FinanceVoucherServiceImplTest {
         subject.setBdept(bdept);
         subject.setBitem(bitem);
         subject.setCassItem(cassItem);
+        subject.setLeafFlag(leafFlag);
         return subject;
     }
 
@@ -721,19 +767,19 @@ class FinanceVoucherServiceImplTest {
     }
 
     private GlAccvouch buildReviewedRow() {
-        GlAccvouch row = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u529e\u516c\u8d39", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO);
+        GlAccvouch row = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u529e\u516c\u8d39", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO);
         row.setCcheck("checker");
         return row;
     }
 
     private GlAccvouch buildReviewedVoucherRow(int inoId, int period, String csign, String billDate) {
-        GlAccvouch row = buildRow(inoId, "COMP-001", period, csign, inoId, 1, billDate, "\u5df2\u5ba1\u51ed\u8bc1", "5601", new BigDecimal("100.00"), BigDecimal.ZERO);
+        GlAccvouch row = buildRow(inoId, "COMP-001", period, csign, inoId, 1, billDate, "\u5df2\u5ba1\u51ed\u8bc1", "560101", new BigDecimal("100.00"), BigDecimal.ZERO);
         row.setCcheck("\u5ba1\u6838\u4eba");
         return row;
     }
 
     private GlAccvouch buildErrorVoucherRow(int inoId, int period, String csign, String billDate) {
-        GlAccvouch row = buildRow(inoId, "COMP-001", period, csign, inoId, 1, billDate, "\u9519\u8bef\u51ed\u8bc1", "5601", new BigDecimal("100.00"), BigDecimal.ZERO);
+        GlAccvouch row = buildRow(inoId, "COMP-001", period, csign, inoId, 1, billDate, "\u9519\u8bef\u51ed\u8bc1", "560101", new BigDecimal("100.00"), BigDecimal.ZERO);
         row.setIflag(1);
         return row;
     }
@@ -746,4 +792,5 @@ class FinanceVoucherServiceImplTest {
         }
     }
 }
+
 

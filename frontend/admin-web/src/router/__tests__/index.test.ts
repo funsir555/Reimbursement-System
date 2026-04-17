@@ -29,6 +29,7 @@ vi.mock('@/utils/permissions', () => ({
 }))
 
 import router from '@/router'
+import PlaceholderView from '@/views/PlaceholderView.vue'
 import ArchiveAgentView from '@/views/archives/ArchiveAgentView.vue'
 import ExpenseDocumentBatchPrintView from '@/views/expense/ExpenseDocumentBatchPrintView.vue'
 import ExpensePaymentOrdersView from '@/views/expense/ExpensePaymentOrdersView.vue'
@@ -104,5 +105,23 @@ describe('router process management routes', () => {
 
     const module = await loader!()
     expect(module.default).toBe(ArchiveAgentView)
+  })
+
+  it('registers general ledger placeholder routes without changing the balance-sheet path', async () => {
+    const postRoute = router.getRoutes().find((item) => item.name === 'finance-post-voucher')
+    const closeRoute = router.getRoutes().find((item) => item.name === 'finance-close-ledger')
+    const balanceRoute = router.getRoutes().find((item) => item.name === 'finance-ledger-balance-sheet')
+
+    expect(postRoute?.path).toBe('/finance/general-ledger/post-voucher')
+    expect(closeRoute?.path).toBe('/finance/general-ledger/close-ledger')
+    expect(balanceRoute?.path).toBe('/finance/general-ledger/balance-sheet')
+
+    const postModule = await (postRoute?.components?.default as (() => Promise<{ default: unknown }>))()
+    const closeModule = await (closeRoute?.components?.default as (() => Promise<{ default: unknown }>))()
+    const balanceModule = await (balanceRoute?.components?.default as (() => Promise<{ default: unknown }>))()
+
+    expect(postModule.default).toBe(PlaceholderView)
+    expect(closeModule.default).toBe(PlaceholderView)
+    expect(balanceModule.default).toBe(PlaceholderView)
   })
 })

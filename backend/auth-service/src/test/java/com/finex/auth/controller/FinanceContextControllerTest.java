@@ -13,6 +13,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -64,5 +69,17 @@ class FinanceContextControllerTest {
                 .andExpect(jsonPath("$.data.companyOptions[0].hasActiveAccountSet").value(true));
 
         verify(financeContextService).getMeta(1L);
+        List<String> requiredPermissions = mockingDetails(accessControlService).getInvocations().stream()
+                .filter(invocation -> invocation.getMethod().getName().equals("requireAnyPermission"))
+                .findFirst()
+                .map(invocation -> Arrays.stream(invocation.getArguments())
+                        .skip(1)
+                        .map(String.class::cast)
+                        .toList())
+                .orElseThrow();
+
+        assertTrue(requiredPermissions.contains("finance:general_ledger:post_voucher:view"));
+        assertTrue(requiredPermissions.contains("finance:general_ledger:close_ledger:view"));
+        assertTrue(requiredPermissions.contains("finance:general_ledger:balance_sheet:view"));
     }
 }
