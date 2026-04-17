@@ -100,6 +100,12 @@ export const routeCatalog: AppRouteDefinition[] = [
         metaKey: 'expense-approval'
       },
       {
+        path: 'expense/documents/print',
+        name: 'expense-document-batch-print',
+        component: () => import('../views/expense/ExpenseDocumentBatchPrintView.vue'),
+        metaKey: 'expense-document-batch-print'
+      },
+      {
         path: 'expense/documents/:documentCode',
         name: 'expense-document-detail',
         component: () => import('../views/expense/ExpenseDocumentDetailView.vue'),
@@ -222,8 +228,18 @@ export const routeCatalog: AppRouteDefinition[] = [
       {
         path: 'finance/general-ledger/review-voucher',
         name: 'finance-review-voucher',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceReviewVoucherView.vue'),
         metaKey: 'finance-review-voucher'
+      },
+      {
+        path: 'finance/general-ledger/review-voucher/:voucherNo',
+        name: 'finance-review-voucher-detail',
+        component: () => import('../views/finance/FinanceNewVoucherView.vue'),
+        props: (route) => ({
+          pageMode: 'review',
+          voucherNo: Array.isArray(route.params.voucherNo) ? route.params.voucherNo[0] || '' : String(route.params.voucherNo || '')
+        }),
+        metaKey: 'finance-review-voucher-detail'
       },
       {
         path: 'finance/general-ledger/balance-sheet',

@@ -8,11 +8,14 @@ package com.finex.auth.service.impl.financearchive;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.FinanceAccountSubjectCloseDTO;
+import com.finex.auth.dto.FinanceAccountSubjectDerivedDefaultsVO;
 import com.finex.auth.dto.FinanceAccountSubjectDetailVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
 import com.finex.auth.dto.FinanceAccountSubjectStatusDTO;
 import com.finex.auth.entity.FinanceAccountSubject;
+import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 
@@ -32,15 +35,25 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
             SystemCompanyMapper systemCompanyMapper,
             GlAccvouchMapper glAccvouchMapper,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            FinanceAccountSetMapper financeAccountSetMapper,
+            FinanceAccountSetTemplateSubjectMapper financeAccountSetTemplateSubjectMapper
     ) {
-        super(financeAccountSubjectMapper, systemCompanyMapper, glAccvouchMapper, objectMapper);
+        super(
+                financeAccountSubjectMapper,
+                systemCompanyMapper,
+                glAccvouchMapper,
+                objectMapper,
+                financeAccountSetMapper,
+                financeAccountSetTemplateSubjectMapper
+        );
     }
 
     /**
      * 创建科目。
      */
     public FinanceAccountSubjectDetailVO createSubject(String companyId, FinanceAccountSubjectSaveDTO dto, String operatorName) {
+        normalizeMutableTextFields(dto);
         validateSavePayload(dto);
         String normalizedCompanyId = requireCompanyId(companyId);
         requireEnabledCompany(normalizedCompanyId);
@@ -55,9 +68,12 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
             throw new IllegalStateException("当前公司下已存在相同科目编码");
         }
 
-        FinanceAccountSubject parent = requireMatchedParentForCreate(normalizedCompanyId, subjectCode);
-        if (!isEnabled(parent.getStatus()) || isClosed(parent.getBclose())) {
-            throw new IllegalStateException("上级科目未启用或已封存，不能新增子科目");
+        FinanceAccountSubject parent = null;
+        if (!isRootSubjectCode(subjectCode)) {
+            parent = requireMatchedParentForCreate(normalizedCompanyId, subjectCode);
+            if (!isEnabled(parent.getStatus()) || isClosed(parent.getBclose())) {
+                throw new IllegalStateException("\u4e0a\u7ea7\u79d1\u76ee\u672a\u542f\u7528\u6216\u5df2\u5c01\u5b58\uff0c\u4e0d\u80fd\u65b0\u589e\u5b50\u79d1\u76ee");
+            }
         }
 
         FinanceAccountSubject subject = new FinanceAccountSubject();
@@ -65,7 +81,7 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
         subject.setSubjectCode(subjectCode);
         applyDerivedStructure(subject, parent);
         subject.setTemplateCode(null);
-        subject.setSortOrder(resolveNextSortOrder(normalizedCompanyId, parent.getSubjectCode()));
+        subject.setSortOrder(resolveNextSortOrder(normalizedCompanyId, parent == null ? null : parent.getSubjectCode()));
         applyMutableFields(subject, dto, true);
         applyDerivedControlledFields(subject, true);
         if (parent != null) {
@@ -80,6 +96,7 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
      * 更新科目。
      */
     public FinanceAccountSubjectDetailVO updateSubject(String companyId, String subjectCode, FinanceAccountSubjectSaveDTO dto, String operatorName) {
+        normalizeMutableTextFields(dto);
         validateSavePayload(dto);
         String normalizedCompanyId = requireCompanyId(companyId);
         String normalizedSubjectCode = requireText(subjectCode, "科目编码不能为空");
@@ -105,6 +122,12 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
     /**
      * 更新Status。
      */
+    public FinanceAccountSubjectDerivedDefaultsVO getDerivedDefaults(String companyId, String subjectCode) {
+        String normalizedCompanyId = requireCompanyId(companyId);
+        requireEnabledCompany(normalizedCompanyId);
+        return deriveDefaults(normalizedCompanyId, subjectCode, null);
+    }
+
     public Boolean updateStatus(String companyId, String subjectCode, FinanceAccountSubjectStatusDTO dto, String operatorName) {
         FinanceAccountSubject subject = requireSubject(companyId, subjectCode);
         int nextStatus = normalizeFlag(dto == null ? null : dto.getStatus(), 1);

@@ -6,6 +6,7 @@
 package com.finex.auth.service;
 
 import com.finex.auth.dto.FinanceAccountSubjectCloseDTO;
+import com.finex.auth.dto.FinanceAccountSubjectDerivedDefaultsVO;
 import com.finex.auth.dto.FinanceAccountSubjectDetailVO;
 import com.finex.auth.dto.FinanceAccountSubjectMetaVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
@@ -35,6 +36,8 @@ public interface FinanceAccountSubjectArchiveService {
      * 获取科目明细。
      */
     FinanceAccountSubjectDetailVO getSubjectDetail(String companyId, String subjectCode);
+
+    FinanceAccountSubjectDerivedDefaultsVO getDerivedDefaults(String companyId, String subjectCode);
 
     /**
      * 创建科目。

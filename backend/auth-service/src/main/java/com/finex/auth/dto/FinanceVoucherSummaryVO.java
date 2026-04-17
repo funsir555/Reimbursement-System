@@ -28,6 +28,8 @@ public class FinanceVoucherSummaryVO {
 
     private String cbill;
 
+    private String checkerName;
+
     private Integer idoc;
 
     private String status;

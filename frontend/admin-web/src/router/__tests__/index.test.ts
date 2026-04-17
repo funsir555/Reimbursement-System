@@ -30,6 +30,7 @@ vi.mock('@/utils/permissions', () => ({
 
 import router from '@/router'
 import ArchiveAgentView from '@/views/archives/ArchiveAgentView.vue'
+import ExpenseDocumentBatchPrintView from '@/views/expense/ExpenseDocumentBatchPrintView.vue'
 import ExpensePaymentOrdersView from '@/views/expense/ExpensePaymentOrdersView.vue'
 import ProcessManagementView from '@/views/process/ProcessManagementView.vue'
 import ExpenseVoucherGenerationView from '@/views/expense/ExpenseVoucherGenerationView.vue'
@@ -72,6 +73,24 @@ describe('router process management routes', () => {
 
     const module = await loader!()
     expect(module.default).toBe(ExpensePaymentOrdersView)
+  })
+
+  it('maps batch print route to ExpenseDocumentBatchPrintView', async () => {
+    const route = router.getRoutes().find((item) => item.name === 'expense-document-batch-print')
+
+    expect(route).toBeTruthy()
+    expect(route?.meta.permissionCodes).toEqual([
+      'expense:list:view',
+      'expense:approval:view',
+      'expense:documents:view',
+      'expense:payment:payment_order:view'
+    ])
+
+    const loader = route?.components?.default as (() => Promise<{ default: unknown }>) | undefined
+    expect(loader).toBeTypeOf('function')
+
+    const module = await loader!()
+    expect(module.default).toBe(ExpenseDocumentBatchPrintView)
   })
 
   it('maps archive agent route to ArchiveAgentView', async () => {

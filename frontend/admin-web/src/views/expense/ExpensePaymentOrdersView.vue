@@ -156,7 +156,7 @@
             <el-button class="detail-floating-button" data-testid="expense-payment-bulk-start" :disabled="!hasSelectedTasks" @click="openStartPaymentDialog">发起支付</el-button>
             <el-button class="detail-floating-button" data-testid="expense-payment-bulk-download" :disabled="!hasSelectedTasks" @click="handleBulkDownload">下载</el-button>
             <el-button class="detail-floating-button" data-testid="expense-payment-bulk-manual-paid" :disabled="!hasSelectedTasks" @click="showPlaceholder('手动已支付')">手动已支付</el-button>
-            <el-button class="detail-floating-button" data-testid="expense-payment-bulk-print" :disabled="!hasSelectedTasks" @click="showPlaceholder('打印')">打印</el-button>
+            <el-button class="detail-floating-button" data-testid="expense-payment-bulk-print" :disabled="!hasSelectedTasks" @click="handleBulkPrint">打印</el-button>
           </div>
           <div class="detail-floating-actions__group detail-floating-actions__group--primary">
             <el-button
@@ -179,10 +179,10 @@
           type="button"
           class="payment-start-option"
           data-testid="expense-payment-start-option-export"
-          @click="showPlaceholder('导出支付单')"
+          @click="handleStartPaymentExport"
         >
           <strong>导出支付单</strong>
-          <span>按已选待支付单据生成支付单文件，后续再接通真实导出支付链路。</span>
+          <span>按已选待支付单据生成支付单文件，并提交到下载中心异步处理。</span>
         </button>
         <button
           type="button"
@@ -210,6 +210,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { expensePaymentApi, type ExpensePaymentOrder, type MoneyValue } from '@/api'
 import { formatMoney } from '@/utils/money'
+import { buildExpenseBatchPrintHref, openExpensePrintWindow } from './expensePrintSupport'
 
 type PaymentTab = 'pending' | 'paying' | 'paid' | 'finished' | 'exception'
 
@@ -456,13 +457,40 @@ function openStartPaymentDialog() {
   startPaymentDialogVisible.value = true
 }
 
+async function handleStartPaymentExport() {
+  try {
+    await expensePaymentApi.submitOrderExport(selectedTaskIds.value)
+    startPaymentDialogVisible.value = false
+    clearSelection()
+    ElMessage.success('下载任务已提交，请到下载中心查看进度')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '提交下载任务失败'))
+  }
+}
+
 async function handleBulkDownload() {
   try {
     await expensePaymentApi.submitOrderExport(selectedTaskIds.value)
-    ElMessage.success('下载任务已提交，请到下载中心查看进度')
+    ElMessage.success('\u4e0b\u8f7d\u4efb\u52a1\u5df2\u63d0\u4ea4\uff0c\u8bf7\u5230\u4e0b\u8f7d\u4e2d\u5fc3\u67e5\u770b\u8fdb\u5ea6')
     clearSelection()
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '提交下载任务失败'))
+    ElMessage.error(resolveErrorMessage(error, '\u63d0\u4ea4\u4e0b\u8f7d\u4efb\u52a1\u5931\u8d25'))
+  }
+}
+
+function handleBulkPrint() {
+  const documentCodes = selectedTaskIds.value
+    .map((taskId) => selectedRowsSnapshot.value[taskId]?.documentCode || '')
+    .filter(Boolean)
+
+  if (documentCodes.length === 0) {
+    ElMessage.warning('\u8bf7\u5148\u52fe\u9009\u5f85\u652f\u4ed8\u5355\u636e')
+    return
+  }
+
+  const openedWindow = openExpensePrintWindow(buildExpenseBatchPrintHref(router, documentCodes))
+  if (!openedWindow) {
+    ElMessage.error('\u672a\u80fd\u6253\u5f00\u6253\u5370\u7a97\u53e3\uff0c\u8bf7\u68c0\u67e5\u6d4f\u89c8\u5668\u5f39\u7a97\u62e6\u622a\u8bbe\u7f6e')
   }
 }
 

@@ -623,12 +623,16 @@ function clearInvalidTemplateBindings(showMessage = false) {
   }
 
   const clearedLabels: string[] = []
-  const clearField = (field: 'formDesign' | 'approvalFlow' | 'expenseDetailDesign', label: string, optionList: Array<{ value?: string; detailCode?: string }> | string[]) => {
+  const clearField = (
+    field: 'formDesign' | 'approvalFlow' | 'expenseDetailDesign',
+    label: string,
+    optionList: ProcessFormOption[] | ProcessExpenseDetailDesignSummary[] | string[]
+  ) => {
     const currentValue = String(form[field] || '').trim()
     if (!currentValue) {
       return
     }
-    const issue = validateTemplateBindingValue(currentValue, optionList as any, label)
+    const issue = validateTemplateBindingValue(currentValue, optionList, label)
     if (!issue) {
       return
     }

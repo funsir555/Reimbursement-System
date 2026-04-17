@@ -7,16 +7,27 @@ package com.finex.auth.service.impl.financearchive;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.dto.FinanceAccountSubjectDerivedDefaultsVO;
 import com.finex.auth.dto.FinanceAccountSubjectDetailVO;
 import com.finex.auth.dto.FinanceAccountSubjectOptionVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
 import com.finex.auth.dto.FinanceAccountSubjectSummaryVO;
+import com.finex.auth.entity.FinanceAccountSet;
 import com.finex.auth.entity.FinanceAccountSubject;
+import com.finex.auth.entity.FinanceAccountSetTemplateSubject;
 import com.finex.auth.entity.SystemCompany;
+import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -39,11 +50,14 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
     protected static final String CATEGORY_PROFIT = "PROFIT";
     protected static final String BALANCE_DEBIT = "DEBIT";
     protected static final String BALANCE_CREDIT = "CREDIT";
+    protected static final Charset GBK_CHARSET = Charset.forName("GBK");
 
     protected final FinanceAccountSubjectMapper financeAccountSubjectMapper;
     protected final SystemCompanyMapper systemCompanyMapper;
     protected final GlAccvouchMapper glAccvouchMapper;
     protected final ObjectMapper objectMapper;
+    protected final FinanceAccountSetMapper financeAccountSetMapper;
+    protected final FinanceAccountSetTemplateSubjectMapper financeAccountSetTemplateSubjectMapper;
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -54,10 +68,26 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
             GlAccvouchMapper glAccvouchMapper,
             ObjectMapper objectMapper
     ) {
+        this(financeAccountSubjectMapper, systemCompanyMapper, glAccvouchMapper, objectMapper, null, null);
+    }
+
+    /**
+     * 鍒濆鍖栬繖涓被鎵€闇€鐨勪緷璧栫粍浠躲€?
+     */
+    protected AbstractFinanceAccountSubjectArchiveSupport(
+            FinanceAccountSubjectMapper financeAccountSubjectMapper,
+            SystemCompanyMapper systemCompanyMapper,
+            GlAccvouchMapper glAccvouchMapper,
+            ObjectMapper objectMapper,
+            FinanceAccountSetMapper financeAccountSetMapper,
+            FinanceAccountSetTemplateSubjectMapper financeAccountSetTemplateSubjectMapper
+    ) {
         this.financeAccountSubjectMapper = financeAccountSubjectMapper;
         this.systemCompanyMapper = systemCompanyMapper;
         this.glAccvouchMapper = glAccvouchMapper;
         this.objectMapper = objectMapper;
+        this.financeAccountSetMapper = financeAccountSetMapper;
+        this.financeAccountSetTemplateSubjectMapper = financeAccountSetTemplateSubjectMapper;
     }
 
     /**
@@ -256,6 +286,14 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
             target.setBalanceDirection(resolveBalanceDirection(target.getSubjectCode(), parent.getSubjectCategory(), parent));
             return;
         }
+        if (isRootSubjectCode(target.getSubjectCode())) {
+            FinanceAccountSubjectDerivedDefaultsVO defaults = deriveRootDefaults(target.getCompanyId(), target.getSubjectCode());
+            target.setParentSubjectCode(defaults.getParentSubjectCode());
+            target.setSubjectLevel(defaults.getSubjectLevel());
+            target.setSubjectCategory(defaults.getSubjectCategory());
+            target.setBalanceDirection(defaults.getBalanceDirection());
+            return;
+        }
         target.setParentSubjectCode(null);
         target.setSubjectLevel(target.getSubjectLevel() == null || target.getSubjectLevel() < 1 ? 1 : target.getSubjectLevel());
         target.setSubjectCategory(resolveCategory(target.getSubjectCategory()));
@@ -318,6 +356,69 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
     /**
      * 根据科目编码匹配最长前缀父级科目。
      */
+    protected FinanceAccountSubjectDerivedDefaultsVO deriveDefaults(String companyId, String subjectCode, String excludedSubjectCode) {
+        String normalizedCompanyId = requireCompanyId(companyId);
+        String normalizedSubjectCode = requireText(subjectCode, "\u79d1\u76ee\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
+        if (isRootSubjectCode(normalizedSubjectCode)) {
+            return deriveRootDefaults(normalizedCompanyId, normalizedSubjectCode);
+        }
+        FinanceAccountSubject parent = findMatchedParent(normalizedCompanyId, normalizedSubjectCode, excludedSubjectCode);
+        if (parent == null) {
+            FinanceAccountSubjectDerivedDefaultsVO defaults = createDerivedDefaults(null, null, null, null, 1, "UNMATCHED");
+            defaults.setBalanceDirection(resolveBalanceDirection(normalizedSubjectCode, null, null));
+            return defaults;
+        }
+        return createDerivedDefaults(
+                parent.getSubjectCode(),
+                resolveSubjectLevel(null, parent),
+                resolveCategory(parent.getSubjectCategory()),
+                resolveBalanceDirection(normalizedSubjectCode, parent.getSubjectCategory(), parent),
+                1,
+                "EXISTING_PARENT"
+        );
+    }
+
+    protected boolean isRootSubjectCode(String subjectCode) {
+        String normalized = trimToNull(subjectCode);
+        return normalized != null && normalized.matches("\\d{4}");
+    }
+
+    protected FinanceAccountSubjectDerivedDefaultsVO deriveRootDefaults(String companyId, String subjectCode) {
+        FinanceAccountSet accountSet = loadAccountSet(companyId);
+        List<FinanceAccountSetTemplateSubject> templateSubjects = loadRootTemplateSubjects(accountSet == null ? null : accountSet.getTemplateCode());
+        FinanceAccountSetTemplateSubject exactTemplateSubject = findExactTemplateRootSubject(templateSubjects, subjectCode);
+        if (exactTemplateSubject != null) {
+            return createDerivedDefaults(
+                    null,
+                    1,
+                    resolveCategory(exactTemplateSubject.getSubjectCategory()),
+                    resolveTemplateBalanceDirection(exactTemplateSubject, subjectCode),
+                    1,
+                    "TEMPLATE_EXACT"
+            );
+        }
+        FinanceAccountSetTemplateSubject similarTemplateSubject = findSimilarTemplateRootSubject(templateSubjects, subjectCode);
+        if (similarTemplateSubject != null) {
+            return createDerivedDefaults(
+                    null,
+                    1,
+                    resolveCategory(similarTemplateSubject.getSubjectCategory()),
+                    resolveTemplateBalanceDirection(similarTemplateSubject, subjectCode),
+                    1,
+                    "TEMPLATE_PREFIX"
+            );
+        }
+        String category = inferCategoryFromLeadingDigit(subjectCode);
+        return createDerivedDefaults(
+                null,
+                1,
+                category,
+                resolveBalanceDirection(subjectCode, category, null),
+                1,
+                "LEADING_DIGIT_FALLBACK"
+        );
+    }
+
     protected FinanceAccountSubject findMatchedParent(String companyId, String subjectCode, String excludedSubjectCode) {
         String normalizedCompanyId = requireCompanyId(companyId);
         String normalizedSubjectCode = requireText(subjectCode, "科目编码不能为空");
@@ -355,6 +456,24 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
     /**
      * 解析BalanceDirection。
      */
+    protected FinanceAccountSubjectDerivedDefaultsVO createDerivedDefaults(
+            String parentSubjectCode,
+            Integer subjectLevel,
+            String subjectCategory,
+            String balanceDirection,
+            Integer leafFlag,
+            String matchedBy
+    ) {
+        FinanceAccountSubjectDerivedDefaultsVO defaults = new FinanceAccountSubjectDerivedDefaultsVO();
+        defaults.setParentSubjectCode(parentSubjectCode);
+        defaults.setSubjectLevel(subjectLevel);
+        defaults.setSubjectCategory(subjectCategory);
+        defaults.setBalanceDirection(balanceDirection);
+        defaults.setLeafFlag(leafFlag);
+        defaults.setMatchedBy(matchedBy);
+        return defaults;
+    }
+
     protected String resolveBalanceDirection(String subjectCode, String subjectCategory, FinanceAccountSubject parent) {
         if (parent != null && trimToNull(parent.getBalanceDirection()) != null) {
             return parent.getBalanceDirection();
@@ -394,6 +513,29 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
     /**
      * 解析NextSortOrder。
      */
+    protected String resolveTemplateBalanceDirection(FinanceAccountSetTemplateSubject templateSubject, String subjectCode) {
+        String balanceDirection = trimToNull(templateSubject == null ? null : templateSubject.getBalanceDirection());
+        if (balanceDirection != null) {
+            return balanceDirection;
+        }
+        return resolveBalanceDirection(subjectCode, templateSubject == null ? null : templateSubject.getSubjectCategory(), null);
+    }
+
+    protected String inferCategoryFromLeadingDigit(String subjectCode) {
+        String normalized = trimToNull(subjectCode);
+        if (normalized == null || normalized.isEmpty()) {
+            return CATEGORY_ASSET;
+        }
+        return switch (normalized.charAt(0)) {
+            case '1' -> CATEGORY_ASSET;
+            case '2' -> CATEGORY_LIABILITY;
+            case '3' -> CATEGORY_EQUITY;
+            case '4' -> CATEGORY_COST;
+            case '5', '6' -> CATEGORY_PROFIT;
+            default -> CATEGORY_ASSET;
+        };
+    }
+
     protected Integer resolveNextSortOrder(String companyId, String parentSubjectCode) {
         var query = Wrappers.<FinanceAccountSubject>lambdaQuery()
                 .eq(FinanceAccountSubject::getCompanyId, companyId)
@@ -421,6 +563,38 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         }
         requireText(dto.getSubjectCode(), "科目编码不能为空");
         requireText(dto.getSubjectName(), "科目名称不能为空");
+    }
+
+    protected void normalizeMutableTextFields(FinanceAccountSubjectSaveDTO dto) {
+        if (dto == null) {
+            return;
+        }
+        dto.setSubjectName(repairUtf8AsGbkIfNeeded(dto.getSubjectName()));
+        dto.setChelp(repairUtf8AsGbkIfNeeded(dto.getChelp()));
+        dto.setCmeasure(repairUtf8AsGbkIfNeeded(dto.getCmeasure()));
+        dto.setCother(repairUtf8AsGbkIfNeeded(dto.getCother()));
+    }
+
+    protected String repairUtf8AsGbkIfNeeded(String value) {
+        if (value == null) {
+            return null;
+        }
+        String repaired = decodeGbkBytesAsUtf8Strict(value);
+        if (repaired == null || Objects.equals(repaired, value)) {
+            return value;
+        }
+        return repaired;
+    }
+
+    protected String decodeGbkBytesAsUtf8Strict(String value) {
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
+        decoder.onMalformedInput(CodingErrorAction.REPORT);
+        decoder.onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            return decoder.decode(ByteBuffer.wrap(value.getBytes(GBK_CHARSET))).toString();
+        } catch (CharacterCodingException ex) {
+            return null;
+        }
     }
 
     /**
@@ -511,6 +685,73 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
     /**
      * 判断是否拥有Children。
      */
+    protected FinanceAccountSet loadAccountSet(String companyId) {
+        if (financeAccountSetMapper == null) {
+            return null;
+        }
+        return financeAccountSetMapper.selectById(requireCompanyId(companyId));
+    }
+
+    protected List<FinanceAccountSetTemplateSubject> loadRootTemplateSubjects(String templateCode) {
+        if (financeAccountSetTemplateSubjectMapper == null) {
+            return List.of();
+        }
+        String normalizedTemplateCode = trimToNull(templateCode);
+        if (normalizedTemplateCode == null) {
+            return List.of();
+        }
+        return financeAccountSetTemplateSubjectMapper.selectList(
+                Wrappers.<FinanceAccountSetTemplateSubject>lambdaQuery()
+                        .eq(FinanceAccountSetTemplateSubject::getTemplateCode, normalizedTemplateCode)
+                        .eq(FinanceAccountSetTemplateSubject::getSubjectLevel, 1)
+                        .eq(FinanceAccountSetTemplateSubject::getStatus, 1)
+                        .orderByAsc(FinanceAccountSetTemplateSubject::getSortOrder, FinanceAccountSetTemplateSubject::getId)
+        );
+    }
+
+    protected FinanceAccountSetTemplateSubject findExactTemplateRootSubject(List<FinanceAccountSetTemplateSubject> templateSubjects, String subjectCode) {
+        String normalizedSubjectCode = trimToNull(subjectCode);
+        if (normalizedSubjectCode == null) {
+            return null;
+        }
+        for (FinanceAccountSetTemplateSubject subject : templateSubjects) {
+            if (Objects.equals(trimToNull(subject.getLevelSegment()), normalizedSubjectCode)) {
+                return subject;
+            }
+        }
+        return null;
+    }
+
+    protected FinanceAccountSetTemplateSubject findSimilarTemplateRootSubject(List<FinanceAccountSetTemplateSubject> templateSubjects, String subjectCode) {
+        String normalizedSubjectCode = trimToNull(subjectCode);
+        if (normalizedSubjectCode == null) {
+            return null;
+        }
+        FinanceAccountSetTemplateSubject matched = null;
+        int maxPrefixLength = 0;
+        for (FinanceAccountSetTemplateSubject subject : templateSubjects) {
+            String levelSegment = trimToNull(subject.getLevelSegment());
+            if (levelSegment == null || Objects.equals(levelSegment, normalizedSubjectCode)) {
+                continue;
+            }
+            int prefixLength = commonPrefixLength(normalizedSubjectCode, levelSegment);
+            if (prefixLength > maxPrefixLength) {
+                maxPrefixLength = prefixLength;
+                matched = subject;
+            }
+        }
+        return maxPrefixLength > 0 ? matched : null;
+    }
+
+    protected int commonPrefixLength(String left, String right) {
+        int max = Math.min(left == null ? 0 : left.length(), right == null ? 0 : right.length());
+        int index = 0;
+        while (index < max && left.charAt(index) == right.charAt(index)) {
+            index++;
+        }
+        return index;
+    }
+
     protected boolean hasChildren(String companyId, String subjectCode) {
         Long count = financeAccountSubjectMapper.selectCount(
                 Wrappers.<FinanceAccountSubject>lambdaQuery()

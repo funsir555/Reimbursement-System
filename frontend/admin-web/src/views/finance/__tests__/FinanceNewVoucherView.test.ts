@@ -13,7 +13,12 @@ const mocks = vi.hoisted(() => ({
     getVoucherMeta: vi.fn(),
     getVoucherDetail: vi.fn(),
     createVoucher: vi.fn(),
-    updateVoucher: vi.fn()
+    updateVoucher: vi.fn(),
+    reviewVoucher: vi.fn(),
+    unreviewVoucher: vi.fn(),
+    markVoucherError: vi.fn(),
+    clearVoucherError: vi.fn(),
+    exportVouchers: vi.fn()
   },
   financeCompany: {
     currentCompanyId: 'COMPANY_A',
@@ -245,6 +250,7 @@ function buildDetail() {
     dbillDate: '2026-04-05',
     idoc: 1,
     cbill: '财务制单员',
+    checkerName: '',
     ctext1: '',
     ctext2: '已有凭证',
     status: 'UNPOSTED',
@@ -259,7 +265,7 @@ function buildDetail() {
   }
 }
 
-async function mountView(props: { pageMode?: 'create' | 'detail'; voucherNo?: string } = {}) {
+async function mountView(props: { pageMode?: 'create' | 'detail' | 'review'; voucherNo?: string } = {}) {
   const wrapper = mount(FinanceNewVoucherView, {
     ...mountOptions,
     props
@@ -288,6 +294,42 @@ describe('FinanceNewVoucherView', () => {
     financeCompanyStore.currentCompanyHasActiveAccountSet = true
     mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: buildMeta() })
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: buildDetail() })
+    mocks.financeApi.reviewVoucher.mockResolvedValue({
+      data: {
+        action: 'REVIEW',
+        voucherNo: 'COMPANY_A~4~记~12',
+        status: 'REVIEWED',
+        statusLabel: '已审核',
+        checkerName: '审核人甲',
+        nextVoucherNo: 'COMPANY_A~4~记~13',
+        lastVoucherOfMonth: false
+      }
+    })
+    mocks.financeApi.unreviewVoucher.mockResolvedValue({
+      data: {
+        action: 'UNREVIEW',
+        voucherNo: 'COMPANY_A~4~记~12',
+        status: 'UNPOSTED',
+        statusLabel: '未记账'
+      }
+    })
+    mocks.financeApi.markVoucherError.mockResolvedValue({
+      data: {
+        action: 'MARK_ERROR',
+        voucherNo: 'COMPANY_A~4~记~12',
+        status: 'ERROR',
+        statusLabel: '已标记错误'
+      }
+    })
+    mocks.financeApi.clearVoucherError.mockResolvedValue({
+      data: {
+        action: 'CLEAR_ERROR',
+        voucherNo: 'COMPANY_A~4~记~12',
+        status: 'UNPOSTED',
+        statusLabel: '未记账'
+      }
+    })
+    mocks.financeApi.exportVouchers.mockResolvedValue(undefined)
   })
 
   it('loads voucher meta with the finance company context', async () => {
@@ -296,6 +338,23 @@ describe('FinanceNewVoucherView', () => {
     expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })
     expect(wrapper.text()).toContain('凭证编号')
     expect(wrapper.text()).toContain('备注')
+  })
+
+  it('renders a single document card without status chips and shows company name only', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const companyBox = wrapper.get('.voucher-company-box')
+
+    expect(wrapper.find('.voucher-info-side').exists()).toBe(false)
+    expect(wrapper.findAll('.status-chip')).toHaveLength(0)
+    expect(companyBox.text()).toBe(financeCompanyStore.currentCompanyName)
+    expect(companyBox.text()).not.toBe(financeCompanyStore.currentCompanyLabel)
+    expect(wrapper.find('.voucher-info-company').exists()).toBe(true)
+    expect(wrapper.find('.voucher-info-code').exists()).toBe(true)
+    expect(wrapper.find('.voucher-info-date').exists()).toBe(true)
+    expect(wrapper.find('.voucher-info-period').exists()).toBe(true)
+    expect(wrapper.find('.voucher-info-maker').exists()).toBe(true)
+    expect(wrapper.find('.voucher-info-docs').exists()).toBe(true)
+    expect(wrapper.find('.voucher-info-field-note').exists()).toBe(true)
   })
 
   it('renders archive options as code on the left and name on the right', async () => {
@@ -418,6 +477,99 @@ describe('FinanceNewVoucherView', () => {
 
     expect(mocks.financeApi.getVoucherDetail).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
     expect(wrapper.text()).toContain('1002  银行存款')
+  })
+
+  it('renders review mode toolbar with review actions and keeps the form readonly', async () => {
+    const detail = buildDetail()
+    detail.status = 'UNPOSTED'
+    detail.statusLabel = '未记账'
+    mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: detail })
+
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+
+    expect(wrapper.text()).toContain('审核凭证')
+    expect(wrapper.text()).toContain('审核')
+    expect(wrapper.text()).toContain('导出')
+    expect(wrapper.text()).toContain('查找')
+    expect(wrapper.text()).toContain('反审核')
+    expect(wrapper.text()).toContain('标记错误')
+    expect(wrapper.text()).not.toContain('保存')
+    expect(wrapper.text()).not.toContain('修改')
+    expect(wrapper.text()).toContain('审核：未审核')
+  })
+
+  it('reviews the current voucher and jumps to the next reviewable voucher', async () => {
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+
+    await wrapper.findAll('button').find((button) => button.text() === '审核')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeApi.reviewVoucher).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
+    expect(mocks.router.replace).toHaveBeenCalledWith({
+      name: 'finance-review-voucher-detail',
+      params: { voucherNo: 'COMPANY_A~4~记~13' }
+    })
+  })
+
+  it('shows the last-voucher message when review mode has no next voucher', async () => {
+    mocks.financeApi.reviewVoucher.mockResolvedValueOnce({
+      data: {
+        action: 'REVIEW',
+        voucherNo: 'COMPANY_A~4~记~12',
+        status: 'REVIEWED',
+        statusLabel: '已审核',
+        checkerName: '审核人甲',
+        nextVoucherNo: '',
+        lastVoucherOfMonth: true
+      }
+    })
+
+    const detail = buildDetail()
+    detail.status = 'REVIEWED'
+    detail.statusLabel = '已审核'
+    detail.checkerName = '审核人甲'
+    mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: detail })
+
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+
+    await wrapper.findAll('button').find((button) => button.text() === '审核')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('当前是最后一张')
+  })
+
+  it('switches the review error button to clear-error when the voucher is already marked error', async () => {
+    const detail = buildDetail()
+    detail.status = 'ERROR'
+    detail.statusLabel = '已标记错误'
+    detail.checkerName = '审核人甲'
+    mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: detail })
+
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+
+    expect(wrapper.text()).toContain('取消错误')
+
+    await wrapper.findAll('button').find((button) => button.text() === '取消错误')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeApi.clearVoucherError).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
+  })
+
+  it('exports the current voucher and finds a matching row in review mode', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce('银行')
+    const wrapper = await mountView({ pageMode: 'review', voucherNo: 'COMPANY_A~4~记~12' })
+    const vm = wrapper.vm as unknown as { selectedRow: { cdigest?: string } }
+
+    await wrapper.findAll('button').find((button) => button.text() === '导出')?.trigger('click')
+    await flushPromises()
+    expect(mocks.financeApi.exportVouchers).toHaveBeenCalledWith({ companyId: 'COMPANY_A', voucherNo: 'COMPANY_A~4~记~12' })
+
+    await wrapper.findAll('button').find((button) => button.text() === '查找')?.trigger('click')
+    await flushPromises()
+
+    expect(vm.selectedRow.cdigest).toBe('摘要 B')
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('已定位到第 2 行')
+    promptSpy.mockRestore()
   })
 
   it('shows readable notices when account set or archive data is missing', async () => {

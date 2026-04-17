@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { FinanceAccountSubjectDetail, FinanceAccountSubjectMeta, FinanceAccountSubjectSavePayload, FinanceAccountSubjectSummary, FinanceCustomerDetail, FinanceCustomerSavePayload, FinanceCustomerSummary, FinanceDepartmentArchiveMeta, FinanceDepartmentQueryPayload, FinanceDepartmentSummary, FinanceProjectArchiveMeta, FinanceProjectClassSavePayload, FinanceProjectClassSummary, FinanceProjectDetail, FinanceProjectSavePayload, FinanceProjectSummary, FinanceVendorDetail, FinanceVendorSavePayload, FinanceVendorSummary } from './finance-archive-types'
+import type { FinanceAccountSubjectDerivedDefaults, FinanceAccountSubjectDetail, FinanceAccountSubjectMeta, FinanceAccountSubjectSavePayload, FinanceAccountSubjectSummary, FinanceCustomerDetail, FinanceCustomerSavePayload, FinanceCustomerSummary, FinanceDepartmentArchiveMeta, FinanceDepartmentQueryPayload, FinanceDepartmentSummary, FinanceProjectArchiveMeta, FinanceProjectClassSavePayload, FinanceProjectClassSummary, FinanceProjectDetail, FinanceProjectSavePayload, FinanceProjectSummary, FinanceVendorDetail, FinanceVendorSavePayload, FinanceVendorSummary } from './finance-archive-types'
 import type { EmployeeQueryPayload, EmployeeRecord, FinanceEmployeeArchiveMeta } from './system-settings-types'
 
 // 这一组方法供对应页面统一调用。
@@ -22,6 +22,10 @@ export const financeArchiveApi = {
   getAccountSubjectDetail: (companyId: string, subjectCode: string) =>
     request<FinanceAccountSubjectDetail>(
       `/auth/finance/archives/account-subjects/${encodeURIComponent(subjectCode)}${buildQueryString({ companyId })}`
+    ),
+  getAccountSubjectDerivedDefaults: (companyId: string, subjectCode: string) =>
+    request<FinanceAccountSubjectDerivedDefaults>(
+      `/auth/finance/archives/account-subjects/derived-defaults${buildQueryString({ companyId, subjectCode })}`
     ),
   createAccountSubject: (companyId: string, payload: FinanceAccountSubjectSavePayload) =>
     request<FinanceAccountSubjectDetail>(`/auth/finance/archives/account-subjects${buildQueryString({ companyId })}`, {

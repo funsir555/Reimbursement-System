@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   },
   router: {
     push: vi.fn(),
-    back: vi.fn()
+    back: vi.fn(),
+    resolve: vi.fn()
   },
   expenseApi: {
     getDetail: vi.fn(),
@@ -38,12 +39,14 @@ const mocks = vi.hoisted(() => ({
     prompt: vi.fn()
   },
   syncReadonlyPayeeLookups: vi.fn(),
+  syncReadonlyPayeeLookupsBatch: vi.fn(),
   resolveExpenseDetailActions: vi.fn(),
   resolveDisabledExpenseDetailActionHint: vi.fn()
 }))
 
 mocks.route = reactive({
-  params: { documentCode: 'DOC-001' }
+  params: { documentCode: 'DOC-001' },
+  query: {}
 })
 
 vi.mock('vue-router', () => ({
@@ -65,7 +68,9 @@ vi.mock('@/views/expense/useReadonlyPayeeLookups', () => ({
   useReadonlyPayeeLookups: () => ({
     payeeOptionMap: {},
     payeeAccountOptionMap: {},
-    syncReadonlyPayeeLookups: mocks.syncReadonlyPayeeLookups
+    syncReadonlyPayeeLookups: mocks.syncReadonlyPayeeLookups,
+    syncReadonlyPayeeLookupsBatch: mocks.syncReadonlyPayeeLookupsBatch,
+    vendorOptionMap: {}
   })
 }))
 
@@ -151,6 +156,10 @@ const globalStubs = {
   'el-icon': SimpleContainer,
   ExpenseFormReadonlyRenderer: {
     template: '<div data-testid="readonly-form" />'
+  },
+  ExpenseDocumentPrintSheet: {
+    props: ['detail', 'expenseDetails'],
+    template: '<div data-testid="expense-print-sheet">{{ detail?.documentCode }} / {{ expenseDetails?.length || 0 }}</div>'
   }
 }
 
@@ -275,14 +284,19 @@ describe('ExpenseDocumentDetailView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.route.params.documentCode = 'DOC-001'
+    mocks.route.query = {}
     mocks.elMessageBox.confirm.mockReset()
     mocks.elMessageBox.prompt.mockReset()
     mocks.router.push.mockResolvedValue(undefined)
     mocks.router.back.mockResolvedValue(undefined)
+    mocks.router.resolve.mockImplementation(({ params, query }: { params?: { documentCode?: string }, query?: Record<string, string> }) => ({
+      href: `/expense/documents/${params?.documentCode || ''}${query?.print ? `?print=${query.print}` : ''}`
+    }))
     mocks.expenseApi.getDetail.mockResolvedValue({ data: buildDocumentDetail() })
     mocks.expenseApi.getNavigation.mockResolvedValue({ data: {} })
     mocks.resolveExpenseDetailActions.mockReturnValue([])
     mocks.resolveDisabledExpenseDetailActionHint.mockReturnValue('')
+    mocks.syncReadonlyPayeeLookupsBatch.mockResolvedValue(undefined)
     mocks.expenseApi.getExpenseDetail.mockImplementation((documentCode: string, detailNo: string) => Promise.resolve({
       data: buildExpenseDetail(
         detailNo,
@@ -290,6 +304,8 @@ describe('ExpenseDocumentDetailView', () => {
         detailNo === 'D001' ? 'application/pdf' : 'image/png'
       )
     }))
+    vi.stubGlobal('open', vi.fn(() => ({ opener: null })))
+    vi.stubGlobal('print', vi.fn())
   })
 
   it('toggles invoice workbench on repeat click and reuses cached detail data', async () => {
@@ -843,7 +859,6 @@ describe('ExpenseDocumentDetailView', () => {
     expect(wrapper.text()).toContain('加载单据详情超时，请稍后重试')
     expect(wrapper.find('[data-testid="readonly-form"]').exists()).toBe(false)
     expect(mocks.elMessage.error).toHaveBeenCalledWith('加载单据详情超时，请稍后重试')
-    expect(mocks.expenseApi.getNavigation).not.toHaveBeenCalled()
   })
 
   it('keeps main detail visible when expense detail request fails', async () => {
@@ -924,6 +939,44 @@ describe('ExpenseDocumentDetailView', () => {
     expect(mocks.expenseApi.comment).toHaveBeenCalled()
     expect(mocks.expenseApi.getNavigation).toHaveBeenCalledWith('DOC-009')
     expect(wrapper.text()).toContain('更新后的单据')
+  })
+
+  it('opens a dedicated print window from the shared detail action bar', async () => {
+    mocks.resolveExpenseDetailActions.mockReturnValue([
+      { key: 'print', label: '打印' }
+    ])
+
+    const wrapper = await mountView()
+    await wrapper.get('.detail-floating-button').trigger('click')
+
+    expect(mocks.router.resolve).toHaveBeenCalledWith({
+      name: 'expense-document-detail',
+      params: { documentCode: 'DOC-001' },
+      query: { print: '1' }
+    })
+    expect(window.open).toHaveBeenCalledWith('/expense/documents/DOC-001?print=1', '_blank', 'noopener,noreferrer')
+  })
+
+  it('renders print mode without interactive chrome and auto prints after data is ready', async () => {
+    mocks.route.query = { print: '1' }
+
+    const wrapper = await mountView()
+
+    expect(mocks.syncReadonlyPayeeLookupsBatch).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="detail-back-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="detail-floating-actions"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-print-sheet"]').exists()).toBe(true)
+    expect(window.print).toHaveBeenCalled()
+  })
+
+  it('does not trigger browser print when print-mode data loading fails', async () => {
+    mocks.route.query = { print: '1' }
+    mocks.expenseApi.getDetail.mockRejectedValue(new Error('加载失败'))
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('加载失败')
+    expect(window.print).not.toHaveBeenCalled()
   })
 
   it('renders compact floating action buttons with all actions aligned to the right', async () => {

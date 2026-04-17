@@ -1,6 +1,7 @@
 package com.finex.auth.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -51,6 +52,7 @@ public class FinanceAccountSubject {
     @TableField("cexch_name")
     private String cexchName;
 
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String cmeasure;
 
     private Integer bperson;
@@ -63,7 +65,7 @@ public class FinanceAccountSubject {
 
     private Integer bitem;
 
-    @TableField("cass_item")
+    @TableField(value = "cass_item", updateStrategy = FieldStrategy.ALWAYS)
     private String cassItem;
 
     private Integer br;
@@ -95,6 +97,7 @@ public class FinanceAccountSubject {
 
     private Integer bclose;
 
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String cother;
 
     private Integer iotherused;

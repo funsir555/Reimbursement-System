@@ -7,12 +7,15 @@ package com.finex.auth.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.FinanceAccountSubjectCloseDTO;
+import com.finex.auth.dto.FinanceAccountSubjectDerivedDefaultsVO;
 import com.finex.auth.dto.FinanceAccountSubjectDetailVO;
 import com.finex.auth.dto.FinanceAccountSubjectMetaVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
 import com.finex.auth.dto.FinanceAccountSubjectStatusDTO;
 import com.finex.auth.dto.FinanceAccountSubjectSummaryVO;
+import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.service.FinanceAccountSubjectArchiveService;
@@ -43,7 +46,9 @@ public class FinanceAccountSubjectArchiveServiceImpl implements FinanceAccountSu
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
             SystemCompanyMapper systemCompanyMapper,
             GlAccvouchMapper glAccvouchMapper,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            FinanceAccountSetMapper financeAccountSetMapper,
+            FinanceAccountSetTemplateSubjectMapper financeAccountSetTemplateSubjectMapper
     ) {
         this.financeAccountSubjectMetaSupport = new FinanceAccountSubjectMetaSupport(
                 financeAccountSubjectMapper,
@@ -61,7 +66,9 @@ public class FinanceAccountSubjectArchiveServiceImpl implements FinanceAccountSu
                 financeAccountSubjectMapper,
                 systemCompanyMapper,
                 glAccvouchMapper,
-                objectMapper
+                objectMapper,
+                financeAccountSetMapper,
+                financeAccountSetTemplateSubjectMapper
         );
     }
 
@@ -87,6 +94,11 @@ public class FinanceAccountSubjectArchiveServiceImpl implements FinanceAccountSu
     @Override
     public FinanceAccountSubjectDetailVO getSubjectDetail(String companyId, String subjectCode) {
         return financeAccountSubjectQueryDomainSupport.getSubjectDetail(companyId, subjectCode);
+    }
+
+    @Override
+    public FinanceAccountSubjectDerivedDefaultsVO getDerivedDefaults(String companyId, String subjectCode) {
+        return financeAccountSubjectMutationDomainSupport.getDerivedDefaults(companyId, subjectCode);
     }
 
     /**

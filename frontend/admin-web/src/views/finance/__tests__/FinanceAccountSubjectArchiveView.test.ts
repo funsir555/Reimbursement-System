@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     getAccountSubjectMeta: vi.fn(),
     listAccountSubjects: vi.fn(),
     getAccountSubjectDetail: vi.fn(),
+    getAccountSubjectDerivedDefaults: vi.fn(),
     createAccountSubject: vi.fn(),
     updateAccountSubject: vi.fn(),
     updateAccountSubjectStatus: vi.fn(),
@@ -15,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   },
   financeCompany: {
     currentCompanyId: 'COMPANY_A',
-    currentCompanyName: '??????',
+    currentCompanyName: '测试公司',
     currentCompanyLabel: 'A01 - 广州测试公司',
     currentCompanyHasActiveAccountSet: true,
     registerSwitchGuard: vi.fn(),
@@ -63,6 +64,31 @@ const SimpleStub = defineComponent({
   template: '<div><slot /><slot name="append" /><slot name="footer" /><slot name="title" /></div>'
 })
 
+const CheckboxGroupStub = defineComponent({
+  props: {
+    modelValue: {
+      type: Array,
+      default: () => []
+    },
+    disabled: {
+      type: Boolean,
+      default: false
+    }
+  },
+  emits: ['update:modelValue'],
+  template: '<div><slot /></div>'
+})
+
+const CheckboxStub = defineComponent({
+  props: {
+    label: {
+      type: String,
+      default: ''
+    }
+  },
+  template: '<label><slot /></label>'
+})
+
 const TableStub = defineComponent({
   props: {
     data: {
@@ -74,7 +100,7 @@ const TableStub = defineComponent({
     provide('tableRows', props.data)
     return {}
   },
-  template: '<div><slot /><slot name="append" /><slot name="footer" /><slot name="title" /></div>'
+  template: '<div><slot /></div>'
 })
 
 const TableColumnStub = defineComponent({
@@ -99,6 +125,45 @@ const TableColumnStub = defineComponent({
   `
 })
 
+const PaginationStub = defineComponent({
+  props: {
+    currentPage: {
+      type: Number,
+      default: 1
+    },
+    pageSize: {
+      type: Number,
+      default: 10
+    },
+    pageSizes: {
+      type: Array,
+      default: () => []
+    },
+    total: {
+      type: Number,
+      default: 0
+    }
+  },
+  emits: ['update:currentPage', 'update:pageSize'],
+  template: `
+    <div data-testid="pagination">
+      <span data-testid="pagination-total">{{ total }}</span>
+      <span data-testid="pagination-current">{{ currentPage }}</span>
+      <span data-testid="pagination-size">{{ pageSize }}</span>
+      <button data-testid="pagination-next" type="button" @click="$emit('update:currentPage', currentPage + 1)">next</button>
+      <button
+        v-for="size in pageSizes"
+        :key="size"
+        type="button"
+        :data-testid="\`pagination-size-\${size}\`"
+        @click="$emit('update:pageSize', size)"
+      >
+        {{ size }}
+      </button>
+    </div>
+  `
+})
+
 async function mountView() {
   const wrapper = mount(FinanceAccountSubjectArchiveView, {
     global: {
@@ -118,7 +183,10 @@ async function mountView() {
         'el-collapse-item': SimpleStub,
         'el-date-picker': SimpleStub,
         'el-input-number': SimpleStub,
-        'el-switch': SimpleStub
+        'el-switch': SimpleStub,
+        'el-checkbox-group': CheckboxGroupStub,
+        'el-checkbox': CheckboxStub,
+        'el-pagination': PaginationStub
       },
       directives: {
         loading: () => undefined
@@ -133,27 +201,28 @@ describe('FinanceAccountSubjectArchiveView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     financeCompanyStore.currentCompanyId = 'COMPANY_A'
-    financeCompanyStore.currentCompanyName = '??????'
-    financeCompanyStore.currentCompanyLabel = 'A01 - 骞垮窞娴嬭瘯鍏徃'
+    financeCompanyStore.currentCompanyName = '测试公司'
+    financeCompanyStore.currentCompanyLabel = 'A01 - 广州测试公司'
     financeCompanyStore.currentCompanyHasActiveAccountSet = true
     mocks.elMessageBox.confirm.mockResolvedValue(true)
     mocks.financeArchiveApi.getAccountSubjectMeta.mockResolvedValue({
       data: {
         subjectCategoryOptions: [
-          { value: 'ASSET', label: '??' },
-          { value: 'LIABILITY', label: '??' }
+          { value: 'ASSET', label: '资产' },
+          { value: 'LIABILITY', label: '负债' },
+          { value: 'PROFIT', label: '损益' }
         ],
         statusOptions: [
-          { value: '1', label: '??' },
-          { value: '0', label: '??' }
+          { value: '1', label: '启用' },
+          { value: '0', label: '停用' }
         ],
         closeStatusOptions: [
-          { value: '0', label: '???' },
-          { value: '1', label: '???' }
+          { value: '0', label: '未封存' },
+          { value: '1', label: '已封存' }
         ],
         yesNoOptions: [
-          { value: '1', label: '?' },
-          { value: '0', label: '?' }
+          { value: '1', label: '是' },
+          { value: '0', label: '否' }
         ]
       }
     })
@@ -161,15 +230,31 @@ describe('FinanceAccountSubjectArchiveView', () => {
       data: [
         {
           subject_code: '1001',
-          subject_name: '????',
+          subject_name: '库存现金',
           subject_level: 1,
           subject_category: 'ASSET',
+          balance_direction: 'DEBIT',
           status: 1,
           bclose: 0,
-          leaf_flag: 1,
-          auxiliary_summary: '?',
-          cash_bank_summary: '???? / ???',
-          children: []
+          leaf_flag: 0,
+          auxiliary_summary: '未设置',
+          cash_bank_summary: '现金科目 / 日记账',
+          children: [
+            {
+              subject_code: '100101',
+              subject_name: '库存现金-子科目',
+              parent_subject_code: '1001',
+              subject_level: 2,
+              subject_category: 'ASSET',
+              balance_direction: 'DEBIT',
+              status: 1,
+              bclose: 0,
+              leaf_flag: 1,
+              auxiliary_summary: '人员',
+              cash_bank_summary: '现金科目',
+              children: []
+            }
+          ]
         },
         {
           subject_code: '2202',
@@ -180,7 +265,7 @@ describe('FinanceAccountSubjectArchiveView', () => {
           status: 1,
           bclose: 0,
           leaf_flag: 1,
-          auxiliary_summary: '无',
+          auxiliary_summary: '未设置',
           cash_bank_summary: '未设置',
           children: []
         },
@@ -193,21 +278,89 @@ describe('FinanceAccountSubjectArchiveView', () => {
           status: 1,
           bclose: 0,
           leaf_flag: 1,
-          auxiliary_summary: '无',
+          auxiliary_summary: '未设置',
           cash_bank_summary: '未设置',
           children: []
-        }
+        },
+        ...Array.from({ length: 9 }, (_, index) => ({
+          subject_code: `50${String(index + 1).padStart(2, '0')}`,
+          subject_name: `附加科目${index + 1}`,
+          subject_level: 1,
+          subject_category: 'ASSET',
+          balance_direction: 'DEBIT',
+          status: 1,
+          bclose: 0,
+          leaf_flag: 1,
+          auxiliary_summary: '未设置',
+          cash_bank_summary: '未设置',
+          children: []
+        }))
       ]
+    })
+    mocks.financeArchiveApi.getAccountSubjectDerivedDefaults.mockImplementation(async (_companyId: string, subjectCode: string) => {
+      if (subjectCode === '5401') {
+        return {
+          data: {
+            subject_level: 1,
+            subject_category: 'PROFIT',
+            balance_direction: 'DEBIT',
+            leaf_flag: 1,
+            matched_by: 'TEMPLATE_EXACT'
+          }
+        }
+      }
+      if (subjectCode === '6602') {
+        return {
+          data: {
+            subject_level: 1,
+            subject_category: 'PROFIT',
+            balance_direction: 'DEBIT',
+            leaf_flag: 1,
+            matched_by: 'TEMPLATE_EXACT'
+          }
+        }
+      }
+      if (subjectCode === '220201') {
+        return {
+          data: {
+            parent_subject_code: '2202',
+            subject_level: 2,
+            subject_category: 'LIABILITY',
+            balance_direction: 'CREDIT',
+            leaf_flag: 1,
+            matched_by: 'EXISTING_PARENT'
+          }
+        }
+      }
+      if (subjectCode === '100101') {
+        return {
+          data: {
+            parent_subject_code: '1001',
+            subject_level: 2,
+            subject_category: 'ASSET',
+            balance_direction: 'DEBIT',
+            leaf_flag: 1,
+            matched_by: 'EXISTING_PARENT'
+          }
+        }
+      }
+      return {
+        data: {
+          balance_direction: 'DEBIT',
+          leaf_flag: 1,
+          matched_by: 'UNMATCHED'
+        }
+      }
     })
     mocks.financeArchiveApi.createAccountSubject.mockResolvedValue({ data: {} })
     mocks.financeArchiveApi.updateAccountSubjectStatus.mockResolvedValue({ data: true })
     mocks.financeArchiveApi.updateAccountSubjectClose.mockResolvedValue({ data: true })
   })
-
   it('loads meta and subject tree on mount', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       subjectTree: Array<{ subject_code: string }>
+      paginatedSubjectTree: Array<{ subject_code: string }>
       meta: { subjectCategoryOptions: Array<{ value: string }> }
     }
 
@@ -220,99 +373,119 @@ describe('FinanceAccountSubjectArchiveView', () => {
       bclose: undefined
     })
     expect(vm.subjectTree[0]?.subject_code).toBe('1001')
+    expect(vm.subjectTree).toHaveLength(12)
+    expect(vm.paginatedSubjectTree).toHaveLength(10)
     expect(vm.meta.subjectCategoryOptions[0]?.value).toBe('ASSET')
+    expect(wrapper.text()).not.toContain('详情')
+    expect(wrapper.text()).not.toContain('新增下级')
 
     wrapper.unmount()
   })
 
-  it('derives parent, category and balance direction from subject code', async () => {
+  it('paginates account subjects by root nodes and keeps child trees together', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      paginatedSubjectTree: Array<{ subject_code: string; children?: Array<{ subject_code: string }> }>
+    }
+
+    expect(wrapper.get('[data-testid="pagination-total"]').text()).toBe('12')
+    expect(vm.paginatedSubjectTree[0]?.subject_code).toBe('1001')
+    expect(vm.paginatedSubjectTree[0]?.children?.[0]?.subject_code).toBe('100101')
+
+    await wrapper.get('[data-testid="pagination-next"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-current"]').text()).toBe('2')
+    expect(vm.paginatedSubjectTree).toHaveLength(2)
+    expect(vm.paginatedSubjectTree.some((item) => item.subject_code === '100101')).toBe(false)
+  })
+
+  it('updates root-level pagination when the page size changes', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      paginatedSubjectTree: Array<{ subject_code: string }>
+    }
+
+    await wrapper.get('[data-testid="pagination-size-20"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-size"]').text()).toBe('20')
+    expect(vm.paginatedSubjectTree).toHaveLength(12)
+  })
+
+  it('treats 4-digit codes as root subjects without parent warning', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       openCreateDrawer: (parentSubjectCode?: string) => void
+      loadDerivedDefaults: () => Promise<void>
       form: Record<string, unknown>
-      syncDerivedFields: () => void
-      balanceDirectionPreview: string
+      missingAutoParent: boolean
+      parentDisplayText: string
       subjectLevelPreview?: number
       categoryPreviewValue?: string
-      parentDisplayText?: string
+      balanceDirectionPreview: string
+      leafFlagPreviewText: string
+      derivedDefaults: { matched_by?: string } | null
+    }
+
+    vm.openCreateDrawer('2202')
+    vm.form.subject_code = '5401'
+    await vm.loadDerivedDefaults()
+    await flushPromises()
+
+    expect(vm.missingAutoParent).toBe(false)
+    expect(vm.parentDisplayText).toBe('无上级科目')
+    expect(vm.subjectLevelPreview).toBe(1)
+    expect(vm.categoryPreviewValue).toBe('PROFIT')
+    expect(vm.balanceDirectionPreview).toBe('DEBIT')
+    expect(vm.leafFlagPreviewText).toBe('是')
+    expect(vm.derivedDefaults?.matched_by).toBe('TEMPLATE_EXACT')
+
+    wrapper.unmount()
+  })
+
+  it('shows matched parent details for child subjects', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCreateDrawer: (parentSubjectCode?: string) => void
+      loadDerivedDefaults: () => Promise<void>
+      form: Record<string, unknown>
+      parentDisplayText: string
+      subjectLevelPreview?: number
+      categoryPreviewValue?: string
+      balanceDirectionPreview: string
+      missingAutoParent: boolean
     }
 
     vm.openCreateDrawer()
     vm.form.subject_code = '220201'
-    vm.syncDerivedFields()
+    await vm.loadDerivedDefaults()
+    await flushPromises()
 
-    expect(vm.form.parent_subject_code).toBe('2202')
+    expect(vm.parentDisplayText).toContain('2202')
     expect(vm.subjectLevelPreview).toBe(2)
     expect(vm.categoryPreviewValue).toBe('LIABILITY')
     expect(vm.balanceDirectionPreview).toBe('CREDIT')
-    expect(vm.parentDisplayText).toContain('2202')
-
-    vm.form.subject_code = '660201'
-    vm.syncDerivedFields()
-
-    expect(vm.form.parent_subject_code).toBe('6602')
-    expect(vm.subjectLevelPreview).toBe(2)
-    expect(vm.categoryPreviewValue).toBe('PROFIT')
-    expect(vm.balanceDirectionPreview).toBe('DEBIT')
+    expect(vm.missingAutoParent).toBe(false)
 
     wrapper.unmount()
   })
 
-  it('builds payload without controlled compatibility fields', async () => {
+  it('blocks saving when a non-root subject still cannot match a parent', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       openCreateDrawer: (parentSubjectCode?: string) => void
-      form: Record<string, unknown>
-      buildPayload: () => Record<string, unknown>
-      syncDerivedFields: () => void
-    }
-
-    vm.openCreateDrawer('1001')
-    vm.form.subject_code = '100101'
-    vm.form.subject_name = '???'
-    vm.form.bcash = 1
-    vm.form.br = 1
-    vm.form.bitem = 1
-    vm.form.cass_item = '01'
-    vm.form.cgather = '1'
-    vm.syncDerivedFields()
-
-    expect(vm.buildPayload()).toMatchObject({
-      subject_code: '100101',
-      subject_name: '???',
-      parent_subject_code: '1001',
-      subject_category: 'ASSET',
-      bcash: 1,
-      br: 1,
-      bitem: 1,
-      cass_item: '01',
-      cgather: '1'
-    })
-    expect(vm.buildPayload()).not.toHaveProperty('leaf_flag')
-    expect(vm.buildPayload()).not.toHaveProperty('cclassany')
-    expect(vm.buildPayload()).not.toHaveProperty('bproperty')
-    expect(vm.buildPayload()).not.toHaveProperty('cbook_type')
-
-    vm.form.bitem = 0
-    expect(vm.buildPayload().cass_item).toBeUndefined()
-
-    wrapper.unmount()
-  })
-
-  it('blocks saving when the subject code cannot match an existing parent', async () => {
-    const wrapper = await mountView()
-    const vm = wrapper.vm as unknown as {
-      openCreateDrawer: (parentSubjectCode?: string) => void
+      loadDerivedDefaults: () => Promise<void>
       form: Record<string, unknown>
       saveSubject: () => Promise<void>
-      syncDerivedFields: () => void
       missingAutoParent: boolean
     }
 
     vm.openCreateDrawer()
     vm.form.subject_code = '990001'
     vm.form.subject_name = '未匹配科目'
-    vm.syncDerivedFields()
+    await vm.loadDerivedDefaults()
+    await flushPromises()
 
     expect(vm.missingAutoParent).toBe(true)
 
@@ -325,56 +498,44 @@ describe('FinanceAccountSubjectArchiveView', () => {
     wrapper.unmount()
   })
 
-  it('submits status and close actions through dedicated endpoints', async () => {
+  it('maps auxiliary checkbox selections to 0/1 payload values and clears cass_item when project is unchecked', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
-      toggleStatus: (row: Record<string, unknown>) => Promise<void>
-      toggleClose: (row: Record<string, unknown>) => Promise<void>
+      openCreateDrawer: (parentSubjectCode?: string) => void
+      loadDerivedDefaults: () => Promise<void>
+      form: Record<string, unknown>
+      auxiliarySelections: string[]
+      buildPayload: () => Record<string, unknown>
     }
 
-    await vm.toggleStatus({ subject_code: '1001', subject_name: '????', status: 1, bclose: 0 } as Record<string, unknown>)
-    await vm.toggleClose({ subject_code: '1001', subject_name: '????', status: 1, bclose: 0 } as Record<string, unknown>)
+    vm.openCreateDrawer('1001')
+    vm.form.subject_code = '100101'
+    vm.form.subject_name = '库存现金-子科目'
+    await vm.loadDerivedDefaults()
     await flushPromises()
 
-    expect(mocks.financeArchiveApi.updateAccountSubjectStatus).toHaveBeenCalledWith('COMPANY_A', '1001', 0)
-    expect(mocks.financeArchiveApi.updateAccountSubjectClose).toHaveBeenCalledWith('COMPANY_A', '1001', 1)
+    vm.auxiliarySelections = ['bperson', 'bitem']
+    vm.form.cass_item = '01'
 
-    wrapper.unmount()
-  })
+    expect(vm.buildPayload()).toMatchObject({
+      parent_subject_code: '1001',
+      bperson: 1,
+      bcus: 0,
+      bsup: 0,
+      bdept: 0,
+      bitem: 1,
+      cass_item: '01'
+    })
 
-  it('shows a readable notice and skips querying subjects when the company has no account set', async () => {
-    financeCompanyStore.currentCompanyHasActiveAccountSet = false
-
-    const wrapper = await mountView()
-
-    expect(mocks.financeArchiveApi.listAccountSubjects).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('当前公司未创建账套，请切换公司或先建账。')
-
-    wrapper.unmount()
-  })
-
-  it('reloads the subject list when the finance company context changes', async () => {
-    const wrapper = await mountView()
-
-    financeCompanyStore.currentCompanyId = 'COMPANY_B'
-    financeCompanyStore.currentCompanyName = '深圳测试公司'
-    financeCompanyStore.currentCompanyLabel = 'B01 - 深圳测试公司'
+    vm.auxiliarySelections = ['bperson']
     await flushPromises()
 
-    expect(mocks.financeArchiveApi.listAccountSubjects).toHaveBeenCalledWith({
-      companyId: 'COMPANY_A',
-      keyword: undefined,
-      subjectCategory: undefined,
-      status: undefined,
-      bclose: undefined
+    expect(vm.form.cass_item).toBe('')
+    expect(vm.buildPayload()).toMatchObject({
+      bperson: 1,
+      bitem: 0
     })
-    expect(mocks.financeArchiveApi.listAccountSubjects).toHaveBeenCalledWith({
-      companyId: 'COMPANY_B',
-      keyword: undefined,
-      subjectCategory: undefined,
-      status: undefined,
-      bclose: undefined
-    })
+    expect(vm.buildPayload().cass_item).toBeUndefined()
 
     wrapper.unmount()
   })

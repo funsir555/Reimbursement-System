@@ -1,12 +1,29 @@
-// 这里集中封装 finance.ts 相关接口。
-// 上游通常是对应业务页面，下游对应后端同域接口。
-// 如果改错，最容易影响页面的加载、保存或提交流程。
-
 import request, { buildQueryString, downloadBinaryFile } from './core'
 import type { PageResult } from './core'
-import type { FinanceVoucherDetail, FinanceVoucherMeta, FinanceVoucherQueryParams, FinanceVoucherSavePayload, FinanceVoucherSaveResult, FinanceVoucherSummary } from './finance-types'
+import type {
+  FinanceVoucherActionResult,
+  FinanceVoucherBatchActionPayload,
+  FinanceVoucherBatchActionResult,
+  FinanceVoucherDetail,
+  FinanceVoucherMeta,
+  FinanceVoucherQueryParams,
+  FinanceVoucherSavePayload,
+  FinanceVoucherSaveResult,
+  FinanceVoucherSummary
+} from './finance-types'
 
-// 这一组方法供对应页面统一调用。
+export type {
+  FinanceVoucherActionResult,
+  FinanceVoucherBatchActionPayload,
+  FinanceVoucherBatchActionResult,
+  FinanceVoucherDetail,
+  FinanceVoucherMeta,
+  FinanceVoucherQueryParams,
+  FinanceVoucherSavePayload,
+  FinanceVoucherSaveResult,
+  FinanceVoucherSummary
+} from './finance-types'
+
 export const financeApi = {
   getVoucherMeta: (params: { companyId?: string; billDate?: string; csign?: string } = {}) =>
     request<FinanceVoucherMeta>(`/auth/finance/vouchers/meta${buildQueryString(params)}`),
@@ -24,6 +41,27 @@ export const financeApi = {
       method: 'PUT',
       body: JSON.stringify(payload)
     }),
+  reviewVoucher: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/review${buildQueryString({ companyId })}`, {
+      method: 'POST'
+    }),
+  unreviewVoucher: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/unreview${buildQueryString({ companyId })}`, {
+      method: 'POST'
+    }),
+  markVoucherError: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/mark-error${buildQueryString({ companyId })}`, {
+      method: 'POST'
+    }),
+  clearVoucherError: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/clear-error${buildQueryString({ companyId })}`, {
+      method: 'POST'
+    }),
+  batchUpdateVoucherState: (payload: FinanceVoucherBatchActionPayload) =>
+    request<FinanceVoucherBatchActionResult>('/auth/finance/vouchers/actions', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
   exportVouchers: (params: FinanceVoucherQueryParams) =>
-    downloadBinaryFile(`/auth/finance/vouchers/export${buildQueryString(params)}`, '凭证查询.csv')
+    downloadBinaryFile(`/auth/finance/vouchers/export${buildQueryString(params)}`, '\u51ed\u8bc1\u67e5\u8be2.csv')
 }

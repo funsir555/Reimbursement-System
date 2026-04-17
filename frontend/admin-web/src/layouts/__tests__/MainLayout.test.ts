@@ -281,6 +281,40 @@ describe('MainLayout', () => {
     expect(mocks.notificationApi.getSummary).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the sidebar fixed and gives the navigation area its own scroll container', async () => {
+    const wrapper = await mountView([
+      'expense:process_management:view',
+      'expense:payment:payment_order:view',
+      'expense:payment:bank_link:view',
+      'finance:system_management:view'
+    ])
+
+    const sidebar = wrapper.get('[data-testid="main-layout-sidebar"]')
+    const sidebarScroll = wrapper.get('[data-testid="main-layout-sidebar-scroll"]')
+
+    expect(sidebar.classes()).toContain('sticky')
+    expect(sidebar.classes()).toContain('top-16')
+    expect(sidebar.classes()).toContain('overflow-hidden')
+    expect(sidebar.classes()).toContain('h-[calc(100vh-64px)]')
+    expect(sidebarScroll.classes()).toContain('overflow-y-auto')
+    expect(sidebarScroll.classes()).toContain('overflow-x-hidden')
+    expect(sidebar.find('[data-submenu="/expense/workbench"]').exists()).toBe(true)
+    expect(sidebar.find('[data-submenu="/expense/payment"]').exists()).toBe(true)
+  })
+
+  it('turns the top-left brand area into a dashboard shortcut', async () => {
+    const wrapper = await mountView(['profile:view'])
+
+    const brand = wrapper.get('[data-testid="main-layout-brand"]')
+
+    expect(brand.attributes('aria-label')).toBe('Go to dashboard')
+    expect(brand.classes()).toContain('main-layout-brand')
+
+    await brand.trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/dashboard')
+  })
+
   it('passes finance company state to workspace tabs and forwards switch events', async () => {
     routeState.path = '/finance/general-ledger/new-voucher'
     routeState.fullPath = '/finance/general-ledger/new-voucher'

@@ -1,8 +1,14 @@
 package com.finex.auth.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.finex.auth.dto.FinanceVoucherActionResultVO;
 import com.finex.auth.dto.FinanceVoucherMetaVO;
 import com.finex.auth.dto.FinanceVoucherQueryDTO;
 import com.finex.auth.dto.FinanceVoucherSaveDTO;
+import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.FinanceCustomer;
@@ -27,20 +33,27 @@ import com.finex.auth.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,6 +96,8 @@ class FinanceVoucherServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), GlAccvouch.class);
+
         service = new FinanceVoucherServiceImpl(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
@@ -103,7 +118,7 @@ class FinanceVoucherServiceImplTest {
         lenient().when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeCustomerMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeVendorMapper.selectList(any())).thenReturn(List.of());
-        lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("5601", "管理费用"), buildSubject("1002", "银行存款")));
+        lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("5601", "绠＄悊璐圭敤"), buildSubject("1002", "閾惰瀛樻")));
         lenient().when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
     }
 
@@ -111,8 +126,8 @@ class FinanceVoucherServiceImplTest {
     void queryVouchersBuildsVoucherHeadSummary() {
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
-                buildRow(1, "COMP-001", 3, "记", 8, 1, "2026-03-28", "办公费", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
-                buildRow(2, "COMP-001", 3, "记", 8, 2, "2026-03-28", "支付办公费", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u529e\u516c\u8d39", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u652f\u4ed8\u529e\u516c\u8d39", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
         ));
 
         FinanceVoucherQueryDTO dto = new FinanceVoucherQueryDTO();
@@ -121,29 +136,29 @@ class FinanceVoucherServiceImplTest {
         dto.setPageSize(20);
 
         FinanceVoucherSummaryVO summary = service.queryVouchers(dto).getItems().get(0);
-        assertEquals("记-0008", summary.getDisplayVoucherNo());
+        assertEquals("\u8bb0-0008", summary.getDisplayVoucherNo());
         assertEquals("1280.00", summary.getTotalDebit().toPlainString());
         assertEquals("1280.00", summary.getTotalCredit().toPlainString());
     }
 
     @Test
     void getMetaLoadsCustomerSupplierAndProjectOptionsFromArchives() {
-        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
-        when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
-        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "广州分公司")));
-        when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "员工甲", "COMP-001")));
-        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("1001", "??????", 1, 1, 1, 1, 1, "7")));
-        when(financeCustomerMapper.selectList(any())).thenReturn(List.of(buildCustomer("C00001", "华南客户", "COMP-001")));
-        when(financeVendorMapper.selectList(any())).thenReturn(List.of(buildVendor("V00001", "核心供应商", "COMP-001")));
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
+        when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "Guangzhou Branch")));
+        when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "\u5458\u5de5\u7532", "COMP-001")));
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("1001", "\u5e93\u5b58\u73b0\u91d1", 1, 1, 1, 1, 1, "7")));
+        when(financeCustomerMapper.selectList(any())).thenReturn(List.of(buildCustomer("C00001", "\u534e\u5357\u5ba2\u6237", "COMP-001")));
+        when(financeVendorMapper.selectList(any())).thenReturn(List.of(buildVendor("V00001", "Core Supplier", "COMP-001")));
         when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("7", "Market Projects", "COMP-001")));
         when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of(buildProject("2002", "South Campaign", "7", "COMP-001")));
         when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
 
-        FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "记");
+        FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "\u8bb0");
 
         assertEquals("C00001", meta.getCustomerOptions().get(0).getValue());
         assertEquals("C00001", meta.getCustomerOptions().get(0).getCode());
-        assertEquals("华南客户", meta.getCustomerOptions().get(0).getName());
+        assertEquals("\u534e\u5357\u5ba2\u6237", meta.getCustomerOptions().get(0).getName());
         assertEquals(1, meta.getAccountOptions().get(0).getBperson());
         assertEquals(1, meta.getAccountOptions().get(0).getBdept());
         assertEquals(1, meta.getAccountOptions().get(0).getBitem());
@@ -283,48 +298,48 @@ class FinanceVoucherServiceImplTest {
             return 1;
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
-        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "管理费用"),
-                buildSubject("1002", "银行存款")
+                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
         ));
         when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
         dto.setCompanyId("COMP-001");
         dto.setIperiod(4);
-        dto.setCsign("记");
+        dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("办公费", "5601", "100.00", null),
-                buildSaveEntry("支付办公费", "1002", null, "100.00")
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "100.00", null),
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
         ));
 
         service.saveVoucher(dto, 1L, "alice");
 
         assertEquals(2, insertedRows.size());
-        assertEquals("管理费用", insertedRows.get(0).getCcodeName());
-        assertEquals("银行存款", insertedRows.get(1).getCcodeName());
+        assertEquals("\u7ba1\u7406\u8d39\u7528", insertedRows.get(0).getCcodeName());
+        assertEquals("\u94f6\u884c\u5b58\u6b3e", insertedRows.get(1).getCcodeName());
     }
 
     @Test
     void saveVoucherRejectsOverlongDigestBeforeWrite() {
-        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "管理费用"),
-                buildSubject("1002", "银行存款")
+                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
         ));
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
         dto.setCompanyId("COMP-001");
         dto.setIperiod(4);
-        dto.setCsign("记");
+        dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
                 buildSaveEntry("A".repeat(256), "5601", "100.00", null),
-                buildSaveEntry("支付办公费用", "1002", null, "100.00")
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
         ));
 
         IllegalArgumentException exception = assertThrows(
@@ -332,26 +347,26 @@ class FinanceVoucherServiceImplTest {
                 () -> service.saveVoucher(dto, 1L, "alice")
         );
 
-        assertEquals("第 1 行摘要长度不能超过 255 个字符", exception.getMessage());
+        assertEquals("\u7b2c 1 \u884c\u6458\u8981\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 255 \u4e2a\u5b57\u7b26", exception.getMessage());
     }
 
     @Test
     void saveVoucherRejectsOversizedSubjectNameSnapshot() {
-        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "财务小王", "COMP-001"));
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
-                buildSubject("5601", "科".repeat(129)),
-                buildSubject("1002", "银行存款")
+                buildSubject("5601", "\u79d1".repeat(129)),
+                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
         ));
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
         dto.setCompanyId("COMP-001");
         dto.setIperiod(4);
-        dto.setCsign("记");
+        dto.setCsign("\u8bb0");
         dto.setDbillDate("2026-04-09");
         dto.setEntries(List.of(
-                buildSaveEntry("办公费用", "5601", "100.00", null),
-                buildSaveEntry("支付办公费用", "1002", null, "100.00")
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "100.00", null),
+                buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "1002", null, "100.00")
         ));
 
         IllegalArgumentException exception = assertThrows(
@@ -359,7 +374,7 @@ class FinanceVoucherServiceImplTest {
                 () -> service.saveVoucher(dto, 1L, "alice")
         );
 
-        assertEquals("科目【5601】名称长度超过 128，请先维护会计科目档案", exception.getMessage());
+        assertEquals("\u79d1\u76ee\u30105601\u3011\u540d\u79f0\u957f\u5ea6\u8d85\u8fc7 128\uff0c\u8bf7\u5148\u7ef4\u62a4\u4f1a\u8ba1\u79d1\u76ee\u6863\u6848", exception.getMessage());
     }
 
     @Test
@@ -391,21 +406,188 @@ class FinanceVoucherServiceImplTest {
     }
 
     @Test
+    void updateVoucherPreservesChineseDigestWhenRebuildingEntries() {
+        List<GlAccvouch> insertedRows = new ArrayList<>();
+        doAnswer(invocation -> {
+            insertedRows.add(invocation.getArgument(0));
+            return 1;
+        }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
+
+        when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u539f\u59cb\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u539f\u59cb\u6458\u8981", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
+        ));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("5601", "\u7ba1\u7406\u8d39\u7528"),
+                buildSubject("1002", "\u94f6\u884c\u5b58\u6b3e")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(3);
+        dto.setCsign("\u8bb0");
+        dto.setInoId(8);
+        dto.setDbillDate("2026-03-28");
+        dto.setEntries(List.of(
+                buildSaveEntry("\u529e\u516c\u8d39\u7528", "5601", "1280.00", null),
+                buildSaveEntry("\u94f6\u884c\u4ed8\u6b3e", "1002", null, "1280.00")
+        ));
+
+        FinanceVoucherSaveResultVO result = service.updateVoucher("COMP-001", "COMP-001~3~\u8bb0~8", dto, 1L, "alice");
+
+        assertEquals("COMP-001~3~\u8bb0~8", result.getVoucherNo());
+        assertEquals("COMP-001", result.getCompanyId());
+        assertEquals(3, result.getIperiod());
+        assertEquals("\u8bb0", result.getCsign());
+        assertEquals(8, result.getInoId());
+        assertEquals(2, result.getEntryCount());
+        assertEquals(2, insertedRows.size());
+        assertEquals("\u529e\u516c\u8d39\u7528", insertedRows.get(0).getCdigest());
+        assertEquals("\u94f6\u884c\u4ed8\u6b3e", insertedRows.get(1).getCdigest());
+        assertEquals("5601", insertedRows.get(0).getCcode());
+        assertEquals("1002", insertedRows.get(1).getCcode());
+    }
+
+    @Test
     void updateVoucherRejectsReviewedVoucher() {
         when(glAccvouchMapper.selectList(any())).thenReturn(List.of(buildReviewedRow()));
 
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
         dto.setCompanyId("COMP-001");
         dto.setIperiod(3);
-        dto.setCsign("记");
+        dto.setCsign("\u8bb0");
         dto.setInoId(8);
         dto.setDbillDate("2026-03-28");
         dto.setEntries(List.of());
 
         IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-                service.updateVoucher("COMP-001", "COMP-001~3~记~8", dto, 1L, "alice")
+                service.updateVoucher("COMP-001", "COMP-001~3~\u8bb0~8", dto, 1L, "alice")
         );
-        assertEquals("当前凭证状态不允许修改", exception.getMessage());
+        assertEquals("\u5f53\u524d\u51ed\u8bc1\u72b6\u6001\u4e0d\u5141\u8bb8\u4fee\u6539", exception.getMessage());
+    }
+
+    @Test
+    void queryVouchersResolvesErrorStatusBeforeReviewed() {
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        GlAccvouch errorRow = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u51ed\u8bc1", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO);
+        errorRow.setCcheck("\u5ba1\u6838\u4eba");
+        errorRow.setIflag(1);
+        when(glAccvouchMapper.selectList(any())).thenReturn(List.of(errorRow));
+
+        FinanceVoucherQueryDTO dto = new FinanceVoucherQueryDTO();
+        dto.setCompanyId("COMP-001");
+
+        FinanceVoucherSummaryVO summary = service.queryVouchers(dto).getItems().get(0);
+
+        assertEquals("ERROR", summary.getStatus());
+        assertEquals("\u5df2\u6807\u8bb0\u9519\u8bef", summary.getStatusLabel());
+        assertEquals("\u5ba1\u6838\u4eba", summary.getCheckerName());
+    }
+
+    @Test
+    void reviewVoucherWritesCheckerAndReturnsNextReviewableVoucher() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
+
+        List<GlAccvouch> currentRows = List.of(
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "1002", BigDecimal.ZERO, new BigDecimal("1280.00"))
+        );
+        List<GlAccvouch> nextRows = List.of(
+                buildReviewedVoucherRow(9, 3, "\u8bb0", "2026-03-28"),
+                buildErrorVoucherRow(10, 3, "\u8bb0", "2026-03-28"),
+                buildRow(5, "COMP-001", 3, "\u8bb0", 11, 1, "2026-03-28", "\u4e0b\u4e00\u5f20\u51ed\u8bc1", "5601", new BigDecimal("256.00"), BigDecimal.ZERO)
+        );
+        List<GlAccvouch> refreshedRows = List.of(
+                buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28"),
+                buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28")
+        );
+        refreshedRows.forEach(row -> row.setCcheck("\u8d22\u52a1\u5c0f\u738b"));
+
+        when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, nextRows, refreshedRows);
+
+        FinanceVoucherActionResultVO result = service.reviewVoucher("COMP-001", "COMP-001~3~\u8bb0~8", 1L, "alice");
+
+        assertEquals("REVIEWED", result.getStatus());
+        assertEquals("\u8d22\u52a1\u5c0f\u738b", result.getCheckerName());
+        assertEquals("COMP-001~3~\u8bb0~11", result.getNextVoucherNo());
+        assertFalse(Boolean.TRUE.equals(result.getLastVoucherOfMonth()));
+
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
+        assertWrapperContainsValues(wrapperCaptor.getValue(), "\u8d22\u52a1\u5c0f\u738b", 0);
+    }
+
+    @Test
+    void reviewVoucherMarksLastVoucherWhenNoNextReviewableVoucher() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
+
+        List<GlAccvouch> currentRows = List.of(
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5f85\u5ba1\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO)
+        );
+        List<GlAccvouch> refreshedRows = List.of(buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28"));
+        refreshedRows.get(0).setCcheck("\u8d22\u52a1\u5c0f\u738b");
+
+        when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, List.of(), refreshedRows);
+
+        FinanceVoucherActionResultVO result = service.reviewVoucher("COMP-001", "COMP-001~3~\u8bb0~8", 1L, "alice");
+
+        assertEquals("REVIEWED", result.getStatus());
+        assertNull(result.getNextVoucherNo());
+        assertTrue(Boolean.TRUE.equals(result.getLastVoucherOfMonth()));
+    }
+
+    @Test
+    void unreviewVoucherClearsChecker() {
+        List<GlAccvouch> currentRows = List.of(buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28"));
+        List<GlAccvouch> refreshedRows = List.of(buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u53cd\u5ba1\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO));
+
+        when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, refreshedRows);
+
+        FinanceVoucherActionResultVO result = service.unreviewVoucher("COMP-001", "COMP-001~3~\u8bb0~8");
+
+        assertEquals("UNPOSTED", result.getStatus());
+        assertNull(result.getCheckerName());
+
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
+        assertWrapperContainsValues(wrapperCaptor.getValue(), 0);
+    }
+
+    @Test
+    void markVoucherErrorSetsErrorFlag() {
+        List<GlAccvouch> currentRows = List.of(buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u6807\u9519\u6458\u8981", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO));
+        List<GlAccvouch> refreshedRows = List.of(buildErrorVoucherRow(8, 3, "\u8bb0", "2026-03-28"));
+
+        when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, refreshedRows);
+
+        FinanceVoucherActionResultVO result = service.markVoucherError("COMP-001", "COMP-001~3~\u8bb0~8");
+
+        assertEquals("ERROR", result.getStatus());
+        assertEquals("\u5df2\u6807\u8bb0\u9519\u8bef", result.getStatusLabel());
+
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
+        assertWrapperContainsValues(wrapperCaptor.getValue(), 1);
+    }
+
+    @Test
+    void clearVoucherErrorRestoresReviewedStatus() {
+        GlAccvouch currentRow = buildErrorVoucherRow(8, 3, "\u8bb0", "2026-03-28");
+        currentRow.setCcheck("\u8d22\u52a1\u4e3b\u7ba1");
+        GlAccvouch refreshedRow = buildReviewedVoucherRow(8, 3, "\u8bb0", "2026-03-28");
+        refreshedRow.setCcheck("\u8d22\u52a1\u4e3b\u7ba1");
+
+        when(glAccvouchMapper.selectList(any())).thenReturn(List.of(currentRow), List.of(refreshedRow));
+
+        FinanceVoucherActionResultVO result = service.clearVoucherError("COMP-001", "COMP-001~3~\u8bb0~8");
+
+        assertEquals("REVIEWED", result.getStatus());
+        assertEquals("\u8d22\u52a1\u4e3b\u7ba1", result.getCheckerName());
+
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
+        assertWrapperContainsValues(wrapperCaptor.getValue(), 0);
     }
 
     private com.finex.auth.dto.FinanceVoucherEntryDTO buildSaveEntry(String digest, String code, String debit, String credit) {
@@ -533,14 +715,35 @@ class FinanceVoucherServiceImplTest {
         row.setMd(debit);
         row.setMc(credit);
         row.setIdoc(1);
-        row.setCbill("财务制单员");
+        row.setCbill("\u8d22\u52a1\u5236\u5355\u5458");
         row.setIbook(0);
         return row;
     }
 
     private GlAccvouch buildReviewedRow() {
-        GlAccvouch row = buildRow(1, "COMP-001", 3, "记", 8, 1, "2026-03-28", "办公费", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO);
+        GlAccvouch row = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u529e\u516c\u8d39", "5601", new BigDecimal("1280.00"), BigDecimal.ZERO);
         row.setCcheck("checker");
         return row;
     }
+
+    private GlAccvouch buildReviewedVoucherRow(int inoId, int period, String csign, String billDate) {
+        GlAccvouch row = buildRow(inoId, "COMP-001", period, csign, inoId, 1, billDate, "\u5df2\u5ba1\u51ed\u8bc1", "5601", new BigDecimal("100.00"), BigDecimal.ZERO);
+        row.setCcheck("\u5ba1\u6838\u4eba");
+        return row;
+    }
+
+    private GlAccvouch buildErrorVoucherRow(int inoId, int period, String csign, String billDate) {
+        GlAccvouch row = buildRow(inoId, "COMP-001", period, csign, inoId, 1, billDate, "\u9519\u8bef\u51ed\u8bc1", "5601", new BigDecimal("100.00"), BigDecimal.ZERO);
+        row.setIflag(1);
+        return row;
+    }
+
+    private void assertWrapperContainsValues(Wrapper<GlAccvouch> wrapper, Object... expectedValues) {
+        AbstractWrapper<?, ?, ?> abstractWrapper = (AbstractWrapper<?, ?, ?>) wrapper;
+        Collection<Object> paramValues = abstractWrapper.getParamNameValuePairs().values();
+        for (Object expectedValue : expectedValues) {
+            assertTrue(paramValues.contains(expectedValue), "wrapper should contain value: " + expectedValue);
+        }
+    }
 }
+

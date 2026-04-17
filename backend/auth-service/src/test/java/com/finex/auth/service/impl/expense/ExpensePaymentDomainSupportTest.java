@@ -7,6 +7,7 @@ import com.finex.auth.dto.ExpenseBankLinkConfigVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.entity.FinanceVendor;
+import com.finex.auth.entity.PmBankPaymentRecord;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.SystemCompanyBankAccount;
@@ -84,6 +85,7 @@ class ExpensePaymentDomainSupportTest {
         assertEquals("DOC-001", actual.get(0).getDocumentCode());
         assertEquals("HQ", actual.get(0).getPaymentCompanyName());
         assertEquals("供应商A", actual.get(0).getPayeeOrCounterpartyName());
+        assertEquals("待回单", actual.get(0).getReceiptStatusLabel());
     }
 
     @Test
@@ -152,6 +154,103 @@ class ExpensePaymentDomainSupportTest {
         assertEquals(9L, actual.getCompanyBankAccountId());
         assertEquals("op-key", actual.getOperatorKey());
         assertEquals("Main", actual.getAccountName());
+    }
+
+    @Test
+    void listPaymentOrdersResolvesReceiptStatusLabelsToChinese() {
+        ExpensePaymentDomainSupport support = newSupport();
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(22L);
+        task.setDocumentCode("DOC-RECEIPT");
+        task.setNodeType("PAYMENT");
+        task.setNodeName("Pay");
+        task.setAssigneeUserId(1L);
+
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-RECEIPT");
+        instance.setDocumentTitle("Receipt");
+        instance.setTemplateName("Expense");
+        instance.setStatus("PENDING_PAYMENT");
+
+        PmBankPaymentRecord record = new PmBankPaymentRecord();
+        record.setDocumentCode("DOC-RECEIPT");
+        record.setReceiptStatus("FAILED");
+
+        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
+        when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
+        when(enrichmentData.metadata("DOC-RECEIPT")).thenReturn(metadata);
+        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(record));
+        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
+
+        List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PENDING_PAYMENT");
+
+        assertEquals("回单失败", actual.get(0).getReceiptStatusLabel());
+    }
+
+    @Test
+    void listPaymentOrdersTreatsManualPaidWithoutReceiptAsPendingReceipt() {
+        ExpensePaymentDomainSupport support = newSupport();
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(23L);
+        task.setDocumentCode("DOC-MANUAL");
+        task.setNodeType("PAYMENT");
+        task.setNodeName("Pay");
+        task.setAssigneeUserId(1L);
+
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-MANUAL");
+        instance.setDocumentTitle("Manual");
+        instance.setTemplateName("Expense");
+        instance.setStatus("PAYMENT_COMPLETED");
+
+        PmBankPaymentRecord record = new PmBankPaymentRecord();
+        record.setDocumentCode("DOC-MANUAL");
+        record.setManualPaid(1);
+        record.setReceiptStatus("RECEIVED");
+        record.setReceiptAttachmentId(null);
+
+        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
+        when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
+        when(enrichmentData.metadata("DOC-MANUAL")).thenReturn(metadata);
+        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(record));
+        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
+
+        List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PAYMENT_COMPLETED");
+
+        assertEquals("待回单", actual.get(0).getReceiptStatusLabel());
+    }
+
+    @Test
+    void listBankLinksUsesChineseStatusLabelsWithoutGarbledText() {
+        ExpensePaymentDomainSupport support = newSupport();
+
+        SystemCompanyBankAccount account = new SystemCompanyBankAccount();
+        account.setId(11L);
+        account.setCompanyId("C1");
+        account.setAccountName("Main");
+        account.setAccountNo("6222000012345678");
+        account.setBankName("招商银行");
+        account.setStatus(1);
+        account.setDirectConnectEnabled(1);
+        account.setDirectConnectProvider("CMB");
+        account.setDirectConnectChannel("CMB_CLOUD");
+
+        PmBankPaymentRecord latestRecord = new PmBankPaymentRecord();
+        latestRecord.setCompanyBankAccountId(11L);
+        latestRecord.setReceiptStatus("RECEIVED");
+
+        when(systemCompanyBankAccountMapper.selectList(any())).thenReturn(List.of(account));
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of());
+        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(latestRecord));
+
+        List<com.finex.auth.dto.ExpenseBankLinkSummaryVO> actual = support.listBankLinks();
+
+        assertEquals(1, actual.size());
+        assertEquals("已启用", actual.get(0).getDirectConnectStatusLabel());
+        assertEquals("未推送", actual.get(0).getLastDirectConnectStatus());
+        assertEquals("已收回单", actual.get(0).getLastReceiptStatus());
     }
 
     @Test

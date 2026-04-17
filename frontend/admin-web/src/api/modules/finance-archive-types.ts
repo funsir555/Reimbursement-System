@@ -150,6 +150,15 @@ export interface FinanceAccountSubjectSavePayload {
   iViewItem?: number
 }
 
+export interface FinanceAccountSubjectDerivedDefaults {
+  parent_subject_code?: string
+  subject_level?: number
+  subject_category?: string
+  balance_direction?: string
+  leaf_flag?: number
+  matched_by?: string
+}
+
 export interface FinanceAccountSubjectStatusPayload {
   status?: number
   bclose?: number

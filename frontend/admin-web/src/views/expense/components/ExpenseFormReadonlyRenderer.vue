@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-6">
-    <div class="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
+    <div v-if="summaryVisible" class="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
       <div class="grid grid-cols-1 gap-4 text-sm text-slate-600 xl:grid-cols-3">
         <div>表单组件数：{{ blocks.length }}</div>
         <div>布局模式：{{ schema?.layoutMode || 'TWO_COLUMN' }}</div>
@@ -176,6 +176,7 @@ const props = withDefaults(defineProps<{
   departmentOptions?: ProcessFormOption[]
   detailType?: string
   defaultBusinessScenario?: string
+  summaryVisible?: boolean
   vendorOptionMap?: Record<string, ExpenseCreateVendorOption>
   payeeOptionMap?: Record<string, ExpenseCreatePayeeOption>
   payeeAccountOptionMap?: Record<string, ExpenseCreatePayeeAccountOption>
@@ -184,6 +185,7 @@ const props = withDefaults(defineProps<{
   departmentOptions: () => [],
   detailType: '',
   defaultBusinessScenario: '',
+  summaryVisible: true,
   vendorOptionMap: () => ({}),
   payeeOptionMap: () => ({}),
   payeeAccountOptionMap: () => ({})

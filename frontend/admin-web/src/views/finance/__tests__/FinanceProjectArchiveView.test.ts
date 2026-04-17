@@ -99,6 +99,40 @@ const TableColumnStub = defineComponent({
   `
 })
 
+const PaginationStub = defineComponent({
+  props: {
+    currentPage: {
+      type: Number,
+      default: 1
+    },
+    pageSize: {
+      type: Number,
+      default: 10
+    },
+    pageSizes: {
+      type: Array,
+      default: () => []
+    }
+  },
+  emits: ['update:currentPage', 'update:pageSize'],
+  template: `
+    <div data-testid="pagination">
+      <span data-testid="pagination-current">{{ currentPage }}</span>
+      <span data-testid="pagination-size">{{ pageSize }}</span>
+      <button data-testid="pagination-next" type="button" @click="$emit('update:currentPage', currentPage + 1)">next</button>
+      <button
+        v-for="size in pageSizes"
+        :key="size"
+        type="button"
+        :data-testid="\`pagination-size-\${size}\`"
+        @click="$emit('update:pageSize', size)"
+      >
+        {{ size }}
+      </button>
+    </div>
+  `
+})
+
 async function mountView() {
   const wrapper = mount(FinanceProjectArchiveView, {
     global: {
@@ -117,7 +151,8 @@ async function mountView() {
         'el-form': SimpleStub,
         'el-form-item': SimpleStub,
         'el-date-picker': SimpleStub,
-        'el-input-number': SimpleStub
+        'el-input-number': SimpleStub,
+        'el-pagination': PaginationStub
       },
       directives: {
         loading: () => undefined
@@ -146,10 +181,22 @@ describe('FinanceProjectArchiveView', () => {
       }
     })
     mocks.financeArchiveApi.listProjectClasses.mockResolvedValue({
-      data: [{ project_class_code: '97', project_class_name: 'Market Projects', status: 1, has_projects: false }]
+      data: Array.from({ length: 12 }, (_, index) => ({
+        project_class_code: `${97 + index}`,
+        project_class_name: index === 0 ? 'Market Projects' : `Class ${index + 1}`,
+        status: 1,
+        has_projects: false
+      }))
     })
     mocks.financeArchiveApi.listProjects.mockResolvedValue({
-      data: [{ citemcode: '2002', citemname: 'Project One', citemccode: '97', status: 1, bclose: 0 }]
+      data: Array.from({ length: 12 }, (_, index) => ({
+        citemcode: `${2002 + index}`,
+        citemname: index === 0 ? 'Project One' : `Project ${index + 1}`,
+        citemccode: '97',
+        project_class_name: 'Market Projects',
+        status: 1,
+        bclose: 0
+      }))
     })
     mocks.financeArchiveApi.createProject.mockResolvedValue({ data: {} })
     mocks.financeArchiveApi.updateProjectStatus.mockResolvedValue({ data: true })
@@ -162,6 +209,8 @@ describe('FinanceProjectArchiveView', () => {
       meta: { projectClassOptions: Array<{ value: string }> }
       projectClasses: Array<{ project_class_code: string }>
       projects: Array<{ citemcode: string }>
+      paginatedProjectClasses: Array<{ project_class_code: string }>
+      paginatedProjects: Array<{ citemcode: string }>
     }
 
     expect(mocks.financeArchiveApi.getProjectArchiveMeta).toHaveBeenCalledWith('COMPANY_A')
@@ -180,8 +229,48 @@ describe('FinanceProjectArchiveView', () => {
     expect(vm.meta.projectClassOptions[0]?.value).toBe('97')
     expect(vm.projectClasses[0]?.project_class_code).toBe('97')
     expect(vm.projects[0]?.citemcode).toBe('2002')
+    expect(vm.paginatedProjectClasses).toHaveLength(10)
+    expect(vm.paginatedProjects).toHaveLength(10)
 
     wrapper.unmount()
+  })
+
+  it('keeps class and project pagination state independent across tabs', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      activeTab: 'classes' | 'projects'
+      paginatedProjectClasses: Array<{ project_class_code: string }>
+      paginatedProjects: Array<{ citemcode: string }>
+    }
+
+    await wrapper.get('[data-testid="pagination-next"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-current"]').text()).toBe('2')
+    expect(vm.paginatedProjectClasses).toHaveLength(2)
+    expect(vm.paginatedProjectClasses[0]?.project_class_code).toBe('107')
+
+    vm.activeTab = 'projects'
+    await flushPromises()
+
+    expect(vm.paginatedProjects).toHaveLength(10)
+    expect(vm.paginatedProjects[0]?.citemcode).toBe('2002')
+  })
+
+  it('updates the current tab page size locally', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      activeTab: 'classes' | 'projects'
+      paginatedProjects: Array<{ citemcode: string }>
+    }
+
+    vm.activeTab = 'projects'
+    await flushPromises()
+    const paginationButtons = wrapper.findAll('[data-testid="pagination-size-20"]')
+    await paginationButtons[1]!.trigger('click')
+    await flushPromises()
+
+    expect(vm.paginatedProjects).toHaveLength(12)
   })
 
   it('builds project payload from dialog form', async () => {

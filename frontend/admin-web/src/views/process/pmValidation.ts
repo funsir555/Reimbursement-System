@@ -1,6 +1,7 @@
 import type {
   ProcessFlowConditionField,
   ProcessFlowSavePayload,
+  ProcessExpenseDetailDesignSummary,
   ProcessFlowScene,
   ProcessFormDesignBlock,
   ProcessFormDesignSchema,
@@ -16,20 +17,33 @@ export const PM_FIELD_KEY_MAX_LENGTH = 64
 const DOCUMENT_TITLE_FIELD_KEYS = new Set(['__documentTitle', 'documentTitle', 'title'])
 const DOCUMENT_RELATION_COMPONENT_CODES = new Set(['related-document', 'writeoff-document'])
 
-type OptionLike = Pick<ProcessFormOption, 'value'> | { detailCode?: string } | string
+type TemplateBindingOption = ProcessFormOption | Pick<ProcessExpenseDetailDesignSummary, 'detailCode'> | string
 
 function trimValue(value: unknown) {
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim()
 }
 
-function optionValue(option: OptionLike) {
+function hasOptionValue(option: Exclude<TemplateBindingOption, string>): option is ProcessFormOption {
+  return 'value' in option
+}
+
+function hasDetailCode(
+  option: Exclude<TemplateBindingOption, string>
+): option is Pick<ProcessExpenseDetailDesignSummary, 'detailCode'> {
+  return 'detailCode' in option
+}
+
+function optionValue(option: TemplateBindingOption) {
   if (typeof option === 'string') {
     return option
   }
-  if ('detailCode' in option) {
+  if (hasOptionValue(option)) {
+    return String(option.value || '')
+  }
+  if (hasDetailCode(option)) {
     return String(option.detailCode || '')
   }
-  return String(option.value || '')
+  return ''
 }
 
 export function validateMaxLength(value: unknown, max: number, label: string) {
@@ -59,7 +73,7 @@ export function isRelationSourceFieldBlock(block: ProcessFormDesignBlock) {
 
 export function validateTemplateBindingValue(
   value: string,
-  options: OptionLike[],
+  options: TemplateBindingOption[],
   label: string
 ) {
   const normalizedValue = trimValue(value)

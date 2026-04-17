@@ -2,12 +2,26 @@
   <div class="min-h-screen bg-gray-50">
     <header class="sticky top-0 z-50 bg-white shadow-sm">
       <div class="flex h-16 items-center justify-between px-6">
-        <div class="flex items-center gap-3">
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600">
-            <el-icon :size="20" class="text-white"><Money /></el-icon>
-          </div>
-          <span class="text-xl font-bold text-gray-800">FinEx</span>
-        </div>
+        <button
+          type="button"
+          class="main-layout-brand group flex items-center gap-3 rounded-2xl border border-sky-100/80 bg-white/85 px-2.5 py-2 text-left transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-sky-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80 focus-visible:ring-offset-2"
+          data-testid="main-layout-brand"
+          aria-label="Go to dashboard"
+          @click="goDashboard"
+        >
+          <span class="main-layout-brand__icon-shell">
+            <span class="main-layout-brand__icon-glow" aria-hidden="true"></span>
+            <pixel-duck-bot-icon
+              variant="brand"
+              aria-label="FinEx brand duck"
+              class="main-layout-brand__icon"
+            />
+          </span>
+          <span class="flex flex-col leading-none">
+            <span class="text-xl font-bold tracking-tight text-slate-800">FinEx</span>
+            <span class="text-[11px] font-medium uppercase tracking-[0.22em] text-sky-500/80">Expense Hub</span>
+          </span>
+        </button>
 
         <div class="mx-8 max-w-xl flex-1">
           <el-input
@@ -70,8 +84,15 @@
     </header>
 
     <div class="flex">
-      <aside class="sticky top-16 min-h-[calc(100vh-64px)] w-64 bg-white shadow-sm">
-        <el-menu :default-active="activeMenu" class="border-0 py-4" router>
+      <aside
+        data-testid="main-layout-sidebar"
+        class="sticky top-16 h-[calc(100vh-64px)] w-64 shrink-0 overflow-hidden bg-white shadow-sm"
+      >
+        <div
+          data-testid="main-layout-sidebar-scroll"
+          class="h-full overflow-y-auto overflow-x-hidden py-4"
+        >
+          <el-menu :default-active="activeMenu" class="border-0" router>
           <template v-for="item in visibleNavigationMenu" :key="item.key">
             <el-menu-item v-if="!item.children?.length" :index="item.index" class="menu-level-1">
               <span v-if="item.iconKey === 'Agent'" class="flex items-center gap-2">
@@ -111,7 +132,8 @@
               </template>
             </el-sub-menu>
           </template>
-        </el-menu>
+          </el-menu>
+        </div>
       </aside>
 
       <main class="flex-1 overflow-hidden p-6">
@@ -179,7 +201,6 @@ import { EXPENSE_CREATE_ENTRY_PERMISSION_CODES, hasAnyPermission } from '@/utils
 import { MAIN_NAVIGATION_MENU, filterVisibleNavigationMenu, type NavigationIconKey } from '@/router/navigation-config'
 import { getRouteMenuPermissionCodes, resolveRouteMeta } from '@/router/route-meta'
 import {
-  Money,
   Search,
   Bell,
   Download,
@@ -321,6 +342,10 @@ const goCreateExpense = () => {
   void router.push('/expense/create')
 }
 
+const goDashboard = () => {
+  void router.push('/dashboard')
+}
+
 const handleUserCommand = (command: string) => {
   if (command === 'profile') {
     if (!canViewProfile.value) return
@@ -390,3 +415,42 @@ async function handleFinanceCompanyChange(companyId: string) {
   await financeCompany.switchCompany(companyId)
 }
 </script>
+
+<style scoped>
+.main-layout-brand {
+  box-shadow: 0 10px 24px -20px rgba(14, 116, 244, 0.45);
+}
+
+.main-layout-brand__icon-shell {
+  position: relative;
+  display: inline-flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 1rem;
+  background:
+    linear-gradient(135deg, rgba(224, 242, 254, 0.98) 5%, rgba(147, 197, 253, 0.92) 48%, rgba(37, 99, 235, 0.94) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 14px 28px -18px rgba(37, 99, 235, 0.9);
+}
+
+.main-layout-brand__icon-glow {
+  position: absolute;
+  inset: 0.3rem;
+  border-radius: 0.85rem;
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 58%);
+  pointer-events: none;
+}
+
+.main-layout-brand__icon {
+  position: relative;
+  z-index: 1;
+  height: 1.8rem;
+  width: 1.8rem;
+  color: rgba(255, 255, 255, 0.98);
+  filter: drop-shadow(0 2px 6px rgba(14, 116, 244, 0.24));
+}
+</style>

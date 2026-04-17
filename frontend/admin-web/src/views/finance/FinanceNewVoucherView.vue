@@ -7,7 +7,8 @@
           :key="action.key"
           :type="action.emphasis === 'primary' ? 'primary' : action.emphasis === 'secondary' ? 'info' : 'default'"
           :plain="action.emphasis === 'secondary'"
-          :loading="action.key === 'save' ? saving : false"
+          :disabled="Boolean(action.disabled)"
+          :loading="action.key === 'save' ? saving : action.key === currentToolbarLoadingKey ? reviewActing : false"
           class="toolbar-button"
           :class="{
             'toolbar-button-large toolbar-button-accent': action.emphasis === 'secondary',
@@ -30,7 +31,7 @@
         <section class="voucher-info-band">
           <div class="voucher-info-main">
             <div class="voucher-info-grid">
-              <label class="voucher-info-field">
+              <label class="voucher-info-field voucher-info-company">
                 <span>公司</span>
                 <div class="voucher-code-box voucher-company-box">{{ currentCompanyName }}</div>
               </label>
@@ -44,21 +45,21 @@
                   <el-input v-model="voucherNoInput" placeholder="请输入凭证号" :readonly="voucherHeaderLocked" />
                 </div>
               </label>
-              <label class="voucher-info-field voucher-info-period">
-                <span>期间</span>
-                <el-input-number v-model="form.iperiod" :min="1" :max="12" :controls="false" :disabled="voucherHeaderLocked" />
-              </label>
-              <label class="voucher-info-field">
+              <label class="voucher-info-field voucher-info-date">
                 <span>制单日期</span>
                 <el-date-picker v-model="form.dbillDate" type="date" value-format="YYYY-MM-DD" format="YYYY-MM-DD" :disabled="isReadonlyMode" />
               </label>
               <label class="voucher-info-field voucher-info-period">
-                <span>附件张数</span>
-                <el-input-number v-model="form.idoc" :min="0" :controls="false" :disabled="isReadonlyMode" />
+                <span>期间</span>
+                <el-input-number v-model="form.iperiod" :min="1" :max="12" :controls="false" :disabled="voucherHeaderLocked" />
               </label>
-              <label class="voucher-info-field">
+              <label class="voucher-info-field voucher-info-maker">
                 <span>制单人</span>
                 <el-input v-model="form.cbill" readonly />
+              </label>
+              <label class="voucher-info-field voucher-info-docs">
+                <span>附件张数</span>
+                <el-input-number v-model="form.idoc" :min="0" :controls="false" :disabled="isReadonlyMode" />
               </label>
               <label class="voucher-info-field voucher-info-field-note">
                 <span>备注</span>
@@ -66,21 +67,6 @@
               </label>
             </div>
           </div>
-
-          <aside class="voucher-info-side">
-            <div class="status-chip" :class="isBalanced ? 'status-chip-balanced' : 'status-chip-warning'">
-              <span>平衡状态</span>
-              <strong>{{ isBalanced ? '已平衡' : '待调整' }}</strong>
-            </div>
-            <div class="status-chip">
-              <span>有效分录</span>
-              <strong>{{ effectiveEntryCount }}</strong>
-            </div>
-            <div class="status-chip">
-              <span>{{ isDetailRoute ? '凭证状态' : '草稿状态' }}</span>
-              <strong>{{ statusChipText }}</strong>
-            </div>
-          </aside>
         </section>
 
         <section v-if="voucherNoticeItems.length" class="voucher-notice-panel">
@@ -216,7 +202,7 @@
         </section>
 
         <footer class="voucher-signature">
-          <span>审核：</span>
+          <span>审核：{{ voucherDetail?.checkerName || '未审核' }}</span>
           <span>记账：</span>
           <span>出纳：</span>
           <span>制单：{{ form.cbill || '未填写' }}</span>
@@ -273,11 +259,11 @@ import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { absMoney, addMoney, formatMoney, isZeroMoney, normalizeMoneyValue } from '@/utils/money'
 
-type ToolbarActionKey = 'new' | 'modify' | 'print' | 'export' | 'copy' | 'reverse' | 'void' | 'insert' | 'delete' | 'searchReplace' | 'cashFlow' | 'save' | 'assist' | 'balance' | 'calculator'
+type ToolbarActionKey = 'new' | 'modify' | 'print' | 'export' | 'copy' | 'reverse' | 'void' | 'insert' | 'delete' | 'searchReplace' | 'cashFlow' | 'save' | 'assist' | 'balance' | 'calculator' | 'review' | 'unreview' | 'markError' | 'find'
 type VoucherEntryRow = FinanceVoucherEntry & { localId: string }
 type DepartmentTreeOption = FinanceVoucherOption & { children: DepartmentTreeOption[] }
 type VoucherFormState = Omit<FinanceVoucherForm, 'entries'> & { entries: VoucherEntryRow[] }
-type VoucherPageMode = 'create' | 'detail'
+type VoucherPageMode = 'create' | 'detail' | 'review'
 type VoucherAssistCapability = {
   department: boolean
   employee: boolean
@@ -292,6 +278,7 @@ interface ToolbarAction {
   label: string
   icon: Component
   emphasis?: 'primary' | 'secondary'
+  disabled?: boolean
 }
 
 const DRAFT_STORAGE_KEY = 'finance-new-voucher-draft'
@@ -330,6 +317,8 @@ const currentUser = readStoredUser()
 
 const loading = ref(false)
 const saving = ref(false)
+const reviewActing = ref(false)
+const currentToolbarLoadingKey = ref<ToolbarActionKey | ''>('')
 const initializing = ref(false)
 const voucherMeta = ref<FinanceVoucherMeta | null>(null)
 const voucherDetail = ref<FinanceVoucherDetail | null>(null)
@@ -357,15 +346,46 @@ const form = reactive<VoucherFormState>({
   entries: ensureMinimumRows([createEntry('CNY', 1), createEntry('CNY', 2)], 'CNY')
 })
 const isDetailRoute = computed(() => props.pageMode === 'detail')
+const isReviewMode = computed(() => props.pageMode === 'review')
 const detailVoucherNo = computed(() => String(props.voucherNo || ''))
 const canEditExisting = computed(() => hasPermission('finance:general_ledger:query_voucher:edit', currentUser))
-const isReadonlyMode = computed(() => isDetailRoute.value && !editingExisting.value)
-const voucherHeaderLocked = computed(() => isDetailRoute.value)
+const canReviewVoucher = computed(() => hasPermission('finance:general_ledger:review_voucher:review', currentUser))
+const canUnreviewVoucher = computed(() => hasPermission('finance:general_ledger:review_voucher:unreview', currentUser))
+const canMarkVoucherError = computed(() => hasPermission('finance:general_ledger:review_voucher:mark_error', currentUser))
+const isReadonlyMode = computed(() => isReviewMode.value || (isDetailRoute.value && !editingExisting.value))
+const voucherHeaderLocked = computed(() => isReviewMode.value || isDetailRoute.value)
+const backToListRouteName = computed(() => (isReviewMode.value ? 'finance-review-voucher' : 'finance-query-voucher'))
 const pageTitle = computed(() => {
+  if (isReviewMode.value) return '审核凭证'
   if (!isDetailRoute.value) return '新建凭证'
   return editingExisting.value ? '修改凭证' : '凭证详情'
 })
 const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>(() => {
+  if (isReviewMode.value) {
+    return [
+      {
+        key: 'review-primary',
+        actions: [
+          { key: 'review', label: '审核', icon: Select, emphasis: 'secondary', disabled: !canReviewVoucher.value }
+        ]
+      },
+      {
+        key: 'review-actions',
+        actions: [
+          { key: 'export', label: '导出', icon: Download },
+          { key: 'find', label: '查找', icon: Search },
+          { key: 'unreview', label: '反审核', icon: RefreshLeft, disabled: !canUnreviewVoucher.value },
+          {
+            key: 'markError',
+            label: voucherDetail.value?.status === 'ERROR' ? '取消错误' : '标记错误',
+            icon: CircleClose,
+            disabled: !canMarkVoucherError.value
+          }
+        ]
+      }
+    ]
+  }
+
   const primaryActions: ToolbarAction[] = [{ key: 'new', label: '新增', icon: Plus, emphasis: 'secondary' }]
   if (isDetailRoute.value && !editingExisting.value && voucherDetail.value?.editable && canEditExisting.value) {
     primaryActions.push({ key: 'modify', label: '修改', icon: Edit, emphasis: 'primary' })
@@ -407,11 +427,9 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
 })
 
 const effectiveRows = computed(() => form.entries.filter((item) => !isEntryBlank(item)))
-const effectiveEntryCount = computed(() => effectiveRows.value.length)
 const totalDebit = computed(() => sumRows(effectiveRows.value, 'md'))
 const totalCredit = computed(() => sumRows(effectiveRows.value, 'mc'))
 const balanceGap = computed(() => subtractVoucherAmount(totalDebit.value, totalCredit.value))
-const isBalanced = computed(() => effectiveEntryCount.value >= 2 && isZeroMoney(balanceGap.value) && validationErrors.value.length === 0)
 const selectedRow = computed(() => form.entries[Math.min(selectedRowIndex.value, Math.max(form.entries.length - 1, 0))] as VoucherEntryRow)
 const financeCompanyState = financeCompany as typeof financeCompany & {
   currentCompanyLabel?: string
@@ -424,9 +442,7 @@ const currentRowLabel = computed(() => {
   if (!selectedRow.value?.ccode) return '当前行'
   return resolveAccountLabel(selectedRow.value.ccode, selectedRow.value.ccodeName)
 })
-const currentCompanyName = computed(
-  () => financeCompanyState.currentCompanyLabel || financeCompany.currentCompanyName || resolveCompanyName(form.companyId)
-)
+const currentCompanyName = computed(() => financeCompany.currentCompanyName || currentCompanyOption.value?.companyName || resolveCompanyName(form.companyId))
 const currentCompanyHasActiveAccountSet = computed(() => {
   if (typeof financeCompanyState.currentCompanyHasActiveAccountSet === 'boolean') {
     return financeCompanyState.currentCompanyHasActiveAccountSet
@@ -437,7 +453,6 @@ const currentCompanyHasActiveAccountSet = computed(() => {
   return Boolean(financeCompany.currentCompanyId || form.companyId)
 })
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
-const statusChipText = computed(() => (isDetailRoute.value ? voucherDetail.value?.statusLabel || '未记账' : hasDraft.value ? '已暂存' : '未暂存'))
 const accountOptionMap = computed(() => new Map((voucherMeta.value?.accountOptions || []).map((item) => [item.value, item] as const)))
 const selectedAccountOption = computed(() => {
   const code = selectedRow.value?.ccode
@@ -582,13 +597,13 @@ async function initializePage() {
   if (!companyId || !viewActive.value) return
   const loadId = beginLoad()
 
-  if (isDetailRoute.value) {
+  if (isDetailRoute.value || isReviewMode.value) {
     const voucherCompanyId = parseVoucherCompanyId(detailVoucherNo.value)
     if (voucherCompanyId && voucherCompanyId !== companyId) {
       if (!isLiveLoad(loadId)) return
       editingExisting.value = false
       voucherDetail.value = null
-      await router.replace({ name: 'finance-query-voucher' })
+      await router.replace({ name: backToListRouteName.value })
       return
     }
     await loadDetail(companyId, detailVoucherNo.value, loadId)
@@ -1087,7 +1102,7 @@ async function handleNewVoucher() {
   clearDraft()
   validationErrors.value = []
 
-  if (isDetailRoute.value) {
+  if (isDetailRoute.value || isReviewMode.value) {
     await router.push({ name: 'finance-new-voucher' })
     return
   }
@@ -1140,14 +1155,116 @@ async function handleSave() {
   }
 }
 
+async function handleReviewVoucher() {
+  const companyId = financeCompany.currentCompanyId || form.companyId
+  if (!companyId || !detailVoucherNo.value) return
+
+  reviewActing.value = true
+  currentToolbarLoadingKey.value = 'review'
+  try {
+    const res = await financeApi.reviewVoucher(companyId, detailVoucherNo.value)
+    ElMessage.success(`凭证审核成功：${res.data.voucherNo}`)
+    if (res.data.nextVoucherNo) {
+      await router.replace({
+        name: 'finance-review-voucher-detail',
+        params: { voucherNo: res.data.nextVoucherNo }
+      })
+      return
+    }
+    await loadDetail(companyId, detailVoucherNo.value)
+    if (res.data.lastVoucherOfMonth) {
+      ElMessage.warning('当前是最后一张')
+    }
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '审核凭证失败'))
+  } finally {
+    currentToolbarLoadingKey.value = ''
+    reviewActing.value = false
+  }
+}
+
+async function handleUnreviewVoucher() {
+  const companyId = financeCompany.currentCompanyId || form.companyId
+  if (!companyId || !detailVoucherNo.value) return
+
+  reviewActing.value = true
+  currentToolbarLoadingKey.value = 'unreview'
+  try {
+    const res = await financeApi.unreviewVoucher(companyId, detailVoucherNo.value)
+    ElMessage.success(`凭证反审核成功：${res.data.voucherNo}`)
+    await loadDetail(companyId, detailVoucherNo.value)
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '反审核凭证失败'))
+  } finally {
+    currentToolbarLoadingKey.value = ''
+    reviewActing.value = false
+  }
+}
+
+async function handleToggleVoucherError() {
+  const companyId = financeCompany.currentCompanyId || form.companyId
+  if (!companyId || !detailVoucherNo.value) return
+
+  const clearing = voucherDetail.value?.status === 'ERROR'
+  reviewActing.value = true
+  currentToolbarLoadingKey.value = 'markError'
+  try {
+    const res = clearing
+      ? await financeApi.clearVoucherError(companyId, detailVoucherNo.value)
+      : await financeApi.markVoucherError(companyId, detailVoucherNo.value)
+    ElMessage.success(clearing ? `凭证取消错误成功：${res.data.voucherNo}` : `凭证标记错误成功：${res.data.voucherNo}`)
+    await loadDetail(companyId, detailVoucherNo.value)
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, clearing ? '取消错误失败' : '标记错误失败'))
+  } finally {
+    currentToolbarLoadingKey.value = ''
+    reviewActing.value = false
+  }
+}
+
+async function handleExportCurrentVoucher() {
+  const companyId = financeCompany.currentCompanyId || form.companyId
+  if (!companyId || !detailVoucherNo.value) return
+  try {
+    await financeApi.exportVouchers({ companyId, voucherNo: detailVoucherNo.value })
+    ElMessage.success('当前凭证已开始导出')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '导出当前凭证失败'))
+  }
+}
+
+function handleFindInEntries() {
+  const keyword = window.prompt('请输入关键字（摘要 / 科目编码 / 科目名称）')
+  const normalizedKeyword = normalizeText(keyword)?.toLowerCase()
+  if (!normalizedKeyword) {
+    return
+  }
+  const matchedIndex = form.entries.findIndex((row) => {
+    return [row.cdigest, row.ccode, row.ccodeName]
+      .filter((item): item is string => Boolean(item))
+      .some((item) => item.toLowerCase().includes(normalizedKeyword))
+  })
+  if (matchedIndex < 0) {
+    ElMessage.warning('当前凭证未找到匹配分录')
+    return
+  }
+  selectRow(matchedIndex)
+  ElMessage.success(`已定位到第 ${matchedIndex + 1} 行`)
+}
+
 function handleToolbarAction(action: ToolbarActionKey) {
   if (action === 'new') return void handleNewVoucher()
   if (action === 'modify') return void enterEditMode()
   if (action === 'insert') return insertEntryAfter(selectedRowIndex.value)
   if (action === 'delete') return removeSelectedEntry()
   if (action === 'save') return void handleSave()
+  if (action === 'review') return void handleReviewVoucher()
+  if (action === 'unreview') return void handleUnreviewVoucher()
+  if (action === 'markError') return void handleToggleVoucherError()
+  if (action === 'find') return void handleFindInEntries()
+  if (action === 'export' && isReviewMode.value) return void handleExportCurrentVoucher()
 
-  const descriptions: Record<Exclude<ToolbarActionKey, 'new' | 'modify' | 'insert' | 'delete' | 'save'>, string> = {
+  const descriptions: Record<Exclude<ToolbarActionKey, 'new' | 'modify' | 'insert' | 'delete' | 'save' | 'review' | 'unreview' | 'markError' | 'find'>, string> = {
     print: '后续可接入正式打印模板与套打配置。',
     export: '后续可扩展为 Excel、PDF 或外部接口输出。',
     copy: '后续可按原凭证复制摘要、科目和金额。',
@@ -1221,7 +1338,8 @@ function resolveAccountLabel(code?: string, accountName?: string) {
 
 function resolveCompanyName(companyId?: string) {
   if (!companyId) return '未设置'
-  return voucherMeta.value?.companyOptions.find((item) => item.value === companyId)?.label || companyId
+  const matched = voucherMeta.value?.companyOptions.find((item) => item.value === companyId)
+  return matched?.name || companyId
 }
 
 function buildDraftStorageKey(companyId = financeCompany.currentCompanyId) {
@@ -1246,9 +1364,9 @@ async function confirmCompanySwitch() {
       confirmButtonText: '继续切换',
       cancelButtonText: '取消'
     })
-    if (isDetailRoute.value) {
+    if (isDetailRoute.value || isReviewMode.value) {
       editingExisting.value = false
-      await router.replace({ name: 'finance-query-voucher' })
+      await router.replace({ name: backToListRouteName.value })
     }
     return true
   } catch {
@@ -1340,24 +1458,21 @@ defineExpose({
 .toolbar-button-large { height: 52px; min-width: 130px; padding: 0 20px; font-size: 15px; }
 .toolbar-button-accent { border-color: #9cbbe3; background: linear-gradient(180deg, #f0f7ff 0%, #e4efff 100%); color: #24528a; box-shadow: 0 12px 24px rgba(59,130,246,.14); }
 .toolbar-button-primary { box-shadow: 0 16px 30px rgba(37,99,235,.2); }
-.voucher-info-band, .voucher-lower { display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 16px; }
+.voucher-info-band { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
+.voucher-lower { display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 16px; }
 .voucher-lower-full { grid-template-columns: minmax(0,1fr); }
-.voucher-info-main, .voucher-info-side, .voucher-ledger-card, .voucher-assist-card, .voucher-side-card { border-radius: 24px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.94); box-shadow: 0 12px 28px rgba(15,23,42,.04); padding: 18px; }
+.voucher-info-main, .voucher-ledger-card, .voucher-assist-card, .voucher-side-card { border-radius: 24px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.94); box-shadow: 0 12px 28px rgba(15,23,42,.04); padding: 18px; }
 .voucher-info-grid, .assist-grid { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 12px 14px; }
 .voucher-info-field, .assist-field { display: flex; flex-direction: column; gap: 8px; grid-column: span 3; }
 .voucher-info-field span, .assist-field span { font-size: 12px; font-weight: 600; color: #5f7391; }
-.voucher-info-code, .voucher-info-period { grid-column: span 2; }
+.voucher-info-company, .voucher-info-code { grid-column: span 4; }
+.voucher-info-date, .voucher-info-period { grid-column: span 2; }
+.voucher-info-maker, .voucher-info-docs { grid-column: span 3; }
 .voucher-info-field-note { grid-column: span 6; }
 .voucher-code-box { display: flex; height: 40px; align-items: center; justify-content: center; border-radius: 14px; border: 1px solid #cfe0f5; background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); font-weight: 700; color: #24466f; }
 .voucher-company-box { justify-content: flex-start; padding: 0 14px; font-weight: 600; }
 .voucher-number-group { display: grid; grid-template-columns: minmax(88px,108px) auto minmax(0,1fr); align-items: center; gap: 8px; }
 .voucher-number-separator { display: inline-flex; align-items: center; justify-content: center; color: #5f7391; font-weight: 700; }
-.voucher-info-side { display: flex; flex-direction: column; gap: 12px; }
-.status-chip { display: flex; flex-direction: column; gap: 4px; border-radius: 18px; border: 1px solid #d8e2f0; background: linear-gradient(180deg, #f8fbff 0%, #f2f6fc 100%); padding: 12px 14px; }
-.status-chip span { font-size: 12px; color: #67809d; }
-.status-chip strong { color: #1d3557; font-size: 16px; }
-.status-chip-balanced { border-color: #bae6c7; background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf3 100%); }
-.status-chip-warning { border-color: #fde68a; background: linear-gradient(180deg, #fff9db 0%, #fff7c4 100%); }
 .voucher-ledger-card { display: flex; min-height: 0; flex-direction: column; }
 .voucher-ledger-header, .voucher-section-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .voucher-ledger-title, .voucher-section-head h2 { font-size: 18px; font-weight: 700; color: #1d3557; }
@@ -1386,15 +1501,15 @@ defineExpose({
 :deep(.voucher-cell .el-input-number), :deep(.voucher-cell .el-input-number .el-input__wrapper), :deep(.assist-field .el-input-number), :deep(.assist-field .el-input-number .el-input__wrapper), :deep(.voucher-info-field .el-input-number), :deep(.voucher-info-field .el-input-number .el-input__wrapper) { width: 100%; }
 :deep(.voucher-number-group .el-select__wrapper), :deep(.voucher-number-group .el-input__wrapper) { min-height: 40px; }
 :deep(.voucher-cell .el-input__wrapper), :deep(.voucher-cell .el-select__wrapper), :deep(.voucher-cell .money-input__control) { min-height: 38px; }
-@media (max-width: 1440px) { .voucher-info-band, .voucher-lower { grid-template-columns: 1fr; } }
-@media (max-width: 1024px) { .voucher-info-grid, .assist-grid { grid-template-columns: repeat(6, minmax(0,1fr)); } .voucher-info-field, .assist-field, .voucher-info-field-note { grid-column: span 3; } .voucher-grid-layout { min-width: 860px; } }
+@media (max-width: 1440px) { .voucher-lower { grid-template-columns: 1fr; } }
+@media (max-width: 1024px) { .voucher-info-grid, .assist-grid { grid-template-columns: repeat(6, minmax(0,1fr)); } .voucher-info-field, .assist-field, .voucher-info-field-note { grid-column: span 3; } .voucher-info-company, .voucher-info-code { grid-column: span 6; } .voucher-grid-layout { min-width: 860px; } }
 @media (max-width: 768px) {
   .voucher-page-header h1 { font-size: 24px; letter-spacing: .18em; }
   .toolbar-group { width: 100%; }
   .toolbar-group + .toolbar-group { padding-left: 0; padding-top: 10px; }
   .toolbar-group + .toolbar-group::before { left: 0; top: 0; height: 1px; width: 100%; }
   .voucher-info-grid, .assist-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .voucher-info-field, .assist-field, .voucher-info-code, .voucher-info-period, .voucher-info-field-note { grid-column: span 2; }
+  .voucher-info-field, .assist-field, .voucher-info-company, .voucher-info-code, .voucher-info-date, .voucher-info-period, .voucher-info-maker, .voucher-info-docs, .voucher-info-field-note { grid-column: span 2; }
   .voucher-signature { flex-direction: column; align-items: flex-start; }
 }
 </style>

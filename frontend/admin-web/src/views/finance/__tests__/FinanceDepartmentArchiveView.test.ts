@@ -77,6 +77,40 @@ const TableColumnStub = defineComponent({
   `
 })
 
+const PaginationStub = defineComponent({
+  props: {
+    currentPage: {
+      type: Number,
+      default: 1
+    },
+    pageSize: {
+      type: Number,
+      default: 10
+    },
+    pageSizes: {
+      type: Array,
+      default: () => []
+    }
+  },
+  emits: ['update:currentPage', 'update:pageSize'],
+  template: `
+    <div data-testid="pagination">
+      <span data-testid="pagination-current">{{ currentPage }}</span>
+      <span data-testid="pagination-size">{{ pageSize }}</span>
+      <button data-testid="pagination-next" type="button" @click="$emit('update:currentPage', currentPage + 1)">next</button>
+      <button
+        v-for="size in pageSizes"
+        :key="size"
+        type="button"
+        :data-testid="\`pagination-size-\${size}\`"
+        @click="$emit('update:pageSize', size)"
+      >
+        {{ size }}
+      </button>
+    </div>
+  `
+})
+
 async function mountView() {
   const wrapper = mount(FinanceDepartmentArchiveView, {
     global: {
@@ -89,7 +123,8 @@ async function mountView() {
         'el-table': TableStub,
         'el-table-column': TableColumnStub,
         'el-tag': SimpleStub,
-        'el-drawer': SimpleStub
+        'el-drawer': SimpleStub,
+        'el-pagination': PaginationStub
       },
       directives: {
         loading: () => undefined
@@ -143,30 +178,28 @@ describe('FinanceDepartmentArchiveView', () => {
       }
     })
     mocks.financeArchiveApi.queryDepartments.mockResolvedValue({
-      data: [
-        {
-          id: 11,
-          deptCode: 'D002',
-          deptName: '费用管理部',
-          parentId: 10,
-          parentDeptName: '财务中心',
-          companyId: 'COMPANY_A',
-          companyName: '广州测试公司',
-          leaderUserId: 101,
-          leaderName: '李经理',
-          status: 1,
-          syncSource: 'WECOM',
-          syncManaged: true,
-          syncEnabled: true,
-          syncStatus: 'SUCCESS',
-          syncRemark: '同步正常',
-          sortOrder: 2,
-          lastSyncAt: '2026-04-15T10:20:30',
-          statDepartmentBelong: '财务',
-          statRegionBelong: '华南',
-          statAreaBelong: '广州'
-        }
-      ]
+      data: Array.from({ length: 12 }, (_, index) => ({
+        id: 11 + index,
+        deptCode: `D${String(index + 2).padStart(3, '0')}`,
+        deptName: index === 0 ? '费用管理部' : `部门${index + 2}`,
+        parentId: 10,
+        parentDeptName: '财务中心',
+        companyId: 'COMPANY_A',
+        companyName: '广州测试公司',
+        leaderUserId: 101 + index,
+        leaderName: index === 0 ? '李经理' : `负责人${index + 2}`,
+        status: 1,
+        syncSource: 'WECOM',
+        syncManaged: true,
+        syncEnabled: true,
+        syncStatus: 'SUCCESS',
+        syncRemark: '同步正常',
+        sortOrder: 2 + index,
+        lastSyncAt: '2026-04-15T10:20:30',
+        statDepartmentBelong: '财务',
+        statRegionBelong: '华南',
+        statAreaBelong: '广州'
+      }))
     })
   })
 
@@ -181,6 +214,7 @@ describe('FinanceDepartmentArchiveView', () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       departments: Array<{ deptName: string; leaderName?: string }>
+      paginatedDepartments: Array<{ deptCode: string }>
     }
 
     expect(mocks.financeArchiveApi.getDepartmentArchiveMeta).toHaveBeenCalledTimes(1)
@@ -192,31 +226,23 @@ describe('FinanceDepartmentArchiveView', () => {
     expect(wrapper.text()).toContain('部门档案属于财务共享基础档案')
     expect(vm.departments[0]?.deptName).toBe('费用管理部')
     expect(vm.departments[0]?.leaderName).toBe('李经理')
+    expect(vm.paginatedDepartments).toHaveLength(10)
 
     wrapper.unmount()
   })
 
-  it('opens the detail drawer in read-only mode', async () => {
+  it('opens the detail drawer in read-only mode after pagination', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       openDetail: (row: Record<string, unknown>) => void
+      paginatedDepartments: Array<Record<string, unknown>>
       currentDepartment?: Record<string, unknown>
     }
 
-    vm.openDetail({
-      deptCode: 'D002',
-      deptName: '费用管理部',
-      parentDeptName: '财务中心',
-      companyName: '广州测试公司',
-      leaderName: '李经理',
-      syncSource: 'WECOM',
-      syncManaged: true,
-      syncEnabled: true,
-      syncStatus: 'SUCCESS',
-      syncRemark: '同步正常',
-      status: 1,
-      sortOrder: 2
-    })
+    await wrapper.get('[data-testid="pagination-next"]').trigger('click')
+    await flushPromises()
+
+    vm.openDetail(vm.paginatedDepartments[0]!)
     await flushPromises()
 
     expect(wrapper.text()).toContain('当前页面仅用于财务查看')
@@ -240,6 +266,21 @@ describe('FinanceDepartmentArchiveView', () => {
     expect(wrapper.text()).toContain('COMP202604060001 - 深圳测试公司')
     expect(vm.departments[0]?.deptName).toBe('费用管理部')
     expect(mocks.financeArchiveApi.queryDepartments).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+  })
+
+  it('changes the displayed department count when the page size changes', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      paginatedDepartments: Array<{ deptCode: string }>
+    }
+
+    await wrapper.get('[data-testid="pagination-size-20"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-size"]').text()).toBe('20')
+    expect(vm.paginatedDepartments).toHaveLength(12)
 
     wrapper.unmount()
   })

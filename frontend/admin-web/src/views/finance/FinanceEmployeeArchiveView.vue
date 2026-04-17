@@ -33,9 +33,9 @@
 
     <el-card class="!rounded-3xl !shadow-sm">
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr),260px,160px,140px]">
-        <el-input v-model="filters.keyword" clearable placeholder="搜索姓名 / 用户名 / 手机号 / 邮箱" @keyup.enter="loadEmployees">
+        <el-input v-model="filters.keyword" clearable placeholder="搜索姓名 / 用户名 / 手机号 / 邮箱" @keyup.enter="loadEmployees(true)">
           <template #append>
-            <el-button :icon="Search" @click="loadEmployees" />
+            <el-button :icon="Search" @click="loadEmployees(true)" />
           </template>
         </el-input>
 
@@ -55,13 +55,13 @@
 
         <div class="flex justify-end gap-2">
           <el-button :icon="RefreshRight" @click="resetFilters">重置</el-button>
-          <el-button type="primary" :icon="RefreshRight" @click="loadEmployees">刷新</el-button>
+          <el-button type="primary" :icon="RefreshRight" @click="loadEmployees(true)">刷新</el-button>
         </div>
       </div>
     </el-card>
 
     <el-card class="!rounded-3xl !shadow-sm">
-      <el-table v-loading="loading" :data="employees" style="width: 100%">
+      <el-table v-loading="loading" :data="paginatedEmployees" style="width: 100%">
         <el-table-column prop="name" label="姓名" min-width="140" />
         <el-table-column prop="username" label="用户名" min-width="140" />
         <el-table-column prop="phone" label="手机号" min-width="140" />
@@ -110,6 +110,15 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="mt-4 flex justify-start">
+        <el-pagination
+          v-model:current-page="employeePagination.currentPage.value"
+          v-model:page-size="employeePagination.pageSize.value"
+          layout="total, sizes, prev, pager, next"
+          :total="employeePagination.total.value"
+          :page-sizes="employeePagination.pageSizes"
+        />
+      </div>
     </el-card>
 
     <el-drawer v-model="detailVisible" title="员工档案详情" size="520px">
@@ -156,6 +165,7 @@ import {
   type EmployeeQueryPayload,
   type EmployeeRecord
 } from '@/api'
+import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 
 type DepartmentOption = {
@@ -165,6 +175,7 @@ type DepartmentOption = {
 
 const loading = ref(false)
 const employees = ref<EmployeeRecord[]>([])
+const employeePagination = useLocalPagination(employees)
 const departments = ref<DepartmentTreeNode[]>([])
 const currentEmployee = ref<EmployeeRecord>()
 const detailVisible = ref(false)
@@ -189,6 +200,7 @@ const departmentOptions = computed(() => flattenDepartments(departments.value, c
 const enabledCount = computed(() => employees.value.filter((item) => item.status === 1).length)
 const disabledCount = computed(() => employees.value.filter((item) => item.status !== 1).length)
 const syncedCount = computed(() => employees.value.filter((item) => item.sourceType && item.sourceType !== 'MANUAL').length)
+const paginatedEmployees = computed(() => employeePagination.paginatedRows.value)
 
 onMounted(async () => {
   await loadMeta()
@@ -201,7 +213,7 @@ watch(
     if (companyId !== previousCompanyId) {
       filters.value.deptId = undefined
     }
-    await loadEmployees()
+    await loadEmployees(true)
   },
   { immediate: true }
 )
@@ -215,7 +227,10 @@ async function loadMeta() {
   }
 }
 
-async function loadEmployees() {
+async function loadEmployees(resetPage = false) {
+  if (resetPage) {
+    employeePagination.resetToFirstPage()
+  }
   loading.value = true
   try {
     const payload: EmployeeQueryPayload = {
@@ -226,6 +241,7 @@ async function loadEmployees() {
     }
     const res = await financeArchiveApi.queryEmployees(payload)
     employees.value = res.data || []
+    employeePagination.clampCurrentPage()
   } catch (error: any) {
     ElMessage.error(error?.message || '员工档案加载失败')
   } finally {
@@ -239,7 +255,7 @@ function resetFilters() {
     deptId: undefined,
     status: undefined
   }
-  loadEmployees()
+  void loadEmployees(true)
 }
 
 function openDetail(row: EmployeeRecord) {

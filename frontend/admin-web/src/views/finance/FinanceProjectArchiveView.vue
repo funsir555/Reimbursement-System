@@ -25,11 +25,11 @@
       <el-tab-pane label="项目分类" name="classes">
         <el-card class="!rounded-3xl !shadow-sm">
           <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr),minmax(0,1fr),180px,160px]">
-            <el-input v-model="classFilters.keyword" clearable placeholder="分类编码 / 分类名称" @keyup.enter="loadProjectClasses">
-              <template #append><el-button :icon="Search" @click="loadProjectClasses" /></template>
+            <el-input v-model="classFilters.keyword" clearable placeholder="分类编码 / 分类名称" @keyup.enter="loadProjectClasses(true)">
+              <template #append><el-button :icon="Search" @click="loadProjectClasses(true)" /></template>
             </el-input>
             <div />
-            <el-select v-model="classFilters.status" clearable placeholder="启用状态" @change="loadProjectClasses">
+            <el-select v-model="classFilters.status" clearable placeholder="启用状态" @change="loadProjectClasses(true)">
               <el-option v-for="item in meta.statusOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
             </el-select>
             <div class="flex justify-end">
@@ -39,7 +39,7 @@
         </el-card>
 
         <el-card class="!rounded-3xl !shadow-sm">
-          <el-table v-loading="loadingClasses" :data="projectClasses" style="width: 100%">
+          <el-table v-loading="loadingClasses" :data="paginatedProjectClasses" style="width: 100%">
             <el-table-column prop="project_class_code" label="分类编码" min-width="180" />
             <el-table-column prop="project_class_name" label="分类名称" min-width="220" show-overflow-tooltip />
             <el-table-column label="状态" width="120">
@@ -67,23 +67,32 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="mt-4 flex justify-start">
+            <el-pagination
+              v-model:current-page="classPagination.currentPage.value"
+              v-model:page-size="classPagination.pageSize.value"
+              layout="total, sizes, prev, pager, next"
+              :total="classPagination.total.value"
+              :page-sizes="classPagination.pageSizes"
+            />
+          </div>
         </el-card>
       </el-tab-pane>
 
       <el-tab-pane label="项目档案" name="projects">
         <el-card class="!rounded-3xl !shadow-sm">
           <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr),minmax(0,1fr),220px,160px,160px,160px]">
-            <el-input v-model="projectFilters.keyword" clearable placeholder="项目编码 / 项目名称" @keyup.enter="loadProjects">
-              <template #append><el-button :icon="Search" @click="loadProjects" /></template>
+            <el-input v-model="projectFilters.keyword" clearable placeholder="项目编码 / 项目名称" @keyup.enter="loadProjects(true)">
+              <template #append><el-button :icon="Search" @click="loadProjects(true)" /></template>
             </el-input>
             <div />
-            <el-select v-model="projectFilters.projectClassCode" clearable placeholder="项目分类" @change="loadProjects">
+            <el-select v-model="projectFilters.projectClassCode" clearable placeholder="项目分类" @change="loadProjects(true)">
               <el-option v-for="item in meta.projectClassOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
-            <el-select v-model="projectFilters.status" clearable placeholder="启用状态" @change="loadProjects">
+            <el-select v-model="projectFilters.status" clearable placeholder="启用状态" @change="loadProjects(true)">
               <el-option v-for="item in meta.statusOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
             </el-select>
-            <el-select v-model="projectFilters.bclose" clearable placeholder="封存状态" @change="loadProjects">
+            <el-select v-model="projectFilters.bclose" clearable placeholder="封存状态" @change="loadProjects(true)">
               <el-option v-for="item in meta.closeStatusOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
             </el-select>
             <div class="flex justify-end">
@@ -93,7 +102,7 @@
         </el-card>
 
         <el-card class="!rounded-3xl !shadow-sm">
-          <el-table v-loading="loadingProjects" :data="projects" style="width: 100%">
+          <el-table v-loading="loadingProjects" :data="paginatedProjects" style="width: 100%">
             <el-table-column prop="citemcode" label="项目编码" min-width="160" />
             <el-table-column prop="citemname" label="项目名称" min-width="220" show-overflow-tooltip />
             <el-table-column prop="project_class_name" label="项目分类" min-width="180" show-overflow-tooltip />
@@ -132,6 +141,15 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="mt-4 flex justify-start">
+            <el-pagination
+              v-model:current-page="projectPagination.currentPage.value"
+              v-model:page-size="projectPagination.pageSize.value"
+              layout="total, sizes, prev, pager, next"
+              :total="projectPagination.total.value"
+              :page-sizes="projectPagination.pageSizes"
+            />
+          </div>
         </el-card>
       </el-tab-pane>
     </el-tabs>
@@ -227,6 +245,7 @@ import {
   type FinanceProjectSavePayload,
   type FinanceProjectSummary
 } from '@/api'
+import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
@@ -243,6 +262,8 @@ const savingClass = ref(false)
 const savingProject = ref(false)
 const projectClasses = ref<FinanceProjectClassSummary[]>([])
 const projects = ref<FinanceProjectSummary[]>([])
+const classPagination = useLocalPagination(projectClasses)
+const projectPagination = useLocalPagination(projects)
 const classDialogVisible = ref(false)
 const projectDialogVisible = ref(false)
 const classDialogMode = ref<ClassDialogMode>('create')
@@ -276,6 +297,8 @@ const canDisable = computed(() => hasPermission('finance:archives:projects:disab
 const canClose = computed(() => hasPermission('finance:archives:projects:close', permissionCodes.value))
 const currentCompanyId = computed(() => financeCompany.currentCompanyId)
 const currentCompanyName = computed(() => financeCompany.currentCompanyName)
+const paginatedProjectClasses = computed(() => classPagination.paginatedRows.value)
+const paginatedProjects = computed(() => projectPagination.paginatedRows.value)
 const classDialogTitle = computed(() => (classDialogMode.value === 'create' ? '新建项目分类' : '编辑项目分类'))
 const projectDialogTitle = computed(() => {
   if (projectDialogMode.value === 'create') return '新建项目档案'
@@ -302,8 +325,8 @@ watch(
       closeProjectDialog()
     }
     await loadMeta()
-    await loadProjectClasses()
-    await loadProjects()
+    await loadProjectClasses(true)
+    await loadProjects(true)
   },
   { immediate: true }
 )
@@ -320,9 +343,13 @@ async function loadMeta() {
   }
 }
 
-async function loadProjectClasses() {
+async function loadProjectClasses(resetPage = false) {
+  if (resetPage) {
+    classPagination.resetToFirstPage()
+  }
   if (!currentCompanyId.value) {
     projectClasses.value = []
+    classPagination.clampCurrentPage()
     return
   }
   loadingClasses.value = true
@@ -333,6 +360,7 @@ async function loadProjectClasses() {
       status: classFilters.status
     })
     projectClasses.value = res.data || []
+    classPagination.clampCurrentPage()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载项目分类失败'))
   } finally {
@@ -340,9 +368,13 @@ async function loadProjectClasses() {
   }
 }
 
-async function loadProjects() {
+async function loadProjects(resetPage = false) {
+  if (resetPage) {
+    projectPagination.resetToFirstPage()
+  }
   if (!currentCompanyId.value) {
     projects.value = []
+    projectPagination.clampCurrentPage()
     return
   }
   loadingProjects.value = true
@@ -355,6 +387,7 @@ async function loadProjects() {
       bclose: projectFilters.bclose
     })
     projects.value = res.data || []
+    projectPagination.clampCurrentPage()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载项目档案失败'))
   } finally {
@@ -365,7 +398,7 @@ async function loadProjects() {
 function resetClassFilters() {
   classFilters.keyword = ''
   classFilters.status = undefined
-  void loadProjectClasses()
+  void loadProjectClasses(true)
 }
 
 function resetProjectFilters() {
@@ -373,15 +406,15 @@ function resetProjectFilters() {
   projectFilters.projectClassCode = ''
   projectFilters.status = undefined
   projectFilters.bclose = undefined
-  void loadProjects()
+  void loadProjects(true)
 }
 
 function reloadCurrentTab() {
   if (activeTab.value === 'classes') {
-    void loadProjectClasses()
+    void loadProjectClasses(true)
     return
   }
-  void loadProjects()
+  void loadProjects(true)
 }
 
 function openClassDialog(mode: ClassDialogMode, row?: FinanceProjectClassSummary) {
@@ -659,6 +692,10 @@ defineExpose({
   projectForm,
   projectClasses,
   projects,
+  classPagination,
+  projectPagination,
+  paginatedProjectClasses,
+  paginatedProjects,
   loadProjectClasses,
   loadProjects,
   openClassDialog,

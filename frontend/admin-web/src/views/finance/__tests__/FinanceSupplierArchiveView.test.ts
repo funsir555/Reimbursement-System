@@ -143,6 +143,44 @@ const MoneyInputStub = defineComponent({
   template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
+const PaginationStub = defineComponent({
+  props: {
+    currentPage: {
+      type: Number,
+      default: 1
+    },
+    pageSize: {
+      type: Number,
+      default: 10
+    },
+    total: {
+      type: Number,
+      default: 0
+    },
+    pageSizes: {
+      type: Array,
+      default: () => []
+    }
+  },
+  emits: ['update:currentPage', 'update:pageSize'],
+  template: `
+    <div data-testid="pagination">
+      <span data-testid="pagination-current">{{ currentPage }}</span>
+      <span data-testid="pagination-size">{{ pageSize }}</span>
+      <button data-testid="pagination-next" type="button" @click="$emit('update:currentPage', currentPage + 1)">next</button>
+      <button
+        v-for="size in pageSizes"
+        :key="size"
+        type="button"
+        :data-testid="\`pagination-size-\${size}\`"
+        @click="$emit('update:pageSize', size)"
+      >
+        {{ size }}
+      </button>
+    </div>
+  `
+})
+
 async function mountView() {
   const wrapper = mount(FinanceSupplierArchiveView, {
     global: {
@@ -163,6 +201,7 @@ async function mountView() {
         'el-date-picker': InputStub,
         'el-icon': true,
         'money-input': MoneyInputStub,
+        'el-pagination': PaginationStub,
         SupplierPaymentInfoFields: true
       },
       directives: {
@@ -180,17 +219,15 @@ describe('FinanceSupplierArchiveView', () => {
     financeCompanyStore.currentCompanyId = 'COMPANY_A'
     financeCompanyStore.currentCompanyName = '广州远智教育科技有限公司'
     mocks.financeArchiveApi.listSuppliers.mockResolvedValue({
-      data: [
-        {
-          cVenCode: 'VEN001',
-          cVenName: '核心供应商',
-          cVenAbbName: '核心简称',
-          cVenPerson: '李四',
-          cVenPhone: '020-88888888',
-          active: true,
-          companyId: 'COMPANY_A'
-        }
-      ]
+      data: Array.from({ length: 12 }, (_, index) => ({
+        cVenCode: `VEN${String(index + 1).padStart(3, '0')}`,
+        cVenName: index === 0 ? '核心供应商' : `Vendor ${index + 1}`,
+        cVenAbbName: index === 0 ? '核心简称' : `V${index + 1}`,
+        cVenPerson: '李四',
+        cVenPhone: '020-88888888',
+        active: true,
+        companyId: 'COMPANY_A'
+      }))
     })
     mocks.financeArchiveApi.getSupplierDetail.mockResolvedValue({
       data: {
@@ -211,23 +248,61 @@ describe('FinanceSupplierArchiveView', () => {
 
   it('loads supplier list rows with code, name and abbreviation', async () => {
     const wrapper = await mountView()
-    const vm = wrapper.vm as unknown as { vendors: Array<{ cVenCode: string; cVenName: string; cVenAbbName: string }> }
+    const vm = wrapper.vm as unknown as {
+      vendors: Array<{ cVenCode: string; cVenName: string; cVenAbbName: string }>
+      paginatedVendors: Array<{ cVenCode: string }>
+    }
 
     expect(mocks.financeArchiveApi.listSuppliers).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       keyword: '',
       includeDisabled: false
     })
-    expect(vm.vendors).toEqual([
-      expect.objectContaining({
-        cVenCode: 'VEN001',
-        cVenName: '核心供应商',
-        cVenAbbName: '核心简称'
-      })
-    ])
+    expect(vm.vendors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cVenCode: 'VEN001',
+          cVenName: '核心供应商',
+          cVenAbbName: '核心简称'
+        })
+      ])
+    )
     expect(vm.vendors[0]?.cVenCode).toBe('VEN001')
     expect(vm.vendors[0]?.cVenName).toBe('核心供应商')
     expect(vm.vendors[0]?.cVenAbbName).toBe('核心简称')
+    expect(vm.paginatedVendors).toHaveLength(10)
+  })
+
+  it('paginates supplier rows locally and keeps actions on the visible page', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      paginatedVendors: Array<{ cVenCode: string }>
+      disableSupplier: (vendorCode: string) => Promise<void>
+    }
+
+    await wrapper.get('[data-testid="pagination-next"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-current"]').text()).toBe('2')
+    expect(vm.paginatedVendors).toHaveLength(2)
+    expect(vm.paginatedVendors[0]?.cVenCode).toBe('VEN011')
+
+    await vm.disableSupplier(vm.paginatedVendors[0]!.cVenCode)
+
+    expect(mocks.financeArchiveApi.disableSupplier).toHaveBeenCalledWith('COMPANY_A', 'VEN011')
+  })
+
+  it('updates the visible supplier count when the page size changes', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      paginatedVendors: Array<{ cVenCode: string }>
+    }
+
+    await wrapper.get('[data-testid="pagination-size-20"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-size"]').text()).toBe('20')
+    expect(vm.paginatedVendors).toHaveLength(12)
   })
 
   it('keeps vendor section order as basic, bank, contact, finance', async () => {

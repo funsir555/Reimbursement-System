@@ -7,6 +7,9 @@ package com.finex.auth.service.impl.voucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.FinanceVoucherDetailVO;
+import com.finex.auth.dto.FinanceVoucherActionResultVO;
+import com.finex.auth.dto.FinanceVoucherBatchActionDTO;
+import com.finex.auth.dto.FinanceVoucherBatchActionResultVO;
 import com.finex.auth.dto.FinanceVoucherEntryDTO;
 import com.finex.auth.dto.FinanceVoucherEntryVO;
 import com.finex.auth.dto.FinanceVoucherMetaVO;
@@ -73,7 +76,9 @@ public abstract class AbstractFinanceVoucherSupport {
     protected static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2);
     protected static final String STATUS_UNPOSTED = "UNPOSTED";
     protected static final String STATUS_REVIEWED = "REVIEWED";
+    protected static final String STATUS_ERROR = "ERROR";
     protected static final String STATUS_POSTED = "POSTED";
+    protected static final int ERROR_FLAG = 1;
     protected static final String VOUCHER_NO_SEPARATOR = "~";
     protected static final int DEFAULT_PAGE = 1;
     protected static final int DEFAULT_PAGE_SIZE = 20;
@@ -187,6 +192,7 @@ public abstract class AbstractFinanceVoucherSupport {
         detail.setDbillDate(formatDate(headerRow.getDbillDate()));
         detail.setIdoc(headerRow.getIdoc());
         detail.setCbill(headerRow.getCbill());
+        detail.setCheckerName(trimToNull(headerRow.getCcheck()));
         detail.setCtext1(headerRow.getCtext1());
         detail.setCtext2(headerRow.getCtext2());
         detail.setStatus(resolveStatus(headerRow));
@@ -368,6 +374,115 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 处理财务凭证中的这一步。
      */
+    protected FinanceVoucherActionResultVO reviewVoucher(
+            String companyId,
+            String voucherNo,
+            Long currentUserId,
+            String currentUsername
+    ) {
+        return changeVoucherState(companyId, voucherNo, "REVIEW", currentUserId, currentUsername, true);
+    }
+
+    protected FinanceVoucherActionResultVO unreviewVoucher(String companyId, String voucherNo) {
+        return changeVoucherState(companyId, voucherNo, "UNREVIEW", null, null, false);
+    }
+
+    protected FinanceVoucherActionResultVO markVoucherError(String companyId, String voucherNo) {
+        return changeVoucherState(companyId, voucherNo, "MARK_ERROR", null, null, false);
+    }
+
+    protected FinanceVoucherActionResultVO clearVoucherError(String companyId, String voucherNo) {
+        return changeVoucherState(companyId, voucherNo, "CLEAR_ERROR", null, null, false);
+    }
+
+    protected FinanceVoucherBatchActionResultVO batchUpdateVoucherState(
+            FinanceVoucherBatchActionDTO dto,
+            Long currentUserId,
+            String currentUsername
+    ) {
+        String companyId = normalize(dto == null ? null : dto.getCompanyId(), null);
+        if (companyId == null) {
+            throw new IllegalArgumentException("公司主体不能为空");
+        }
+        String action = normalizeVoucherAction(dto == null ? null : dto.getAction());
+        List<String> voucherNos = normalizeVoucherNos(dto == null ? null : dto.getVoucherNos());
+        for (String voucherNo : voucherNos) {
+            changeVoucherState(companyId, voucherNo, action, currentUserId, currentUsername, false);
+        }
+
+        FinanceVoucherBatchActionResultVO result = new FinanceVoucherBatchActionResultVO();
+        result.setAction(action);
+        result.setSuccessCount(voucherNos.size());
+        result.setVoucherNos(voucherNos);
+        return result;
+    }
+
+    protected FinanceVoucherActionResultVO changeVoucherState(
+            String companyId,
+            String voucherNo,
+            String action,
+            Long currentUserId,
+            String currentUsername,
+            boolean includeNextVoucher
+    ) {
+        VoucherKey voucherKey = parseVoucherNo(voucherNo);
+        validateVoucherCompany(companyId, voucherKey);
+        String normalizedAction = normalizeVoucherAction(action);
+        List<GlAccvouch> existingRows = requireVoucherRows(voucherKey);
+        GlAccvouch headerRow = existingRows.get(0);
+        String currentStatus = resolveStatus(headerRow);
+        String nextVoucherNo = null;
+        boolean lastVoucherOfMonth = false;
+
+        switch (normalizedAction) {
+            case "REVIEW" -> {
+                if (!Objects.equals(currentStatus, STATUS_UNPOSTED)) {
+                    throw new IllegalStateException("仅未记账凭证允许审核");
+                }
+                String checkerName = resolveMakerName(requireUser(currentUserId), currentUsername);
+                validateHeaderLength(checkerName, "审核人", 64);
+                updateVoucherAuditState(voucherKey, checkerName, 0);
+                if (includeNextVoucher) {
+                    nextVoucherNo = findNextReviewableVoucherNo(headerRow);
+                    lastVoucherOfMonth = nextVoucherNo == null;
+                }
+            }
+            case "UNREVIEW" -> {
+                if (!Objects.equals(currentStatus, STATUS_REVIEWED)) {
+                    throw new IllegalStateException("仅已审核凭证允许反审核");
+                }
+                updateVoucherAuditState(voucherKey, null, 0);
+            }
+            case "MARK_ERROR" -> {
+                if (Objects.equals(currentStatus, STATUS_POSTED)) {
+                    throw new IllegalStateException("已记账凭证不允许标记错误");
+                }
+                if (Objects.equals(currentStatus, STATUS_ERROR)) {
+                    throw new IllegalStateException("当前凭证已标记错误");
+                }
+                updateVoucherErrorFlag(voucherKey, ERROR_FLAG);
+            }
+            case "CLEAR_ERROR" -> {
+                if (!Objects.equals(currentStatus, STATUS_ERROR)) {
+                    throw new IllegalStateException("当前凭证未标记错误");
+                }
+                updateVoucherErrorFlag(voucherKey, 0);
+            }
+            default -> throw new IllegalArgumentException("凭证动作不合法");
+        }
+
+        List<GlAccvouch> refreshedRows = requireVoucherRows(voucherKey);
+        FinanceVoucherActionResultVO result = new FinanceVoucherActionResultVO();
+        result.setAction(normalizedAction);
+        result.setVoucherNo(buildVoucherNo(voucherKey.companyId(), voucherKey.iperiod(), voucherKey.csign(), voucherKey.inoId()));
+        result.setStatus(resolveStatus(refreshedRows.get(0)));
+        result.setStatusLabel(resolveStatusLabel(result.getStatus()));
+        result.setCheckerName(trimToNull(refreshedRows.get(0).getCcheck()));
+        result.setNextVoucherNo(nextVoucherNo);
+        result.setLastVoucherOfMonth(lastVoucherOfMonth);
+        return result;
+    }
+
     protected byte[] exportVouchers(FinanceVoucherQueryDTO dto) {
         List<FinanceVoucherSummaryVO> rows = loadVoucherSummaries(dto);
         if (rows.isEmpty()) {
@@ -653,11 +768,15 @@ public abstract class AbstractFinanceVoucherSupport {
 
         String voucherNoKeyword = lower(trimToNull(normalizedDto.getVoucherNo()));
         String summaryKeyword = lower(trimToNull(normalizedDto.getSummary()));
+        Set<String> statuses = resolveStatusFilters(normalizedDto.getStatus());
 
         return grouped.values().stream()
+                .filter(items -> statuses.isEmpty() || statuses.contains(resolveStatus(items.get(0))))
                 .filter(items -> summaryKeyword == null || containsSummary(items, summaryKeyword))
                 .map(this::toSummaryVO)
-                .filter(item -> voucherNoKeyword == null || lower(item.getDisplayVoucherNo()).contains(voucherNoKeyword))
+                .filter(item -> voucherNoKeyword == null
+                        || lower(item.getDisplayVoucherNo()).contains(voucherNoKeyword)
+                        || lower(item.getVoucherNo()).contains(voucherNoKeyword))
                 .sorted(Comparator
                         .comparing(FinanceVoucherSummaryVO::getDbillDate, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(FinanceVoucherSummaryVO::getInoId, Comparator.nullsLast(Comparator.reverseOrder())))
@@ -681,6 +800,7 @@ public abstract class AbstractFinanceVoucherSupport {
         summary.setDbillDate(formatDate(headerRow.getDbillDate()));
         summary.setSummary(resolveVoucherSummary(rows));
         summary.setCbill(headerRow.getCbill());
+        summary.setCheckerName(trimToNull(headerRow.getCcheck()));
         summary.setIdoc(headerRow.getIdoc());
         summary.setStatus(status);
         summary.setStatusLabel(resolveStatusLabel(status));
@@ -694,6 +814,125 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 处理财务凭证中的这一步。
      */
+    protected Set<String> resolveStatusFilters(String rawStatus) {
+        String normalizedStatus = trimToNull(rawStatus);
+        if (normalizedStatus == null) {
+            return Set.of();
+        }
+        Set<String> result = new LinkedHashSet<>();
+        for (String item : normalizedStatus.split(",")) {
+            String status = normalize(item, null);
+            if (!Objects.equals(status, STATUS_UNPOSTED)
+                    && !Objects.equals(status, STATUS_REVIEWED)
+                    && !Objects.equals(status, STATUS_ERROR)
+                    && !Objects.equals(status, STATUS_POSTED)) {
+                throw new IllegalArgumentException("凭证状态筛选不合法");
+            }
+            result.add(status);
+        }
+        return result;
+    }
+
+    protected List<String> normalizeVoucherNos(List<String> voucherNos) {
+        if (voucherNos == null || voucherNos.isEmpty()) {
+            throw new IllegalArgumentException("凭证集合不能为空");
+        }
+        List<String> normalized = voucherNos.stream()
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("凭证集合不能为空");
+        }
+        return normalized;
+    }
+
+    protected String normalizeVoucherAction(String action) {
+        String normalized = normalize(action, null);
+        if (!Objects.equals(normalized, "REVIEW")
+                && !Objects.equals(normalized, "UNREVIEW")
+                && !Objects.equals(normalized, "MARK_ERROR")
+                && !Objects.equals(normalized, "CLEAR_ERROR")) {
+            throw new IllegalArgumentException("凭证动作不合法");
+        }
+        return normalized;
+    }
+
+    protected List<GlAccvouch> requireVoucherRows(VoucherKey voucherKey) {
+        List<GlAccvouch> rows = loadVoucherRows(voucherKey);
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("凭证不存在");
+        }
+        return rows;
+    }
+
+    protected List<GlAccvouch> loadVoucherRows(VoucherKey voucherKey) {
+        return glAccvouchMapper.selectList(
+                Wrappers.<GlAccvouch>lambdaQuery()
+                        .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
+                        .eq(GlAccvouch::getCsign, voucherKey.csign())
+                        .eq(GlAccvouch::getInoId, voucherKey.inoId())
+                        .orderByAsc(GlAccvouch::getInid, GlAccvouch::getId)
+        );
+    }
+
+    protected void updateVoucherAuditState(VoucherKey voucherKey, String checkerName, int errorFlag) {
+        glAccvouchMapper.update(
+                null,
+                Wrappers.<GlAccvouch>lambdaUpdate()
+                        .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
+                        .eq(GlAccvouch::getCsign, voucherKey.csign())
+                        .eq(GlAccvouch::getInoId, voucherKey.inoId())
+                        .set(GlAccvouch::getCcheck, checkerName)
+                        .set(GlAccvouch::getIflag, errorFlag)
+        );
+    }
+
+    protected void updateVoucherErrorFlag(VoucherKey voucherKey, int errorFlag) {
+        glAccvouchMapper.update(
+                null,
+                Wrappers.<GlAccvouch>lambdaUpdate()
+                        .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
+                        .eq(GlAccvouch::getCsign, voucherKey.csign())
+                        .eq(GlAccvouch::getInoId, voucherKey.inoId())
+                        .set(GlAccvouch::getIflag, errorFlag)
+        );
+    }
+
+    protected String findNextReviewableVoucherNo(GlAccvouch currentRow) {
+        if (currentRow == null || currentRow.getDbillDate() == null || currentRow.getInoId() == null) {
+            return null;
+        }
+        YearMonth billMonth = YearMonth.from(currentRow.getDbillDate());
+        LocalDateTime monthStart = billMonth.atDay(1).atStartOfDay();
+        LocalDateTime monthEnd = billMonth.plusMonths(1).atDay(1).atStartOfDay();
+        List<GlAccvouch> rows = glAccvouchMapper.selectList(
+                Wrappers.<GlAccvouch>lambdaQuery()
+                        .eq(GlAccvouch::getCompanyId, currentRow.getCompanyId())
+                        .ge(GlAccvouch::getDbillDate, monthStart)
+                        .lt(GlAccvouch::getDbillDate, monthEnd)
+                        .gt(GlAccvouch::getInoId, currentRow.getInoId())
+                        .orderByAsc(GlAccvouch::getInoId, GlAccvouch::getInid, GlAccvouch::getId)
+        );
+        Map<VoucherKey, List<GlAccvouch>> grouped = rows.stream()
+                .collect(Collectors.groupingBy(
+                        item -> new VoucherKey(item.getCompanyId(), item.getIperiod(), item.getCsign(), item.getInoId()),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        for (Map.Entry<VoucherKey, List<GlAccvouch>> entry : grouped.entrySet()) {
+            if (Objects.equals(resolveStatus(entry.getValue().get(0)), STATUS_UNPOSTED)) {
+                VoucherKey nextKey = entry.getKey();
+                return buildVoucherNo(nextKey.companyId(), nextKey.iperiod(), nextKey.csign(), nextKey.inoId());
+            }
+        }
+        return null;
+    }
+
     protected FinanceVoucherOptionVO toCompanyOption(SystemCompany company) {
         String companyCode = trimToNull(company.getCompanyCode());
         String companyName = trimToNull(company.getCompanyName());
@@ -982,6 +1221,9 @@ public abstract class AbstractFinanceVoucherSupport {
         if (Objects.equals(row.getIbook(), 1)) {
             return STATUS_POSTED;
         }
+        if (Objects.equals(row.getIflag(), ERROR_FLAG)) {
+            return STATUS_ERROR;
+        }
         if (trimToNull(row.getCcheck()) != null) {
             return STATUS_REVIEWED;
         }
@@ -994,6 +1236,7 @@ public abstract class AbstractFinanceVoucherSupport {
     protected String resolveStatusLabel(String status) {
         return switch (normalize(status, STATUS_UNPOSTED)) {
             case STATUS_POSTED -> "已记账";
+            case STATUS_ERROR -> "已标记错误";
             case STATUS_REVIEWED -> "已审核";
             default -> "未记账";
         };

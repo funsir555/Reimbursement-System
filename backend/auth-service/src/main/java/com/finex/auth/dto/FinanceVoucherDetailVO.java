@@ -30,6 +30,8 @@ public class FinanceVoucherDetailVO {
 
     private String cbill;
 
+    private String checkerName;
+
     private String ctext1;
 
     private String ctext2;

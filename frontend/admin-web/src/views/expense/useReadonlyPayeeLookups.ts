@@ -25,7 +25,28 @@ export function useReadonlyPayeeLookups() {
       return
     }
 
-    const lookups = await loadReadonlyPayeeLookups(schema)
+    const lookups = await loadReadonlyPayeeLookups([schema])
+    if (currentVersion !== syncVersion) {
+      return
+    }
+
+    vendorOptionMap.value = lookups.vendorOptionMap
+    payeeOptionMap.value = lookups.payeeOptionMap
+    payeeAccountOptionMap.value = lookups.payeeAccountOptionMap
+  }
+
+  async function syncReadonlyPayeeLookupsBatch(schemas: Array<ProcessFormDesignSchema | null | undefined>) {
+    const currentVersion = ++syncVersion
+    vendorOptionMap.value = {}
+    payeeOptionMap.value = {}
+    payeeAccountOptionMap.value = {}
+
+    const normalizedSchemas = schemas.filter(Boolean) as ProcessFormDesignSchema[]
+    if (normalizedSchemas.length === 0) {
+      return
+    }
+
+    const lookups = await loadReadonlyPayeeLookups(normalizedSchemas)
     if (currentVersion !== syncVersion) {
       return
     }
@@ -39,14 +60,15 @@ export function useReadonlyPayeeLookups() {
     vendorOptionMap,
     payeeOptionMap,
     payeeAccountOptionMap,
-    syncReadonlyPayeeLookups
+    syncReadonlyPayeeLookups,
+    syncReadonlyPayeeLookupsBatch
   }
 }
 
-async function loadReadonlyPayeeLookups(schema: ProcessFormDesignSchema) {
-  const needsVendor = hasBusinessComponent(schema, 'counterparty')
-  const needsPayee = hasBusinessComponent(schema, 'payee')
-  const needsPayeeAccount = hasBusinessComponent(schema, 'payee-account')
+async function loadReadonlyPayeeLookups(schemas: ProcessFormDesignSchema[]) {
+  const needsVendor = schemas.some((schema) => hasBusinessComponent(schema, 'counterparty'))
+  const needsPayee = schemas.some((schema) => hasBusinessComponent(schema, 'payee'))
+  const needsPayeeAccount = schemas.some((schema) => hasBusinessComponent(schema, 'payee-account'))
 
   if (!needsVendor && !needsPayee && !needsPayeeAccount) {
     return {

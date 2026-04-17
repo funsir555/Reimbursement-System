@@ -5,6 +5,9 @@
 
 package com.finex.auth.service.impl;
 
+import com.finex.auth.dto.FinanceVoucherActionResultVO;
+import com.finex.auth.dto.FinanceVoucherBatchActionDTO;
+import com.finex.auth.dto.FinanceVoucherBatchActionResultVO;
 import com.finex.auth.dto.FinanceVoucherDetailVO;
 import com.finex.auth.dto.FinanceVoucherMetaVO;
 import com.finex.auth.dto.FinanceVoucherPageVO;
@@ -142,6 +145,36 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
             String currentUsername
     ) {
         return voucherMutationDomainSupport.updateVoucher(companyId, voucherNo, dto, currentUserId, currentUsername);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO reviewVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return voucherMutationDomainSupport.reviewVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO unreviewVoucher(String companyId, String voucherNo) {
+        return voucherMutationDomainSupport.unreviewVoucher(companyId, voucherNo);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO markVoucherError(String companyId, String voucherNo) {
+        return voucherMutationDomainSupport.markVoucherError(companyId, voucherNo);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO clearVoucherError(String companyId, String voucherNo) {
+        return voucherMutationDomainSupport.clearVoucherError(companyId, voucherNo);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherBatchActionResultVO batchUpdateVoucherState(FinanceVoucherBatchActionDTO dto, Long currentUserId, String currentUsername) {
+        return voucherMutationDomainSupport.batchUpdateVoucherState(dto, currentUserId, currentUsername);
     }
 
     /**

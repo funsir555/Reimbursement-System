@@ -144,6 +144,10 @@ export const ROUTE_META_REGISTRY = {
     title: '报销单详情',
     permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view']
   }),
+  'expense-document-batch-print': routeMeta({
+    title: '???????',
+    permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view', 'expense:payment:payment_order:view']
+  }),
   'expense-document-expense-detail': routeMeta({
     title: '费用明细',
     permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view']
@@ -264,8 +268,12 @@ export const ROUTE_META_REGISTRY = {
     tabTitle: '审核凭证',
     menuTitle: '审核凭证',
     description: '审核总账凭证',
-    placeholderTitle: '审核凭证',
-    placeholderDescription: '审核总账凭证',
+    permissionCode: 'finance:general_ledger:review_voucher:view'
+  }),
+  'finance-review-voucher-detail': routeMeta({
+    title: '审核凭证详情',
+    tabTitle: '审核凭证详情',
+    description: '查看和审核凭证详情',
     permissionCode: 'finance:general_ledger:review_voucher:view'
   }),
   'finance-ledger-balance-sheet': routeMeta({

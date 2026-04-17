@@ -1,5 +1,22 @@
 <template>
-  <div class="expense-wb-page expense-wb-page--detail detail-page space-y-6">
+  <div
+    v-if="isPrintMode"
+    class="expense-print-page expense-print-page--detail"
+    data-testid="detail-print-mode"
+  >
+    <div v-loading="detailLoading || printLoading" class="expense-print-page__state">
+      <ExpenseDocumentPrintSheet
+        v-if="detail && !printLoadError"
+        :detail="detail"
+        :expense-details="printExpenseDetails"
+        :vendor-option-map="vendorOptionMap"
+        :payee-option-map="payeeOptionMap"
+        :payee-account-option-map="payeeAccountOptionMap"
+      />
+      <el-empty v-else :description="printLoadError || detailLoadError || '暂无可打印单据数据'" :image-size="96" />
+    </div>
+  </div>
+  <div v-else class="expense-wb-page expense-wb-page--detail detail-page space-y-6">
     <section class="expense-wb-hero detail-hero" data-testid="detail-hero">
       <div class="expense-wb-hero__content detail-hero__content">
         <div class="detail-hero__main">
@@ -417,7 +434,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -434,6 +451,7 @@ import {
 } from '@/api'
 import ExpenseFormReadonlyRenderer from './components/ExpenseFormReadonlyRenderer.vue'
 import ExpenseInvoiceWorkbench from './components/ExpenseInvoiceWorkbench.vue'
+import ExpenseDocumentPrintSheet from './components/ExpenseDocumentPrintSheet.vue'
 import { buildAuthorizedAttachmentPreviewUrl } from './expenseInvoicePreview'
 import { useReadonlyPayeeLookups } from './useReadonlyPayeeLookups'
 import {
@@ -444,6 +462,7 @@ import {
 } from './expenseDetailActionMatrix'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { formatMoney } from '@/utils/money'
+import { buildExpenseDetailPrintHref, isExpenseDetailPrintMode, loadExpenseDocumentPrintBundle, openExpensePrintWindow } from './expensePrintSupport'
 
 type UserActionMode = 'transfer' | 'add-sign' | ''
 type ApprovalTimelineItem = {
@@ -460,12 +479,15 @@ const detailLoading = ref(false)
 const navigationLoading = ref(false)
 const detail = ref<ExpenseDocumentDetail | null>(null)
 const detailLoadError = ref('')
+const printLoading = ref(false)
+const printLoadError = ref('')
+const printExpenseDetails = ref<ExpenseDetailInstanceDetail[]>([])
 const navigation = ref<ExpenseDocumentNavigation>({})
 const activeExpenseDetailNo = ref('')
 const expenseDetailLoadingNo = ref('')
 const expenseDetailCache = ref<Record<string, ExpenseDetailInstanceDetail>>({})
 const expenseDetailErrors = ref<Record<string, string>>({})
-const { vendorOptionMap, payeeOptionMap, payeeAccountOptionMap, syncReadonlyPayeeLookups } = useReadonlyPayeeLookups()
+const { vendorOptionMap, payeeOptionMap, payeeAccountOptionMap, syncReadonlyPayeeLookups, syncReadonlyPayeeLookupsBatch } = useReadonlyPayeeLookups()
 const storedUser = (readStoredUser() || {}) as { userId?: number; permissionCodes?: string[] }
 const commentDialogVisible = ref(false)
 const commentSubmitting = ref(false)
@@ -486,8 +508,10 @@ const userActionForm = ref({
 const emptyExpenseDetailSchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
 let detailRequestVersion = 0
 let navigationRequestVersion = 0
+let lastPrintedDocumentCode = ''
 
 const amountText = computed(() => `¥ ${formatDetailMoney(detail.value?.totalAmount)}`)
+const isPrintMode = computed(() => isExpenseDetailPrintMode(route.query))
 const activeExpenseDetail = computed(() => (
   activeExpenseDetailNo.value ? expenseDetailCache.value[activeExpenseDetailNo.value] || null : null
 ))
@@ -588,7 +612,7 @@ const userActionDialogConfirm = computed(() => userActionMode.value === 'transfe
 const userActionDialogPlaceholder = computed(() => userActionMode.value === 'transfer' ? '可选填写转交说明' : '可选填写加签说明')
 
 watch(
-  () => route.params.documentCode,
+  () => [route.params.documentCode, route.query.print],
   () => {
     void loadDetail()
   },
@@ -654,31 +678,62 @@ async function selectExpenseDetail(detailNo: string) {
 async function loadDetail() {
   const requestVersion = ++detailRequestVersion
   detailLoading.value = true
+  printLoading.value = isPrintMode.value
   navigationRequestVersion += 1
   navigationLoading.value = false
   detailLoadError.value = ''
+  printLoadError.value = ''
   detail.value = null
+  printExpenseDetails.value = []
   navigation.value = {}
   activeExpenseDetailNo.value = ''
   expenseDetailLoadingNo.value = ''
   expenseDetailCache.value = {}
   expenseDetailErrors.value = {}
   try {
-    const res = await expenseApi.getDetail(String(route.params.documentCode || ''))
-    if (requestVersion !== detailRequestVersion) {
-      return
+    const documentCode = String(route.params.documentCode || '')
+    if (!documentCode) {
+      throw new Error('\u7f3a\u5c11\u5355\u636e\u7f16\u53f7')
     }
-    detail.value = res.data
-    void syncReadonlyPayeeLookups(res.data.formSchemaSnapshot)
-    void loadNavigation(res.data.documentCode, requestVersion)
+
+    if (isPrintMode.value) {
+      const bundle = await loadExpenseDocumentPrintBundle(documentCode)
+      if (requestVersion !== detailRequestVersion) {
+        return
+      }
+      detail.value = bundle.detail
+      printExpenseDetails.value = bundle.expenseDetails
+      await syncReadonlyPayeeLookupsBatch([
+        bundle.detail.formSchemaSnapshot,
+        ...bundle.expenseDetails.map((item) => item.schemaSnapshot)
+      ])
+      await triggerPrint(documentCode)
+    } else {
+      const res = await expenseApi.getDetail(documentCode)
+      if (requestVersion !== detailRequestVersion) {
+        return
+      }
+      detail.value = res.data
+      void syncReadonlyPayeeLookups(res.data.formSchemaSnapshot)
+      void loadNavigation(res.data.documentCode, requestVersion)
+    }
   } catch (error: unknown) {
     if (requestVersion === detailRequestVersion) {
-      detailLoadError.value = resolveErrorMessage(error, '加载单据详情失败')
-      ElMessage.error(detailLoadError.value)
+      const message = resolveErrorMessage(
+        error,
+        isPrintMode.value ? '\u52a0\u8f7d\u6253\u5370\u6570\u636e\u5931\u8d25' : '\u52a0\u8f7d\u5355\u636e\u8be6\u60c5\u5931\u8d25'
+      )
+      if (isPrintMode.value) {
+        printLoadError.value = message
+      } else {
+        detailLoadError.value = message
+      }
+      ElMessage.error(message)
     }
   } finally {
     if (requestVersion === detailRequestVersion) {
       detailLoading.value = false
+      printLoading.value = false
     }
   }
 }
@@ -847,7 +902,7 @@ async function handleTaskAction(action: 'approve' | 'reject') {
 }
 async function handleActionClick(action: ActionItem) {
   if (action.disabled) {
-    ElMessage.warning(action.reason || '当前动作暂不可用')
+    ElMessage.warning(action.reason || '\u5f53\u524d\u52a8\u4f5c\u6682\u4e0d\u53ef\u7528')
     return
   }
 
@@ -856,8 +911,10 @@ async function handleActionClick(action: ActionItem) {
       await handleRecall()
       return
     case 'print':
+      handlePrint()
+      return
     case 'download':
-      ElMessage.info('功能建设中')
+      ElMessage.info('\u529f\u80fd\u5efa\u8bbe\u4e2d')
       return
     case 'comment':
       openCommentDialog()
@@ -885,6 +942,27 @@ async function handleActionClick(action: ActionItem) {
       await openUserActionDialog(action.key)
       return
   }
+}
+
+function handlePrint() {
+  const documentCode = detail.value?.documentCode || String(route.params.documentCode || '')
+  if (!documentCode) {
+    ElMessage.warning('\u7f3a\u5c11\u5355\u636e\u7f16\u53f7\uff0c\u65e0\u6cd5\u6253\u5f00\u6253\u5370\u9875')
+    return
+  }
+  const openedWindow = openExpensePrintWindow(buildExpenseDetailPrintHref(router, documentCode))
+  if (!openedWindow) {
+    ElMessage.error('\u672a\u80fd\u6253\u5f00\u6253\u5370\u7a97\u53e3\uff0c\u8bf7\u68c0\u67e5\u6d4f\u89c8\u5668\u5f39\u7a97\u62e6\u622a\u8bbe\u7f6e')
+  }
+}
+
+async function triggerPrint(documentCode: string) {
+  if (!documentCode || lastPrintedDocumentCode === documentCode || !detail.value || printLoadError.value) {
+    return
+  }
+  lastPrintedDocumentCode = documentCode
+  await nextTick()
+  window.print()
 }
 
 async function handleRecall() {
@@ -1120,6 +1198,17 @@ function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
 </script>
 
 <style scoped>
+.expense-print-page {
+  min-height: 100vh;
+  background: #f4f7fb;
+  padding: 24px;
+}
+
+.expense-print-page__state {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .detail-page {
   padding-bottom: 132px;
 }
@@ -1353,6 +1442,17 @@ function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
     min-height: 34px;
     padding: 0 14px;
     font-size: 14px;
+  }
+}
+
+@media print {
+  .expense-print-page {
+    background: #ffffff;
+    padding: 0;
+  }
+
+  .expense-print-page__state {
+    max-width: none;
   }
 }
 </style>

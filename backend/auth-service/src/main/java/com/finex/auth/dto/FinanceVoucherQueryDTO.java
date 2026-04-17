@@ -9,6 +9,8 @@ public class FinanceVoucherQueryDTO {
 
     private String voucherNo;
 
+    private String status;
+
     private String csign;
 
     private String billMonth;

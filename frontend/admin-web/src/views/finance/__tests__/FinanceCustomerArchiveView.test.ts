@@ -147,6 +147,45 @@ const MoneyInputStub = defineComponent({
   template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
+const PaginationStub = defineComponent({
+  props: {
+    currentPage: {
+      type: Number,
+      default: 1
+    },
+    pageSize: {
+      type: Number,
+      default: 10
+    },
+    total: {
+      type: Number,
+      default: 0
+    },
+    pageSizes: {
+      type: Array,
+      default: () => []
+    }
+  },
+  emits: ['update:currentPage', 'update:pageSize'],
+  template: `
+    <div data-testid="pagination">
+      <span data-testid="pagination-total">{{ total }}</span>
+      <span data-testid="pagination-current">{{ currentPage }}</span>
+      <span data-testid="pagination-size">{{ pageSize }}</span>
+      <button data-testid="pagination-next" type="button" @click="$emit('update:currentPage', currentPage + 1)">next</button>
+      <button
+        v-for="size in pageSizes"
+        :key="size"
+        type="button"
+        :data-testid="\`pagination-size-\${size}\`"
+        @click="$emit('update:pageSize', size)"
+      >
+        {{ size }}
+      </button>
+    </div>
+  `
+})
+
 async function mountView() {
   const wrapper = mount(FinanceCustomerArchiveView, {
     global: {
@@ -166,7 +205,8 @@ async function mountView() {
         'el-input-number': NumberStub,
         'el-date-picker': InputStub,
         'el-icon': true,
-        'money-input': MoneyInputStub
+        'money-input': MoneyInputStub,
+        'el-pagination': PaginationStub
       },
       directives: {
         loading: () => undefined
@@ -215,7 +255,8 @@ async function mountKeepAliveHost(showCustomer = true) {
         'el-input-number': NumberStub,
         'el-date-picker': InputStub,
         'el-icon': true,
-        'money-input': MoneyInputStub
+        'money-input': MoneyInputStub,
+        'el-pagination': PaginationStub
       },
       directives: {
         loading: () => undefined
@@ -233,21 +274,19 @@ describe('FinanceCustomerArchiveView', () => {
     financeCompanyStore.currentCompanyId = 'COMPANY_A'
     financeCompanyStore.currentCompanyName = '广州远智教育科技有限公司'
     mocks.financeArchiveApi.listCustomers.mockResolvedValue({
-      data: [
-        {
-          cCusCode: 'CUS001',
-          cCusName: '广州客户',
-          cCusAbbName: '广州简称',
-          cCusPerson: '张三',
-          cCusHand: '13800000000',
-          cCusBank: '建设银行',
-          cCusAccount: '6222000012345678',
-          iARMoney: '1200.00',
-          companyId: 'COMPANY_A',
-          active: true,
-          updatedAt: '2026-04-05 10:00:00'
-        }
-      ]
+      data: Array.from({ length: 12 }, (_, index) => ({
+        cCusCode: `CUS${String(index + 1).padStart(3, '0')}`,
+        cCusName: index === 0 ? '广州客户' : `Customer ${index + 1}`,
+        cCusAbbName: index === 0 ? '广州简称' : `C${index + 1}`,
+        cCusPerson: '张三',
+        cCusHand: '13800000000',
+        cCusBank: '建设银行',
+        cCusAccount: '6222000012345678',
+        iARMoney: '1200.00',
+        companyId: 'COMPANY_A',
+        active: true,
+        updatedAt: '2026-04-05 10:00:00'
+      }))
     })
     mocks.financeArchiveApi.getCustomerDetail.mockResolvedValue({
       data: {
@@ -267,23 +306,65 @@ describe('FinanceCustomerArchiveView', () => {
 
   it('loads customer list rows with code, name and abbreviation', async () => {
     const wrapper = await mountView()
-    const vm = wrapper.vm as unknown as { customers: Array<{ cCusCode: string; cCusName: string; cCusAbbName: string }> }
+    const vm = wrapper.vm as unknown as {
+      customers: Array<{ cCusCode: string; cCusName: string; cCusAbbName: string }>
+      paginatedCustomers: Array<{ cCusCode: string }>
+    }
 
     expect(mocks.financeArchiveApi.listCustomers).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       keyword: '',
       includeDisabled: false
     })
-    expect(vm.customers).toEqual([
-      expect.objectContaining({
-        cCusCode: 'CUS001',
-        cCusName: '广州客户',
-        cCusAbbName: '广州简称'
-      })
-    ])
+    expect(vm.customers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          cCusCode: 'CUS001',
+          cCusName: '广州客户',
+          cCusAbbName: '广州简称'
+        })
+      ])
+    )
     expect(vm.customers[0]?.cCusCode).toBe('CUS001')
     expect(vm.customers[0]?.cCusName).toBe('广州客户')
     expect(vm.customers[0]?.cCusAbbName).toBe('广州简称')
+    expect(vm.paginatedCustomers).toHaveLength(10)
+    expect(wrapper.get('[data-testid="pagination-total"]').text()).toBe('12')
+  })
+
+  it('paginates customer rows locally and resets to the first page after reset', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      paginatedCustomers: Array<{ cCusCode: string }>
+      resetFilters: () => void
+    }
+
+    await wrapper.get('[data-testid="pagination-next"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-current"]').text()).toBe('2')
+    expect(vm.paginatedCustomers).toHaveLength(2)
+    expect(vm.paginatedCustomers[0]?.cCusCode).toBe('CUS011')
+
+    vm.resetFilters()
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-current"]').text()).toBe('1')
+    expect(vm.paginatedCustomers).toHaveLength(10)
+  })
+
+  it('updates the visible row count when the page size changes', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      paginatedCustomers: Array<{ cCusCode: string }>
+    }
+
+    await wrapper.get('[data-testid="pagination-size-20"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="pagination-size"]').text()).toBe('20')
+    expect(wrapper.get('[data-testid="pagination-current"]').text()).toBe('1')
+    expect(vm.paginatedCustomers).toHaveLength(12)
   })
 
   it('opens customer detail with the list code and hydrates the edit form', async () => {

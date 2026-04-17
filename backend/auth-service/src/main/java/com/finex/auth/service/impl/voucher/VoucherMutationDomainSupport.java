@@ -5,6 +5,9 @@
 
 package com.finex.auth.service.impl.voucher;
 
+import com.finex.auth.dto.FinanceVoucherActionResultVO;
+import com.finex.auth.dto.FinanceVoucherBatchActionDTO;
+import com.finex.auth.dto.FinanceVoucherBatchActionResultVO;
 import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
@@ -59,5 +62,25 @@ public final class VoucherMutationDomainSupport extends AbstractFinanceVoucherSu
             String currentUsername
     ) {
         return super.updateVoucher(companyId, voucherNo, dto, currentUserId, currentUsername);
+    }
+
+    public FinanceVoucherActionResultVO reviewVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return super.reviewVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    public FinanceVoucherActionResultVO unreviewVoucher(String companyId, String voucherNo) {
+        return super.unreviewVoucher(companyId, voucherNo);
+    }
+
+    public FinanceVoucherActionResultVO markVoucherError(String companyId, String voucherNo) {
+        return super.markVoucherError(companyId, voucherNo);
+    }
+
+    public FinanceVoucherActionResultVO clearVoucherError(String companyId, String voucherNo) {
+        return super.clearVoucherError(companyId, voucherNo);
+    }
+
+    public FinanceVoucherBatchActionResultVO batchUpdateVoucherState(FinanceVoucherBatchActionDTO dto, Long currentUserId, String currentUsername) {
+        return super.batchUpdateVoucherState(dto, currentUserId, currentUsername);
     }
 }

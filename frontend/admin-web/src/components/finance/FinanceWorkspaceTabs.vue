@@ -28,16 +28,19 @@
         <el-select
           :model-value="currentCompanyId"
           class="finance-company-select"
+          :style="companySelectStyle"
           filterable
+          :filter-method="handleCompanyFilter"
           :loading="companyLoading || companySwitching"
           :disabled="companyLoading || companySwitching"
           placeholder="请选择公司"
+          @visible-change="handleCompanyDropdownVisibleChange"
           @update:model-value="handleCompanyChange"
         >
           <el-option
-            v-for="item in companyOptions"
+            v-for="item in filteredCompanyOptions"
             :key="item.companyId"
-            :label="item.label"
+            :label="formatCompanyOptionLabel(item)"
             :value="item.companyId"
           />
         </el-select>
@@ -61,9 +64,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { Close, Operation } from '@element-plus/icons-vue'
 import type { FinanceWorkspaceTab } from '@/stores/financeWorkspace'
 import type { FinanceCompanyOption } from '@/api'
+
+const COMPANY_SELECT_WIDTH = '390px'
 
 const props = defineProps<{
   tabs: FinanceWorkspaceTab[]
@@ -81,6 +87,21 @@ const emit = defineEmits<{
   closeRight: [path: string]
   changeCompany: [companyId: string]
 }>()
+
+const companyKeyword = ref('')
+const companySelectStyle = { '--finance-company-select-width': COMPANY_SELECT_WIDTH }
+const filteredCompanyOptions = computed(() => {
+  const options = props.companyOptions || []
+  const keyword = normalizeText(companyKeyword.value).toLowerCase()
+  if (!keyword) {
+    return options
+  }
+  return options.filter((item) =>
+    [item.companyName, item.companyCode, item.label, item.companyId]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => value.toLowerCase().includes(keyword))
+  )
+})
 
 function handleCommand(command: string) {
   if (!props.activePath) {
@@ -102,6 +123,24 @@ function handleCommand(command: string) {
 
 function handleCompanyChange(companyId: string) {
   emit('changeCompany', companyId)
+}
+
+function handleCompanyFilter(query: string) {
+  companyKeyword.value = normalizeText(query)
+}
+
+function handleCompanyDropdownVisibleChange(visible: boolean) {
+  if (!visible) {
+    companyKeyword.value = ''
+  }
+}
+
+function formatCompanyOptionLabel(item: FinanceCompanyOption) {
+  return item.companyName || item.label || item.companyId
+}
+
+function normalizeText(value?: string | null) {
+  return String(value || '').trim()
 }
 </script>
 
@@ -206,7 +245,7 @@ function handleCompanyChange(companyId: string) {
 }
 
 .finance-company-select {
-  width: 260px;
+  width: var(--finance-company-select-width, 390px);
 }
 
 :deep(.finance-company-select .el-select__wrapper) {

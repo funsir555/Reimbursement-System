@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
   },
   router: {
     push: vi.fn(),
-    replace: vi.fn()
+    replace: vi.fn(),
+    resolve: vi.fn()
   },
   expensePaymentApi: {
     listOrders: vi.fn(),
@@ -23,7 +24,8 @@ const mocks = vi.hoisted(() => ({
   elMessage: {
     success: vi.fn(),
     error: vi.fn(),
-    info: vi.fn()
+    info: vi.fn(),
+    warning: vi.fn()
   },
   elMessageBox: {
     confirm: vi.fn(),
@@ -197,6 +199,9 @@ describe('ExpensePaymentOrdersView', () => {
     vi.clearAllMocks()
     mocks.route.path = '/expense/payment/orders'
     mocks.route.query.tab = 'pending'
+    mocks.router.resolve.mockImplementation(({ query }: { query?: Record<string, string> }) => ({
+      href: `/expense/documents/print?documentCodes=${query?.documentCodes || ''}&source=${query?.source || ''}`
+    }))
 
     const pendingRows = Array.from({ length: 11 }, (_, index) => buildOrder({
       taskId: index + 1,
@@ -221,6 +226,7 @@ describe('ExpensePaymentOrdersView', () => {
     mocks.expensePaymentApi.rejectTasks.mockResolvedValue({ data: true })
     mocks.elMessageBox.confirm.mockResolvedValue(undefined)
     mocks.elMessageBox.prompt.mockResolvedValue({ value: '批量驳回原因' })
+    vi.stubGlobal('open', vi.fn(() => ({ opener: null })))
   })
 
   it('renders pending rows with a default floating bar and disables actions before selection', async () => {
@@ -261,7 +267,30 @@ describe('ExpensePaymentOrdersView', () => {
     expect(wrapper.get('[data-testid="expense-payment-bulk-download"]').attributes('disabled')).toBeUndefined()
   })
 
-  it('opens the static start payment dialog without calling payment APIs', async () => {
+  it('opens the shared batch print page for selected pending payment documents', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-payment-select-row-1"]').setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="expense-payment-select-row-2"]').setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="expense-payment-bulk-print"]').trigger('click')
+
+    expect(mocks.router.resolve).toHaveBeenCalledWith({
+      name: 'expense-document-batch-print',
+      query: {
+        documentCodes: 'DOC-PAY-001,DOC-PAY-002',
+        source: 'payment-pending'
+      }
+    })
+    expect(window.open).toHaveBeenCalledWith(
+      '/expense/documents/print?documentCodes=DOC-PAY-001,DOC-PAY-002&source=payment-pending',
+      '_blank',
+      'noopener,noreferrer'
+    )
+  })
+
+  it('submits export from the start payment dialog and clears selection', async () => {
     const wrapper = await mountView()
 
     await wrapper.get('[data-testid="expense-payment-select-row-1"]').setValue(true)
@@ -271,7 +300,29 @@ describe('ExpensePaymentOrdersView', () => {
 
     expect(wrapper.text()).toContain('导出支付单')
     expect(wrapper.text()).toContain('银企直连支付')
+    await wrapper.get('[data-testid="expense-payment-start-option-export"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.expensePaymentApi.submitOrderExport).toHaveBeenCalledWith([1])
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('下载任务已提交，请到下载中心查看进度')
+    expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').text()).toContain('未选择单据')
+    expect(wrapper.text()).not.toContain('导出支付单')
     expect(mocks.expensePaymentApi.startTask).not.toHaveBeenCalled()
+  })
+
+  it('keeps bank-link payment as a static placeholder in the start payment dialog', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-payment-select-row-1"]').setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="expense-payment-bulk-start"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="expense-payment-start-option-bank-link"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessage.info).toHaveBeenCalledWith('银企直连支付功能建设中')
+    expect(mocks.expensePaymentApi.submitOrderExport).not.toHaveBeenCalled()
   })
 
   it('submits export for selected pending payment tasks', async () => {

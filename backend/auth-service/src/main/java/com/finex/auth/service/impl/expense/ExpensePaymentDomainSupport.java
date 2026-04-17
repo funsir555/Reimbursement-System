@@ -1164,15 +1164,15 @@ public class ExpensePaymentDomainSupport {
      */
     private String resolveReceiptStatusLabel(PmBankPaymentRecord record) {
         if (record == null) {
-            return "闂佸搫鐗滄禍鐐哄极閹捐绠?";
+            return "待回单";
         }
         if (isFlagEnabled(record.getManualPaid()) && trimToNull(record.getReceiptAttachmentId()) == null) {
-            return "manual-paid";
+            return "待回单";
         }
         return switch (defaultText(trimToNull(record.getReceiptStatus()), RECEIPT_STATUS_PENDING)) {
-            case RECEIPT_STATUS_RECEIVED -> "received";
-            case RECEIPT_STATUS_FAILED -> "failed";
-            default -> "pending";
+            case RECEIPT_STATUS_RECEIVED -> "已收回单";
+            case RECEIPT_STATUS_FAILED -> "回单失败";
+            default -> "待回单";
         };
     }
 
@@ -1181,13 +1181,13 @@ public class ExpensePaymentDomainSupport {
      */
     private String resolveBankLinkStatusLabel(SystemCompanyBankAccount account) {
         if (!isFlagEnabled(account.getDirectConnectEnabled())) {
-            return "闂佸搫鐗滄禍婊堝箚鎼淬劍鍋?";
+            return "未启用";
         }
         if (!BANK_PROVIDER_CMB.equals(trimToNull(account.getDirectConnectProvider()))
                 || !BANK_CHANNEL_CMB_CLOUD.equals(trimToNull(account.getDirectConnectChannel()))) {
-            return "闂佸搫鐗滄禍顏堝储閵堝洨纾?";
+            return "配置异常";
         }
-        return "閻庣懓鎲¤ぐ鍐箚鎼淬劍鍋?";
+        return "已启用";
     }
 
     /**
@@ -1195,7 +1195,7 @@ public class ExpensePaymentDomainSupport {
      */
     private String resolveBankLinkSyncStatus(SystemCompanyBankAccount account) {
         String status = trimToNull(account.getDirectConnectLastSyncStatus());
-        return status == null ? "闂佸搫鐗滄禍婵堟暜瑜版帗鐒?" : status;
+        return status == null ? "未推送" : status;
     }
 
     /**

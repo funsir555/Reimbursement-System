@@ -44,10 +44,10 @@
           v-model="filters.keyword"
           clearable
           placeholder="搜索部门编码 / 部门名称 / 负责人"
-          @keyup.enter="loadDepartments"
+          @keyup.enter="loadDepartments(true)"
         >
           <template #append>
-            <el-button :icon="Search" @click="loadDepartments" />
+            <el-button :icon="Search" @click="loadDepartments(true)" />
           </template>
         </el-input>
 
@@ -71,13 +71,13 @@
 
         <div class="flex justify-end gap-2">
           <el-button :icon="RefreshRight" @click="resetFilters">重置</el-button>
-          <el-button type="primary" :icon="RefreshRight" @click="loadDepartments">刷新</el-button>
+          <el-button type="primary" :icon="RefreshRight" @click="loadDepartments(true)">刷新</el-button>
         </div>
       </div>
     </el-card>
 
     <el-card class="!rounded-3xl !shadow-sm">
-      <el-table v-loading="loading" :data="departments" style="width: 100%">
+      <el-table v-loading="loading" :data="paginatedDepartments" style="width: 100%">
         <el-table-column prop="deptCode" label="部门编码" min-width="120" />
         <el-table-column prop="deptName" label="部门名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="parentDeptName" label="上级部门" min-width="160" show-overflow-tooltip />
@@ -108,6 +108,15 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="mt-4 flex justify-start">
+        <el-pagination
+          v-model:current-page="departmentPagination.currentPage.value"
+          v-model:page-size="departmentPagination.pageSize.value"
+          layout="total, sizes, prev, pager, next"
+          :total="departmentPagination.total.value"
+          :page-sizes="departmentPagination.pageSizes"
+        />
+      </div>
     </el-card>
 
     <el-drawer v-model="detailVisible" title="部门档案详情" size="520px">
@@ -139,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { RefreshRight, Search } from '@element-plus/icons-vue'
 import {
@@ -149,6 +158,7 @@ import {
   type FinanceDepartmentSummary,
   type FinanceDepartmentTreeNode
 } from '@/api'
+import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 
 type DepartmentOption = {
@@ -158,6 +168,7 @@ type DepartmentOption = {
 
 const loading = ref(false)
 const departments = ref<FinanceDepartmentSummary[]>([])
+const departmentPagination = useLocalPagination(departments)
 const currentDepartment = ref<FinanceDepartmentSummary>()
 const detailVisible = ref(false)
 const financeCompany = useFinanceCompanyStore()
@@ -186,11 +197,19 @@ const parentDepartmentOptions = computed(() => flattenDepartments(meta.value.dep
 const enabledCount = computed(() => departments.value.filter((item) => item.status === 1).length)
 const disabledCount = computed(() => departments.value.filter((item) => item.status !== 1).length)
 const syncManagedCount = computed(() => departments.value.filter((item) => item.syncManaged).length)
+const paginatedDepartments = computed(() => departmentPagination.paginatedRows.value)
 
 onMounted(async () => {
   await loadMeta()
-  await loadDepartments()
+  await loadDepartments(true)
 })
+
+watch(
+  () => financeCompany.currentCompanyId,
+  () => {
+    departmentPagination.resetToFirstPage()
+  }
+)
 
 async function loadMeta() {
   try {
@@ -204,7 +223,10 @@ async function loadMeta() {
   }
 }
 
-async function loadDepartments() {
+async function loadDepartments(resetPage = false) {
+  if (resetPage) {
+    departmentPagination.resetToFirstPage()
+  }
   loading.value = true
   try {
     const payload: FinanceDepartmentQueryPayload = {
@@ -214,6 +236,7 @@ async function loadDepartments() {
     }
     const res = await financeArchiveApi.queryDepartments(payload)
     departments.value = res.data || []
+    departmentPagination.clampCurrentPage()
   } catch (error: any) {
     ElMessage.error(error?.message || '部门档案加载失败')
   } finally {
@@ -227,7 +250,7 @@ function resetFilters() {
     parentId: undefined,
     status: undefined
   }
-  loadDepartments()
+  void loadDepartments(true)
 }
 
 function openDetail(row: FinanceDepartmentSummary) {

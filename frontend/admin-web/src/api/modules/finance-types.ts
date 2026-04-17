@@ -76,6 +76,7 @@ export interface FinanceVoucherMeta {
 export interface FinanceVoucherQueryParams {
   companyId: string
   voucherNo?: string
+  status?: string
   csign?: string
   billMonth?: string
   billMonthFrom?: string
@@ -96,6 +97,7 @@ export interface FinanceVoucherSummary {
   dbillDate: string
   summary: string
   cbill: string
+  checkerName?: string
   idoc: number
   status: string
   statusLabel: string
@@ -116,6 +118,7 @@ export interface FinanceVoucherDetail {
   dbillDate: string
   idoc: number
   cbill: string
+  checkerName?: string
   ctext1?: string
   ctext2?: string
   status: string
@@ -136,4 +139,26 @@ export interface FinanceVoucherSaveResult {
   totalDebit: MoneyValue
   totalCredit: MoneyValue
   status: string
+}
+
+export interface FinanceVoucherActionResult {
+  action: string
+  voucherNo: string
+  status: string
+  statusLabel: string
+  checkerName?: string
+  nextVoucherNo?: string
+  lastVoucherOfMonth?: boolean
+}
+
+export interface FinanceVoucherBatchActionPayload {
+  companyId: string
+  action: 'REVIEW' | 'UNREVIEW' | 'MARK_ERROR' | 'CLEAR_ERROR'
+  voucherNos: string[]
+}
+
+export interface FinanceVoucherBatchActionResult {
+  action: string
+  successCount: number
+  voucherNos: string[]
 }

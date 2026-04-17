@@ -11,7 +11,7 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <el-button :icon="RefreshRight" @click="loadCustomers">刷新</el-button>
+          <el-button :icon="RefreshRight" @click="loadCustomers(true)">刷新</el-button>
           <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreateDialog">新增客户</el-button>
         </div>
       </div>
@@ -19,9 +19,9 @@
 
     <el-card class="!rounded-3xl !shadow-sm">
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr),220px,160px]">
-        <el-input v-model="keyword" clearable placeholder="请输入客户名称或编码" @keyup.enter="loadCustomers">
+        <el-input v-model="keyword" clearable placeholder="请输入客户名称或编码" @keyup.enter="loadCustomers(true)">
           <template #append>
-            <el-button :icon="Search" @click="loadCustomers" />
+            <el-button :icon="Search" @click="loadCustomers(true)" />
           </template>
         </el-input>
 
@@ -30,7 +30,7 @@
           inline-prompt
           active-text="含停用"
           inactive-text="仅启用"
-          @change="loadCustomers"
+          @change="loadCustomers(true)"
         />
 
         <div class="flex justify-end">
@@ -40,7 +40,7 @@
     </el-card>
 
     <el-card class="!rounded-3xl !shadow-sm">
-      <el-table v-loading="loading" :data="customers" style="width: 100%">
+      <el-table v-loading="loading" :data="paginatedCustomers" style="width: 100%">
         <el-table-column prop="cCusCode" label="客户编码" width="170" />
         <el-table-column prop="cCusName" label="客户名称" min-width="220" show-overflow-tooltip />
         <el-table-column prop="cCusAbbName" label="简称" min-width="140" show-overflow-tooltip />
@@ -71,6 +71,15 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="mt-4 flex justify-start">
+        <el-pagination
+          v-model:current-page="customerPagination.currentPage.value"
+          v-model:page-size="customerPagination.pageSize.value"
+          layout="total, sizes, prev, pager, next"
+          :total="customerPagination.total.value"
+          :page-sizes="customerPagination.pageSizes"
+        />
+      </div>
     </el-card>
 
     <el-dialog
@@ -174,6 +183,7 @@ import {
   type FinanceCustomerSummary
 } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { formatMoney } from '@/utils/money'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
@@ -214,6 +224,7 @@ const dialogVisible = ref(false)
 const keyword = ref('')
 const includeDisabled = ref(false)
 const customers = ref<FinanceCustomerSummary[]>([])
+const customerPagination = useLocalPagination(customers)
 const editingCustomerCode = ref('')
 const activeSections = ref(['basic', 'contact', 'bank', 'finance'])
 const customerForm = reactive<Record<string, string | number | undefined>>({})
@@ -227,6 +238,7 @@ const canDisable = computed(() => hasPermission('finance:archives:customers:dele
 const currentCompanyId = computed(() => financeCompany.currentCompanyId)
 const currentCompanyName = computed(() => financeCompany.currentCompanyName)
 const hasPendingEdit = computed(() => dialogVisible.value)
+const paginatedCustomers = computed(() => customerPagination.paginatedRows.value)
 
 const customerSections: Array<{ key: string; label: string; fields: CustomerFieldConfig[] }> = [
   {
@@ -342,7 +354,7 @@ watch(
     if (companyId !== previousCompanyId) {
       closeDialog()
     }
-    await loadCustomers()
+    await loadCustomers(true)
   },
   { immediate: true }
 )
@@ -363,9 +375,13 @@ function unregisterCompanySwitchGuard() {
   guardRegistered = false
 }
 
-async function loadCustomers() {
+async function loadCustomers(resetPage = false) {
+  if (resetPage) {
+    customerPagination.resetToFirstPage()
+  }
   if (!currentCompanyId.value) {
     customers.value = []
+    customerPagination.clampCurrentPage()
     return
   }
   loading.value = true
@@ -376,6 +392,7 @@ async function loadCustomers() {
       includeDisabled: includeDisabled.value
     })
     customers.value = res.data
+    customerPagination.clampCurrentPage()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载客户档案失败'))
   } finally {
@@ -386,7 +403,7 @@ async function loadCustomers() {
 function resetFilters() {
   keyword.value = ''
   includeDisabled.value = false
-  void loadCustomers()
+  void loadCustomers(true)
 }
 
 function resetCustomerForm() {

@@ -11,7 +11,7 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
-          <el-button :icon="RefreshRight" @click="loadVendors">刷新</el-button>
+          <el-button :icon="RefreshRight" @click="loadVendors(true)">刷新</el-button>
           <el-button v-if="canCreate" type="primary" :icon="Plus" @click="openCreateDialog">新增供应商</el-button>
         </div>
       </div>
@@ -19,9 +19,9 @@
 
     <el-card class="!rounded-3xl !shadow-sm">
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr),220px,160px]">
-        <el-input v-model="keyword" clearable placeholder="请输入供应商名称或编码" @keyup.enter="loadVendors">
+        <el-input v-model="keyword" clearable placeholder="请输入供应商名称或编码" @keyup.enter="loadVendors(true)">
           <template #append>
-            <el-button :icon="Search" @click="loadVendors" />
+            <el-button :icon="Search" @click="loadVendors(true)" />
           </template>
         </el-input>
 
@@ -30,7 +30,7 @@
           inline-prompt
           active-text="含停用"
           inactive-text="仅启用"
-          @change="loadVendors"
+          @change="loadVendors(true)"
         />
 
         <div class="flex justify-end">
@@ -40,7 +40,7 @@
     </el-card>
 
     <el-card class="!rounded-3xl !shadow-sm">
-      <el-table v-loading="loading" :data="vendors" style="width: 100%">
+      <el-table v-loading="loading" :data="paginatedVendors" style="width: 100%">
         <el-table-column prop="cVenCode" label="供应商编码" width="170" />
         <el-table-column prop="cVenName" label="供应商名称" min-width="220" show-overflow-tooltip />
         <el-table-column prop="cVenAbbName" label="简称" min-width="140" show-overflow-tooltip />
@@ -66,6 +66,15 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="mt-4 flex justify-start">
+        <el-pagination
+          v-model:current-page="vendorPagination.currentPage.value"
+          v-model:page-size="vendorPagination.pageSize.value"
+          layout="total, sizes, prev, pager, next"
+          :total="vendorPagination.total.value"
+          :page-sizes="vendorPagination.pageSizes"
+        />
+      </div>
     </el-card>
 
     <el-dialog
@@ -165,6 +174,7 @@ import {
 } from '@/api'
 import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
@@ -211,6 +221,7 @@ const dialogVisible = ref(false)
 const keyword = ref('')
 const includeDisabled = ref(false)
 const vendors = ref<FinanceVendorSummary[]>([])
+const vendorPagination = useLocalPagination(vendors)
 const editingVendorCode = ref('')
 const activeSections = ref(['basic', 'bank'])
 const vendorForm = reactive<Record<string, string | number | undefined>>({})
@@ -224,6 +235,7 @@ const canDisable = computed(() => hasPermission('finance:archives:suppliers:dele
 const currentCompanyId = computed(() => financeCompany.currentCompanyId)
 const currentCompanyName = computed(() => financeCompany.currentCompanyName)
 const hasPendingEdit = computed(() => dialogVisible.value)
+const paginatedVendors = computed(() => vendorPagination.paginatedRows.value)
 
 const vendorSections: Array<{ key: string; label: string; fields: VendorFieldConfig[] }> = [
   {
@@ -346,7 +358,7 @@ const allowedVendorFieldKeys = new Set([
   ...vendorSections.flatMap((section) => section.fields.map((field) => field.key)),
   ...paymentFieldKeys
 ])
-const vendorFieldLabels = {
+const vendorFieldLabels: Record<string, string> = {
   ...vendorSections.flatMap((section) => section.fields).reduce<Record<string, string>>((acc, field) => {
     acc[field.key] = field.label
     return acc
@@ -374,7 +386,7 @@ watch(
     if (companyId !== previousCompanyId) {
       closeDialog()
     }
-    await loadVendors()
+    await loadVendors(true)
   },
   { immediate: true }
 )
@@ -395,9 +407,13 @@ function unregisterCompanySwitchGuard() {
   guardRegistered = false
 }
 
-async function loadVendors() {
+async function loadVendors(resetPage = false) {
+  if (resetPage) {
+    vendorPagination.resetToFirstPage()
+  }
   if (!currentCompanyId.value) {
     vendors.value = []
+    vendorPagination.clampCurrentPage()
     return
   }
   loading.value = true
@@ -408,6 +424,7 @@ async function loadVendors() {
       includeDisabled: includeDisabled.value
     })
     vendors.value = res.data
+    vendorPagination.clampCurrentPage()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载供应商档案失败'))
   } finally {
@@ -418,7 +435,7 @@ async function loadVendors() {
 function resetFilters() {
   keyword.value = ''
   includeDisabled.value = false
-  void loadVendors()
+  void loadVendors(true)
 }
 
 function resetVendorForm() {

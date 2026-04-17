@@ -5,6 +5,7 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.FinanceAccountSubjectCloseDTO;
+import com.finex.auth.dto.FinanceAccountSubjectDerivedDefaultsVO;
 import com.finex.auth.dto.FinanceAccountSubjectDetailVO;
 import com.finex.auth.dto.FinanceAccountSubjectMetaVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
@@ -76,6 +77,16 @@ public class FinanceAccountSubjectArchiveController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), SUBJECT_VIEW);
         return Result.success(financeAccountSubjectArchiveService.getSubjectDetail(companyId, subjectCode));
+    }
+
+    @GetMapping("/derived-defaults")
+    public Result<FinanceAccountSubjectDerivedDefaultsVO> getDerivedDefaults(
+            @RequestParam String companyId,
+            @RequestParam String subjectCode,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), SUBJECT_VIEW);
+        return Result.success(financeAccountSubjectArchiveService.getDerivedDefaults(companyId, subjectCode));
     }
 
     // 处理 createSubject 请求。
