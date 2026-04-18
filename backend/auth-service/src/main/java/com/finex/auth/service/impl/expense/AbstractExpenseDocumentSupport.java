@@ -352,6 +352,15 @@ class AbstractExpenseDocumentSupport {
         detail.setExpenseTypeOptions(expenseDetailSystemFieldSupport.loadExpenseTypeOptions());
         detail.setExpenseTypeInvoiceFreeModeMap(expenseDetailSystemFieldSupport.loadExpenseTypeInvoiceFreeModeMap());
         User currentUser = userId == null ? null : userMapper.selectById(userId);
+        if (currentUser != null) {
+            detail.setCurrentUserCompanyId(trimToNull(currentUser.getCompanyId()));
+            if (trimToNull(currentUser.getCompanyId()) != null) {
+                SystemCompany company = systemCompanyMapper.selectById(currentUser.getCompanyId());
+                if (company != null) {
+                    detail.setCurrentUserCompanyName(trimToNull(company.getCompanyName()));
+                }
+            }
+        }
         if (currentUser != null && currentUser.getDeptId() != null) {
             detail.setCurrentUserDeptId(String.valueOf(currentUser.getDeptId()));
             SystemDepartment department = systemDepartmentMapper.selectById(currentUser.getDeptId());
@@ -2130,6 +2139,8 @@ class AbstractExpenseDocumentSupport {
         target.setDepartmentOptions(source.getDepartmentOptions());
         target.setExpenseTypeOptions(source.getExpenseTypeOptions());
         target.setExpenseTypeInvoiceFreeModeMap(source.getExpenseTypeInvoiceFreeModeMap());
+        target.setCurrentUserCompanyId(source.getCurrentUserCompanyId());
+        target.setCurrentUserCompanyName(source.getCurrentUserCompanyName());
         target.setCurrentUserDeptId(source.getCurrentUserDeptId());
         target.setCurrentUserDeptName(source.getCurrentUserDeptName());
     }

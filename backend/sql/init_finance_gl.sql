@@ -43,6 +43,8 @@ CREATE TABLE gl_accvouch (
     csup_id VARCHAR(64) COMMENT '供应商编码',
     citem_id VARCHAR(6) COMMENT '项目编码',
     citem_class VARCHAR(2) COMMENT '项目大类编码',
+    cash_flow_item_id BIGINT COMMENT '现金流量档案ID',
+    cash_flow_item_name VARCHAR(200) COMMENT '现金流量名称快照',
     cname VARCHAR(64) COMMENT '业务员',
     ccode_equal VARCHAR(64) COMMENT '对方科目编码',
     iflagbank TINYINT COMMENT '银行账两清标志',
@@ -92,7 +94,8 @@ CREATE TABLE gl_accvouch (
     KEY idx_gl_accvouch_company_csup (company_id, csup_id),
     KEY idx_gl_accvouch_company_citem_class (company_id, citem_class),
     KEY idx_gl_accvouch_company_citem_id (company_id, citem_id),
-    KEY idx_gl_accvouch_company_citem_class_id (company_id, citem_class, citem_id)
+    KEY idx_gl_accvouch_company_citem_class_id (company_id, citem_class, citem_id),
+    KEY idx_gl_accvouch_company_cash_flow (company_id, cash_flow_item_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='凭证及明细账';
 
 CREATE TABLE gl_accsum (

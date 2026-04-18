@@ -94,6 +94,8 @@ class ExpenseDocumentControllerTest {
         ExpenseCreateTemplateDetailVO detail = new ExpenseCreateTemplateDetailVO();
         detail.setTemplateCode("TPL-001");
         detail.setTemplateName("Travel Reimbursement");
+        detail.setCurrentUserCompanyId("COMPANY-001");
+        detail.setCurrentUserCompanyName("Shanghai Branch");
         ProcessFormOptionVO companyOption = new ProcessFormOptionVO();
         companyOption.setValue("COMPANY-001");
         companyOption.setLabel("Shanghai Branch");
@@ -111,6 +113,8 @@ class ExpenseDocumentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.templateCode").value("TPL-001"))
+                .andExpect(jsonPath("$.data.currentUserCompanyId").value("COMPANY-001"))
+                .andExpect(jsonPath("$.data.currentUserCompanyName").value("Shanghai Branch"))
                 .andExpect(jsonPath("$.data.companyOptions[0].value").value("COMPANY-001"));
 
         verify(accessControlService).requireAnyPermission(

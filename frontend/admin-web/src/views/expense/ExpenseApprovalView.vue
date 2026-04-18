@@ -140,7 +140,13 @@
     </el-card>
 
     <el-card class="expense-wb-panel expense-wb-table-shell expense-wb-table-shell--compact">
-      <el-table :data="pagedItems" style="width: 100%" v-loading="loading" @header-dragend="handleHeaderDragEnd">
+      <el-table
+        :data="pagedItems"
+        style="width: 100%"
+        v-loading="loading"
+        @header-dragend="handleHeaderDragEnd"
+        @row-dblclick="handleRowDblClick"
+      >
         <el-table-column
           v-for="column in visibleColumnDefinitions"
           :key="column.key"
@@ -157,7 +163,8 @@
               v-if="column.key === 'documentCode'"
               class="font-medium text-blue-600 hover:underline"
               type="button"
-              @click="openDetail(row.documentCode)"
+              @click.stop="openDetail(row.documentCode)"
+              @dblclick.stop
             >
               {{ resolveColumnText(row, column.key) }}
             </button>
@@ -171,9 +178,9 @@
 
         <el-table-column label="操作" width="240" fixed="right" :resizable="false">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row.documentCode)">查看</el-button>
-            <el-button link type="success" size="small" @click="handleAction(row.taskId, 'approve')">通过</el-button>
-            <el-button link type="danger" size="small" @click="handleAction(row.taskId, 'reject')">驳回</el-button>
+            <el-button link type="primary" size="small" @click.stop="openDetail(row.documentCode)" @dblclick.stop>查看</el-button>
+            <el-button link type="success" size="small" @click.stop="handleAction(row.taskId, 'approve')" @dblclick.stop>通过</el-button>
+            <el-button link type="danger" size="small" @click.stop="handleAction(row.taskId, 'reject')" @dblclick.stop>驳回</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -404,6 +411,13 @@ function handleHeaderDragEnd(
 
 function openDetail(documentCode: string) {
   void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+}
+
+function handleRowDblClick(row: ExpenseApprovalPendingItem) {
+  if (!row.documentCode) {
+    return
+  }
+  openDetail(row.documentCode)
 }
 
 async function handleExport() {

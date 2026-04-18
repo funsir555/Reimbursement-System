@@ -56,7 +56,11 @@ describe('formDesignerHelper', () => {
 
     expect(paletteItem).toBeTruthy()
     expect(paletteItem?.label).toBe('付款公司')
-    expect(paletteItem?.props).toEqual({ componentCode: 'payment-company' })
+    expect(paletteItem?.props).toEqual({
+      componentCode: 'payment-company',
+      defaultCompanyMode: 'NONE',
+      defaultCompanyId: ''
+    })
   })
 
   it('includes related and writeoff document business components with default allowed types', () => {

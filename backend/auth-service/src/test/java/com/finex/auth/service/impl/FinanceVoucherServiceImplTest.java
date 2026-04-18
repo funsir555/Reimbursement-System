@@ -11,6 +11,7 @@ import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
+import com.finex.auth.entity.FinanceCashFlowItem;
 import com.finex.auth.entity.FinanceCustomer;
 import com.finex.auth.entity.FinanceProjectArchive;
 import com.finex.auth.entity.FinanceProjectClass;
@@ -21,6 +22,7 @@ import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
@@ -69,6 +71,9 @@ class FinanceVoucherServiceImplTest {
     private FinanceCustomerMapper financeCustomerMapper;
 
     @Mock
+    private FinanceCashFlowItemMapper financeCashFlowItemMapper;
+
+    @Mock
     private FinanceVendorMapper financeVendorMapper;
 
     @Mock
@@ -101,6 +106,7 @@ class FinanceVoucherServiceImplTest {
         service = new FinanceVoucherServiceImpl(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
+                financeCashFlowItemMapper,
                 financeCustomerMapper,
                 financeVendorMapper,
                 financeProjectClassMapper,
@@ -118,6 +124,7 @@ class FinanceVoucherServiceImplTest {
         lenient().when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeCustomerMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeVendorMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(financeCashFlowItemMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
                 buildSubject("560101", "管理费用"),
                 buildSubject("100201", "银行存款")
@@ -150,11 +157,14 @@ class FinanceVoucherServiceImplTest {
         when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(systemCompanyMapper.selectList(any())).thenReturn(List.of(buildCompany("COMP-001", "001", "Guangzhou Branch")));
         when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "\u5458\u5de5\u7532", "COMP-001")));
-        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(buildSubject("1001", "\u5e93\u5b58\u73b0\u91d1", 1, 1, 1, 1, 1, "7")));
+        FinanceAccountSubject cashSubject = buildSubject("1001", "\u5e93\u5b58\u73b0\u91d1", 1, 1, 1, 1, 1, "7");
+        cashSubject.setBcash(1);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(cashSubject));
         when(financeCustomerMapper.selectList(any())).thenReturn(List.of(buildCustomer("C00001", "\u534e\u5357\u5ba2\u6237", "COMP-001")));
         when(financeVendorMapper.selectList(any())).thenReturn(List.of(buildVendor("V00001", "Core Supplier", "COMP-001")));
         when(financeProjectClassMapper.selectList(any())).thenReturn(List.of(buildProjectClass("7", "Market Projects", "COMP-001")));
         when(financeProjectArchiveMapper.selectList(any())).thenReturn(List.of(buildProject("2002", "South Campaign", "7", "COMP-001")));
+        when(financeCashFlowItemMapper.selectList(any())).thenReturn(List.of(buildCashFlowItem(101L, "1001", "销售商品、提供劳务收到的现金", "INFLOW", "COMP-001")));
         when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
 
         FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "\u8bb0");
@@ -171,6 +181,9 @@ class FinanceVoucherServiceImplTest {
         assertEquals("7", meta.getProjectClassOptions().get(0).getCode());
         assertEquals("2002", meta.getProjectOptions().get(0).getCode());
         assertEquals("7", meta.getProjectOptions().get(0).getParentValue());
+        assertEquals(1, meta.getAccountOptions().get(0).getBcash());
+        assertEquals("1001", meta.getCashFlowOptions().get(0).getCode());
+        assertEquals("销售商品、提供劳务收到的现金", meta.getCashFlowOptions().get(0).getName());
     }
 
     @Test
@@ -235,6 +248,75 @@ class FinanceVoucherServiceImplTest {
         assertEquals(2, insertedRows.size());
         assertEquals("7", insertedRows.get(0).getCitemClass());
         assertEquals("2002", insertedRows.get(0).getCitemId());
+    }
+
+    @Test
+    void saveVoucherRejectsCashSubjectWithoutCashFlowSelection() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        FinanceAccountSubject cashSubject = buildSubject("100101", "库存现金", 0, 0, 0, 0, 0, null);
+        cashSubject.setBcash(1);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                cashSubject,
+                buildSubject("560101", "管理费用")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("收到现金", "100101", "100.00", null),
+                buildSaveEntry("对方科目", "560101", null, "100.00")
+        ));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u79d1\u76ee\u5df2\u542f\u7528\u73b0\u91d1\u7ba1\u7406\uff0c\u5fc5\u987b\u9009\u62e9\u73b0\u91d1\u6d41\u91cf", exception.getMessage());
+    }
+
+    @Test
+    void saveVoucherAcceptsCashSubjectWithValidCashFlowSelection() {
+        List<GlAccvouch> insertedRows = new ArrayList<>();
+        doAnswer(invocation -> {
+            insertedRows.add(invocation.getArgument(0));
+            return 1;
+        }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
+
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        FinanceAccountSubject cashSubject = buildSubject("100101", "库存现金");
+        cashSubject.setBcash(1);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                cashSubject,
+                buildSubject("560101", "管理费用")
+        ));
+        when(financeCashFlowItemMapper.selectList(any())).thenReturn(List.of(
+                buildCashFlowItem(101L, "1001", "销售商品、提供劳务收到的现金", "INFLOW", "COMP-001")
+        ));
+        when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("收到现金", "100101", "100.00", null),
+                buildSaveEntry("对方科目", "560101", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCashFlowItemId(101L);
+
+        service.saveVoucher(dto, 1L, "alice");
+
+        assertEquals(2, insertedRows.size());
+        assertEquals(101L, insertedRows.get(0).getCashFlowItemId());
+        assertEquals("销售商品、提供劳务收到的现金", insertedRows.get(0).getCashFlowItemName());
+        assertNull(insertedRows.get(1).getCashFlowItemId());
     }
 
     @Test
@@ -712,6 +794,18 @@ class FinanceVoucherServiceImplTest {
         project.setBclose(0);
         project.setSortOrder(1);
         return project;
+    }
+
+    private FinanceCashFlowItem buildCashFlowItem(Long id, String code, String name, String direction, String companyId) {
+        FinanceCashFlowItem item = new FinanceCashFlowItem();
+        item.setId(id);
+        item.setCompanyId(companyId);
+        item.setCashFlowCode(code);
+        item.setCashFlowName(name);
+        item.setDirection(direction);
+        item.setStatus(1);
+        item.setSortOrder(1);
+        return item;
     }
 
     private SystemCompany buildCompany(String companyId, String companyCode, String companyName) {

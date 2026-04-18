@@ -406,6 +406,24 @@
                       </el-select>
                     </el-form-item>
 
+                    <el-form-item v-if="businessCode(selectedBlock) === 'payment-company'" label="默认付款公司" class="!mb-0">
+                      <el-select
+                        :model-value="paymentCompanyDefaultValue(selectedBlock)"
+                        class="w-full"
+                        placeholder="请选择默认付款公司"
+                        @update:model-value="setPaymentCompanyDefaultValue"
+                      >
+                        <el-option label="不设置默认付款公司" :value="paymentCompanyNoneValue" />
+                        <el-option label="提单人所在公司" :value="paymentCompanySubmitterValue" />
+                        <el-option
+                          v-for="item in companyOptions"
+                          :key="item.value"
+                          :label="item.label"
+                          :value="item.value"
+                        />
+                      </el-select>
+                    </el-form-item>
+
                     <el-form-item
                       v-if="supportsDocumentTemplateTypeConfig(selectedBlock)"
                       :label="documentTemplateTypeLabel(selectedBlock)"
@@ -627,12 +645,15 @@ const dragSource = ref<DragSource | null>(null)
 const dragHover = ref<{ blockId: string; position: 'before' | 'after' } | null>(null)
 const paletteDeleteActive = ref(false)
 const sceneOptions = ref<ProcessFlowScene[]>([])
+const companyOptions = ref<ProcessFormOption[]>([])
 const departmentOptions = ref<ProcessFormOption[]>([])
 const customArchives = ref<ProcessCustomArchiveSummary[]>([])
 const customArchiveDetailMap = ref<Record<string, ProcessCustomArchiveDetail>>({})
 const customArchiveDetailLoadingCodes = ref<string[]>([])
 const customArchiveDetailErrorCodes = ref<string[]>([])
 const working = reactive<DesignerDetailState>(createEmptyDetail(resolveRouteTemplateType(), initialIsCreateMode))
+const paymentCompanySubmitterValue = '__SUBMITTER_COMPANY__'
+const paymentCompanyNoneValue = '__NONE__'
 const undertakeDeptSpecialValue = '__SUBMITTER_DEPARTMENT__'
 const undertakeDeptNoneValue = '__NONE__'
 
@@ -847,6 +868,7 @@ async function loadPage() {
   try {
     const [flowMetaRes, archiveRes] = await Promise.all([processApi.getFlowMeta(), processApi.listCustomArchives()])
     sceneOptions.value = flowMetaRes.data.sceneOptions || []
+    companyOptions.value = flowMetaRes.data.companyOptions || []
     departmentOptions.value = flowMetaRes.data.departmentOptions || []
     customArchives.value = archiveRes.data || []
     customArchiveDetailMap.value = {}
@@ -1128,6 +1150,36 @@ function setUndertakeDepartmentDefaultValue(value: string | number | boolean) {
   }
   setSelectedBlockProp('defaultDeptMode', 'FIXED_DEPARTMENT')
   setSelectedBlockProp('defaultDeptId', nextValue)
+}
+
+function paymentCompanyDefaultValue(block: ProcessFormDesignBlock) {
+  const mode = stringProp(block, 'defaultCompanyMode', 'NONE')
+  if (mode === 'SUBMITTER_COMPANY') {
+    return paymentCompanySubmitterValue
+  }
+  if (mode === 'FIXED_COMPANY') {
+    return stringProp(block, 'defaultCompanyId') || paymentCompanyNoneValue
+  }
+  return paymentCompanyNoneValue
+}
+
+function setPaymentCompanyDefaultValue(value: string | number | boolean) {
+  if (!selectedBlock.value || businessCode(selectedBlock.value) !== 'payment-company') {
+    return
+  }
+  const nextValue = String(value || paymentCompanyNoneValue)
+  if (nextValue === paymentCompanySubmitterValue) {
+    setSelectedBlockProp('defaultCompanyMode', 'SUBMITTER_COMPANY')
+    setSelectedBlockProp('defaultCompanyId', '')
+    return
+  }
+  if (nextValue === paymentCompanyNoneValue) {
+    setSelectedBlockProp('defaultCompanyMode', 'NONE')
+    setSelectedBlockProp('defaultCompanyId', '')
+    return
+  }
+  setSelectedBlockProp('defaultCompanyMode', 'FIXED_COMPANY')
+  setSelectedBlockProp('defaultCompanyId', nextValue)
 }
 
 function supportsDocumentTemplateTypeConfig(block: ProcessFormDesignBlock) {

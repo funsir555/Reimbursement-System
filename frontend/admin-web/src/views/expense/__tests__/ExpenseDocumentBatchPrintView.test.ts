@@ -1,32 +1,39 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, reactive } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseDocumentBatchPrintView from '@/views/expense/ExpenseDocumentBatchPrintView.vue'
 
 const mocks = vi.hoisted(() => ({
   route: {
+    params: {},
     query: {
       documentCodes: 'DOC-001,DOC-002'
     }
   },
+  router: {
+    replace: vi.fn()
+  },
   expenseApi: {
-    getDetail: vi.fn(),
-    getExpenseDetail: vi.fn()
+    getPrintPdf: vi.fn(),
+    getBatchPrintPdf: vi.fn()
   },
   elMessage: {
     error: vi.fn()
   },
-  syncReadonlyPayeeLookupsBatch: vi.fn()
+  createObjectURL: vi.fn(),
+  revokeObjectURL: vi.fn()
 }))
 
 mocks.route = reactive({
+  params: {},
   query: {
     documentCodes: 'DOC-001,DOC-002'
   }
 })
 
 vi.mock('vue-router', () => ({
-  useRoute: () => mocks.route
+  useRoute: () => mocks.route,
+  useRouter: () => mocks.router
 }))
 
 vi.mock('@/api', () => ({
@@ -37,17 +44,23 @@ vi.mock('element-plus', () => ({
   ElMessage: mocks.elMessage
 }))
 
-vi.mock('@/views/expense/useReadonlyPayeeLookups', () => ({
-  useReadonlyPayeeLookups: () => ({
-    vendorOptionMap: {},
-    payeeOptionMap: {},
-    payeeAccountOptionMap: {},
-    syncReadonlyPayeeLookupsBatch: mocks.syncReadonlyPayeeLookupsBatch
-  })
-}))
-
-const SimpleContainer = defineComponent({
-  template: '<div><slot /></div>'
+const ButtonStub = defineComponent({
+  props: {
+    disabled: {
+      type: Boolean,
+      default: false
+    },
+    type: {
+      type: String,
+      default: ''
+    },
+    plain: {
+      type: Boolean,
+      default: false
+    }
+  },
+  emits: ['click'],
+  template: '<button type="button" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>'
 })
 
 const EmptyStub = defineComponent({
@@ -60,40 +73,12 @@ const EmptyStub = defineComponent({
   template: '<div>{{ description }}</div>'
 })
 
-function buildDetail(documentCode: string) {
-  return {
-    documentCode,
-    documentTitle: `${documentCode} 标题`,
-    status: 'PENDING_APPROVAL',
-    statusLabel: '审批中',
-    totalAmount: 100,
-    templateSnapshot: {},
-    formSchemaSnapshot: { layoutMode: 'TWO_COLUMN', blocks: [] },
-    formData: {},
-    flowSnapshot: {},
-    companyOptions: [],
-    departmentOptions: [],
-    expenseDetails: [
-      {
-        detailNo: `${documentCode}-D001`,
-        detailType: 'NORMAL_REIMBURSEMENT',
-        detailTypeLabel: '普通报销'
-      }
-    ],
-    currentTasks: [],
-    actionLogs: []
-  }
-}
-
 async function mountView() {
   const wrapper = mount(ExpenseDocumentBatchPrintView, {
     global: {
       stubs: {
-        'el-empty': EmptyStub,
-        'ExpenseDocumentPrintSheet': {
-          props: ['detail'],
-          template: '<div data-testid="expense-print-sheet">{{ detail.documentCode }}</div>'
-        }
+        'el-button': ButtonStub,
+        'el-empty': EmptyStub
       },
       directives: {
         loading: () => undefined
@@ -104,44 +89,91 @@ async function mountView() {
   return wrapper
 }
 
+const mountedWrappers: Array<Awaited<ReturnType<typeof mountView>>> = []
+
 describe('ExpenseDocumentBatchPrintView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.route.query.documentCodes = 'DOC-001,DOC-002'
-    mocks.expenseApi.getDetail.mockImplementation((documentCode: string) => Promise.resolve({
-      data: buildDetail(documentCode)
-    }))
-    mocks.expenseApi.getExpenseDetail.mockImplementation((documentCode: string, detailNo: string) => Promise.resolve({
-      data: {
-        documentCode,
-        detailNo,
-        detailType: 'NORMAL_REIMBURSEMENT',
-        detailTypeLabel: '普通报销',
-        schemaSnapshot: { layoutMode: 'TWO_COLUMN', blocks: [] },
-        formData: {}
+    mocks.route.params = {}
+    mocks.route.query = { documentCodes: 'DOC-001,DOC-002' }
+    mocks.router.replace.mockResolvedValue(undefined)
+
+    let objectUrlIndex = 0
+    mocks.createObjectURL.mockImplementation(() => `blob:preview-${++objectUrlIndex}`)
+    Object.defineProperty(window.URL, 'createObjectURL', {
+      configurable: true,
+      writable: true,
+      value: mocks.createObjectURL
+    })
+    Object.defineProperty(window.URL, 'revokeObjectURL', {
+      configurable: true,
+      writable: true,
+      value: mocks.revokeObjectURL
+    })
+
+    mocks.expenseApi.getBatchPrintPdf.mockResolvedValue({
+      blob: new Blob(['batch-pdf'], { type: 'application/pdf' }),
+      fileName: 'expense-documents-batch-2.pdf',
+      contentType: 'application/pdf'
+    })
+    mocks.expenseApi.getPrintPdf.mockResolvedValue({
+      blob: new Blob(['single-pdf'], { type: 'application/pdf' }),
+      fileName: 'expense-document-DOC-001.pdf',
+      contentType: 'application/pdf'
+    })
+  })
+
+  afterEach(() => {
+    mountedWrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+  })
+
+  it('loads batch PDF preview and renders browser PDF viewer iframe', async () => {
+    const wrapper = await mountView()
+    mountedWrappers.push(wrapper)
+
+    expect(mocks.expenseApi.getBatchPrintPdf).toHaveBeenCalledWith(['DOC-001', 'DOC-002'], 'PORTRAIT')
+    expect(wrapper.get('[data-testid="expense-pdf-preview-frame"]').attributes('src')).toContain('blob:preview-1')
+    expect(wrapper.text()).toContain('批量打印预览')
+    expect(wrapper.text()).toContain('2 张单据')
+  })
+
+  it('switches orientation and reloads the PDF with the new backend parameter', async () => {
+    const wrapper = await mountView()
+    mountedWrappers.push(wrapper)
+
+    await wrapper.get('[data-testid="expense-pdf-preview-landscape"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.router.replace).toHaveBeenCalledWith({
+      query: {
+        documentCodes: 'DOC-001,DOC-002',
+        orientation: 'LANDSCAPE'
       }
-    }))
-    mocks.syncReadonlyPayeeLookupsBatch.mockResolvedValue(undefined)
-    vi.stubGlobal('print', vi.fn())
+    })
+    expect(mocks.expenseApi.getBatchPrintPdf).toHaveBeenLastCalledWith(['DOC-001', 'DOC-002'], 'LANDSCAPE')
+    expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:preview-1')
   })
 
-  it('renders all requested documents and auto prints after loading', async () => {
-    const wrapper = await mountView()
+  it('loads single-document preview when routed from detail print entry', async () => {
+    mocks.route.params = { documentCode: 'DOC-001' }
+    mocks.route.query = {}
 
-    expect(mocks.expenseApi.getDetail).toHaveBeenCalledTimes(2)
-    expect(mocks.syncReadonlyPayeeLookupsBatch).toHaveBeenCalledTimes(1)
-    expect(wrapper.findAll('[data-testid="expense-print-sheet"]')).toHaveLength(2)
-    expect(wrapper.text()).toContain('DOC-001')
-    expect(wrapper.text()).toContain('DOC-002')
-    expect(window.print).toHaveBeenCalledTimes(1)
+    const wrapper = await mountView()
+    mountedWrappers.push(wrapper)
+
+    expect(mocks.expenseApi.getPrintPdf).toHaveBeenCalledWith('DOC-001', 'PORTRAIT')
+    expect(wrapper.text()).toContain('单据打印预览')
   })
 
-  it('shows a stable empty state and skips print when document codes are missing', async () => {
-    mocks.route.query.documentCodes = ''
+  it('shows a stable empty state when batch document codes are missing', async () => {
+    mocks.route.params = {}
+    mocks.route.query = {}
 
     const wrapper = await mountView()
+    mountedWrappers.push(wrapper)
 
+    expect(mocks.expenseApi.getBatchPrintPdf).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('缺少可打印的单据编号')
-    expect(window.print).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="expense-pdf-preview-frame"]').exists()).toBe(false)
   })
 })

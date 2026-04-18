@@ -289,8 +289,10 @@ describe('ExpenseDocumentDetailView', () => {
     mocks.elMessageBox.prompt.mockReset()
     mocks.router.push.mockResolvedValue(undefined)
     mocks.router.back.mockResolvedValue(undefined)
-    mocks.router.resolve.mockImplementation(({ params, query }: { params?: { documentCode?: string }, query?: Record<string, string> }) => ({
-      href: `/expense/documents/${params?.documentCode || ''}${query?.print ? `?print=${query.print}` : ''}`
+    mocks.router.resolve.mockImplementation(({ name, params }: { name?: string, params?: { documentCode?: string } }) => ({
+      href: name === 'expense-document-print'
+        ? `/expense/documents/${params?.documentCode || ''}/print`
+        : `/expense/documents/${params?.documentCode || ''}`
     }))
     mocks.expenseApi.getDetail.mockResolvedValue({ data: buildDocumentDetail() })
     mocks.expenseApi.getNavigation.mockResolvedValue({ data: {} })
@@ -950,11 +952,10 @@ describe('ExpenseDocumentDetailView', () => {
     await wrapper.get('.detail-floating-button').trigger('click')
 
     expect(mocks.router.resolve).toHaveBeenCalledWith({
-      name: 'expense-document-detail',
-      params: { documentCode: 'DOC-001' },
-      query: { print: '1' }
+      name: 'expense-document-print',
+      params: { documentCode: 'DOC-001' }
     })
-    expect(window.open).toHaveBeenCalledWith('/expense/documents/DOC-001?print=1', '_blank', 'noopener,noreferrer')
+    expect(window.open).toHaveBeenCalledWith('/expense/documents/DOC-001/print', '_blank', 'noopener,noreferrer')
   })
 
   it('renders print mode without interactive chrome and auto prints after data is ready', async () => {

@@ -145,6 +145,8 @@ class ExpenseDocumentTemplateDomainSupport {
         target.setDepartmentOptions(source.getDepartmentOptions());
         target.setExpenseTypeOptions(source.getExpenseTypeOptions());
         target.setExpenseTypeInvoiceFreeModeMap(source.getExpenseTypeInvoiceFreeModeMap());
+        target.setCurrentUserCompanyId(source.getCurrentUserCompanyId());
+        target.setCurrentUserCompanyName(source.getCurrentUserCompanyName());
         target.setCurrentUserDeptId(source.getCurrentUserDeptId());
         target.setCurrentUserDeptName(source.getCurrentUserDeptName());
     }

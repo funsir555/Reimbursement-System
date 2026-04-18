@@ -28,6 +28,8 @@ public class ProcessFlowRoute {
 
     private Integer defaultRoute;
 
+    private Integer attachBelowNodes;
+
     private String conditionJson;
 
     private LocalDateTime createdAt;

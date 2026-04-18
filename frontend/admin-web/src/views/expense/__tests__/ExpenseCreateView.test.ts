@@ -1,5 +1,5 @@
 ﻿import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
+import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseCreateView from '@/views/expense/ExpenseCreateView.vue'
 
@@ -113,11 +113,20 @@ const EmptyStub = defineComponent({
 })
 
 const ExpenseRuntimeFormEditorStub = defineComponent({
-  setup(_, { expose }) {
+  props: {
+    modelValue: {
+      type: Object,
+      default: () => ({})
+    }
+  },
+  setup(props, { expose }) {
     expose({
       validateBeforeSubmit: mocks.runtimeEditor.validateBeforeSubmit
     })
-    return () => null
+    return () => h('div', {
+      'data-testid': 'expense-runtime-form-editor',
+      'data-model-value': JSON.stringify(props.modelValue || {})
+    })
   }
 })
 
@@ -183,7 +192,10 @@ function buildTemplateDetail(
       blocks: []
     },
     expenseDetailSharedArchives: [],
+    companyOptions: [],
     departmentOptions: [],
+    currentUserCompanyId: '',
+    currentUserCompanyName: '',
     currentUserDeptId: 1,
     currentUserDeptName: '财务部'
   }
@@ -196,6 +208,21 @@ function buildAmountBlock(fieldKey: string) {
     kind: 'CONTROL',
     props: {
       controlType: 'AMOUNT'
+    }
+  }
+}
+
+function buildPaymentCompanyBlock(overrides: Record<string, unknown> = {}) {
+  return {
+    blockId: 'block-payment-company',
+    fieldKey: 'paymentCompany',
+    kind: 'BUSINESS_COMPONENT',
+    label: '付款公司',
+    props: {
+      componentCode: 'payment-company',
+      defaultCompanyMode: 'NONE',
+      defaultCompanyId: '',
+      ...overrides
     }
   }
 }
@@ -226,6 +253,10 @@ function writeDraft(
       expenseDetails: options.expenseDetails || []
     })
   )
+}
+
+function runtimeFormValue(wrapper: ReturnType<typeof mount>) {
+  return JSON.parse(wrapper.get('[data-testid="expense-runtime-form-editor"]').attributes('data-model-value') || '{}')
 }
 
 async function mountView() {
@@ -673,5 +704,83 @@ describe('ExpenseCreateView', () => {
 
     expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
     expect(mocks.elMessage.warning).toHaveBeenCalledWith(`字段标识 ${'r'.repeat(65)}最多 64 个字符`)
+  })
+
+  it('defaults payment company to the fixed configured company when the option is available', async () => {
+    mocks.route.query = { templateCode: 'TPL-006', draftKey: 'draft-payment-company-fixed' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-006&draftKey=draft-payment-company-fixed'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-006', '付款公司模板', 'contract', '合同单', {
+          blocks: [buildPaymentCompanyBlock({ defaultCompanyMode: 'FIXED_COMPANY', defaultCompanyId: 'COMPANY_A' })]
+        }),
+        companyOptions: [{ value: 'COMPANY_A', label: '广州公司' }]
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).paymentCompany).toBe('COMPANY_A')
+  })
+
+  it('defaults payment company to the submitter company when configured and available', async () => {
+    mocks.route.query = { templateCode: 'TPL-007', draftKey: 'draft-payment-company-submitter' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-007&draftKey=draft-payment-company-submitter'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-007', '付款公司模板', 'contract', '合同单', {
+          blocks: [buildPaymentCompanyBlock({ defaultCompanyMode: 'SUBMITTER_COMPANY' })]
+        }),
+        companyOptions: [{ value: 'COMPANY_B', label: '上海分公司' }],
+        currentUserCompanyId: 'COMPANY_B',
+        currentUserCompanyName: '上海分公司'
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).paymentCompany).toBe('COMPANY_B')
+  })
+
+  it('keeps the restored draft payment company instead of overriding it with a default', async () => {
+    mocks.route.query = { templateCode: 'TPL-008', draftKey: 'draft-payment-company-existing' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-008&draftKey=draft-payment-company-existing'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-008', '付款公司模板', 'contract', '合同单', {
+          blocks: [buildPaymentCompanyBlock({ defaultCompanyMode: 'FIXED_COMPANY', defaultCompanyId: 'COMPANY_A' })]
+        }),
+        companyOptions: [
+          { value: 'COMPANY_A', label: '广州公司' },
+          { value: 'COMPANY_B', label: '上海分公司' }
+        ]
+      }
+    })
+    writeDraft('draft-payment-company-existing', 'TPL-008', {
+      formValues: {
+        paymentCompany: 'COMPANY_B'
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).paymentCompany).toBe('COMPANY_B')
+  })
+
+  it('leaves payment company empty when the configured default is not in company options', async () => {
+    mocks.route.query = { templateCode: 'TPL-009', draftKey: 'draft-payment-company-invalid' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-009&draftKey=draft-payment-company-invalid'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-009', '付款公司模板', 'contract', '合同单', {
+          blocks: [buildPaymentCompanyBlock({ defaultCompanyMode: 'FIXED_COMPANY', defaultCompanyId: 'COMPANY_X' })]
+        }),
+        companyOptions: [{ value: 'COMPANY_A', label: '广州公司' }]
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).paymentCompany).toBe('')
   })
 })

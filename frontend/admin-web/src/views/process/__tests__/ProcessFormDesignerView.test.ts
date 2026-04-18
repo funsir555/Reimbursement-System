@@ -142,6 +142,7 @@ const TooltipStub = defineComponent({
 function buildFlowMeta() {
   return {
     sceneOptions: [],
+    companyOptions: [{ label: '广州公司', value: 'COMPANY_A' }],
     departmentOptions: []
   }
 }
@@ -445,4 +446,48 @@ describe('ProcessFormDesignerView', () => {
     expect(mocks.processApi.updateFormDesign).not.toHaveBeenCalled()
     expect(mocks.elMessage.warning).toHaveBeenCalledWith(`字段标识 ${'x'.repeat(65)}最多 64 个字符`)
   })
+  it('shows payment company default configuration options for the business component', async () => {
+    mocks.route.name = 'expense-workbench-process-form-edit'
+    mocks.route.params = { id: '8' }
+
+    const wrapper = await mountView({
+      formDesignDetail: {
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-payment-company',
+              fieldKey: 'paymentCompany',
+              label: 'Payment Company',
+              kind: 'BUSINESS_COMPONENT',
+              span: 1,
+              required: false,
+              defaultValue: '',
+              helpText: '',
+              props: {
+                componentCode: 'payment-company',
+                defaultCompanyMode: 'NONE',
+                defaultCompanyId: ''
+              },
+              permission: {
+                fixedStages: {
+                  DRAFT_BEFORE_SUBMIT: 'EDITABLE',
+                  RESUBMIT_AFTER_RETURN: 'EDITABLE',
+                  IN_APPROVAL: 'READONLY',
+                  ARCHIVED: 'READONLY'
+                },
+                sceneOverrides: []
+              }
+            }
+          ]
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('\u9ed8\u8ba4\u4ed8\u6b3e\u516c\u53f8')
+    const optionLabels = wrapper.findAll('el-option-stub').map((item) => item.attributes('label'))
+    expect(optionLabels).toContain('\u4e0d\u8bbe\u7f6e\u9ed8\u8ba4\u4ed8\u6b3e\u516c\u53f8')
+    expect(optionLabels).toContain('\u63d0\u5355\u4eba\u6240\u5728\u516c\u53f8')
+    expect(optionLabels).toContain('\u5e7f\u5dde\u516c\u53f8')
+  })
+
 })

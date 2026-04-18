@@ -35,6 +35,7 @@ export interface ProcessFlowRoute {
   routeName: string
   priority: number
   defaultRoute: boolean
+  attachBelowNodes: boolean
   conditionGroups: ProcessFlowConditionGroup[]
 }
 
@@ -141,6 +142,7 @@ export interface ProcessFlowMeta {
   paymentSpecialOptions: ProcessFlowConfigOption[]
   branchOperatorOptions: ProcessFormOption[]
   branchConditionFields: ProcessFlowConditionField[]
+  companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
   userOptions: ProcessFormOption[]
   expenseTypeOptions: ProcessFormOption[]

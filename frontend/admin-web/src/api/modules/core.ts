@@ -1,10 +1,5 @@
-// 这里集中封装 core.ts 相关接口。
-// 上游通常是对应业务页面，下游对应后端同域接口。
-// 如果改错，最容易影响页面的加载、保存或提交流程。
-
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
-// 清理本地登录态。
 function clearLoginState() {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
@@ -30,23 +25,18 @@ export interface RequestOptions extends RequestInit {
   timeoutMessage?: string
 }
 
-// 发起统一请求，并集中处理 token、超时和统一回包。
-export async function request<T>(url: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
-  const token = localStorage.getItem('token')
+export interface BinaryRequestOptions extends RequestOptions {
+  fallbackFileName?: string
+}
+
+export interface BinaryFileResponse {
+  blob: Blob
+  fileName: string
+  contentType: string
+}
+
+function withTimeout<T extends RequestOptions>(options: T) {
   const { timeoutMs, timeoutMessage, signal, ...fetchOptions } = options
-  const isFormDataBody = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData
-  const headers: Record<string, string> = {
-    ...(fetchOptions.headers as Record<string, string>)
-  }
-
-  if (!isFormDataBody && !headers['Content-Type']) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-
   let timeoutHandle: ReturnType<typeof window.setTimeout> | undefined
   let didTimeout = false
   let requestSignal = signal
@@ -69,37 +59,65 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     }, timeoutMs)
   }
 
+  return {
+    fetchOptions,
+    requestSignal,
+    timeoutMessage,
+    clear() {
+      if (timeoutHandle) {
+        window.clearTimeout(timeoutHandle)
+      }
+    },
+    isTimedOut() {
+      return didTimeout
+    }
+  }
+}
+
+export async function request<T>(url: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
+  const token = localStorage.getItem('token')
+  const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>)
+  }
+
+  if (!isFormDataBody && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const timeout = withTimeout(options)
+
   let response: Response
   try {
     response = await fetch(`${API_BASE_URL}${url}`, {
-      ...fetchOptions,
+      ...timeout.fetchOptions,
       headers,
-      signal: requestSignal
+      signal: timeout.requestSignal
     })
   } catch (error: unknown) {
-    if (timeoutHandle) {
-      window.clearTimeout(timeoutHandle)
-    }
-    if (didTimeout) {
-      throw new Error(timeoutMessage || '请求超时，请稍后重试')
+    timeout.clear()
+    if (timeout.isTimedOut()) {
+      throw new Error(timeout.timeoutMessage || '请求超时，请稍后重试')
     }
     throw error
   }
 
-  if (timeoutHandle) {
-    window.clearTimeout(timeoutHandle)
-  }
+  timeout.clear()
 
   const result = await response.json().catch(() => ({ message: '请求失败' }))
 
   if (response.status === 401) {
     clearLoginState()
     window.location.href = '/login'
-    throw new Error(result.message || '登录已过期，请重新登录')
+    throw new Error((result as { message?: string }).message || '登录已过期，请重新登录')
   }
 
   if (!response.ok) {
-    throw new Error(result.message || `HTTP ${response.status}`)
+    throw new Error((result as { message?: string }).message || `HTTP ${response.status}`)
   }
 
   const payload = result as ApiResponse<T>
@@ -119,7 +137,6 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
 
 type QueryValue = string | number | boolean | undefined | null
 
-// 把对象参数拼成 URL 查询字符串。
 export function buildQueryString<T extends object>(params: T) {
   const search = new URLSearchParams()
   Object.entries(params as Record<string, QueryValue>).forEach(([key, value]) => {
@@ -148,18 +165,34 @@ function decodeContentDispositionFileName(contentDisposition: string | null) {
   return plainMatch?.[1] || ''
 }
 
-// 下载二进制文件，并处理登录失效和文件名。
-export async function downloadBinaryFile(url: string, fallbackFileName?: string) {
+export async function requestBinary(url: string, options: BinaryRequestOptions = {}): Promise<BinaryFileResponse> {
   const token = localStorage.getItem('token')
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>)
+  }
+
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_BASE_URL}${url}`, {
-    method: 'GET',
-    headers
-  })
+  const timeout = withTimeout(options)
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${url}`, {
+      ...timeout.fetchOptions,
+      headers,
+      signal: timeout.requestSignal
+    })
+  } catch (error: unknown) {
+    timeout.clear()
+    if (timeout.isTimedOut()) {
+      throw new Error(timeout.timeoutMessage || '请求超时，请稍后重试')
+    }
+    throw error
+  }
+
+  timeout.clear()
 
   if (response.status === 401) {
     clearLoginState()
@@ -178,7 +211,19 @@ export async function downloadBinaryFile(url: string, fallbackFileName?: string)
   }
 
   const blob = await response.blob()
-  const fileName = decodeContentDispositionFileName(response.headers.get('Content-Disposition')) || fallbackFileName || 'download.xlsx'
+  return {
+    blob,
+    fileName: decodeContentDispositionFileName(response.headers.get('Content-Disposition')) || options.fallbackFileName || 'download.bin',
+    contentType: response.headers.get('Content-Type') || blob.type || ''
+  }
+}
+
+export async function downloadBinaryFile(url: string, fallbackFileName?: string) {
+  const { blob, fileName } = await requestBinary(url, {
+    method: 'GET',
+    fallbackFileName: fallbackFileName || 'download.xlsx'
+  })
+
   const objectUrl = window.URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = objectUrl
@@ -188,6 +233,5 @@ export async function downloadBinaryFile(url: string, fallbackFileName?: string)
   document.body.removeChild(anchor)
   window.URL.revokeObjectURL(objectUrl)
 }
-
 
 export default request

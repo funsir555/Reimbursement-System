@@ -20,6 +20,7 @@ import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
+import com.finex.auth.entity.FinanceCashFlowItem;
 import com.finex.auth.entity.FinanceCustomer;
 import com.finex.auth.entity.FinanceProjectArchive;
 import com.finex.auth.entity.FinanceProjectClass;
@@ -29,6 +30,7 @@ import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
@@ -99,6 +101,7 @@ public abstract class AbstractFinanceVoucherSupport {
 
     private final GlAccvouchMapper glAccvouchMapper;
     private final FinanceAccountSubjectMapper financeAccountSubjectMapper;
+    private final FinanceCashFlowItemMapper financeCashFlowItemMapper;
     private final FinanceCustomerMapper financeCustomerMapper;
     private final FinanceVendorMapper financeVendorMapper;
     private final FinanceProjectClassMapper financeProjectClassMapper;
@@ -138,6 +141,7 @@ public abstract class AbstractFinanceVoucherSupport {
         meta.setSupplierOptions(loadSupplierOptions(effectiveCompanyId));
         meta.setProjectClassOptions(loadProjectClassOptions(effectiveCompanyId));
         meta.setProjectOptions(loadProjectOptions(effectiveCompanyId));
+        meta.setCashFlowOptions(loadCashFlowOptions(effectiveCompanyId));
         meta.setDefaultCompanyId(effectiveCompanyId);
         meta.setDefaultBillDate(effectiveBillDate.format(DATE_FORMATTER));
         meta.setDefaultPeriod(effectiveBillDate.getMonthValue());
@@ -229,6 +233,7 @@ public abstract class AbstractFinanceVoucherSupport {
         validateVoucherType(voucherType);
         validateEntries(companyId, normalizedEntries);
         Map<String, FinanceAccountSubject> accountSubjects = loadSelectableAccountMap(companyId);
+        Map<Long, FinanceCashFlowItem> cashFlowItems = loadEnabledCashFlowItemMap(companyId);
 
         String makerName = resolveMakerName(currentUser, currentUsername);
         validateHeaderLength(makerName, "\u5236\u5355\u4eba", 64);
@@ -259,7 +264,8 @@ public abstract class AbstractFinanceVoucherSupport {
                         dto,
                         normalizedEntries.get(index),
                         index + 1,
-                        accountSubjects
+                        accountSubjects,
+                        cashFlowItems
                 );
                 glAccvouchMapper.insert(row);
             }
@@ -323,6 +329,7 @@ public abstract class AbstractFinanceVoucherSupport {
         validateVoucherType(voucherKey.csign());
         validateEntries(voucherKey.companyId(), normalizedEntries);
         Map<String, FinanceAccountSubject> accountSubjects = loadSelectableAccountMap(voucherKey.companyId());
+        Map<Long, FinanceCashFlowItem> cashFlowItems = loadEnabledCashFlowItemMap(voucherKey.companyId());
 
         String makerName = trimToNull(headerRow.getCbill()) == null
                 ? resolveMakerName(requireUser(currentUserId), currentUsername)
@@ -353,7 +360,8 @@ public abstract class AbstractFinanceVoucherSupport {
                     dto,
                     normalizedEntries.get(index),
                     index + 1,
-                    accountSubjects
+                    accountSubjects,
+                    cashFlowItems
             );
             glAccvouchMapper.insert(row);
         }
@@ -689,6 +697,37 @@ public abstract class AbstractFinanceVoucherSupport {
                 .toList();
     }
 
+    protected List<FinanceVoucherOptionVO> loadCashFlowOptions(String companyId) {
+        return loadEnabledCashFlowItemMap(companyId).values().stream()
+                .map(item -> option(
+                        String.valueOf(item.getId()),
+                        item.getCashFlowCode(),
+                        item.getCashFlowName(),
+                        item.getCashFlowCode() + "  " + item.getCashFlowName() + "（" + resolveCashFlowDirectionLabel(item.getDirection()) + "）",
+                        null
+                ))
+                .toList();
+    }
+
+    protected Map<Long, FinanceCashFlowItem> loadEnabledCashFlowItemMap(String companyId) {
+        String normalizedCompanyId = trimToNull(companyId);
+        if (normalizedCompanyId == null || financeCashFlowItemMapper == null) {
+            return Map.of();
+        }
+        return financeCashFlowItemMapper.selectList(
+                        Wrappers.<FinanceCashFlowItem>lambdaQuery()
+                                .eq(FinanceCashFlowItem::getCompanyId, normalizedCompanyId)
+                                .eq(FinanceCashFlowItem::getStatus, 1)
+                                .orderByAsc(FinanceCashFlowItem::getSortOrder, FinanceCashFlowItem::getCashFlowCode, FinanceCashFlowItem::getId)
+                ).stream()
+                .collect(Collectors.toMap(
+                        FinanceCashFlowItem::getId,
+                        item -> item,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+    }
+
     /**
      * 加载Selectable项目。
      */
@@ -972,6 +1011,7 @@ public abstract class AbstractFinanceVoucherSupport {
         option.setBitem(subject.getBitem());
         option.setCassItem(trimToNull(subject.getCassItem()));
         option.setLeafFlag(subject.getLeafFlag());
+        option.setBcash(subject.getBcash());
         return option;
     }
 
@@ -1114,10 +1154,12 @@ public abstract class AbstractFinanceVoucherSupport {
             FinanceVoucherSaveDTO dto,
             FinanceVoucherEntryDTO entry,
             int rowNo,
-            Map<String, FinanceAccountSubject> accountSubjects
+            Map<String, FinanceAccountSubject> accountSubjects,
+            Map<Long, FinanceCashFlowItem> cashFlowItems
     ) {
         GlAccvouch row = new GlAccvouch();
         FinanceAccountSubject accountSubject = accountSubjects.get(trimToNull(entry.getCcode()));
+        FinanceCashFlowItem cashFlowItem = resolveVoucherCashFlowItem(entry, accountSubject, cashFlowItems);
         row.setCompanyId(companyId);
         row.setIperiod(period);
         row.setCsign(voucherType);
@@ -1146,6 +1188,8 @@ public abstract class AbstractFinanceVoucherSupport {
         row.setCsupId(trimToNull(entry.getCsupId()));
         row.setCitemClass(trimToNull(entry.getCitemClass()));
         row.setCitemId(trimToNull(entry.getCitemId()));
+        row.setCashFlowItemId(cashFlowItem == null ? null : cashFlowItem.getId());
+        row.setCashFlowItemName(cashFlowItem == null ? null : trimToNull(cashFlowItem.getCashFlowName()));
         row.setCexchName(normalize(entry.getCexchName(), DEFAULT_CURRENCY));
         row.setNfrat(defaultDecimal(entry.getNfrat(), DEFAULT_RATE));
         row.setMd(normalizeAmount(entry.getMd()));
@@ -1206,6 +1250,8 @@ public abstract class AbstractFinanceVoucherSupport {
         entry.setCsupId(row.getCsupId());
         entry.setCitemClass(row.getCitemClass());
         entry.setCitemId(row.getCitemId());
+        entry.setCashFlowItemId(row.getCashFlowItemId());
+        entry.setCashFlowItemName(row.getCashFlowItemName());
         entry.setCexchName(normalize(row.getCexchName(), DEFAULT_CURRENCY));
         entry.setNfrat(defaultDecimal(row.getNfrat(), DEFAULT_RATE));
         entry.setMd(normalizeAmount(row.getMd()));
@@ -1357,6 +1403,8 @@ public abstract class AbstractFinanceVoucherSupport {
             normalizedEntry.setCsupId(trimToNull(entry.getCsupId()));
             normalizedEntry.setCitemClass(trimToNull(entry.getCitemClass()));
             normalizedEntry.setCitemId(trimToNull(entry.getCitemId()));
+            normalizedEntry.setCashFlowItemId(entry.getCashFlowItemId());
+            normalizedEntry.setCashFlowItemName(trimToNull(entry.getCashFlowItemName()));
             normalizedEntry.setCexchName(normalize(entry.getCexchName(), DEFAULT_CURRENCY));
             normalizedEntry.setNfrat(defaultDecimal(entry.getNfrat(), DEFAULT_RATE));
             normalizedEntry.setMd(normalizeNullableAmount(entry.getMd()));
@@ -1380,6 +1428,8 @@ public abstract class AbstractFinanceVoucherSupport {
                 && trimToNull(entry.getCsupId()) == null
                 && trimToNull(entry.getCitemClass()) == null
                 && trimToNull(entry.getCitemId()) == null
+                && entry.getCashFlowItemId() == null
+                && trimToNull(entry.getCashFlowItemName()) == null
                 && trimToNull(entry.getCexchName()) == null
                 && isNullOrZero(entry.getNfrat())
                 && isNullOrZero(entry.getMd())
@@ -1405,6 +1455,7 @@ public abstract class AbstractFinanceVoucherSupport {
         Set<String> suppliers = loadEnabledSupplierMap(companyId).keySet();
         Map<String, FinanceProjectClass> projectClasses = loadEnabledProjectClassMap(companyId);
         Map<String, FinanceProjectArchive> projects = loadSelectableProjects(companyId);
+        Map<Long, FinanceCashFlowItem> cashFlowItems = loadEnabledCashFlowItemMap(companyId);
         Set<String> currencies = CURRENCY_SEEDS.stream().map(OptionSeed::value).collect(Collectors.toCollection(LinkedHashSet::new));
 
         BigDecimal totalDebit = ZERO;
@@ -1453,6 +1504,7 @@ public abstract class AbstractFinanceVoucherSupport {
             if (debit.compareTo(BigDecimal.ZERO) == 0 && credit.compareTo(BigDecimal.ZERO) == 0) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u501f\u65b9\u6216\u8d37\u65b9\u81f3\u5c11\u586b\u5199\u4e00\u9879");
             }
+            validateCashFlowSelection(entry, subject, cashFlowItems, debit, credit, rowNo);
 
             BigDecimal qtyDebit = normalizeNullableQuantity(entry.getNdS());
             BigDecimal qtyCredit = normalizeNullableQuantity(entry.getNcS());
@@ -1530,6 +1582,54 @@ public abstract class AbstractFinanceVoucherSupport {
         throw new IllegalArgumentException(
                 "\u7b2c " + rowNo + " \u884c\u79d1\u76ee\u3010" + subjectLabel + "\u3011\u4e0d\u662f\u672b\u7ea7\u79d1\u76ee\uff0c\u4e0d\u5141\u8bb8\u5f55\u5165\u51ed\u8bc1"
         );
+    }
+
+    protected void validateCashFlowSelection(
+            FinanceVoucherEntryDTO entry,
+            FinanceAccountSubject subject,
+            Map<Long, FinanceCashFlowItem> cashFlowItems,
+            BigDecimal debit,
+            BigDecimal credit,
+            int rowNo
+    ) {
+        if (!requiresCashFlow(subject, debit, credit)) {
+            return;
+        }
+        Long cashFlowItemId = entry.getCashFlowItemId();
+        if (cashFlowItemId == null) {
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u79d1\u76ee\u5df2\u542f\u7528\u73b0\u91d1\u7ba1\u7406\uff0c\u5fc5\u987b\u9009\u62e9\u73b0\u91d1\u6d41\u91cf");
+        }
+        FinanceCashFlowItem item = cashFlowItems.get(cashFlowItemId);
+        if (item == null) {
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u73b0\u91d1\u6d41\u91cf\u4e0d\u5b58\u5728\u6216\u5f53\u524d\u4e0d\u53ef\u7528");
+        }
+    }
+
+    protected FinanceCashFlowItem resolveVoucherCashFlowItem(
+            FinanceVoucherEntryDTO entry,
+            FinanceAccountSubject subject,
+            Map<Long, FinanceCashFlowItem> cashFlowItems
+    ) {
+        if (entry == null || subject == null || cashFlowItems == null || cashFlowItems.isEmpty()) {
+            return null;
+        }
+        BigDecimal debit = normalizeAmount(entry.getMd());
+        BigDecimal credit = normalizeAmount(entry.getMc());
+        if (!requiresCashFlow(subject, debit, credit)) {
+            return null;
+        }
+        Long cashFlowItemId = entry.getCashFlowItemId();
+        return cashFlowItemId == null ? null : cashFlowItems.get(cashFlowItemId);
+    }
+
+    protected boolean requiresCashFlow(FinanceAccountSubject subject, BigDecimal debit, BigDecimal credit) {
+        return subject != null
+                && isEnabled(subject.getBcash())
+                && (normalizeAmount(debit).compareTo(BigDecimal.ZERO) > 0 || normalizeAmount(credit).compareTo(BigDecimal.ZERO) > 0);
+    }
+
+    protected String resolveCashFlowDirectionLabel(String direction) {
+        return Objects.equals(normalize(direction, ""), "OUTFLOW") ? "\u6d41\u51fa" : "\u6d41\u5165";
     }
 
     protected void validateProjectSelection(

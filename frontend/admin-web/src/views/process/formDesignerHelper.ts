@@ -157,6 +157,9 @@ export function buildBusinessComponentPaletteItems() {
 }
 
 function buildBusinessComponentProps(componentCode: string) {
+  if (componentCode === 'payment-company') {
+    return { componentCode, defaultCompanyMode: 'NONE', defaultCompanyId: '' }
+  }
   if (componentCode === 'undertake-department') {
     return { componentCode, defaultDeptMode: 'NONE', defaultDeptId: '' }
   }

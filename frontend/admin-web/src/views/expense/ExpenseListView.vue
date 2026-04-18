@@ -158,7 +158,13 @@
     </el-card>
 
     <el-card class="expense-wb-panel expense-wb-table-shell expense-wb-table-shell--compact">
-      <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading" @header-dragend="handleHeaderDragEnd">
+      <el-table
+        :data="pagedExpenseList"
+        style="width: 100%"
+        v-loading="loading"
+        @header-dragend="handleHeaderDragEnd"
+        @row-dblclick="handleRowDblClick"
+      >
         <el-table-column
           v-for="column in visibleColumnDefinitions"
           :key="column.key"
@@ -175,7 +181,8 @@
               v-if="column.key === 'documentCode'"
               class="cursor-pointer font-medium text-blue-600 hover:underline"
               type="button"
-              @click="openDetail(row)"
+              @click.stop="openDetail(row)"
+              @dblclick.stop
             >
               {{ resolveColumnText(row, column.key) }}
             </button>
@@ -191,14 +198,14 @@
 
         <el-table-column label="操作" width="220" fixed="right" :resizable="false">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row)">查看</el-button>
-            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:edit')" link type="primary" size="small">
+            <el-button link type="primary" size="small" @click.stop="openDetail(row)" @dblclick.stop>查看</el-button>
+            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:edit')" link type="primary" size="small" @click.stop @dblclick.stop>
               编辑
             </el-button>
-            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:delete')" link type="danger" size="small">
+            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:delete')" link type="danger" size="small" @click.stop @dblclick.stop>
               删除
             </el-button>
-            <el-button v-if="resolveDocumentStatusLabel(row) === '已驳回' && can('expense:list:submit')" link type="warning" size="small">
+            <el-button v-if="resolveDocumentStatusLabel(row) === '已驳回' && can('expense:list:submit')" link type="warning" size="small" @click.stop @dblclick.stop>
               重新提交
             </el-button>
           </template>
@@ -452,6 +459,10 @@ function openDetail(row: ExpenseSummary) {
     return
   }
   void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+}
+
+function handleRowDblClick(row: ExpenseSummary) {
+  openDetail(row)
 }
 
 async function reloadList() {

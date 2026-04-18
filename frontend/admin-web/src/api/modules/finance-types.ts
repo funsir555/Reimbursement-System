@@ -17,6 +17,7 @@ export interface FinanceVoucherOption {
   bitem?: number
   cassItem?: string
   leafFlag?: number
+  bcash?: number
 }
 
 export interface FinanceVoucherEntry {
@@ -30,6 +31,8 @@ export interface FinanceVoucherEntry {
   csupId?: string
   citemClass?: string
   citemId?: string
+  cashFlowItemId?: number
+  cashFlowItemName?: string
   cexchName?: string
   nfrat?: number
   md?: MoneyValue
@@ -64,6 +67,7 @@ export interface FinanceVoucherMeta {
   supplierOptions: FinanceVoucherOption[]
   projectClassOptions: FinanceVoucherOption[]
   projectOptions: FinanceVoucherOption[]
+  cashFlowOptions: FinanceVoucherOption[]
   defaultCompanyId?: string
   defaultBillDate: string
   defaultPeriod: number

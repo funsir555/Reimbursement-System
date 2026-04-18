@@ -13,6 +13,7 @@ import com.finex.auth.entity.FinanceAccountSet;
 import com.finex.auth.entity.FinanceAccountSetCodeRule;
 import com.finex.auth.entity.FinanceAccountSetTemplate;
 import com.finex.auth.entity.FinanceAccountSetTemplateSubject;
+import com.finex.auth.entity.FinanceCashFlowItem;
 import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
@@ -21,6 +22,7 @@ import com.finex.auth.mapper.FinanceAccountSetCodeRuleMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
+import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
@@ -52,12 +54,25 @@ public class FinanceAccountSetTaskWorker {
 
     private static final String CREATE_MODE_BLANK = "BLANK";
     private static final String CREATE_MODE_REFERENCE = "REFERENCE";
+    private static final List<CashFlowSeed> DEFAULT_CASH_FLOW_SEEDS = List.of(
+            new CashFlowSeed("1001", "销售商品、提供劳务收到的现金", "INFLOW", 10),
+            new CashFlowSeed("1002", "收到其他与经营活动有关的现金", "INFLOW", 20),
+            new CashFlowSeed("2001", "购买商品、接受劳务支付的现金", "OUTFLOW", 30),
+            new CashFlowSeed("2002", "支付给职工以及为职工支付的现金", "OUTFLOW", 40),
+            new CashFlowSeed("2003", "支付的各项税费", "OUTFLOW", 50),
+            new CashFlowSeed("2004", "支付其他与经营活动有关的现金", "OUTFLOW", 60),
+            new CashFlowSeed("3001", "收回投资收到的现金", "INFLOW", 70),
+            new CashFlowSeed("3002", "购建固定资产、无形资产和其他长期资产支付的现金", "OUTFLOW", 80),
+            new CashFlowSeed("4001", "吸收投资收到的现金", "INFLOW", 90),
+            new CashFlowSeed("4002", "偿还债务支付的现金", "OUTFLOW", 100)
+    );
 
     private final AsyncTaskRecordMapper asyncTaskRecordMapper;
     private final FinanceAccountSetMapper financeAccountSetMapper;
     private final FinanceAccountSetCodeRuleMapper financeAccountSetCodeRuleMapper;
     private final FinanceAccountSetTemplateMapper financeAccountSetTemplateMapper;
     private final FinanceAccountSetTemplateSubjectMapper financeAccountSetTemplateSubjectMapper;
+    private final FinanceCashFlowItemMapper financeCashFlowItemMapper;
     private final FinanceAccountSubjectMapper financeAccountSubjectMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final UserMapper userMapper;
@@ -161,6 +176,8 @@ public class FinanceAccountSetTaskWorker {
         for (FinanceAccountSubject subject : subjects) {
             financeAccountSubjectMapper.insert(subject);
         }
+
+        seedDefaultCashFlowItems(targetCompany.getCompanyId());
 
         accountSet.setStatus("ACTIVE");
         accountSet.setErrorMessage(null);
@@ -528,6 +545,34 @@ public class FinanceAccountSetTaskWorker {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void seedDefaultCashFlowItems(String companyId) {
+        String normalizedCompanyId = trimToNull(companyId);
+        if (normalizedCompanyId == null) {
+            return;
+        }
+        for (CashFlowSeed seed : DEFAULT_CASH_FLOW_SEEDS) {
+            Long existingCount = financeCashFlowItemMapper.selectCount(
+                    Wrappers.<FinanceCashFlowItem>lambdaQuery()
+                            .eq(FinanceCashFlowItem::getCompanyId, normalizedCompanyId)
+                            .eq(FinanceCashFlowItem::getCashFlowCode, seed.code())
+            );
+            if (existingCount != null && existingCount > 0) {
+                continue;
+            }
+            FinanceCashFlowItem item = new FinanceCashFlowItem();
+            item.setCompanyId(normalizedCompanyId);
+            item.setCashFlowCode(seed.code());
+            item.setCashFlowName(seed.name());
+            item.setDirection(seed.direction());
+            item.setStatus(1);
+            item.setSortOrder(seed.sortOrder());
+            financeCashFlowItemMapper.insert(item);
+        }
+    }
+
+    private record CashFlowSeed(String code, String name, String direction, int sortOrder) {
     }
 }
 

@@ -1246,6 +1246,21 @@ CREATE TABLE IF NOT EXISTS fin_project_archive (
         FOREIGN KEY (company_id, citemccode)
         REFERENCES fin_project_class (company_id, project_class_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目档案主目录表';
+
+CREATE TABLE IF NOT EXISTS fin_cash_flow_item (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    company_id VARCHAR(64) NOT NULL COMMENT '公司主体编码',
+    cash_flow_code VARCHAR(32) NOT NULL COMMENT '现金流量编码',
+    cash_flow_name VARCHAR(200) NOT NULL COMMENT '现金流量名称',
+    direction VARCHAR(16) NOT NULL COMMENT '现金流量方向：INFLOW/OUTFLOW',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1启用 0停用',
+    sort_order INT NOT NULL DEFAULT 1 COMMENT '排序号',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_fin_cash_flow_item_company_code (company_id, cash_flow_code),
+    KEY idx_fin_cash_flow_item_company_status (company_id, status, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='现金流量档案表';
 -- PROJECT_ARCHIVE_INIT_END
 
 CREATE TABLE IF NOT EXISTS ea_agent_definition (

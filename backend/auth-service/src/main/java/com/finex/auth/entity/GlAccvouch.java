@@ -77,5 +77,9 @@ public class GlAccvouch {
 
     private String citemClass;
 
+    private Long cashFlowItemId;
+
+    private String cashFlowItemName;
+
     private String companyId;
 }

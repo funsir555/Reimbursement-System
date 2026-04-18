@@ -50,6 +50,7 @@ function createRoute(routeKey: string, sourceNodeKey: string, priority: number):
     routeName: `条件分支 ${priority}`,
     priority,
     defaultRoute: false,
+    attachBelowNodes: false,
     conditionGroups: []
   }
 }
@@ -93,6 +94,77 @@ describe('processFlowDesignerHelper', () => {
       if (nestedBranch?.kind === 'branch') {
         expect(nestedBranch.routes).toHaveLength(2)
       }
+    }
+  })
+
+  it('attaches branch tail nodes to the left route when attachBelowNodes is enabled', () => {
+    const nodes = [
+      createBranchNode('branch-1', 1),
+      createApprovalNode('tail-1', 2),
+      createApprovalNode('tail-2', 3)
+    ]
+    const routes = [
+      {
+        ...createRoute('route-1', 'branch-1', 2),
+        attachBelowNodes: true
+      },
+      createRoute('route-2', 'branch-1', 1)
+    ]
+
+    const blocks = buildFlowCanvasBlocks(nodes, routes)
+
+    expect(blocks.filter((item) => item.kind === 'branch')).toHaveLength(1)
+    expect(blocks.filter((item) => item.kind === 'node')).toHaveLength(0)
+
+    const branchBlock = blocks.find((item) => item.kind === 'branch')
+    expect(branchBlock?.kind).toBe('branch')
+    if (branchBlock?.kind === 'branch') {
+      expect(branchBlock.routes[0].route.routeKey).toBe('route-1')
+      const attachedNodes = branchBlock.routes[0].blocks
+        .filter((item) => item.kind === 'node')
+        .map((item) => item.kind === 'node' ? item.node.nodeKey : '')
+      expect(attachedNodes).toEqual(['tail-1', 'tail-2'])
+    }
+  })
+
+  it('attaches only the current nested container tail when nested branch uses attachBelowNodes', () => {
+    const nodes = [
+      createBranchNode('outer-branch', 1),
+      createBranchNode('inner-branch', 1, 'outer-route-1'),
+      createApprovalNode('inner-tail', 2, 'outer-route-1'),
+      createApprovalNode('outer-tail', 2)
+    ]
+    const routes = [
+      {
+        ...createRoute('outer-route-1', 'outer-branch', 1),
+        attachBelowNodes: true
+      },
+      createRoute('outer-route-2', 'outer-branch', 2),
+      {
+        ...createRoute('inner-route-1', 'inner-branch', 1),
+        attachBelowNodes: true
+      },
+      createRoute('inner-route-2', 'inner-branch', 2)
+    ]
+
+    const blocks = buildFlowCanvasBlocks(nodes, routes)
+    const outerBranch = blocks.find((item) => item.kind === 'branch')
+
+    expect(outerBranch?.kind).toBe('branch')
+    if (outerBranch?.kind === 'branch') {
+      const innerBranch = outerBranch.routes[0].blocks.find((item) => item.kind === 'branch')
+      expect(innerBranch?.kind).toBe('branch')
+      if (innerBranch?.kind === 'branch') {
+        const innerAttachedNodes = innerBranch.routes[0].blocks
+          .filter((item) => item.kind === 'node')
+          .map((item) => item.kind === 'node' ? item.node.nodeKey : '')
+        expect(innerAttachedNodes).toEqual(['inner-tail'])
+      }
+
+      const outerAttachedNodes = outerBranch.routes[0].blocks
+        .filter((item) => item.kind === 'node')
+        .map((item) => item.kind === 'node' ? item.node.nodeKey : '')
+      expect(outerAttachedNodes).toEqual(['outer-tail'])
     }
   })
 
@@ -191,6 +263,29 @@ describe('processFlowDesignerHelper', () => {
         .sort((left, right) => (left.priority ?? 0) - (right.priority ?? 0))
         .map((item) => item.routeName)
     ).toEqual(['条件分支 1', '条件分支 2'])
+  })
+
+  it('moves the attached route to the first lane and keeps only one attached route per branch', () => {
+    const routes = [
+      {
+        ...createRoute('route-1', 'branch-1', 1),
+        attachBelowNodes: true
+      },
+      {
+        ...createRoute('route-2', 'branch-1', 2),
+        attachBelowNodes: true
+      },
+      createRoute('route-3', 'branch-2', 1)
+    ]
+
+    const next = reindexFlowState([], routes)
+
+    const branchOneRoutes = next.routes
+      .filter((item) => item.sourceNodeKey === 'branch-1')
+      .sort((left, right) => (left.priority ?? 0) - (right.priority ?? 0))
+
+    expect(branchOneRoutes.map((item) => item.routeKey)).toEqual(['route-1', 'route-2'])
+    expect(branchOneRoutes.map((item) => item.attachBelowNodes)).toEqual([true, false])
   })
 
   it('moves a node across containers and reindexes both sides', () => {

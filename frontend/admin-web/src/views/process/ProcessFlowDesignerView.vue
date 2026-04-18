@@ -150,6 +150,22 @@
                 <el-input v-model="selectedRoute.routeName" maxlength="64" show-word-limit placeholder="请输入分支名称" />
               </el-form-item>
 
+              <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="space-y-1">
+                    <p class="text-sm font-semibold text-slate-800">附带下方节点</p>
+                    <p class="text-xs leading-5 text-slate-500">
+                      开启后，当前泳道会自动排到最左侧，并承接当前分支块后方的公共尾部节点。
+                    </p>
+                  </div>
+                  <el-switch
+                    v-model="selectedRouteAttachBelowNodes"
+                    active-text="已开启"
+                    inactive-text="未开启"
+                  />
+                </div>
+              </div>
+
               <div class="route-pill-grid">
                 <button
                   v-for="routeItem in currentBranchRoutes"
@@ -160,7 +176,15 @@
                   @click="selectRoute(routeItem.routeKey)"
                 >
                   <div class="min-w-0 text-left">
-                    <p class="truncate text-sm font-semibold text-slate-800">{{ routeItem.routeName || '未命名分支' }}</p>
+                    <div class="flex items-center gap-2">
+                      <p class="truncate text-sm font-semibold text-slate-800">{{ routeItem.routeName || '未命名分支' }}</p>
+                      <span
+                        v-if="routeItem.attachBelowNodes"
+                        class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-600"
+                      >
+                        附带下方节点
+                      </span>
+                    </div>
                     <p class="mt-1 text-xs text-slate-400">
                       优先级 {{ routeItem.priority }} · {{ describeRouteConditions(routeItem).groups }} 组条件 ·
                       {{ describeRouteConditions(routeItem).conditions }} 条条件
@@ -802,6 +826,13 @@ const selectedRoute = computed<EditableProcessFlowRoute | undefined>(
   () => working.routes.find((item) => item.routeKey === selectedRouteKey.value) as EditableProcessFlowRoute | undefined
 )
 
+const selectedRouteAttachBelowNodes = computed<boolean>({
+  get: () => Boolean(selectedRoute.value?.attachBelowNodes),
+  set: (value) => {
+    updateSelectedRouteAttachBelowNodes(value)
+  }
+})
+
 const selectedRouteBranchNode = computed(() => {
   if (!selectedRoute.value) {
     return undefined
@@ -949,6 +980,7 @@ function emptyMeta(): ProcessFlowMeta {
     paymentSpecialOptions: [],
     branchOperatorOptions: [],
     branchConditionFields: [],
+    companyOptions: [],
     departmentOptions: [],
     userOptions: [],
     expenseTypeOptions: [],
@@ -1224,6 +1256,7 @@ function normalizeRoute(route: ProcessFlowRoute, index: number): EditableProcess
     routeName: route.routeName || `条件分支 ${index + 1}`,
     priority: route.priority ?? index + 1,
     defaultRoute: false,
+    attachBelowNodes: Boolean(route.attachBelowNodes),
     conditionGroups: normalizeConditionGroups(route.conditionGroups || [])
   }
 }
@@ -1453,6 +1486,33 @@ function addRouteLane(branchNodeKey: string) {
   const nextRoutes = appendRouteToBranch(working.routes || [], branchNodeKey)
   const addedRoute = nextRoutes.find((item) => item.sourceNodeKey === branchNodeKey && !existingKeys.has(item.routeKey))
   applyWorkingGraph(working.nodes || [], nextRoutes, addedRoute ? { routeKey: addedRoute.routeKey } : { nodeKey: branchNodeKey })
+}
+
+function updateSelectedRouteAttachBelowNodes(enabled: boolean) {
+  if (!selectedRoute.value) {
+    return
+  }
+  const routeKey = selectedRoute.value.routeKey
+  const sourceNodeKey = selectedRoute.value.sourceNodeKey
+  const nextRoutes = (working.routes || []).map((item) => {
+    if (item.sourceNodeKey !== sourceNodeKey) {
+      return cloneValue(item)
+    }
+    if (item.routeKey === routeKey) {
+      return {
+        ...cloneValue(item),
+        attachBelowNodes: enabled
+      }
+    }
+    if (!enabled) {
+      return cloneValue(item)
+    }
+    return {
+      ...cloneValue(item),
+      attachBelowNodes: false
+    }
+  })
+  applyWorkingGraph(working.nodes || [], nextRoutes, { routeKey })
 }
 
 async function removeSelectedItem() {

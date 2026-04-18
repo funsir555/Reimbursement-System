@@ -32,6 +32,7 @@ import com.finex.auth.entity.ProcessFlowNode;
 import com.finex.auth.entity.ProcessFlowRoute;
 import com.finex.auth.entity.ProcessFlowScene;
 import com.finex.auth.entity.ProcessFlowVersion;
+import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
@@ -41,6 +42,7 @@ import com.finex.auth.mapper.ProcessFlowNodeMapper;
 import com.finex.auth.mapper.ProcessFlowRouteMapper;
 import com.finex.auth.mapper.ProcessFlowSceneMapper;
 import com.finex.auth.mapper.ProcessFlowVersionMapper;
+import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.ProcessFlowDesignService;
@@ -129,6 +131,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     private final ProcessFlowNodeMapper processFlowNodeMapper;
     private final ProcessFlowRouteMapper processFlowRouteMapper;
     private final ProcessFlowSceneMapper processFlowSceneMapper;
+    private final SystemCompanyMapper systemCompanyMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
     private final ProcessExpenseTypeMapper processExpenseTypeMapper;
@@ -267,6 +270,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 option("包含", "CONTAINS")
         ));
         meta.setBranchConditionFields(buildConditionFields());
+        meta.setCompanyOptions(loadCompanyOptions());
         meta.setDepartmentOptions(loadDepartmentOptions());
         meta.setUserOptions(loadUserOptions());
         meta.setExpenseTypeOptions(loadExpenseTypeOptions());
@@ -626,10 +630,42 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             if (route.getPriority() == null) {
                 route.setPriority(index + 1);
             }
+            route.setAttachBelowNodes(Boolean.TRUE.equals(route.getAttachBelowNodes()));
             if (route.getConditionGroups() == null) {
                 route.setConditionGroups(new ArrayList<>());
             }
             validatePmNameLength(route.getRouteName(), "\u7b2c " + (index + 1) + " \u6761\u5206\u652f\u540d\u79f0");
+        }
+
+        Map<String, List<ProcessFlowRouteDTO>> routesBySourceNode = routes.stream()
+                .collect(Collectors.groupingBy(
+                        item -> asText(item.getSourceNodeKey(), "__ROOT__"),
+                        LinkedHashMap::new,
+                        Collectors.toCollection(ArrayList::new)
+                ));
+        for (List<ProcessFlowRouteDTO> branchRoutes : routesBySourceNode.values()) {
+            long attachedCount = branchRoutes.stream()
+                    .filter(item -> Boolean.TRUE.equals(item.getAttachBelowNodes()))
+                    .count();
+            if (attachedCount > 1) {
+                throw new IllegalStateException("同一分支块最多只能有 1 条泳道开启附带下方节点");
+            }
+            normalizeBranchRoutePriorities(branchRoutes);
+        }
+    }
+
+    private void normalizeBranchRoutePriorities(List<ProcessFlowRouteDTO> branchRoutes) {
+        if (branchRoutes == null || branchRoutes.isEmpty()) {
+            return;
+        }
+        List<ProcessFlowRouteDTO> orderedRoutes = new ArrayList<>(branchRoutes);
+        orderedRoutes.sort(
+                Comparator.comparing((ProcessFlowRouteDTO item) -> !Boolean.TRUE.equals(item.getAttachBelowNodes()))
+                        .thenComparing(item -> item.getPriority() == null ? Integer.MAX_VALUE : item.getPriority())
+                        .thenComparing(item -> asText(item.getRouteKey(), ""))
+        );
+        for (int index = 0; index < orderedRoutes.size(); index++) {
+            orderedRoutes.get(index).setPriority(index + 1);
         }
     }
 
@@ -765,6 +801,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             route.setRouteName(asText(item.getRouteName(), "鍒嗘敮"));
             route.setPriority(item.getPriority() == null ? 1 : item.getPriority());
             route.setDefaultRoute(Boolean.TRUE.equals(item.getDefaultRoute()) ? 1 : 0);
+            route.setAttachBelowNodes(Boolean.TRUE.equals(item.getAttachBelowNodes()) ? 1 : 0);
             route.setConditionJson(writeValue(item.getConditionGroups() == null ? Collections.emptyList() : item.getConditionGroups()));
             processFlowRouteMapper.insert(route);
         }
@@ -807,6 +844,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             item.setRouteName(route.getRouteName());
             item.setPriority(route.getPriority());
             item.setDefaultRoute(route.getDefaultRoute() != null && route.getDefaultRoute() == 1);
+            item.setAttachBelowNodes(route.getAttachBelowNodes() != null && route.getAttachBelowNodes() == 1);
             item.setConditionGroups(readConditionGroups(route.getConditionJson()));
             return item;
         }).toList();
@@ -1082,6 +1120,17 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         item.setSceneDescription(scene.getSceneDescription());
         item.setStatus(scene.getStatus());
         return item;
+    }
+
+    private List<ProcessFormOptionVO> loadCompanyOptions() {
+        return systemCompanyMapper.selectList(
+                Wrappers.<SystemCompany>lambdaQuery()
+                        .eq(SystemCompany::getStatus, 1)
+                        .orderByAsc(SystemCompany::getCompanyCode, SystemCompany::getCompanyId)
+        ).stream().map(item -> option(
+                trimToNull(item.getCompanyName()) != null ? item.getCompanyName() : asText(item.getCompanyCode(), item.getCompanyId()),
+                item.getCompanyId()
+        )).toList();
     }
 
     /**

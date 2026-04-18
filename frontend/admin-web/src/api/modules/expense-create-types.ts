@@ -88,6 +88,8 @@ export interface ExpenseCreateTemplateDetail {
   expenseDetailSharedArchives: ProcessCustomArchiveDetail[]
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
+  currentUserCompanyId?: string
+  currentUserCompanyName?: string
   currentUserDeptId?: string
   currentUserDeptName?: string
 }

@@ -108,7 +108,15 @@
               >
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 text-left">
-                    <p class="truncate text-sm font-semibold text-slate-800">{{ lane.route.routeName || '未命名分支' }}</p>
+                    <div class="flex items-center gap-2">
+                      <p class="truncate text-sm font-semibold text-slate-800">{{ lane.route.routeName || '未命名分支' }}</p>
+                      <span
+                        v-if="lane.route.attachBelowNodes"
+                        class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-600"
+                      >
+                        附带下方节点
+                      </span>
+                    </div>
                     <p class="mt-1 text-xs text-slate-400">
                       优先级 {{ lane.route.priority || 1 }} · {{ countConditions(lane.route) }} 条条件
                     </p>

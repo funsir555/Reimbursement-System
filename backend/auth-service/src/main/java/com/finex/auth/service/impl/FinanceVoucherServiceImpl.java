@@ -17,6 +17,7 @@ import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
@@ -52,6 +53,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
     public FinanceVoucherServiceImpl(
             GlAccvouchMapper glAccvouchMapper,
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
+            FinanceCashFlowItemMapper financeCashFlowItemMapper,
             FinanceCustomerMapper financeCustomerMapper,
             FinanceVendorMapper financeVendorMapper,
             FinanceProjectClassMapper financeProjectClassMapper,
@@ -66,6 +68,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         this.voucherMetaSupport = new VoucherMetaSupport(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
+                financeCashFlowItemMapper,
                 financeCustomerMapper,
                 financeVendorMapper,
                 financeProjectClassMapper,
@@ -78,6 +81,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         this.voucherQueryDomainSupport = new VoucherQueryDomainSupport(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
+                financeCashFlowItemMapper,
                 financeCustomerMapper,
                 financeVendorMapper,
                 financeProjectClassMapper,
@@ -89,6 +93,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
         this.voucherMutationDomainSupport = new VoucherMutationDomainSupport(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
+                financeCashFlowItemMapper,
                 financeCustomerMapper,
                 financeVendorMapper,
                 financeProjectClassMapper,

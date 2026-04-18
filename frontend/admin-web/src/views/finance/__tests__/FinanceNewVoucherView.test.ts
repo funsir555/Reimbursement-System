@@ -165,8 +165,8 @@ const MoneyInputStub = defineComponent({
     readonly: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false }
   },
-  emits: ['update:modelValue', 'focus', 'keydown'],
-  template: '<input :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @focus="$emit(\'focus\')" @keydown="$emit(\'keydown\', $event)" />'
+  emits: ['update:modelValue', 'focus', 'blur', 'keydown'],
+  template: '<input :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @focus="$emit(\'focus\')" @blur="$emit(\'blur\', $event)" @keydown="$emit(\'keydown\', $event)" />'
 })
 
 const mountOptions = {
@@ -180,6 +180,8 @@ const mountOptions = {
       'el-input-number': NumberStub,
       'el-date-picker': InputStub,
       'el-dialog': defineComponent({ template: '<div><slot /><slot name="footer" /></div>' }),
+      'el-radio-group': defineComponent({ props: { modelValue: { type: [String, Number], default: '' } }, emits: ['update:modelValue'], template: '<div><slot /></div>' }),
+      'el-radio': defineComponent({ props: { label: { type: [String, Number], default: '' } }, template: '<label><input type=\"radio\" :value=\"label\" /><slot /></label>' }),
       'el-icon': true,
       'money-input': MoneyInputStub
     }
@@ -203,6 +205,7 @@ function buildMeta() {
         name: '库存现金',
         label: '1001  库存现金',
         leafFlag: 1,
+        bcash: 1,
         bperson: 1,
         bcus: 1,
         bsup: 1,
@@ -221,7 +224,22 @@ function buildMeta() {
         bsup: 0,
         bdept: 0,
         bitem: 0
+      },
+      {
+        value: '560101',
+        code: '560101',
+        name: '办公费',
+        label: '560101  办公费',
+        leafFlag: 1,
+        bperson: 0,
+        bcus: 0,
+        bsup: 0,
+        bdept: 0,
+        bitem: 0
       }
+    ],
+    cashFlowOptions: [
+      { value: '101', code: '1001', name: '销售商品、提供劳务收到的现金', label: '1001  销售商品、提供劳务收到的现金' }
     ],
     customerOptions: [{ value: 'C00001', code: 'C00001', name: '华南客户', label: 'C00001  华南客户' }],
     supplierOptions: [{ value: 'V00001', code: 'V00001', name: '核心供应商', label: 'V00001  核心供应商' }],
@@ -262,7 +280,7 @@ function buildDetail() {
     totalDebit: '100.00',
     totalCredit: '100.00',
     entries: [
-      { inid: 1, cdigest: '摘要 A', ccode: '1001', ccodeName: '库存现金', md: '100.00', mc: '' },
+      { inid: 1, cdigest: '摘要 A', ccode: '1001', ccodeName: '库存现金', md: '100.00', mc: '', cashFlowItemId: 101, cashFlowItemName: '销售商品、提供劳务收到的现金' },
       { inid: 2, cdigest: '摘要 B', ccode: '100201', ccodeName: '银行存款', md: '', mc: '100.00' }
     ]
   }
@@ -659,10 +677,10 @@ describe('FinanceNewVoucherView', () => {
     }
 
     vm.form.entries[0].cdigest = '摘要 A'
-    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].ccode = '560101'
     vm.form.entries[0].md = '100.00'
     vm.form.entries[1].cdigest = '摘要 B'
-    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].ccode = '560101'
     vm.form.entries[1].mc = '100.00'
     await flushPromises()
 
@@ -687,10 +705,10 @@ describe('FinanceNewVoucherView', () => {
     }
 
     vm.form.entries[0].cdigest = 'A'.repeat(256)
-    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].ccode = '560101'
     vm.form.entries[0].md = '100.00'
     vm.form.entries[1].cdigest = '摘要 B'
-    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].ccode = '560101'
     vm.form.entries[1].mc = '100.00'
     await flushPromises()
 
@@ -717,11 +735,11 @@ describe('FinanceNewVoucherView', () => {
     }
 
     vm.form.entries[0].cdigest = '\u6458\u8981 A'
-    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].ccode = '560101'
     vm.form.entries[0].cexchName = 'C'.repeat(33)
     vm.form.entries[0].md = '100.00'
     vm.form.entries[1].cdigest = '\u6458\u8981 B'
-    vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].ccode = '560101'
     vm.form.entries[1].mc = '100.00'
     await flushPromises()
 
@@ -739,6 +757,7 @@ describe('FinanceNewVoucherView', () => {
           cdigest: string
           ccode: string
           ccusId?: string
+          cashFlowItemId?: number
           citemClass?: string
           citemId?: string
           md?: string
@@ -749,10 +768,12 @@ describe('FinanceNewVoucherView', () => {
 
     vm.form.entries[0].cdigest = '摘要 A'
     vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].cashFlowItemId = 101
     vm.form.entries[0].ccusId = 'C99999'
     vm.form.entries[0].md = '100.00'
     vm.form.entries[1].cdigest = '摘要 B'
     vm.form.entries[1].ccode = '1001'
+    vm.form.entries[1].cashFlowItemId = 101
     vm.form.entries[1].citemClass = '01'
     vm.form.entries[1].citemId = '000002'
     vm.form.entries[1].mc = '100.00'
@@ -856,5 +877,62 @@ describe('FinanceNewVoucherView', () => {
     expect(mocks.elMessageBox.alert).toHaveBeenCalledTimes(1)
     expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
   })
+
+  it('opens the cash-flow dialog when a cash subject leaves the amount field without a selection', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          cashFlowItemId?: number
+        }>
+      }
+      cashFlowDialogVisible: boolean
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].md = '100.00'
+    await flushPromises()
+
+    await wrapper.findAll('input').find((input) => input.attributes('placeholder') === '0.00')?.trigger('blur')
+    await flushPromises()
+
+    expect(vm.cashFlowDialogVisible).toBe(true)
+    expect(vm.form.entries[0].cashFlowItemId).toBeUndefined()
+  })
+
+  it('blocks save when a cash subject is missing cash-flow selection', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '560101'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
+    expect((wrapper.vm as unknown as { cashFlowDialogVisible: boolean }).cashFlowDialogVisible).toBe(true)
+  })
 })
+
+
+
 

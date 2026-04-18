@@ -50,6 +50,8 @@ class ExpenseDocumentTemplateDomainSupportTest {
         templateDetail.setTemplateCode("TPL-1");
         templateDetail.setTemplateName("Travel");
         templateDetail.setTemplateType("report");
+        templateDetail.setCurrentUserCompanyId("COMPANY_A");
+        templateDetail.setCurrentUserCompanyName("广州远智教育科技有限公司");
         ProcessDocumentExpenseDetail detail = new ProcessDocumentExpenseDetail();
         ExpenseDetailInstanceDTO runtimeDetail = new ExpenseDetailInstanceDTO();
         runtimeDetail.setDetailNo("D1");
@@ -65,6 +67,8 @@ class ExpenseDocumentTemplateDomainSupportTest {
         assertEquals("DOC-1", actual.getDocumentCode());
         assertEquals("TPL-1", actual.getTemplateCode());
         assertEquals("Travel", actual.getTemplateName());
+        assertEquals("COMPANY_A", actual.getCurrentUserCompanyId());
+        assertEquals("广州远智教育科技有限公司", actual.getCurrentUserCompanyName());
         assertEquals("trip", actual.getFormData().get("reason"));
         assertEquals(1, actual.getExpenseDetails().size());
         assertSame(runtimeDetail, actual.getExpenseDetails().get(0));

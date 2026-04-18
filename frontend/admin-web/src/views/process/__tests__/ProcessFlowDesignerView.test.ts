@@ -105,6 +105,17 @@ const InputStub = defineComponent({
   template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
+const SwitchStub = defineComponent({
+  props: {
+    modelValue: {
+      type: Boolean,
+      default: false
+    }
+  },
+  emits: ['change', 'update:modelValue'],
+  template: '<button type="button" data-testid="attach-below-switch" @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)"><slot /></button>'
+})
+
 const FormItemStub = defineComponent({
   props: {
     label: {
@@ -142,6 +153,9 @@ const ProcessFlowCanvasRendererStub = defineComponent({
       <button type="button" data-testid="select-route" @click="$emit('select-route', 'route-1')">
         select route
       </button>
+      <button type="button" data-testid="select-route-2" @click="$emit('select-route', 'route-2')">
+        select route 2
+      </button>
       <button
         type="button"
         data-testid="move-lane-node-to-root"
@@ -163,7 +177,7 @@ const ProcessFlowCanvasRendererStub = defineComponent({
 function buildFlowMeta() {
   return {
     nodeTypeOptions: [],
-    sceneOptions: [],
+    sceneOptions: [{ id: 1, sceneName: 'Default Scene', sceneDescription: '', status: 1 }],
     approvalApproverTypeOptions: [],
     approvalManagerRuleModeOptions: [],
     approvalManagerDeptSourceOptions: [],
@@ -182,6 +196,7 @@ function buildFlowMeta() {
     paymentSpecialOptions: [],
     branchOperatorOptions: [],
     branchConditionFields: [],
+    companyOptions: [],
     departmentOptions: [],
     userOptions: [],
     expenseTypeOptions: [],
@@ -189,7 +204,7 @@ function buildFlowMeta() {
   }
 }
 
-function buildFlowDetail(flowName = 'Travel Approval Flow') {
+function buildFlowDetail(flowName = 'Travel Approval Flow', routeAttachFlags: [boolean, boolean] = [false, false]) {
   return {
     id: 1,
     flowCode: 'FLOW-001',
@@ -230,6 +245,7 @@ function buildFlowDetail(flowName = 'Travel Approval Flow') {
         sourceNodeKey: 'branch-1',
         routeName: '分支 A',
         priority: 1,
+        attachBelowNodes: routeAttachFlags[0],
         conditionGroups: []
       },
       {
@@ -237,13 +253,30 @@ function buildFlowDetail(flowName = 'Travel Approval Flow') {
         sourceNodeKey: 'branch-1',
         routeName: '分支 B',
         priority: 2,
+        attachBelowNodes: routeAttachFlags[1],
         conditionGroups: []
       }
     ]
   }
 }
 
-async function mountView(flowName = 'Travel Approval Flow') {
+function buildSavedFlowDetail(payload: { flowName: string; flowDescription?: string; nodes: any[]; routes: any[] }) {
+  return {
+    id: 1,
+    flowCode: 'FLOW-001',
+    flowName: payload.flowName,
+    flowDescription: payload.flowDescription || 'flow description',
+    status: 'DRAFT',
+    statusLabel: 'Draft',
+    nodes: payload.nodes,
+    routes: payload.routes
+  }
+}
+
+async function mountView(
+  flowName = 'Travel Approval Flow',
+  detail = buildFlowDetail(flowName)
+) {
   mocks.processApi.listFlows.mockResolvedValue({
     data: [
       {
@@ -257,7 +290,8 @@ async function mountView(flowName = 'Travel Approval Flow') {
     ]
   })
   mocks.processApi.getFlowMeta.mockResolvedValue({ data: buildFlowMeta() })
-  mocks.processApi.getFlowDetail.mockResolvedValue({ data: buildFlowDetail(flowName) })
+  mocks.processApi.getFlowDetail.mockResolvedValue({ data: detail })
+  mocks.processApi.updateFlow.mockImplementation(async (_id: number, payload: any) => ({ data: buildSavedFlowDetail(payload) }))
 
   const wrapper = mount(ProcessFlowDesignerView, {
     global: {
@@ -266,6 +300,7 @@ async function mountView(flowName = 'Travel Approval Flow') {
         'el-card': SimpleContainer,
         'el-button': ButtonStub,
         'el-input': InputStub,
+        'el-switch': SwitchStub,
         'el-form-item': FormItemStub,
         'el-tag': TagStub,
         'el-icon': SimpleContainer,
@@ -409,4 +444,64 @@ describe('ProcessFlowDesignerView', () => {
     )
     expect(mocks.elMessage.success).toHaveBeenCalledWith('节点位置已调整')
   })
+
+  it('moves the attached lane to the left and shows the attach badge after enabling attach below nodes', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    await wrapper.get('[data-testid="select-route-2"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="attach-below-switch"]').trigger('click')
+    await flushPromises()
+
+    const routePills = wrapper.findAll('.route-pill').map((item) => item.text())
+    expect(routePills[0]).toContain('分支 B')
+    expect(routePills[1]).toContain('分支 A')
+    expect(wrapper.text()).toContain('附带下方节点')
+  })
+
+  it('persists attachBelowNodes=false after turning off an attached route and saving draft', async () => {
+    const wrapper = await mountView('Travel Approval Flow', buildFlowDetail('Travel Approval Flow', [true, false]))
+
+    await wrapper.get('[data-testid="select-route"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="attach-below-switch"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
+    const payload = mocks.processApi.updateFlow.mock.calls[0][1]
+    expect(payload.routes.find((item: any) => item.routeKey === 'route-1')?.attachBelowNodes).toBe(false)
+    expect(payload.routes.find((item: any) => item.routeKey === 'route-2')?.attachBelowNodes).toBe(false)
+
+    expect(wrapper.getComponent(SwitchStub).props('modelValue')).toBe(false)
+  })
+
+  it('persists attachBelowNodes=true on the newly enabled route and keeps it first after saving draft', async () => {
+    const wrapper = await mountView('Travel Approval Flow', buildFlowDetail('Travel Approval Flow', [true, false]))
+
+    await wrapper.get('[data-testid="select-route-2"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="attach-below-switch"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
+    const payload = mocks.processApi.updateFlow.mock.calls[0][1]
+    expect(payload.routes.find((item: any) => item.routeKey === 'route-2')).toMatchObject({
+      priority: 1,
+      attachBelowNodes: true
+    })
+    expect(payload.routes.find((item: any) => item.routeKey === 'route-1')).toMatchObject({
+      priority: 2,
+      attachBelowNodes: false
+    })
+
+    expect(wrapper.getComponent(SwitchStub).props('modelValue')).toBe(true)
+    const routePills = wrapper.findAll('.route-pill').map((item) => item.text())
+    expect(routePills[0]).toContain('B')
+    expect(routePills[1]).toContain('A')
+  })
+
 })

@@ -144,8 +144,12 @@ export const ROUTE_META_REGISTRY = {
     title: '报销单详情',
     permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view']
   }),
+  'expense-document-print': routeMeta({
+    title: '打印预览',
+    permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view']
+  }),
   'expense-document-batch-print': routeMeta({
-    title: '???????',
+    title: '批量打印预览',
     permissionCodes: ['expense:list:view', 'expense:approval:view', 'expense:documents:view', 'expense:payment:payment_order:view']
   }),
   'expense-document-expense-detail': routeMeta({

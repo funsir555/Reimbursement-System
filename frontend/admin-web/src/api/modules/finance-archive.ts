@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { FinanceAccountSubjectDerivedDefaults, FinanceAccountSubjectDetail, FinanceAccountSubjectMeta, FinanceAccountSubjectSavePayload, FinanceAccountSubjectSummary, FinanceCustomerDetail, FinanceCustomerSavePayload, FinanceCustomerSummary, FinanceDepartmentArchiveMeta, FinanceDepartmentQueryPayload, FinanceDepartmentSummary, FinanceProjectArchiveMeta, FinanceProjectClassSavePayload, FinanceProjectClassSummary, FinanceProjectDetail, FinanceProjectSavePayload, FinanceProjectSummary, FinanceVendorDetail, FinanceVendorSavePayload, FinanceVendorSummary } from './finance-archive-types'
+import type { FinanceAccountSubjectDerivedDefaults, FinanceAccountSubjectDetail, FinanceAccountSubjectMeta, FinanceAccountSubjectSavePayload, FinanceAccountSubjectSummary, FinanceCashFlowItem, FinanceCashFlowSavePayload, FinanceCustomerDetail, FinanceCustomerSavePayload, FinanceCustomerSummary, FinanceDepartmentArchiveMeta, FinanceDepartmentQueryPayload, FinanceDepartmentSummary, FinanceProjectArchiveMeta, FinanceProjectClassSavePayload, FinanceProjectClassSummary, FinanceProjectDetail, FinanceProjectSavePayload, FinanceProjectSummary, FinanceVendorDetail, FinanceVendorSavePayload, FinanceVendorSummary } from './finance-archive-types'
 import type { EmployeeQueryPayload, EmployeeRecord, FinanceEmployeeArchiveMeta } from './system-settings-types'
 
 // 这一组方法供对应页面统一调用。
@@ -122,6 +122,23 @@ export const financeArchiveApi = {
         body: JSON.stringify({ bclose })
       }
     ),
+  listCashFlows: (params: { companyId: string; keyword?: string; direction?: string; status?: number }) =>
+    request<FinanceCashFlowItem[]>(`/auth/finance/archives/cash-flows${buildQueryString(params)}`),
+  createCashFlow: (companyId: string, payload: FinanceCashFlowSavePayload) =>
+    request<FinanceCashFlowItem>(`/auth/finance/archives/cash-flows${buildQueryString({ companyId })}`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateCashFlow: (companyId: string, id: number, payload: FinanceCashFlowSavePayload) =>
+    request<FinanceCashFlowItem>(`/auth/finance/archives/cash-flows/${id}${buildQueryString({ companyId })}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  updateCashFlowStatus: (companyId: string, id: number, status: number) =>
+    request<boolean>(`/auth/finance/archives/cash-flows/${id}/status${buildQueryString({ companyId })}`, {
+      method: 'POST',
+      body: JSON.stringify({ status })
+    }),
   getDepartmentArchiveMeta: () =>
     request<FinanceDepartmentArchiveMeta>('/auth/finance/archives/departments/meta'),
   queryDepartments: (payload: FinanceDepartmentQueryPayload = {}) =>

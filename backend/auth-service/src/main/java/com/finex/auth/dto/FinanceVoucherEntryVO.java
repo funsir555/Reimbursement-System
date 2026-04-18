@@ -28,6 +28,10 @@ public class FinanceVoucherEntryVO {
 
     private String citemId;
 
+    private Long cashFlowItemId;
+
+    private String cashFlowItemName;
+
     private String cexchName;
 
     private BigDecimal nfrat;

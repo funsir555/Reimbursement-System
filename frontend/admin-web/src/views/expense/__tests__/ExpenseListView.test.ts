@@ -85,11 +85,25 @@ const TableStub = defineComponent({
       default: () => []
     }
   },
+  emits: ['row-dblclick'],
   setup(props) {
     provide('tableRows', props.data)
     return {}
   },
-  template: '<div><slot /></div>'
+  template: `
+    <div>
+      <button
+        v-for="row in data"
+        :key="row.documentCode"
+        class="row-dblclick-trigger"
+        :data-document-code="row.documentCode"
+        @dblclick="$emit('row-dblclick', row)"
+      >
+        {{ row.documentCode }}
+      </button>
+      <slot />
+    </div>
+  `
 })
 
 const TableColumnStub = defineComponent({
@@ -320,6 +334,14 @@ describe('ExpenseListView', () => {
     vm.openDetail({ documentCode: 'DOC-001', no: 'DOC-001' })
 
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/create')
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+  })
+
+  it('opens the document detail page on row double click', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-001"]').trigger('dblclick')
+
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
   })
 

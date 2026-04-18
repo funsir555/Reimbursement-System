@@ -11,6 +11,7 @@ import com.finex.auth.dto.FinanceVoucherMetaVO;
 import com.finex.auth.dto.FinanceVoucherOptionVO;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
@@ -39,6 +40,7 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
     public VoucherMetaSupport(
             GlAccvouchMapper glAccvouchMapper,
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
+            FinanceCashFlowItemMapper financeCashFlowItemMapper,
             FinanceCustomerMapper financeCustomerMapper,
             FinanceVendorMapper financeVendorMapper,
             FinanceProjectClassMapper financeProjectClassMapper,
@@ -48,7 +50,7 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
             UserMapper userMapper,
             VoucherContextSupport voucherContextSupport
     ) {
-        super(glAccvouchMapper, financeAccountSubjectMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper);
+        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper);
         this.voucherContextSupport = voucherContextSupport;
     }
 
@@ -79,6 +81,7 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
         meta.setSupplierOptions(loadSupplierOptions(effectiveCompanyId));
         meta.setProjectClassOptions(loadProjectClassOptions(effectiveCompanyId));
         meta.setProjectOptions(loadProjectOptions(effectiveCompanyId));
+        meta.setCashFlowOptions(loadCashFlowOptions(effectiveCompanyId));
         meta.setDefaultCompanyId(effectiveCompanyId);
         meta.setDefaultBillDate(effectiveBillDate.format(DATE_FORMATTER));
         meta.setDefaultPeriod(effectiveBillDate.getMonthValue());

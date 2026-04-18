@@ -45,9 +45,8 @@ export function detectExpensePrintEnvironment(userAgent = navigator?.userAgent |
 
 export function buildExpenseDetailPrintHref(router: Router, documentCode: string) {
   return router.resolve({
-    name: 'expense-document-detail',
-    params: { documentCode },
-    query: { print: '1' }
+    name: 'expense-document-print',
+    params: { documentCode }
   }).href
 }
 

@@ -84,11 +84,25 @@ const TableStub = defineComponent({
       default: () => []
     }
   },
+  emits: ['row-dblclick'],
   setup(props) {
     provide('tableRows', props.data)
     return {}
   },
-  template: '<div><slot /></div>'
+  template: `
+    <div>
+      <button
+        v-for="row in data"
+        :key="row.documentCode"
+        class="row-dblclick-trigger"
+        :data-document-code="row.documentCode"
+        @dblclick="$emit('row-dblclick', row)"
+      >
+        {{ row.documentCode }}
+      </button>
+      <slot />
+    </div>
+  `
 })
 
 const TableColumnStub = defineComponent({
@@ -220,6 +234,20 @@ describe('ExpenseApprovalView', () => {
 
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
     expect(mocks.expenseApprovalApi.approve).toHaveBeenCalledWith(1, { comment: '同意' })
+  })
+
+  it('opens detail on row double click while approval actions do not navigate to detail', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      handleAction: (taskId: number, action: 'approve' | 'reject') => Promise<void>
+    }
+
+    await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-001"]').trigger('dblclick')
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+
+    mocks.router.push.mockClear()
+    await vm.handleAction(1, 'approve')
+    expect(mocks.router.push).not.toHaveBeenCalled()
   })
 
   it('shares column widths across pages and persists page-specific column order', async () => {

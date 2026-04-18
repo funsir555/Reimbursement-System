@@ -28,4 +28,6 @@ public class FinanceVoucherOptionVO {
     private String cassItem;
 
     private Integer leafFlag;
+
+    private Integer bcash;
 }

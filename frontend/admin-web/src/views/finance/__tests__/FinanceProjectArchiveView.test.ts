@@ -15,7 +15,11 @@ const mocks = vi.hoisted(() => ({
     createProject: vi.fn(),
     updateProject: vi.fn(),
     updateProjectStatus: vi.fn(),
-    updateProjectClose: vi.fn()
+    updateProjectClose: vi.fn(),
+    listCashFlows: vi.fn(),
+    createCashFlow: vi.fn(),
+    updateCashFlow: vi.fn(),
+    updateCashFlowStatus: vi.fn()
   },
   financeCompany: {
     currentCompanyId: 'COMPANY_A',
@@ -148,6 +152,7 @@ async function mountView() {
         'el-table-column': TableColumnStub,
         'el-tag': SimpleStub,
         'el-dialog': SimpleStub,
+        'el-drawer': SimpleStub,
         'el-form': SimpleStub,
         'el-form-item': SimpleStub,
         'el-date-picker': SimpleStub,
@@ -201,6 +206,18 @@ describe('FinanceProjectArchiveView', () => {
     mocks.financeArchiveApi.createProject.mockResolvedValue({ data: {} })
     mocks.financeArchiveApi.updateProjectStatus.mockResolvedValue({ data: true })
     mocks.financeArchiveApi.updateProjectClose.mockResolvedValue({ data: true })
+    mocks.financeArchiveApi.listCashFlows.mockResolvedValue({
+      data: Array.from({ length: 12 }, (_, index) => ({
+        id: index + 1,
+        cash_flow_code: `${1001 + index}`,
+        cash_flow_name: index === 0 ? '销售商品、提供劳务收到的现金' : `现金流量${index + 1}`,
+        direction: index % 2 === 0 ? 'INFLOW' : 'OUTFLOW',
+        status: 1,
+        sort_order: index + 1
+      }))
+    })
+    mocks.financeArchiveApi.createCashFlow.mockResolvedValue({ data: {} })
+    mocks.financeArchiveApi.updateCashFlowStatus.mockResolvedValue({ data: true })
   })
 
   it('loads meta, project classes and projects on mount', async () => {
@@ -209,8 +226,10 @@ describe('FinanceProjectArchiveView', () => {
       meta: { projectClassOptions: Array<{ value: string }> }
       projectClasses: Array<{ project_class_code: string }>
       projects: Array<{ citemcode: string }>
+      cashFlows: Array<{ cash_flow_code: string }>
       paginatedProjectClasses: Array<{ project_class_code: string }>
       paginatedProjects: Array<{ citemcode: string }>
+      paginatedCashFlows: Array<{ cash_flow_code: string }>
     }
 
     expect(mocks.financeArchiveApi.getProjectArchiveMeta).toHaveBeenCalledWith('COMPANY_A')
@@ -226,11 +245,19 @@ describe('FinanceProjectArchiveView', () => {
       status: undefined,
       bclose: undefined
     })
+    expect(mocks.financeArchiveApi.listCashFlows).toHaveBeenCalledWith({
+      companyId: 'COMPANY_A',
+      keyword: undefined,
+      direction: undefined,
+      status: undefined
+    })
     expect(vm.meta.projectClassOptions[0]?.value).toBe('97')
     expect(vm.projectClasses[0]?.project_class_code).toBe('97')
     expect(vm.projects[0]?.citemcode).toBe('2002')
+    expect(vm.cashFlows[0]?.cash_flow_code).toBe('1001')
     expect(vm.paginatedProjectClasses).toHaveLength(10)
     expect(vm.paginatedProjects).toHaveLength(10)
+    expect(vm.paginatedCashFlows).toHaveLength(10)
 
     wrapper.unmount()
   })
@@ -238,9 +265,10 @@ describe('FinanceProjectArchiveView', () => {
   it('keeps class and project pagination state independent across tabs', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
-      activeTab: 'classes' | 'projects'
+      activeTab: 'classes' | 'projects' | 'cashFlows'
       paginatedProjectClasses: Array<{ project_class_code: string }>
       paginatedProjects: Array<{ citemcode: string }>
+      paginatedCashFlows: Array<{ cash_flow_code: string }>
     }
 
     await wrapper.get('[data-testid="pagination-next"]').trigger('click')
@@ -255,6 +283,12 @@ describe('FinanceProjectArchiveView', () => {
 
     expect(vm.paginatedProjects).toHaveLength(10)
     expect(vm.paginatedProjects[0]?.citemcode).toBe('2002')
+
+    vm.activeTab = 'cashFlows'
+    await flushPromises()
+
+    expect(vm.paginatedCashFlows).toHaveLength(10)
+    expect(vm.paginatedCashFlows[0]?.cash_flow_code).toBe('1001')
   })
 
   it('updates the current tab page size locally', async () => {
@@ -271,6 +305,32 @@ describe('FinanceProjectArchiveView', () => {
     await flushPromises()
 
     expect(vm.paginatedProjects).toHaveLength(12)
+  })
+
+  it('builds cash-flow payload from drawer form', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCashFlowDrawer: (mode: 'create') => void
+      cashFlowForm: Record<string, unknown>
+      buildCashFlowPayload: () => Record<string, unknown>
+    }
+
+    vm.openCashFlowDrawer('create')
+    vm.cashFlowForm.cash_flow_code = '1001'
+    vm.cashFlowForm.cash_flow_name = '销售商品、提供劳务收到的现金'
+    vm.cashFlowForm.direction = 'INFLOW'
+    vm.cashFlowForm.status = 1
+    vm.cashFlowForm.sort_order = 10
+
+    expect(vm.buildCashFlowPayload()).toMatchObject({
+      cash_flow_code: '1001',
+      cash_flow_name: '销售商品、提供劳务收到的现金',
+      direction: 'INFLOW',
+      status: 1,
+      sort_order: 10
+    })
+
+    wrapper.unmount()
   })
 
   it('builds project payload from dialog form', async () => {
@@ -339,6 +399,43 @@ describe('FinanceProjectArchiveView', () => {
 
     expect(mocks.financeArchiveApi.updateProjectStatus).toHaveBeenCalledWith('COMPANY_A', '2002', 0)
     expect(mocks.financeArchiveApi.updateProjectClose).toHaveBeenCalledWith('COMPANY_A', '2002', 1)
+
+    wrapper.unmount()
+  })
+
+  it('creates cash flows and toggles their status through dedicated endpoints', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCashFlowDrawer: (mode: 'create') => void
+      cashFlowForm: Record<string, unknown>
+      saveCashFlow: () => Promise<void>
+      toggleCashFlowStatus: (row: Record<string, unknown>) => Promise<void>
+    }
+
+    vm.openCashFlowDrawer('create')
+    vm.cashFlowForm.cash_flow_code = '1001'
+    vm.cashFlowForm.cash_flow_name = '销售商品、提供劳务收到的现金'
+    vm.cashFlowForm.direction = 'INFLOW'
+    vm.cashFlowForm.status = 1
+    vm.cashFlowForm.sort_order = 10
+
+    await vm.saveCashFlow()
+    await vm.toggleCashFlowStatus({
+      id: 1,
+      cash_flow_code: '1001',
+      cash_flow_name: '销售商品、提供劳务收到的现金',
+      status: 1
+    } as Record<string, unknown>)
+    await flushPromises()
+
+    expect(mocks.financeArchiveApi.createCashFlow).toHaveBeenCalledWith('COMPANY_A', {
+      cash_flow_code: '1001',
+      cash_flow_name: '销售商品、提供劳务收到的现金',
+      direction: 'INFLOW',
+      status: 1,
+      sort_order: 10
+    })
+    expect(mocks.financeArchiveApi.updateCashFlowStatus).toHaveBeenCalledWith('COMPANY_A', 1, 0)
 
     wrapper.unmount()
   })

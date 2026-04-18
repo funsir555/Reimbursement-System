@@ -62,6 +62,10 @@ public class ExpenseDocumentEditContextVO {
 
     private Map<String, String> expenseTypeInvoiceFreeModeMap = new LinkedHashMap<>();
 
+    private String currentUserCompanyId;
+
+    private String currentUserCompanyName;
+
     private String currentUserDeptId;
 
     private String currentUserDeptName;

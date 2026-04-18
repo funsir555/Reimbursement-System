@@ -30,6 +30,18 @@ export const routeCatalog: AppRouteDefinition[] = [
     metaKey: 'login'
   },
   {
+    path: '/expense/documents/:documentCode/print',
+    name: 'expense-document-print',
+    component: () => import('../views/expense/ExpenseDocumentBatchPrintView.vue'),
+    metaKey: 'expense-document-print'
+  },
+  {
+    path: '/expense/documents/print',
+    name: 'expense-document-batch-print',
+    component: () => import('../views/expense/ExpenseDocumentBatchPrintView.vue'),
+    metaKey: 'expense-document-batch-print'
+  },
+  {
     // 主框架页：登录后的大多数业务页面都挂在 MainLayout 下面。
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
@@ -98,12 +110,6 @@ export const routeCatalog: AppRouteDefinition[] = [
         name: 'expense-approval',
         component: () => import('../views/expense/ExpenseApprovalView.vue'),
         metaKey: 'expense-approval'
-      },
-      {
-        path: 'expense/documents/print',
-        name: 'expense-document-batch-print',
-        component: () => import('../views/expense/ExpenseDocumentBatchPrintView.vue'),
-        metaKey: 'expense-document-batch-print'
       },
       {
         path: 'expense/documents/:documentCode',

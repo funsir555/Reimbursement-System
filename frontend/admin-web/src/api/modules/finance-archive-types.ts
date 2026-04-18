@@ -229,6 +229,26 @@ export interface FinanceProjectStatusPayload {
   bclose?: number
 }
 
+export interface FinanceCashFlowItem {
+  id?: number
+  company_id?: string
+  cash_flow_code: string
+  cash_flow_name: string
+  direction: 'INFLOW' | 'OUTFLOW'
+  status: number
+  sort_order?: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface FinanceCashFlowSavePayload {
+  cash_flow_code: string
+  cash_flow_name: string
+  direction: 'INFLOW' | 'OUTFLOW'
+  status?: number
+  sort_order?: number
+}
+
 export interface FinanceDepartmentArchiveOption {
   value: string
   label: string

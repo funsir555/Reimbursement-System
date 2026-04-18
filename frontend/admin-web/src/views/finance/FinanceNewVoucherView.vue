@@ -129,10 +129,10 @@
                   </el-select>
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @keydown="handleAmountKeydown($event, index, 'md')" />
+                  <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index, 'md')" @keydown="handleAmountKeydown($event, index, 'md')" />
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.mc" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @keydown="handleAmountKeydown($event, index, 'mc')" />
+                  <money-input v-model="row.mc" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index, 'mc')" @keydown="handleAmountKeydown($event, index, 'mc')" />
                 </div>
               </div>
             </div>
@@ -195,6 +195,10 @@
                   <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
+              <label class="assist-field">
+                <span class="voucher-field-label">现金流量</span>
+                <el-input :model-value="selectedRow.cashFlowItemName || ''" readonly placeholder="请选择现金流量" :disabled="isReadonlyMode || !requiresRowCashFlow(selectedRow)" @focus="handleCashFlowFieldFocus" />
+              </label>
             </div>
           </div>
         </section>
@@ -208,6 +212,21 @@
         </footer>
       </div>
     </div>
+
+    <el-dialog v-model="cashFlowDialogVisible" title="选择现金流量" width="480px" destroy-on-close :close-on-click-modal="false" :close-on-press-escape="false" :show-close="isReadonlyMode">
+      <div class="space-y-4">
+        <p class="action-dialog-content">当前科目已启用现金管理，请先选择一条现金流量。</p>
+        <el-radio-group v-model="cashFlowDialogSelection" class="cash-flow-radio-group">
+          <el-radio v-for="item in voucherMeta?.cashFlowOptions || []" :key="item.value" :label="item.value">
+            {{ formatVoucherOptionLabel(item) }}
+          </el-radio>
+        </el-radio-group>
+      </div>
+      <template #footer>
+        <el-button @click="closeCashFlowDialog">取消</el-button>
+        <el-button type="primary" @click="confirmCashFlowSelection">确定</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="actionDialog.visible" :title="actionDialog.title" width="420px" destroy-on-close>
       <div class="action-dialog-content">
@@ -333,6 +352,9 @@ const lastCommittedSnapshot = ref('')
 const actionDialog = reactive({ visible: false, title: '', description: '' })
 const lastValidLeafSubjectByRow = reactive<Record<string, LeafSubjectSnapshot | undefined>>({})
 const leafSubjectWarningVisible = ref(false)
+const cashFlowDialogVisible = ref(false)
+const cashFlowDialogRowIndex = ref<number | null>(null)
+const cashFlowDialogSelection = ref('')
 const viewActive = ref(false)
 let entrySeed = 0
 let loadSequence = 0
@@ -459,6 +481,7 @@ const currentCompanyHasActiveAccountSet = computed(() => {
 })
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
 const accountOptionMap = computed(() => new Map((voucherMeta.value?.accountOptions || []).map((item) => [item.value, item] as const)))
+const cashFlowOptionMap = computed(() => new Map((voucherMeta.value?.cashFlowOptions || []).map((item) => [item.value, item] as const)))
 const selectedAccountOption = computed(() => {
   const code = selectedRow.value?.ccode
   return code ? accountOptionMap.value.get(code) : undefined
@@ -736,6 +759,8 @@ function createEntry(defaultCurrency: string, rowNo: number): VoucherEntryRow {
     csupId: '',
     citemClass: '',
     citemId: '',
+    cashFlowItemId: undefined,
+    cashFlowItemName: '',
     cexchName: defaultCurrency,
     nfrat: 1,
     md: '',
@@ -789,6 +814,8 @@ function buildPayload(includeBlankRows = false): FinanceVoucherSavePayload {
     csupId: item.csupId || undefined,
     citemClass: item.citemClass || undefined,
     citemId: item.citemId || undefined,
+    cashFlowItemId: item.cashFlowItemId,
+    cashFlowItemName: item.cashFlowItemName || undefined,
     cexchName: item.cexchName || voucherMeta.value?.defaultCurrency || 'CNY',
     nfrat: normalizeDecimal(item.nfrat),
     md: normalizeMoneyField(item.md),
@@ -851,6 +878,17 @@ function clearAssistSelections(row: VoucherEntryRow) {
   row.csupId = ''
   row.citemClass = ''
   row.citemId = ''
+}
+
+function clearRowCashFlow(row: VoucherEntryRow) {
+  row.cashFlowItemId = undefined
+  row.cashFlowItemName = ''
+}
+
+function requiresRowCashFlow(row?: VoucherEntryRow | null) {
+  if (!row?.ccode) return false
+  const account = findAccountOptionByCode(row.ccode)
+  return Number(account?.bcash || 0) === 1 && (!isZeroMoney(row.md || '0') || !isZeroMoney(row.mc || '0'))
 }
 
 function syncRowAccountState(row: VoucherEntryRow, options = voucherMeta.value?.accountOptions || []) {
@@ -938,6 +976,66 @@ async function tryLeaveSubjectField(nextRowIndex = selectedRowIndex.value) {
     selectRow(nextRowIndex)
   }
   return canLeave
+}
+
+function openCashFlowDialog(index = selectedRowIndex.value) {
+  const row = form.entries[index]
+  if (!row || isReadonlyMode.value || !requiresRowCashFlow(row)) {
+    return false
+  }
+  cashFlowDialogRowIndex.value = index
+  cashFlowDialogSelection.value = row.cashFlowItemId ? String(row.cashFlowItemId) : ''
+  cashFlowDialogVisible.value = true
+  selectRow(index)
+  return true
+}
+
+function closeCashFlowDialog() {
+  cashFlowDialogVisible.value = false
+  const rowIndex = cashFlowDialogRowIndex.value
+  cashFlowDialogRowIndex.value = null
+  cashFlowDialogSelection.value = ''
+  if (rowIndex === null || isReadonlyMode.value) {
+    return
+  }
+  const row = form.entries[rowIndex]
+  if (!row) return
+  nextTick(() => {
+    selectRow(rowIndex)
+    focusSubjectField(row)
+  })
+}
+
+function confirmCashFlowSelection() {
+  const rowIndex = cashFlowDialogRowIndex.value
+  if (rowIndex === null) {
+    cashFlowDialogVisible.value = false
+    return
+  }
+  const row = form.entries[rowIndex]
+  const option = cashFlowOptionMap.value.get(cashFlowDialogSelection.value)
+  if (!row || !option) {
+    ElMessage.warning('请选择现金流量')
+    return
+  }
+  row.cashFlowItemId = Number(option.value)
+  row.cashFlowItemName = option.name || option.label || option.code || ''
+  cashFlowDialogVisible.value = false
+  cashFlowDialogRowIndex.value = null
+  cashFlowDialogSelection.value = ''
+}
+
+function ensureRowCashFlowState(row: VoucherEntryRow) {
+  if (!requiresRowCashFlow(row)) {
+    clearRowCashFlow(row)
+    return false
+  }
+  if (row.cashFlowItemId) {
+    const option = cashFlowOptionMap.value.get(String(row.cashFlowItemId))
+    row.cashFlowItemName = option?.name || option?.label || row.cashFlowItemName || ''
+    return false
+  }
+  return true
 }
 
 function resolveAssistCapability(option?: FinanceVoucherOption | null): VoucherAssistCapability {
@@ -1055,6 +1153,7 @@ function validateEntrySelection(row: VoucherEntryRow, rowNo: number, errors: str
   const supplierValues = buildOptionValueSet(meta.supplierOptions)
   const projectClassValues = buildOptionValueSet(meta.projectClassOptions)
   const projectMap = new Map((meta.projectOptions || []).map((item) => [item.value, item] as const))
+  const cashFlowValues = buildOptionValueSet(meta.cashFlowOptions)
   const account = row.ccode ? accountMap.get(row.ccode) : undefined
   const capability = resolveAssistCapability(account)
 
@@ -1111,6 +1210,13 @@ function validateEntrySelection(row: VoucherEntryRow, rowNo: number, errors: str
       errors.push(`第 ${rowNo} 行项目分类与项目归属不匹配`)
     }
   }
+  if (Number(account?.bcash || 0) === 1 && (!isZeroMoney(row.md || '0') || !isZeroMoney(row.mc || '0'))) {
+    if (!row.cashFlowItemId) {
+      errors.push(`第 ${rowNo} 行科目已启用现金管理，必须选择现金流量`)
+    } else if (!cashFlowValues.has(String(row.cashFlowItemId))) {
+      errors.push(`第 ${rowNo} 行现金流量不存在或当前不可用`)
+    }
+  }
 }
 
 function validateVoucher(showToast = false) {
@@ -1146,7 +1252,7 @@ function validateVoucher(showToast = false) {
 }
 
 function isEntryBlank(row: VoucherEntryRow) {
-  return !row.cdigest.trim() && !row.ccode && !row.cdeptId && !row.cpersonId && !row.ccusId && !row.csupId && !row.citemClass && !row.citemId && !normalizeMoneyField(row.md) && !normalizeMoneyField(row.mc) && !row.ndS && !row.ncS
+  return !row.cdigest.trim() && !row.ccode && !row.cdeptId && !row.cpersonId && !row.ccusId && !row.csupId && !row.citemClass && !row.citemId && !row.cashFlowItemId && !normalizeMoneyField(row.md) && !normalizeMoneyField(row.mc) && !row.ndS && !row.ncS
 }
 
 function sumRows(rows: FinanceVoucherEntry[], field: 'md' | 'mc') {
@@ -1205,10 +1311,16 @@ function handleSubjectChange(index: number, value?: string | number) {
   if (!row.ccode) {
     delete lastValidLeafSubjectByRow[row.localId]
     clearAssistSelections(row)
+    clearRowCashFlow(row)
     return
   }
   if (isLeafAccountOption(option)) {
     rememberLeafSubject(row, option)
+  }
+  if (Number(option?.bcash || 0) !== 1) {
+    clearRowCashFlow(row)
+  } else {
+    ensureRowCashFlowState(row)
   }
 }
 
@@ -1231,6 +1343,17 @@ function handleEntryFieldFocus(index: number) {
 
 function handleAssistFieldFocus() {
   void ensureSelectedRowUsesLeafSubject()
+}
+
+function handleCashFlowFieldFocus() {
+  if (isReadonlyMode.value) return
+  if (!ensureRowCashFlowState(selectedRow.value)) {
+    if (requiresRowCashFlow(selectedRow.value)) {
+      void nextTick()
+    }
+    return
+  }
+  openCashFlowDialog(selectedRowIndex.value)
 }
 
 function insertEntryAfter(index: number) {
@@ -1297,6 +1420,10 @@ function enterEditMode() {
 
 async function handleSave() {
   if (!(await ensureSelectedRowUsesLeafSubject())) return
+  if (ensureRowCashFlowState(selectedRow.value)) {
+    openCashFlowDialog(selectedRowIndex.value)
+    return
+  }
   if (!validateVoucher(true)) return
 
   saving.value = true
@@ -1432,6 +1559,12 @@ function handleToolbarAction(action: ToolbarActionKey) {
   if (action === 'markError') return void handleToggleVoucherError()
   if (action === 'find') return void handleFindInEntries()
   if (action === 'export' && isReviewMode.value) return void handleExportCurrentVoucher()
+  if (action === 'cashFlow') {
+    if (isReadonlyMode.value) return
+    if (!ensureRowCashFlowState(selectedRow.value)) return
+    openCashFlowDialog(selectedRowIndex.value)
+    return
+  }
 
   const descriptions: Record<Exclude<ToolbarActionKey, 'new' | 'modify' | 'insert' | 'delete' | 'save' | 'review' | 'unreview' | 'markError' | 'find'>, string> = {
     print: '后续可接入正式打印模板与套打配置。',
@@ -1440,7 +1573,7 @@ function handleToolbarAction(action: ToolbarActionKey) {
     reverse: '后续可接入红字冲销与反向凭证生成流程。',
     void: '后续可接入作废状态流转和权限校验。',
     searchReplace: '后续可在分录摘要、科目和辅助项中做批量查找替换。',
-    cashFlow: '后续可关联现金流量项目并形成补录面板。',
+    cashFlow: '请选择当前分录对应的现金流量。',
     assist: '当前下方辅助核算区域已可录入基础信息，后续可扩展为侧边明细抽屉。',
     balance: '后续可联动余额查询与科目实时余额提示。',
     calculator: '后续可接入悬浮计算器或公式辅助输入能力。'
@@ -1478,6 +1611,15 @@ function handleAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 
   if (field === 'mc' && row.mc) {
     row.md = ''
     row.ndS = undefined
+  }
+}
+
+function handleAmountBlur(index: number, _field: 'md' | 'mc') {
+  if (isReadonlyMode.value) return
+  const row = form.entries[index]
+  if (!row) return
+  if (ensureRowCashFlowState(row)) {
+    openCashFlowDialog(index)
   }
 }
 
@@ -1599,12 +1741,14 @@ function moneyText(value: string) {
 
 defineExpose({
   assistDisabledState,
+  cashFlowDialogVisible,
   currentAssistCapability,
   departmentTreeOptions,
   filteredProjectOptions,
   form,
   projectClassOptionsForDisplay,
   selectedRow,
+  validateVoucher,
   getFilteredProjectOptions: () => filteredProjectOptions.value
 })
 </script>
@@ -1661,6 +1805,7 @@ defineExpose({
 .voucher-signature { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; border-radius: 18px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.92); padding: 12px 14px; color: #4a627f; font-size: 13px; }
 .action-dialog-content { color: #506680; line-height: 1.8; }
 .action-dialog-subtle { margin-top: 8px; color: #8a9bb1; font-size: 12px; }
+.cash-flow-radio-group { display: flex; flex-direction: column; gap: 10px; }
 :deep(.voucher-info-field .el-input__wrapper), :deep(.voucher-info-field .el-select__wrapper), :deep(.voucher-info-field .el-date-editor), :deep(.assist-field .el-input__wrapper), :deep(.assist-field .el-select__wrapper), :deep(.voucher-cell .el-input__wrapper), :deep(.voucher-cell .el-select__wrapper) { border-radius: 12px; box-shadow: 0 0 0 1px #d8e2f0 inset; }
 :deep(.voucher-cell .el-input-number), :deep(.voucher-cell .el-input-number .el-input__wrapper), :deep(.assist-field .el-input-number), :deep(.assist-field .el-input-number .el-input__wrapper), :deep(.voucher-info-field .el-input-number), :deep(.voucher-info-field .el-input-number .el-input__wrapper) { width: 100%; }
 :deep(.voucher-info-field .el-input__wrapper), :deep(.voucher-info-field .el-select__wrapper), :deep(.voucher-info-field .el-date-editor), :deep(.voucher-info-field .el-input-number .el-input__wrapper), :deep(.assist-field .el-input__wrapper), :deep(.assist-field .el-select__wrapper), :deep(.assist-field .el-input-number .el-input__wrapper) { min-height: 34px; }

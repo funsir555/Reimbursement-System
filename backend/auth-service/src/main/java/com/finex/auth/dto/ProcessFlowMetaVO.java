@@ -48,6 +48,8 @@ public class ProcessFlowMetaVO {
 
     private List<ProcessFlowConditionFieldVO> branchConditionFields = new ArrayList<>();
 
+    private List<ProcessFormOptionVO> companyOptions = new ArrayList<>();
+
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
 
     private List<ProcessFormOptionVO> userOptions = new ArrayList<>();

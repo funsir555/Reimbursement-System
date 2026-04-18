@@ -19,6 +19,7 @@ public class ProcessFlowRouteDTO {
 
     private Integer priority;
     private Boolean defaultRoute;
+    private Boolean attachBelowNodes;
 
     @Valid
     private List<ProcessFlowConditionGroupDTO> conditionGroups = new ArrayList<>();

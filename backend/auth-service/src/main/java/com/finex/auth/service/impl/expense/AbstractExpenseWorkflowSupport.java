@@ -575,7 +575,20 @@ class AbstractExpenseWorkflowSupport {
         if (route != null) {
             ProcessFlowNodeDTO branchNode = snapshot.node(route.getSourceNodeKey());
             if (branchNode != null) {
-                return advanceFromPosition(instance, snapshot, context, branchNode.getParentNodeKey(), nextIndex(snapshot, branchNode), terminalStatus);
+                boolean branchHasAttachedTail = snapshot.routes(route.getSourceNodeKey()).stream()
+                        .anyMatch(item -> Boolean.TRUE.equals(item.getAttachBelowNodes()));
+                if (!branchHasAttachedTail || Boolean.TRUE.equals(route.getAttachBelowNodes())) {
+                    return advanceFromPosition(instance, snapshot, context, branchNode.getParentNodeKey(), nextIndex(snapshot, branchNode), terminalStatus);
+                }
+                String parentContainerKey = branchNode.getParentNodeKey();
+                return advanceFromPosition(
+                        instance,
+                        snapshot,
+                        context,
+                        parentContainerKey,
+                        snapshot.children(parentContainerKey).size(),
+                        terminalStatus
+                );
             }
         }
 

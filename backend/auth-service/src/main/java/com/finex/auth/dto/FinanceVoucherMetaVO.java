@@ -28,6 +28,8 @@ public class FinanceVoucherMetaVO {
 
     private List<FinanceVoucherOptionVO> projectOptions = new ArrayList<>();
 
+    private List<FinanceVoucherOptionVO> cashFlowOptions = new ArrayList<>();
+
     private String defaultCompanyId;
 
     private String defaultBillDate;

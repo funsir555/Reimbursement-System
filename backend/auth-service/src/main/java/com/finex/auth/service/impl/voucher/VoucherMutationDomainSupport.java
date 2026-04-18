@@ -11,6 +11,7 @@ import com.finex.auth.dto.FinanceVoucherBatchActionResultVO;
 import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
@@ -33,6 +34,7 @@ public final class VoucherMutationDomainSupport extends AbstractFinanceVoucherSu
     public VoucherMutationDomainSupport(
             GlAccvouchMapper glAccvouchMapper,
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
+            FinanceCashFlowItemMapper financeCashFlowItemMapper,
             FinanceCustomerMapper financeCustomerMapper,
             FinanceVendorMapper financeVendorMapper,
             FinanceProjectClassMapper financeProjectClassMapper,
@@ -41,7 +43,7 @@ public final class VoucherMutationDomainSupport extends AbstractFinanceVoucherSu
             SystemDepartmentMapper systemDepartmentMapper,
             UserMapper userMapper
     ) {
-        super(glAccvouchMapper, financeAccountSubjectMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper);
+        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper);
     }
 
     /**

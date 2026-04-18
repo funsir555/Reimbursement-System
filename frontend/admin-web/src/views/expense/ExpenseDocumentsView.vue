@@ -150,7 +150,13 @@
     </el-card>
 
     <el-card class="expense-wb-panel expense-wb-table-shell expense-wb-table-shell--compact">
-      <el-table :data="pagedExpenseList" style="width: 100%" v-loading="loading" @header-dragend="handleHeaderDragEnd">
+      <el-table
+        :data="pagedExpenseList"
+        style="width: 100%"
+        v-loading="loading"
+        @header-dragend="handleHeaderDragEnd"
+        @row-dblclick="handleRowDblClick"
+      >
         <el-table-column
           v-for="column in visibleColumnDefinitions"
           :key="column.key"
@@ -167,7 +173,8 @@
               v-if="column.key === 'documentCode'"
               class="cursor-pointer font-medium text-blue-600 hover:underline"
               type="button"
-              @click="openDetail(row)"
+              @click.stop="openDetail(row)"
+              @dblclick.stop
             >
               {{ resolveColumnText(row, column.key) }}
             </button>
@@ -183,7 +190,7 @@
 
         <el-table-column label="操作" width="120" fixed="right" :resizable="false">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openDetail(row)">查看详情</el-button>
+            <el-button link type="primary" size="small" @click.stop="openDetail(row)" @dblclick.stop>查看详情</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -422,6 +429,10 @@ function openDetail(row: ExpenseSummary) {
     return
   }
   void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+}
+
+function handleRowDblClick(row: ExpenseSummary) {
+  openDetail(row)
 }
 
 async function reloadList() {

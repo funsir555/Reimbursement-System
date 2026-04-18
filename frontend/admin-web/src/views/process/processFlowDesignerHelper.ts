@@ -61,32 +61,7 @@ export function buildFlowCanvasBlocks(
   routes: ProcessFlowRoute[],
   containerKey: FlowContainerKey = null
 ): FlowCanvasBlock[] {
-  const blocks: FlowCanvasBlock[] = [createInsertBlock(containerKey, 0)]
-  const orderedNodes = listNodesInContainer(nodes, containerKey)
-
-  orderedNodes.forEach((node, index) => {
-    if (node.nodeType === 'BRANCH') {
-      blocks.push({
-        key: `branch-${node.nodeKey}`,
-        kind: 'branch',
-        node,
-        routes: listRoutesForBranch(routes, node.nodeKey).map((route) => ({
-          route,
-          blocks: buildFlowCanvasBlocks(nodes, routes, route.routeKey)
-        }))
-      })
-    } else {
-      blocks.push({
-        key: `node-${node.nodeKey}`,
-        kind: 'node',
-        node
-      })
-    }
-
-    blocks.push(createInsertBlock(containerKey, index + 1))
-  })
-
-  return blocks
+  return buildContainerBlocks(nodes, routes, containerKey, 0)
 }
 
 export function insertNodeIntoContainer(
@@ -124,6 +99,7 @@ export function buildDefaultBranchRoutes(branchNodeKey: string, existingCount = 
       routeName: `${AUTO_ROUTE_NAME_PREFIX}${order}`,
       priority: order,
       defaultRoute: false,
+      attachBelowNodes: false,
       conditionGroups: []
     }
   })
@@ -302,7 +278,7 @@ export function reindexFlowState(nodes: ProcessFlowNode[], routes: ProcessFlowRo
 
   const branchNodeKeys = new Set(nextRoutes.map((item) => item.sourceNodeKey))
   branchNodeKeys.forEach((branchNodeKey) => {
-    const ordered = listRoutesForBranch(nextRoutes, branchNodeKey)
+    const ordered = orderRoutesForBranch(nextRoutes, branchNodeKey)
     ordered.forEach((item, index) => {
       const target = nextRoutes.find((route) => route.routeKey === item.routeKey)
       if (!target) {
@@ -310,6 +286,7 @@ export function reindexFlowState(nodes: ProcessFlowNode[], routes: ProcessFlowRo
       }
       target.priority = index + 1
       target.defaultRoute = false
+      target.attachBelowNodes = Boolean(index === 0 && item.attachBelowNodes)
       if (!target.routeName || isAutoRouteName(target.routeName)) {
         target.routeName = `${AUTO_ROUTE_NAME_PREFIX}${index + 1}`
       }
@@ -334,16 +311,65 @@ function listNodesInContainer(nodes: ProcessFlowNode[], containerKey: FlowContai
     })
 }
 
-function listRoutesForBranch(routes: ProcessFlowRoute[], branchNodeKey: string) {
-  return routes
-    .filter((item) => item.sourceNodeKey === branchNodeKey)
-    .sort((left, right) => {
-      const priorityGap = (left.priority ?? 0) - (right.priority ?? 0)
-      if (priorityGap !== 0) {
-        return priorityGap
+function buildContainerBlocks(
+  nodes: ProcessFlowNode[],
+  routes: ProcessFlowRoute[],
+  containerKey: FlowContainerKey,
+  startIndex: number
+): FlowCanvasBlock[] {
+  const blocks: FlowCanvasBlock[] = [createInsertBlock(containerKey, startIndex)]
+  const orderedNodes = listNodesInContainer(nodes, containerKey)
+
+  for (const [offset, node] of orderedNodes.slice(startIndex).entries()) {
+    const index = startIndex + offset
+    if (node.nodeType === 'BRANCH') {
+      const branchRoutes = listRoutesForBranch(routes, node.nodeKey)
+      const attachedRoute = branchRoutes.find((item) => item.attachBelowNodes)
+      blocks.push({
+        key: `branch-${node.nodeKey}`,
+        kind: 'branch',
+        node,
+        routes: branchRoutes.map((route) => ({
+          route,
+          blocks: buildRouteLaneBlocks(nodes, routes, route, containerKey, index)
+        }))
+      })
+      if (attachedRoute) {
+        break
       }
-      return left.routeKey.localeCompare(right.routeKey)
-    })
+    } else {
+      blocks.push({
+        key: `node-${node.nodeKey}`,
+        kind: 'node',
+        node
+      })
+    }
+
+    blocks.push(createInsertBlock(containerKey, index + 1))
+  }
+
+  return blocks
+}
+
+function buildRouteLaneBlocks(
+  nodes: ProcessFlowNode[],
+  routes: ProcessFlowRoute[],
+  route: ProcessFlowRoute,
+  parentContainerKey: FlowContainerKey,
+  branchIndex: number
+) {
+  const laneBlocks = buildContainerBlocks(nodes, routes, route.routeKey, 0)
+  if (!route.attachBelowNodes) {
+    return laneBlocks
+  }
+  return [
+    ...laneBlocks,
+    ...buildContainerBlocks(nodes, routes, parentContainerKey, branchIndex + 1)
+  ]
+}
+
+function listRoutesForBranch(routes: ProcessFlowRoute[], branchNodeKey: string) {
+  return orderRoutesForBranch(routes, branchNodeKey)
 }
 
 function collectContainerDescendants(
@@ -437,4 +463,21 @@ function buildDisplayOrderHint(nodes: ProcessFlowNode[], index: number) {
 
 function createRouteKey(branchNodeKey: string, order: number) {
   return `${branchNodeKey}-route-${order}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
+function orderRoutesForBranch(routes: ProcessFlowRoute[], branchNodeKey: string) {
+  const candidates = routes
+    .filter((item) => item.sourceNodeKey === branchNodeKey)
+    .sort((left, right) => {
+      const priorityGap = (left.priority ?? 0) - (right.priority ?? 0)
+      if (priorityGap !== 0) {
+        return priorityGap
+      }
+      return left.routeKey.localeCompare(right.routeKey)
+    })
+  const attachedRoute = candidates.find((item) => item.attachBelowNodes)
+  if (!attachedRoute) {
+    return candidates
+  }
+  return [attachedRoute, ...candidates.filter((item) => item.routeKey !== attachedRoute.routeKey)]
 }

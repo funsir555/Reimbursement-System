@@ -929,6 +929,8 @@ function extractTemplateDetail(context: ExpenseDocumentEditContext): ExpenseCrea
     expenseDetailSharedArchives: context.expenseDetailSharedArchives || [],
     companyOptions: context.companyOptions || [],
     departmentOptions: context.departmentOptions || [],
+    currentUserCompanyId: context.currentUserCompanyId,
+    currentUserCompanyName: context.currentUserCompanyName,
     currentUserDeptId: context.currentUserDeptId,
     currentUserDeptName: context.currentUserDeptName
   }
@@ -1058,6 +1060,11 @@ function resetFormValues() {
       formValues[block.fieldKey] = Array.isArray(block.defaultValue) ? [...block.defaultValue] : block.defaultValue
       return
     }
+    const businessDefaultValue = resolveBusinessComponentDefaultValue(block)
+    if (businessDefaultValue !== undefined) {
+      formValues[block.fieldKey] = businessDefaultValue
+      return
+    }
     if (block.kind === 'CONTROL' && ['MULTI_SELECT', 'CHECKBOX', 'DATE_RANGE'].includes(controlType(block))) {
       formValues[block.fieldKey] = []
       return
@@ -1068,6 +1075,31 @@ function resetFormValues() {
     }
     formValues[block.fieldKey] = ''
   })
+}
+
+function resolveBusinessComponentDefaultValue(block: ProcessFormDesignBlock) {
+  if (block.kind !== 'BUSINESS_COMPONENT') {
+    return undefined
+  }
+  const componentCode = String(block.props.componentCode || '')
+  if (componentCode !== 'payment-company') {
+    return undefined
+  }
+  const availableCompanyIds = new Set(
+    (templateDetail.value?.companyOptions || [])
+      .map((item) => String(item.value || '').trim())
+      .filter(Boolean)
+  )
+  const mode = String(block.props.defaultCompanyMode || 'NONE')
+  if (mode === 'FIXED_COMPANY') {
+    const defaultCompanyId = String(block.props.defaultCompanyId || '').trim()
+    return availableCompanyIds.has(defaultCompanyId) ? defaultCompanyId : ''
+  }
+  if (mode === 'SUBMITTER_COMPANY') {
+    const submitterCompanyId = String(templateDetail.value?.currentUserCompanyId || '').trim()
+    return availableCompanyIds.has(submitterCompanyId) ? submitterCompanyId : ''
+  }
+  return ''
 }
 
 function controlType(block: ProcessFormDesignBlock) {
