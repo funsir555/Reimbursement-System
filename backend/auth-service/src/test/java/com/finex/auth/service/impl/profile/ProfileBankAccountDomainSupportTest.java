@@ -238,7 +238,7 @@ class ProfileBankAccountDomainSupportTest {
         assertNull(captor.getValue().getCnapsCode());
     }
     @Test
-    void createBankAccountUsesUnifiedOutletValidationMessage() {
+    void createBankAccountUsesUnifiedBankDirectoryValidationMessage() {
         User user = new User();
         user.setId(3L);
         when(userService.getById(3L)).thenReturn(user);
@@ -259,6 +259,6 @@ class ProfileBankAccountDomainSupportTest {
                 () -> support.createBankAccount(3L, dto)
         );
 
-        assertEquals("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a", exception.getMessage());
+        assertEquals("请选择开户银行、开户省、开户市与开户网点后再保存", exception.getMessage());
     }
 }

@@ -284,6 +284,43 @@ class SystemSettingsServiceImplTest {
     }
 
     @Test
+    void updateCompanyBankAccountUsesUnifiedBankDirectoryValidationMessage() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setCompanyName("Company A");
+
+        SystemCompanyBankAccount current = new SystemCompanyBankAccount();
+        current.setId(5L);
+        current.setCompanyId("COMPANY_A");
+        current.setStatus(1);
+        current.setDefaultAccount(0);
+
+        CompanyBankAccountSaveDTO dto = new CompanyBankAccountSaveDTO();
+        dto.setCompanyId("COMPANY_A");
+        dto.setBankName("Bank A");
+        dto.setBankCode("BANK_A");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchCode("BANK_A_SZ");
+        dto.setAccountName("Primary Account");
+        dto.setAccountNo("622200001");
+        dto.setStatus(1);
+        dto.setDefaultAccount(0);
+
+        when(systemCompanyBankAccountMapper.selectById(5L)).thenReturn(current);
+        when(systemCompanyBankAccountMapper.selectCount(any())).thenReturn(0L);
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(company));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> systemSettingsService.updateCompanyBankAccount(5L, dto)
+        );
+
+        assertEquals("请选择开户银行、开户省、开户市与开户网点后再保存", exception.getMessage());
+    }
+
+    @Test
     void updateEmployeeForSyncedUserOnlyChangesStatFields() {
         User syncedUser = new User();
         syncedUser.setId(10L);

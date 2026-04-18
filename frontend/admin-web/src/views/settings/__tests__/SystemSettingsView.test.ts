@@ -563,7 +563,7 @@ describe('SystemSettingsView', () => {
       accountNo: '622200001'
     })
 
-    expect(vm.validateCompanyBankAccountForm()).toBe('\u8bf7\u9009\u62e9\u5f00\u6237\u7f51\u70b9')
+    expect(vm.validateCompanyBankAccountForm()).toBe('\u8bf7\u9009\u62e9\u5f00\u6237\u94f6\u884c\u3001\u5f00\u6237\u7701\u3001\u5f00\u6237\u5e02\u4e0e\u5f00\u6237\u7f51\u70b9\u540e\u518d\u4fdd\u5b58')
   })
 
   it('shows the unified company bank account success wording when saving', async () => {

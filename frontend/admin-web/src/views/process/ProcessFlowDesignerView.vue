@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 pb-24">
+  <div class="space-y-6 pb-36">
     <div class="mb-6 flex justify-start">
       <div class="flex flex-wrap items-center gap-3">
         <button type="button" class="flex items-center gap-2 text-sm text-blue-600" @click="goBack">
@@ -65,10 +65,14 @@
             </el-form-item>
           </div>
 
-          <div class="flow-canvas-shell rounded-[32px] border border-slate-100 bg-slate-50/80 px-4 py-6 lg:px-8" :class="{ 'canvas-muted': hasSelection }">
+          <div
+            class="flow-canvas-shell rounded-[32px] border border-slate-100 bg-slate-50/80 px-4 py-6 lg:px-8"
+            :class="{ 'canvas-muted': hasSelection }"
+            data-testid="flow-canvas-shell"
+          >
             <div class="flow-canvas-scroll" data-testid="flow-canvas-scroll">
-              <div class="flow-canvas-surface">
-                <div class="flow-track">
+              <div class="flow-canvas-surface" data-testid="flow-canvas-surface">
+                <div class="flow-track" data-testid="flow-track">
                   <div class="flow-step is-first">
                     <div class="terminal-node start-node">
                       <span class="terminal-title">开始</span>
@@ -156,14 +160,9 @@
                 <div class="flex items-start justify-between gap-4">
                   <div class="space-y-1">
                     <p class="text-sm font-semibold text-slate-800">附带下方节点</p>
-                    <p class="text-xs leading-5 text-slate-500">
-                      开启后，当前泳道会自动排到最左侧，并承接当前分支块后方的公共尾部节点。
-                    </p>
                   </div>
                   <el-switch
                     v-model="selectedRouteAttachBelowNodes"
-                    active-text="已开启"
-                    inactive-text="未开启"
                   />
                 </div>
               </div>
@@ -662,7 +661,7 @@
     </div>
 
     <div
-      class="process-flow-designer-floating-bar sticky bottom-4 z-10"
+      class="process-flow-designer-floating-bar sticky bottom-0 z-10 mt-10"
       data-testid="process-flow-designer-floating-bar"
     >
       <div
@@ -2030,13 +2029,15 @@ function appendQueryParam(path: string, key: string, value: string) {
 
 .flow-canvas-shell {
   overflow: hidden;
+  padding-bottom: 20px;
 }
 
 .flow-canvas-scroll {
   max-height: calc(100vh - 320px);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 4px 10px 10px 4px;
+  padding: 4px 18px 34px 4px;
 }
 
 .flow-canvas-scroll::-webkit-scrollbar {
@@ -2056,12 +2057,14 @@ function appendQueryParam(path: string, key: string, value: string) {
 .flow-canvas-surface {
   display: flex;
   justify-content: center;
+  width: max-content;
   min-width: 100%;
 }
 
 .flow-track {
   display: flex;
   min-height: 560px;
+  width: max-content;
   min-width: 100%;
   flex-direction: column;
   align-items: center;
@@ -2102,12 +2105,12 @@ function appendQueryParam(path: string, key: string, value: string) {
 
 .terminal-node {
   display: flex;
-  min-width: 152px;
+  min-width: 92px;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   border-radius: 24px;
-  padding: 18px 22px;
+  padding: 12px 14px;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
 }
 
@@ -2155,7 +2158,7 @@ function appendQueryParam(path: string, key: string, value: string) {
   border: 1px solid #e2e8f0;
   border-radius: 20px;
   background: #fff;
-  padding: 14px 16px;
+  padding: 12px 14px;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
@@ -2175,7 +2178,7 @@ function appendQueryParam(path: string, key: string, value: string) {
   border: 1px solid #e2e8f0;
   border-radius: 20px;
   background: #fff;
-  padding: 14px 16px;
+  padding: 12px 14px;
   text-align: left;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
@@ -2184,6 +2187,7 @@ function appendQueryParam(path: string, key: string, value: string) {
   display: flex;
   justify-content: center;
   width: 100%;
+  padding-top: 12px;
 }
 
 .process-flow-designer-floating-bar__inner {
@@ -2220,6 +2224,7 @@ function appendQueryParam(path: string, key: string, value: string) {
 
   .flow-canvas-shell {
     overflow: visible;
+    padding-bottom: 0;
   }
 
   .flow-canvas-scroll {
@@ -2230,9 +2235,11 @@ function appendQueryParam(path: string, key: string, value: string) {
 
   .flow-canvas-surface {
     display: block;
+    width: auto;
   }
 
   .flow-track {
+    width: auto;
     min-width: 0;
   }
 

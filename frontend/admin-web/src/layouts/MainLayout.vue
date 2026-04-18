@@ -27,7 +27,7 @@
           <el-input
             v-model="searchQuery"
             placeholder="搜索报销单、发票、流程模板、Agent"
-            class="w-full"
+            class="main-layout-search w-full"
             :prefix-icon="Search"
           />
         </div>
@@ -452,5 +452,17 @@ async function handleFinanceCompanyChange(companyId: string) {
   width: 1.8rem;
   color: rgba(255, 255, 255, 0.98);
   filter: drop-shadow(0 2px 6px rgba(14, 116, 244, 0.24));
+}
+
+:deep(.main-layout-search .el-input__wrapper) {
+  background-color: #fff;
+  box-shadow:
+    0 0 0 1px rgba(203, 213, 225, 0.9) inset,
+    0 8px 20px -18px rgba(15, 23, 42, 0.28);
+}
+
+:deep(.main-layout-search .el-input__wrapper:hover),
+:deep(.main-layout-search .el-input__wrapper.is-focus) {
+  background-color: #fff;
 }
 </style>

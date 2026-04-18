@@ -19,6 +19,7 @@ import java.util.Objects;
 public abstract class AbstractFinanceVendorArchiveSupport {
 
     protected static final DateTimeFormatter CODE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final String BANK_DIRECTORY_REQUIRED_MESSAGE = "请选择开户银行、开户省、开户市与开户网点后再保存";
 
     protected final FinanceVendorMapper financeVendorMapper;
     protected final UserMapper userMapper;
@@ -76,14 +77,15 @@ public abstract class AbstractFinanceVendorArchiveSupport {
             if (trimToNull(dto.getCVenAccount()) == null) {
                 throw new IllegalArgumentException("\u94f6\u884c\u8d26\u53f7\u4e0d\u80fd\u4e3a\u7a7a");
             }
-            if (trimToNull(dto.getCVenBank()) == null) {
-                throw new IllegalArgumentException("\u94f6\u884c\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
-            }
-            if (trimToNull(dto.getReceiptBankProvince()) == null || trimToNull(dto.getReceiptBankCity()) == null) {
-                throw new IllegalArgumentException("\u5f00\u6237\u884c\u6240\u5728\u7701\u5e02\u4e0d\u80fd\u4e3a\u7a7a");
-            }
-            if (trimToNull(dto.getReceiptBranchName()) == null) {
-                throw new IllegalArgumentException("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a");
+            if (
+                    trimToNull(dto.getCVenBank()) == null
+                            || trimToNull(dto.getCVenBankCode()) == null
+                            || trimToNull(dto.getReceiptBankProvince()) == null
+                            || trimToNull(dto.getReceiptBankCity()) == null
+                            || trimToNull(dto.getReceiptBranchCode()) == null
+                            || trimToNull(dto.getReceiptBranchName()) == null
+            ) {
+                throw new IllegalArgumentException(BANK_DIRECTORY_REQUIRED_MESSAGE);
             }
         }
 

@@ -228,4 +228,22 @@ describe('PersonalCenterView', () => {
     expect(mocks.profileApi.setDefaultBankAccount).toHaveBeenCalledWith(9)
     expect(mocks.elMessage.success).toHaveBeenCalledWith('个人银行账户已设为默认')
   })
+
+  it('uses the unified bank directory reminder when validating personal accounts', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    Object.assign(vm.bankForm, {
+      accountName: '张三',
+      accountNo: '6222020202020202',
+      bankCode: 'BOC',
+      bankName: '中国银行',
+      province: '上海市',
+      city: '上海市',
+      branchCode: '',
+      branchName: ''
+    })
+
+    expect(vm.validateBankForm()).toBe('请选择开户银行、开户省、开户市与开户网点后再保存')
+  })
 })

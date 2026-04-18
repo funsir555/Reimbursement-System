@@ -419,11 +419,19 @@ function closeBankDialog() {
 }
 
 function validateBankForm() {
+  const incompleteBankDirectoryMessage = '请选择开户银行、开户省、开户市与开户网点后再保存'
   if (!String(bankForm.accountName || '').trim()) return '请填写账户名'
   if (!String(bankForm.accountNo || '').trim()) return '请填写银行账号'
-  if (!String(bankForm.bankCode || '').trim() || !String(bankForm.bankName || '').trim()) return '请选择开户银行'
-  if (!String(bankForm.province || '').trim() || !String(bankForm.city || '').trim()) return '请选择开户省市'
-  if (!String(bankForm.branchCode || '').trim() || !String(bankForm.branchName || '').trim()) return '请选择开户网点'
+  if (
+    !String(bankForm.bankCode || '').trim()
+    || !String(bankForm.bankName || '').trim()
+    || !String(bankForm.province || '').trim()
+    || !String(bankForm.city || '').trim()
+    || !String(bankForm.branchCode || '').trim()
+    || !String(bankForm.branchName || '').trim()
+  ) {
+    return incompleteBankDirectoryMessage
+  }
   return ''
 }
 

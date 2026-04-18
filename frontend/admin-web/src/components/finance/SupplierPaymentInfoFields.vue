@@ -11,7 +11,7 @@
       v-if="needsBankReselection"
       type="warning"
       :closable="false"
-      title="当前记录的银行目录编码不完整，请重新选择开户银行、开户省、开户市与开户网点后再保存。"
+      title="请选择开户银行、开户省、开户市与开户网点后再保存"
     />
 
     <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">

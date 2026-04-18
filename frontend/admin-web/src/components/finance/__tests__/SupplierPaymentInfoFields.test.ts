@@ -27,6 +27,16 @@ const SimpleContainer = defineComponent({
   template: '<div><slot /></div>'
 })
 
+const AlertStub = defineComponent({
+  props: {
+    title: {
+      type: String,
+      default: ''
+    }
+  },
+  template: '<div>{{ title }}</div>'
+})
+
 const InputStub = defineComponent({
   props: {
     modelValue: {
@@ -90,7 +100,7 @@ describe('SupplierPaymentInfoFields', () => {
           'el-input': InputStub,
           'el-select': SelectStub,
           'el-option': true,
-          'el-alert': SimpleContainer
+          'el-alert': AlertStub
         }
       }
     })
@@ -120,7 +130,7 @@ describe('SupplierPaymentInfoFields', () => {
           'el-input': InputStub,
           'el-select': SelectStub,
           'el-option': true,
-          'el-alert': SimpleContainer
+          'el-alert': AlertStub
         }
       }
     })
@@ -168,7 +178,7 @@ describe('SupplierPaymentInfoFields', () => {
           'el-input': InputStub,
           'el-select': SelectStub,
           'el-option': true,
-          'el-alert': SimpleContainer
+          'el-alert': AlertStub
         }
       }
     })
@@ -181,5 +191,34 @@ describe('SupplierPaymentInfoFields', () => {
 
     expect(mocks.elMessage.error).toHaveBeenCalledWith('\u52a0\u8f7d\u5f00\u6237\u7701\u4efd\u5931\u8d25')
     expect(mocks.elMessage.error).not.toHaveBeenCalledWith('\u52a0\u8f7d\u5f00\u6237\u5730\u5740\u5931\u8d25')
+  })
+
+  it('shows the unified bank directory reminder when stored selection is incomplete', async () => {
+    const formState = reactive<Record<string, unknown>>({
+      cVenBank: '招商银行',
+      receiptBankProvince: '广东省',
+      receiptBankCity: '深圳市',
+      receiptBranchName: '招商银行深圳福华支行',
+      cVenBankCode: '',
+      receiptBranchCode: ''
+    })
+    const wrapper = mount(SupplierPaymentInfoFields, {
+      props: {
+        formState,
+        businessScope: 'PUBLIC'
+      },
+      global: {
+        stubs: {
+          'el-form-item': SimpleContainer,
+          'el-input': InputStub,
+          'el-select': SelectStub,
+          'el-option': true,
+          'el-alert': AlertStub
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('请选择开户银行、开户省、开户市与开户网点后再保存')
   })
 })

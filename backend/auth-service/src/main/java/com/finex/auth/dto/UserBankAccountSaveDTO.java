@@ -6,6 +6,8 @@ import lombok.Data;
 @Data
 public class UserBankAccountSaveDTO {
 
+    private static final String BANK_DIRECTORY_REQUIRED_MESSAGE = "请选择开户银行、开户省、开户市与开户网点后再保存";
+
     @NotBlank(message = "账户名不能为空")
     private String accountName;
 
@@ -14,22 +16,22 @@ public class UserBankAccountSaveDTO {
 
     private String accountType;
 
-    @NotBlank(message = "开户银行不能为空")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String bankName;
 
-    @NotBlank(message = "开户银行编码不能为空")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String bankCode;
 
-    @NotBlank(message = "开户省不能为空")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String province;
 
-    @NotBlank(message = "开户市不能为空")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String city;
 
-    @NotBlank(message = "开户网点不能为空")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String branchName;
 
-    @NotBlank(message = "开户网点编码不能为空")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String branchCode;
 
     private String cnapsCode;

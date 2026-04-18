@@ -96,17 +96,11 @@
             v-else-if="isPayeeAccountBlock(block) && resolvePayeeAccountCard(block)"
             class="mt-4 rounded-[24px] border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-sky-50 px-5 py-4 shadow-sm"
           >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">收款账户</p>
-                <p class="mt-1 text-xs leading-6 text-slate-500">已按档案信息解析为脱敏收款账户展示。</p>
-              </div>
-              <el-tag size="small" effect="plain" type="info">已脱敏</el-tag>
-            </div>
+            <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">收款账户</p>
 
             <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
               <div class="rounded-2xl border border-white/90 bg-white/90 px-4 py-3">
-                <p class="text-xs text-slate-400">账户名</p>
+                <p class="text-xs text-slate-400">账户名称</p>
                 <p class="mt-2 break-words text-sm font-semibold text-slate-800">
                   {{ resolvePayeeAccountCard(block)?.ownerName || '-' }}
                 </p>
@@ -114,7 +108,7 @@
               <div class="rounded-2xl border border-white/90 bg-white/90 px-4 py-3">
                 <p class="text-xs text-slate-400">银行账号</p>
                 <p class="mt-2 break-all text-sm font-semibold text-slate-800">
-                  {{ resolvePayeeAccountCard(block)?.accountNoMasked || '-' }}
+                  {{ resolvePayeeAccountCard(block)?.accountNo || '-' }}
                 </p>
               </div>
               <div class="rounded-2xl border border-white/90 bg-white/90 px-4 py-3">
@@ -165,7 +159,7 @@ import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 
 type PayeeAccountCard = {
   ownerName: string
-  accountNoMasked: string
+  accountNo: string
   bankName: string
 }
 
@@ -299,30 +293,41 @@ function controlDisplayLines(block: ProcessFormDesignBlock, rawValue: unknown) {
 function resolvePayeeAccountCard(block: ProcessFormDesignBlock): PayeeAccountCard | null {
   const rawValue = props.formData?.[block.fieldKey]
   const option = resolvePayeeAccountOption(rawValue)
-  if (option) {
+  const rawRecord = isRecord(rawValue) ? rawValue : null
+  const ownerName = firstNonBlank(
+    rawRecord?.ownerName,
+    firstResolvedPayeeLabel.value,
+    rawRecord?.accountName,
+    option?.ownerName,
+    option?.accountName,
+    rawRecord?.label,
+    rawRecord?.value,
+    formatValue(rawValue)
+  )
+  const accountNo = firstNonBlank(
+    rawRecord?.accountNo,
+    rawRecord?.accountNoMasked,
+    option?.accountNoMasked
+  )
+  const bankName = firstNonBlank(
+    rawRecord?.bankName,
+    rawRecord?.bankBranchName,
+    option?.bankName
+  )
+
+  if (ownerName || accountNo || bankName) {
     return {
-      ownerName: firstNonBlank(option.ownerName, firstResolvedPayeeLabel.value, option.accountName, formatValue(rawValue)) || '-',
-      accountNoMasked: firstNonBlank(option.accountNoMasked) || '-',
-      bankName: firstNonBlank(option.bankName) || '-'
+      ownerName: ownerName || '-',
+      accountNo: accountNo || '-',
+      bankName: bankName || '-'
     }
   }
 
-  if (isRecord(rawValue)) {
-    const ownerName = firstNonBlank(
-      rawValue.ownerName,
-      firstResolvedPayeeLabel.value,
-      rawValue.accountName,
-      rawValue.label,
-      rawValue.value
-    )
-    const accountNoMasked = firstNonBlank(rawValue.accountNoMasked)
-    const bankName = firstNonBlank(rawValue.bankName)
-    if (ownerName || accountNoMasked || bankName) {
-      return {
-        ownerName: ownerName || '-',
-        accountNoMasked: accountNoMasked || '-',
-        bankName: bankName || '-'
-      }
+  if (option) {
+    return {
+      ownerName: firstNonBlank(option.ownerName, firstResolvedPayeeLabel.value, option.accountName, formatValue(rawValue)) || '-',
+      accountNo: firstNonBlank(option.accountNoMasked) || '-',
+      bankName: firstNonBlank(option.bankName) || '-'
     }
   }
 

@@ -349,11 +349,16 @@ describe('ProcessFlowDesignerView', () => {
     expect(buttons[0]?.text()).toContain('返回上一级')
     expect(buttons[1]?.text()).toContain('刷新')
     expect(buttons.some((item) => item.text().includes('新建流程'))).toBe(false)
+    expect(wrapper.get('[data-testid="flow-canvas-shell"]').classes()).toContain('flow-canvas-shell')
     expect(wrapper.get('[data-testid="flow-canvas-scroll"]').classes()).toContain('flow-canvas-scroll')
+    expect(wrapper.get('[data-testid="flow-canvas-surface"]').classes()).toContain('flow-canvas-surface')
+    expect(wrapper.get('[data-testid="flow-track"]').classes()).toContain('flow-track')
     expect(wrapper.get('[data-testid="designer-side-panel"]').classes()).toContain('designer-side-scroll')
 
     const floatingBar = wrapper.get('[data-testid="process-flow-designer-floating-bar"]')
     expect(floatingBar.classes()).toContain('process-flow-designer-floating-bar')
+    expect(floatingBar.classes()).toContain('bottom-0')
+    expect(floatingBar.classes()).toContain('mt-10')
     expect(wrapper.get('[data-testid="process-flow-designer-floating-bar-inner"]').classes()).toContain(
       'process-flow-designer-floating-bar__inner'
     )
@@ -457,6 +462,9 @@ describe('ProcessFlowDesignerView', () => {
     expect(routePills[0]).toContain('分支 B')
     expect(routePills[1]).toContain('分支 A')
     expect(wrapper.text()).toContain('附带下方节点')
+    expect(wrapper.text()).not.toContain('开启后，当前泳道会自动排到最左侧，并承接当前分支块后方的公共尾部节点。')
+    expect(wrapper.text()).not.toContain('已开启')
+    expect(wrapper.text()).not.toContain('未开启')
   })
 
   it('persists attachBelowNodes=false after turning off an attached route and saving draft', async () => {

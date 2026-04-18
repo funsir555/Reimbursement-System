@@ -284,6 +284,7 @@ class AbstractExpenseDocumentSupport {
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
+    private final ExpenseReadonlyPayeeAccountSnapshotEnhancer readonlyPayeeAccountSnapshotEnhancer;
 
     /**
      * 查询可用模板列表。
@@ -851,7 +852,10 @@ class AbstractExpenseDocumentSupport {
             throw new IllegalStateException("Current user cannot view this expense detail");
         }
         ProcessDocumentExpenseDetail detail = requireExpenseDetail(documentCode, detailNo);
-        return toExpenseDetailDetailVO(detail);
+        Map<String, Object> parentSchema = readMap(instance.getFormSchemaSnapshotJson());
+        Map<String, Object> parentFormData = readFormData(instance.getFormDataJson());
+        String paymentCompanyId = extractFirstBusinessComponentValue(parentSchema, parentFormData, PAYMENT_COMPANY_COMPONENT_CODE);
+        return toExpenseDetailDetailVO(detail, paymentCompanyId);
     }
 
     /**
@@ -1117,6 +1121,7 @@ class AbstractExpenseDocumentSupport {
         Map<String, Object> templateSnapshot = readMap(instance.getTemplateSnapshotJson());
         Map<String, Object> formSchemaSnapshot = readMap(instance.getFormSchemaSnapshotJson());
         Map<String, Object> formData = readFormData(instance.getFormDataJson());
+        readonlyPayeeAccountSnapshotEnhancer.enhanceFormData(formSchemaSnapshot, formData, null);
         Map<String, Object> flowSnapshot = readMap(instance.getFlowSnapshotJson());
         long snapshotElapsedAt = elapsedMillis(snapshotStartedAt);
         detail.setTemplateSnapshot(templateSnapshot);
@@ -2049,7 +2054,7 @@ class AbstractExpenseDocumentSupport {
         return summary;
     }
 
-    private ExpenseDetailInstanceDetailVO toExpenseDetailDetailVO(ProcessDocumentExpenseDetail detail) {
+    private ExpenseDetailInstanceDetailVO toExpenseDetailDetailVO(ProcessDocumentExpenseDetail detail, String fallbackPaymentCompanyId) {
         ExpenseDetailInstanceDetailVO vo = new ExpenseDetailInstanceDetailVO();
         vo.setDocumentCode(detail.getDocumentCode());
         vo.setDetailNo(detail.getDetailNo());
@@ -2062,8 +2067,11 @@ class AbstractExpenseDocumentSupport {
         vo.setBusinessSceneMode(detail.getBusinessSceneMode());
         vo.setDetailTitle(detail.getDetailTitle());
         vo.setSortOrder(detail.getSortOrder());
-        vo.setSchemaSnapshot(readMap(detail.getSchemaSnapshotJson()));
-        vo.setFormData(readMap(detail.getFormDataJson()));
+        Map<String, Object> schemaSnapshot = readMap(detail.getSchemaSnapshotJson());
+        Map<String, Object> formData = readMap(detail.getFormDataJson());
+        readonlyPayeeAccountSnapshotEnhancer.enhanceFormData(schemaSnapshot, formData, fallbackPaymentCompanyId);
+        vo.setSchemaSnapshot(schemaSnapshot);
+        vo.setFormData(formData);
         vo.setCreatedAt(formatTime(detail.getCreatedAt()));
         vo.setUpdatedAt(formatTime(detail.getUpdatedAt()));
         return vo;

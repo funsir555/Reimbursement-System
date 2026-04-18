@@ -250,19 +250,21 @@ class FinanceVendorMutationDomainSupportTest {
         assertEquals("供应商编码长度不能超过 64 个字符", exception.getMessage());
     }
     @Test
-    void createVendorUsesUnifiedBankFieldMessages() {
+    void createVendorUsesUnifiedBankDirectoryMessage() {
         FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
         dto.setCVenName("Vendor A");
         dto.setCVenBank("招商银行");
+        dto.setCVenBankCode("CMB");
         dto.setCVenAccount("622200001");
         dto.setReceiptBankProvince("广东省");
         dto.setReceiptBankCity("深圳市");
+        dto.setReceiptBranchCode("CMB-SZ");
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> support.createVendor("COMPANY_A", dto, "tester", true)
         );
 
-        assertEquals("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a", exception.getMessage());
+        assertEquals("请选择开户银行、开户省、开户市与开户网点后再保存", exception.getMessage());
     }
 }

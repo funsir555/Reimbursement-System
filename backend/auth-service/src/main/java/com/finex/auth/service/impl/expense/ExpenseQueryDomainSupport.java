@@ -64,7 +64,6 @@ public class ExpenseQueryDomainSupport {
     private final ExpenseDocumentTemplateSupport expenseDocumentTemplateSupport;
     private final ExpenseRelationWriteOffService expenseRelationWriteOffService;
     private final ExpenseSummaryAssembler expenseSummaryAssembler;
-    private final ExpenseDocumentDetailAssembler expenseDocumentDetailAssembler;
     private final ProcessDocumentTaskMapper processDocumentTaskMapper;
     private final ProcessDocumentActionLogMapper processDocumentActionLogMapper;
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
@@ -142,10 +141,7 @@ public class ExpenseQueryDomainSupport {
      * 获取报销单明细。
      */
     public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
-        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
-        expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
-        var detail = expenseDocumentReadSupport.requireExpenseDetail(documentCode, detailNo);
-        return expenseDocumentDetailAssembler.toExpenseDetailDetailVO(detail);
+        return expenseDocumentReadSupport.getExpenseDetail(userId, documentCode, detailNo, allowCrossView);
     }
 
     /**

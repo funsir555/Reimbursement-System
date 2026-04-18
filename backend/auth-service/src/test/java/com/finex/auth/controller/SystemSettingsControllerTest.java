@@ -239,6 +239,31 @@ class SystemSettingsControllerTest {
     }
 
     @Test
+    void createCompanyBankAccountRejectsIncompleteBankDirectoryWithUnifiedMessage() throws Exception {
+        mockMvc.perform(post("/auth/system-settings/company-bank-accounts")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyId": "COMPANY001",
+                                  "accountName": "测试公司账户",
+                                  "accountNo": "6222020202020202",
+                                  "bankName": "中国工商银行",
+                                  "bankCode": "ICBC",
+                                  "province": "上海市",
+                                  "city": "上海市",
+                                  "branchCode": "ICBC-SH-001",
+                                  "branchName": ""
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("请选择开户银行、开户省、开户市与开户网点后再保存"));
+
+        verifyNoInteractions(systemSettingsService, accessControlService);
+    }
+
+    @Test
     void deleteCompanyBankAccountReturnsUnifiedMessage() throws Exception {
         doNothing().when(accessControlService).requirePermission(1L, "settings:company_accounts:delete");
         when(systemSettingsService.deleteCompanyBankAccount(8L)).thenReturn(Boolean.TRUE);

@@ -25,6 +25,8 @@ import java.util.Objects;
  */
 public final class ProfileBankAccountDomainSupport extends AbstractProfileDomainSupport {
 
+    private static final String BANK_DIRECTORY_REQUIRED_MESSAGE = "请选择开户银行、开户省、开户市与开户网点后再保存";
+
     /**
      * 初始化这个类所需的依赖组件。
      */
@@ -165,12 +167,15 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         String previousBranchName = trimToNull(account.getBranchName());
         String previousCnapsCode = trimToNull(account.getCnapsCode());
 
-        String nextBankCode = requireText(dto.getBankCode(), "开户银行编码不能为空");
-        String nextBankName = requireText(dto.getBankName(), "开户银行不能为空");
-        String nextProvince = requireText(dto.getProvince(), "开户省不能为空");
-        String nextCity = requireText(dto.getCity(), "开户市不能为空");
-        String nextBranchCode = requireText(dto.getBranchCode(), "开户网点编码不能为空");
-        String nextBranchName = requireText(dto.getBranchName(), "开户网点不能为空");
+        String nextBankCode = trimToNull(dto.getBankCode());
+        String nextBankName = trimToNull(dto.getBankName());
+        String nextProvince = trimToNull(dto.getProvince());
+        String nextCity = trimToNull(dto.getCity());
+        String nextBranchCode = trimToNull(dto.getBranchCode());
+        String nextBranchName = trimToNull(dto.getBranchName());
+        if (nextBankCode == null || nextBankName == null || nextProvince == null || nextCity == null || nextBranchCode == null || nextBranchName == null) {
+            throw new IllegalArgumentException(BANK_DIRECTORY_REQUIRED_MESSAGE);
+        }
         boolean branchSelectionChanged = !Objects.equals(previousBankCode, nextBankCode)
                 || !Objects.equals(previousProvince, nextProvince)
                 || !Objects.equals(previousCity, nextCity)

@@ -8,24 +8,27 @@ import java.time.LocalDateTime;
 @Data
 public class CompanyBankAccountSaveDTO {
 
+    private static final String BANK_DIRECTORY_REQUIRED_MESSAGE = "请选择开户银行、开户省、开户市与开户网点后再保存";
+
     @NotBlank(message = "\u516c\u53f8\u4e0d\u80fd\u4e3a\u7a7a")
     private String companyId;
 
-    @NotBlank(message = "\u5f00\u6237\u94f6\u884c\u4e0d\u80fd\u4e3a\u7a7a")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String bankName;
 
-    @NotBlank(message = "\u5f00\u6237\u94f6\u884c\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String bankCode;
 
-    @NotBlank(message = "\u5f00\u6237\u7701\u4e0d\u80fd\u4e3a\u7a7a")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String province;
 
-    @NotBlank(message = "\u5f00\u6237\u5e02\u4e0d\u80fd\u4e3a\u7a7a")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String city;
 
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String branchName;
 
-    @NotBlank(message = "\u5f00\u6237\u7f51\u70b9\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a")
+    @NotBlank(message = BANK_DIRECTORY_REQUIRED_MESSAGE)
     private String branchCode;
 
     private String cnapsCode;

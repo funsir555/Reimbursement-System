@@ -195,6 +195,30 @@ class UserCenterControllerTest {
     }
 
     @Test
+    void createBankAccountRejectsIncompleteBankDirectoryWithUnifiedMessage() throws Exception {
+        mockMvc.perform(post("/auth/user-center/bank-accounts")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountName": "测试账户",
+                                  "accountNo": "6222020202020202",
+                                  "bankName": "中国银行",
+                                  "bankCode": "BOC",
+                                  "province": "上海市",
+                                  "city": "上海市",
+                                  "branchCode": "BOC-SH",
+                                  "branchName": ""
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("请选择开户银行、开户省、开户市与开户网点后再保存"));
+
+        verifyNoInteractions(userCenterService, accessControlService);
+    }
+
+    @Test
     void updateBankAccountStatusRequiresProfilePermission() throws Exception {
         when(userCenterService.updateBankAccountStatus(1L, 12L, 0)).thenReturn(Boolean.TRUE);
         doNothing().when(accessControlService).requirePermission(1L, "profile:view");

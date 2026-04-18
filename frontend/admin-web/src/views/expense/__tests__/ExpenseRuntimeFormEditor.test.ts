@@ -601,10 +601,12 @@ describe('ExpenseRuntimeFormEditor', () => {
     Object.assign(vm.vendorDraft, {
       cVenName: '测试供应商',
       receiptAccountName: 'A'.repeat(129),
+      cVenBankCode: 'ICBC',
       cVenAccount: '622200001',
       cVenBank: '中国工商银行',
       receiptBankProvince: '上海市',
       receiptBankCity: '上海市',
+      receiptBranchCode: 'ICBC-SH-001',
       receiptBranchName: '上海营业部'
     })
     expect(vm.validateVendorDraft()).toBe('账户名最多 128 个字符')
@@ -613,6 +615,6 @@ describe('ExpenseRuntimeFormEditor', () => {
       receiptAccountName: '测试账户',
       receiptBranchName: ''
     })
-    expect(vm.validateVendorDraft()).toBe('请先选择开户网点')
+    expect(vm.validateVendorDraft()).toBe('请选择开户银行、开户省、开户市与开户网点后再保存')
   })
 })

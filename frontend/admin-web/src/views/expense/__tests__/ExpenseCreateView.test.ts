@@ -227,6 +227,21 @@ function buildPaymentCompanyBlock(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function buildUndertakeDepartmentBlock(overrides: Record<string, unknown> = {}) {
+  return {
+    blockId: 'block-undertake-department',
+    fieldKey: 'undertakeDepartment',
+    kind: 'BUSINESS_COMPONENT',
+    label: '承担部门',
+    props: {
+      componentCode: 'undertake-department',
+      defaultDeptMode: 'NONE',
+      defaultDeptId: '',
+      ...overrides
+    }
+  }
+}
+
 function buildExpenseDetail(detailNo: string, actualPaymentAmount: string) {
   return {
     detailNo,
@@ -782,5 +797,85 @@ describe('ExpenseCreateView', () => {
     const wrapper = await mountView()
 
     expect(runtimeFormValue(wrapper).paymentCompany).toBe('')
+  })
+
+  it('defaults undertake department to the submitter department when configured and available', async () => {
+    mocks.route.query = { templateCode: 'TPL-010', draftKey: 'draft-undertake-department-submitter' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-010&draftKey=draft-undertake-department-submitter'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-010', '承担部门模板', 'report', '报销单', {
+          blocks: [buildUndertakeDepartmentBlock({ defaultDeptMode: 'SUBMITTER_DEPARTMENT' })]
+        }),
+        departmentOptions: [{ value: 'DEPT_FIN', label: '财务部' }],
+        currentUserDeptId: 'DEPT_FIN',
+        currentUserDeptName: '财务部'
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).undertakeDepartment).toBe('DEPT_FIN')
+  })
+
+  it('defaults undertake department to the fixed configured department when the option is available', async () => {
+    mocks.route.query = { templateCode: 'TPL-011', draftKey: 'draft-undertake-department-fixed' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-011&draftKey=draft-undertake-department-fixed'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-011', '承担部门模板', 'report', '报销单', {
+          blocks: [buildUndertakeDepartmentBlock({ defaultDeptMode: 'FIXED_DEPARTMENT', defaultDeptId: 'DEPT_HR' })]
+        }),
+        departmentOptions: [{ value: 'DEPT_HR', label: '人力资源部' }]
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).undertakeDepartment).toBe('DEPT_HR')
+  })
+
+  it('leaves undertake department empty when the configured default is not in department options', async () => {
+    mocks.route.query = { templateCode: 'TPL-012', draftKey: 'draft-undertake-department-invalid' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-012&draftKey=draft-undertake-department-invalid'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-012', '承担部门模板', 'report', '报销单', {
+          blocks: [buildUndertakeDepartmentBlock({ defaultDeptMode: 'FIXED_DEPARTMENT', defaultDeptId: 'DEPT_IT' })]
+        }),
+        departmentOptions: [{ value: 'DEPT_FIN', label: '财务部' }]
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).undertakeDepartment).toBe('')
+  })
+
+  it('keeps the restored draft undertake department instead of overriding it with a default', async () => {
+    mocks.route.query = { templateCode: 'TPL-013', draftKey: 'draft-undertake-department-existing' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-013&draftKey=draft-undertake-department-existing'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-013', '承担部门模板', 'report', '报销单', {
+          blocks: [buildUndertakeDepartmentBlock({ defaultDeptMode: 'SUBMITTER_DEPARTMENT' })]
+        }),
+        departmentOptions: [
+          { value: 'DEPT_FIN', label: '财务部' },
+          { value: 'DEPT_HR', label: '人力资源部' }
+        ],
+        currentUserDeptId: 'DEPT_FIN',
+        currentUserDeptName: '财务部'
+      }
+    })
+    writeDraft('draft-undertake-department-existing', 'TPL-013', {
+      formValues: {
+        undertakeDepartment: 'DEPT_HR'
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(runtimeFormValue(wrapper).undertakeDepartment).toBe('DEPT_HR')
   })
 })

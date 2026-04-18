@@ -89,20 +89,18 @@ public class ExpenseDocumentPdfRenderer {
                 .document { page-break-inside: auto; }
                 .document--break { page-break-before: always; }
                 .header-table, .field-grid, .detail-summary, .receipt-table, .timeline-table, .account-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-                .document-header { margin-bottom: 16pt; padding-top: 4pt; border-top: 4pt solid #6f8195; border-bottom: 1.5pt solid #d5dde7; padding-bottom: 14pt; }
-                .header-table { height: 108pt; }
-                .header-main { padding-right: 14pt; vertical-align: top; height: 108pt; }
-                .header-side { width: 196pt; vertical-align: top; height: 108pt; }
-                .header-main-panel { height: 108pt; }
+                .document-header { margin-bottom: 12pt; padding-top: 4pt; border-top: 4pt solid #6f8195; border-bottom: 1.5pt solid #d5dde7; padding-bottom: 10pt; }
+                .header-main { padding-right: 14pt; vertical-align: top; }
+                .header-side { width: 196pt; vertical-align: top; }
                 .header-kicker { font-size: 8.5pt; color: #6f8195; letter-spacing: 1.2pt; text-transform: uppercase; }
                 .header-title { margin: 4pt 0 0; font-size: 20pt; line-height: 1.25; font-weight: 700; color: #111827; }
                 .header-meta { margin-top: 7pt; font-size: 9pt; color: #475569; }
                 .header-submeta { margin-top: 4pt; font-size: 8.6pt; color: #64748b; }
-                .amount-panel { border: 1pt solid #d6dee8; background: #f6f8fb; padding: 10pt 12pt; text-align: right; border-radius: 8pt; height: 108pt; }
+                .amount-panel { border: 1pt solid #d6dee8; background: #f6f8fb; padding: 8pt 12pt; text-align: right; border-radius: 8pt; min-height: 86pt; }
                 .amount-label { display: block; font-size: 8.5pt; color: #64748b; }
-                .amount-value { display: block; margin-top: 6pt; font-size: 18pt; font-weight: 700; color: #0f172a; }
-                .amount-meta { margin-top: 10pt; padding-top: 8pt; border-top: 1pt solid #dbe3ec; font-size: 8.4pt; line-height: 1.55; color: #64748b; }
-                .amount-meta-row { margin-top: 2pt; }
+                .amount-value { display: block; margin-top: 5pt; font-size: 18pt; font-weight: 700; color: #0f172a; }
+                .amount-meta { margin-top: 7pt; font-size: 8.4pt; line-height: 1.45; color: #64748b; }
+                .amount-meta-row { margin-top: 1pt; }
                 .amount-meta-row:first-child { margin-top: 0; }
                 .amount-meta-label { display: inline-block; min-width: 42pt; color: #475569; text-align: left; }
                 .amount-meta-value { color: #64748b; }
@@ -160,12 +158,12 @@ public class ExpenseDocumentPdfRenderer {
     }
 
     private void appendHeader(StringBuilder html, ExpenseDocumentDetailVO detail) {
-        html.append("<header class='document-header'><table class='header-table'><tr><td class='header-main'><div class='header-main-panel'>");
+        html.append("<header class='document-header'><table class='header-table'><tr><td class='header-main'>");
         html.append("<div class='header-kicker'>Expense Document</div>");
         html.append("<h1 class='header-title'>").append(escapeHtml(defaultText(detail.getDocumentTitle(), detail.getDocumentCode(), "报销打印单"))).append("</h1>");
         html.append("<div class='header-meta'>单据编号：").append(escapeHtml(defaultText(detail.getDocumentCode(), "-"))).append("　　模板：").append(escapeHtml(defaultText(detail.getTemplateName(), "-"))).append("　　状态：").append(escapeHtml(defaultText(detail.getStatusLabel(), detail.getStatus(), "-"))).append("</div>");
         html.append("<div class='header-submeta'>提单人：").append(escapeHtml(defaultText(detail.getSubmitterName(), "-"))).append("　　提交时间：").append(escapeHtml(defaultText(detail.getSubmittedAt(), "-"))).append("</div>");
-        html.append("</div></td><td class='header-side'><div class='amount-panel'><span class='amount-label'>单据金额</span><span class='amount-value'>¥").append(escapeHtml(formatMoney(detail.getTotalAmount()))).append("</span><div class='amount-meta'>");
+        html.append("</td><td class='header-side'><div class='amount-panel'><span class='amount-label'>单据金额</span><span class='amount-value'>¥").append(escapeHtml(formatMoney(detail.getTotalAmount()))).append("</span><div class='amount-meta'>");
         appendAmountMetaRow(html, "当前节点", defaultText(detail.getCurrentNodeName(), "-"));
         appendAmountMetaRow(html, "完成时间", defaultText(detail.getFinishedAt(), "-"));
         html.append("</div></div></td></tr></table></header>");
@@ -388,7 +386,7 @@ public class ExpenseDocumentPdfRenderer {
         Map<String, Object> accountValue = asMap(rawValue);
         List<MiniItem> items = List.of(
                 new MiniItem("账户名称", firstNonBlank(accountValue.get("ownerName"), accountValue.get("accountName"), accountValue.get("label"), accountValue.get("value"))),
-                new MiniItem("银行账号", firstNonBlank(accountValue.get("accountNoMasked"), accountValue.get("accountNo"))),
+                new MiniItem("银行账号", firstNonBlank(accountValue.get("accountNo"), accountValue.get("accountNoMasked"))),
                 new MiniItem("开户行", firstNonBlank(accountValue.get("bankName"), accountValue.get("bankBranchName")))
         );
         return PrintField.mini(label, null, null, items);

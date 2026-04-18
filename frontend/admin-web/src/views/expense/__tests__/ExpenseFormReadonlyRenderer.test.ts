@@ -122,7 +122,7 @@ describe('ExpenseFormReadonlyRenderer', () => {
             sourceType: 'USER',
             ownerName: '张三',
             accountName: '张三',
-            accountNoMasked: '6222 **** 8888',
+            accountNo: '6222333344448888',
             bankName: '招商银行上海分行'
           }
         }
@@ -137,13 +137,13 @@ describe('ExpenseFormReadonlyRenderer', () => {
     })
 
     expect(wrapper.text()).toContain('张三')
-    expect(wrapper.text()).toContain('6222 **** 8888')
+    expect(wrapper.text()).toContain('6222333344448888')
     expect(wrapper.text()).toContain('招商银行上海分行')
     expect(wrapper.text()).not.toContain('PERSONAL_PAYEE:张三')
     expect(wrapper.text()).not.toContain('USER_ACCOUNT:8')
   })
 
-  it('renders payee account as a card with owner, masked account and bank', () => {
+  it('renders payee account as a card with owner, masked account and bank when only masked data is available', () => {
     const wrapper = mount(ExpenseFormReadonlyRenderer, {
       props: {
         schema: {
@@ -187,13 +187,58 @@ describe('ExpenseFormReadonlyRenderer', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('账户名')
+    expect(wrapper.text()).toContain('账户名称')
     expect(wrapper.text()).toContain('张三')
     expect(wrapper.text()).toContain('银行账号')
     expect(wrapper.text()).toContain('6222 **** 8899')
     expect(wrapper.text()).toContain('开户行')
     expect(wrapper.text()).toContain('招商银行上海分行')
     expect(wrapper.text()).not.toContain('USER_ACCOUNT:8')
+  })
+
+  it('prefers real payee account numbers from the readonly snapshot over masked lookup values', () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+          ]
+        },
+        formData: {
+          payeeAccount: {
+            value: 'USER_ACCOUNT:8',
+            ownerName: '张三',
+            accountName: '张三',
+            accountNo: '6222333344448899',
+            accountNoMasked: '6222 **** 8899',
+            bankName: '招商银行上海分行'
+          }
+        },
+        payeeAccountOptionMap: {
+          'USER_ACCOUNT:8': {
+            value: 'USER_ACCOUNT:8',
+            label: '张三 / 招商银行',
+            sourceType: 'USER',
+            ownerCode: '2',
+            ownerName: '张三',
+            bankName: '招商银行上海分行',
+            accountName: '张三',
+            accountNoMasked: '6222 **** 8899'
+          }
+        }
+      },
+      global: {
+        stubs: {
+          'el-tag': {
+            template: '<span><slot /></span>'
+          }
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('6222333344448899')
+    expect(wrapper.text()).not.toContain('6222 **** 8899')
   })
 
   it('falls back to raw payee account value when lookup data is missing', () => {

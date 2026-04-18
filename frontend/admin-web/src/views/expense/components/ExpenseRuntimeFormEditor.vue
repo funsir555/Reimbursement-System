@@ -1404,6 +1404,7 @@ async function openVendorAccountDialog() {
 }
 
 function validateVendorDraft() {
+  const incompleteBankDirectoryMessage = '请选择开户银行、开户省、开户市与开户网点后再保存'
   if (!String(vendorDraft.cVenName || '').trim()) {
     return '请先填写供应商名称'
   }
@@ -1413,14 +1414,15 @@ function validateVendorDraft() {
   if (!String(vendorDraft.cVenAccount || '').trim()) {
     return '请先填写银行账号'
   }
-  if (!String(vendorDraft.cVenBank || '').trim()) {
-    return '请先选择开户银行'
-  }
-  if (!String(vendorDraft.receiptBankProvince || '').trim() || !String(vendorDraft.receiptBankCity || '').trim()) {
-    return '请先选择开户省市'
-  }
-  if (!String(vendorDraft.receiptBranchName || '').trim()) {
-    return '请先选择开户网点'
+  if (
+    !String(vendorDraft.cVenBank || '').trim()
+    || !String(vendorDraft.cVenBankCode || '').trim()
+    || !String(vendorDraft.receiptBankProvince || '').trim()
+    || !String(vendorDraft.receiptBankCity || '').trim()
+    || !String(vendorDraft.receiptBranchName || '').trim()
+    || !String(vendorDraft.receiptBranchCode || '').trim()
+  ) {
+    return incompleteBankDirectoryMessage
   }
   const lengthRules = [
     { key: 'cVenName', label: '供应商名称', max: 128 },

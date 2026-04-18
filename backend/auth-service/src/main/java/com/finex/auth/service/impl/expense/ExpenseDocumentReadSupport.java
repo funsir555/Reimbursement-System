@@ -6,6 +6,7 @@
 package com.finex.auth.service.impl.expense;
 
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
+import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
@@ -56,6 +57,10 @@ class ExpenseDocumentReadSupport {
 
     ProcessDocumentExpenseDetail requireExpenseDetail(String documentCode, String detailNo) {
         return support.requireExpenseDetail(documentCode, detailNo);
+    }
+
+    ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
+        return support.getExpenseDetail(userId, documentCode, detailNo, allowCrossView);
     }
 
     ExpenseDetailInstanceDTO toRuntimeExpenseDetailDTO(ProcessDocumentExpenseDetail detail) {

@@ -2169,15 +2169,17 @@ function buildCompanyBankAccountPayload(
 }
 
 function validateCompanyBankAccountForm() {
+  const incompleteBankDirectoryMessage = '请选择开户银行、开户省、开户市与开户网点后再保存'
   if (!String(companyBankAccountForm.companyId || '').trim()) return '请选择所属公司'
-  if (!String(companyBankAccountForm.bankCode || '').trim() || !String(companyBankAccountForm.bankName || '').trim()) {
-    return '请选择开户银行'
-  }
-  if (!String(companyBankAccountForm.province || '').trim() || !String(companyBankAccountForm.city || '').trim()) {
-    return '请选择开户省市'
-  }
-  if (!String(companyBankAccountForm.branchCode || '').trim() || !String(companyBankAccountForm.branchName || '').trim()) {
-    return '请选择开户网点'
+  if (
+    !String(companyBankAccountForm.bankCode || '').trim()
+    || !String(companyBankAccountForm.bankName || '').trim()
+    || !String(companyBankAccountForm.province || '').trim()
+    || !String(companyBankAccountForm.city || '').trim()
+    || !String(companyBankAccountForm.branchCode || '').trim()
+    || !String(companyBankAccountForm.branchName || '').trim()
+  ) {
+    return incompleteBankDirectoryMessage
   }
   if (!String(companyBankAccountForm.accountName || '').trim()) return '请填写账户名'
   if (!String(companyBankAccountForm.accountNo || '').trim()) return '请填写银行账号'

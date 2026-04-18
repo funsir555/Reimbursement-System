@@ -88,6 +88,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 abstract class AbstractSystemSettingsDomainSupport {
 
+    private static final String BANK_DIRECTORY_REQUIRED_MESSAGE = "请选择开户银行、开户省、开户市与开户网点后再保存";
     private static final String SOURCE_MANUAL = "MANUAL";
     private static final String PLATFORM_DINGTALK = "DINGTALK";
     private static final String PLATFORM_WECOM = "WECOM";
@@ -1672,23 +1673,8 @@ abstract class AbstractSystemSettingsDomainSupport {
         if (companyId == null) {
             throw new IllegalArgumentException("\u516c\u53f8\u4e0d\u80fd\u4e3a\u7a7a");
         }
-        if (bankName == null) {
-            throw new IllegalArgumentException("\u5f00\u6237\u94f6\u884c\u4e0d\u80fd\u4e3a\u7a7a");
-        }
-        if (bankCode == null) {
-            throw new IllegalArgumentException("\u5f00\u6237\u94f6\u884c\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
-        }
-        if (province == null) {
-            throw new IllegalArgumentException("\u5f00\u6237\u7701\u4e0d\u80fd\u4e3a\u7a7a");
-        }
-        if (city == null) {
-            throw new IllegalArgumentException("\u5f00\u6237\u5e02\u4e0d\u80fd\u4e3a\u7a7a");
-        }
-        if (branchName == null) {
-            throw new IllegalArgumentException("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a");
-        }
-        if (branchCode == null) {
-            throw new IllegalArgumentException("\u5f00\u6237\u7f51\u70b9\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
+        if (bankName == null || bankCode == null || province == null || city == null || branchName == null || branchCode == null) {
+            throw new IllegalArgumentException(BANK_DIRECTORY_REQUIRED_MESSAGE);
         }
         if (accountName == null) {
             throw new IllegalArgumentException("\u8d26\u6237\u540d\u4e0d\u80fd\u4e3a\u7a7a");

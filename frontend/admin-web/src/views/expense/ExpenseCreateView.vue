@@ -1082,24 +1082,41 @@ function resolveBusinessComponentDefaultValue(block: ProcessFormDesignBlock) {
     return undefined
   }
   const componentCode = String(block.props.componentCode || '')
-  if (componentCode !== 'payment-company') {
-    return undefined
+  if (componentCode === 'payment-company') {
+    const availableCompanyIds = new Set(
+      (templateDetail.value?.companyOptions || [])
+        .map((item) => String(item.value || '').trim())
+        .filter(Boolean)
+    )
+    const mode = String(block.props.defaultCompanyMode || 'NONE')
+    if (mode === 'FIXED_COMPANY') {
+      const defaultCompanyId = String(block.props.defaultCompanyId || '').trim()
+      return availableCompanyIds.has(defaultCompanyId) ? defaultCompanyId : ''
+    }
+    if (mode === 'SUBMITTER_COMPANY') {
+      const submitterCompanyId = String(templateDetail.value?.currentUserCompanyId || '').trim()
+      return availableCompanyIds.has(submitterCompanyId) ? submitterCompanyId : ''
+    }
+    return ''
   }
-  const availableCompanyIds = new Set(
-    (templateDetail.value?.companyOptions || [])
-      .map((item) => String(item.value || '').trim())
-      .filter(Boolean)
-  )
-  const mode = String(block.props.defaultCompanyMode || 'NONE')
-  if (mode === 'FIXED_COMPANY') {
-    const defaultCompanyId = String(block.props.defaultCompanyId || '').trim()
-    return availableCompanyIds.has(defaultCompanyId) ? defaultCompanyId : ''
+  if (componentCode === 'undertake-department') {
+    const availableDepartmentIds = new Set(
+      (templateDetail.value?.departmentOptions || [])
+        .map((item) => String(item.value || '').trim())
+        .filter(Boolean)
+    )
+    const mode = String(block.props.defaultDeptMode || 'NONE')
+    if (mode === 'FIXED_DEPARTMENT') {
+      const defaultDeptId = String(block.props.defaultDeptId || '').trim()
+      return availableDepartmentIds.has(defaultDeptId) ? defaultDeptId : ''
+    }
+    if (mode === 'SUBMITTER_DEPARTMENT') {
+      const submitterDeptId = String(templateDetail.value?.currentUserDeptId || '').trim()
+      return availableDepartmentIds.has(submitterDeptId) ? submitterDeptId : ''
+    }
+    return ''
   }
-  if (mode === 'SUBMITTER_COMPANY') {
-    const submitterCompanyId = String(templateDetail.value?.currentUserCompanyId || '').trim()
-    return availableCompanyIds.has(submitterCompanyId) ? submitterCompanyId : ''
-  }
-  return ''
+  return undefined
 }
 
 function controlType(block: ProcessFormDesignBlock) {

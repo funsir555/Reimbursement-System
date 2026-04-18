@@ -313,9 +313,10 @@ function branchShellStyle(routeCount: number, depth: number) {
   if (compact) {
     return {
       '--branch-lane-count': String(Math.max(routeCount, 1)),
-      '--branch-lane-gap': '12px',
-      '--branch-lane-min-width': '0px',
-      '--branch-shell-width': '100%',
+      '--branch-lane-gap': '10px',
+      '--branch-lane-min-width': '144px',
+      '--branch-shell-width': 'max-content',
+      '--branch-shell-min-width': '100%',
       '--branch-lane-padding': '8px'
     }
   }
@@ -323,19 +324,21 @@ function branchShellStyle(routeCount: number, depth: number) {
   if (routeCount === 2) {
     return {
       '--branch-lane-count': '2',
-      '--branch-lane-gap': '24px',
-      '--branch-lane-min-width': '0px',
-      '--branch-shell-width': 'min(100%, 760px)',
-      '--branch-lane-padding': '12px'
+      '--branch-lane-gap': '16px',
+      '--branch-lane-min-width': '144px',
+      '--branch-shell-width': 'max-content',
+      '--branch-shell-min-width': '0px',
+      '--branch-lane-padding': '8px'
     }
   }
 
   return {
     '--branch-lane-count': String(Math.max(routeCount, 1)),
-    '--branch-lane-gap': '18px',
-    '--branch-lane-min-width': '240px',
+    '--branch-lane-gap': '14px',
+    '--branch-lane-min-width': '144px',
     '--branch-shell-width': 'max-content',
-    '--branch-lane-padding': '12px'
+    '--branch-shell-min-width': '0px',
+    '--branch-lane-padding': '8px'
   }
 }
 </script>
@@ -388,10 +391,10 @@ function branchShellStyle(routeCount: number, depth: number) {
 }
 
 .flow-node-card {
-  width: min(60%, 420px);
+  width: min(36%, 252px);
   border: 0;
   border-radius: 28px;
-  padding: 22px 24px;
+  padding: 14px 16px;
   color: #fff;
   text-align: left;
   box-shadow: 0 20px 44px rgba(15, 23, 42, 0.16);
@@ -479,8 +482,8 @@ function branchShellStyle(routeCount: number, depth: number) {
   position: relative;
   display: flex;
   width: var(--branch-shell-width);
-  max-width: 100%;
-  min-width: 0;
+  max-width: none;
+  min-width: var(--branch-shell-min-width, 0);
   flex-direction: column;
   align-items: center;
   gap: 0;
@@ -489,7 +492,6 @@ function branchShellStyle(routeCount: number, depth: number) {
 }
 
 .branch-shell.is-compact {
-  width: 100%;
   padding-inline: 0;
 }
 
@@ -557,10 +559,10 @@ function branchShellStyle(routeCount: number, depth: number) {
 }
 
 .branch-lanes {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  grid-template-columns: repeat(var(--branch-lane-count), minmax(var(--branch-lane-min-width), 1fr));
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  justify-content: center;
   gap: var(--branch-lane-gap);
   margin: 0;
 }
@@ -568,7 +570,8 @@ function branchShellStyle(routeCount: number, depth: number) {
 .branch-lane {
   display: flex;
   height: 100%;
-  min-width: 0;
+  width: fit-content;
+  min-width: var(--branch-lane-min-width);
   flex-direction: column;
   align-items: center;
   gap: 0;
@@ -608,7 +611,7 @@ function branchShellStyle(routeCount: number, depth: number) {
   border: 1px solid #e2e8f0;
   border-radius: 22px;
   background: linear-gradient(180deg, #fff, #f8fafc);
-  padding: 14px 16px;
+  padding: 10px 12px;
   text-align: left;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
@@ -651,7 +654,7 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .branch-merge {
   display: flex;
-  min-width: 168px;
+  min-width: 100px;
   flex-direction: column;
   align-items: center;
   gap: 0;
@@ -664,11 +667,11 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .branch-merge span {
   display: flex;
-  min-width: 168px;
+  min-width: 100px;
   justify-content: center;
   border-radius: 20px;
   background: linear-gradient(135deg, #dbeafe, #f8fafc);
-  padding: 10px 16px;
+  padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
   color: #1e3a8a;
@@ -676,12 +679,14 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 @media (max-width: 1279px) {
   .flow-node-card {
-    width: min(86%, 420px);
+    width: min(88%, 252px);
   }
 
   .branch-shell,
   .branch-shell.is-compact {
     width: min(100%, 520px);
+    max-width: 100%;
+    min-width: 0;
   }
 
   .branch-split-line,
@@ -692,8 +697,15 @@ function branchShellStyle(routeCount: number, depth: number) {
   }
 
   .branch-lanes {
-    grid-template-columns: 1fr;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
     gap: 14px;
+  }
+
+  .branch-lane {
+    width: 100%;
+    min-width: 0;
   }
 }
 </style>
