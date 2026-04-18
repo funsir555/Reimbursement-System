@@ -139,7 +139,7 @@
               <div class="flex items-start justify-between gap-4">
                 <div>
                   <p class="text-lg font-semibold text-slate-800">{{ account.bankName }}</p>
-                  <p class="mt-1 text-sm text-slate-500">{{ account.branchName || '未设置分支行' }}</p>
+                  <p class="mt-1 text-sm text-slate-500">{{ account.branchName || '未设置开户网点' }}</p>
                 </div>
                 <div class="flex flex-wrap items-center justify-end gap-2">
                   <el-tag v-if="account.defaultAccount" type="success" effect="plain">默认</el-tag>
@@ -149,7 +149,7 @@
 
               <div class="mt-5 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                 <div class="rounded-2xl bg-white px-4 py-3">
-                  <p class="text-slate-400">收款人姓名</p>
+                  <p class="text-slate-400">账户名</p>
                   <p class="mt-2 font-medium text-slate-800">{{ account.accountName }}</p>
                 </div>
                 <div class="rounded-2xl bg-white px-4 py-3">
@@ -159,10 +159,6 @@
                 <div class="rounded-2xl bg-white px-4 py-3">
                   <p class="text-slate-400">开户地区</p>
                   <p class="mt-2 font-medium text-slate-800">{{ accountLocation(account) }}</p>
-                </div>
-                <div class="rounded-2xl bg-white px-4 py-3">
-                  <p class="text-slate-400">联行号</p>
-                  <p class="mt-2 font-medium text-slate-800">{{ account.cnapsCode || '-' }}</p>
                 </div>
               </div>
 
@@ -231,7 +227,7 @@
           :form-state="bankForm"
           :required="true"
           :field-map="bankFieldMap"
-          account-name-label="收款人姓名/账户名"
+          account-name-label="账户名"
           business-scope="PRIVATE"
         />
 
@@ -310,7 +306,6 @@ const bankForm = reactive<UserBankAccountSavePayload>({
   city: '',
   branchName: '',
   branchCode: '',
-  cnapsCode: '',
   defaultAccount: 0,
   status: 1
 })
@@ -323,8 +318,7 @@ const bankFieldMap = {
   city: 'city',
   branchCode: 'branchCode',
   branchName: 'branchName',
-  accountNo: 'accountNo',
-  cnapsCode: 'cnapsCode'
+  accountNo: 'accountNo'
 } as const
 
 const canChangePassword = computed(() => hasPermission('profile:password:update', permissionCodes.value))
@@ -387,7 +381,6 @@ function resetBankForm() {
     city: '',
     branchName: '',
     branchCode: '',
-    cnapsCode: '',
     defaultAccount: bankAccounts.value.length === 0 ? 1 : 0,
     status: 1
   })
@@ -413,7 +406,6 @@ function openEditBankDialog(account: UserBankAccountRecord) {
     city: account.city || '',
     branchName: account.branchName || '',
     branchCode: account.branchCode || '',
-    cnapsCode: account.cnapsCode || '',
     defaultAccount: account.defaultAccount ? 1 : 0,
     status: account.status ?? 1
   })
@@ -427,11 +419,11 @@ function closeBankDialog() {
 }
 
 function validateBankForm() {
-  if (!String(bankForm.accountName || '').trim()) return '请填写收款人姓名/账户名'
+  if (!String(bankForm.accountName || '').trim()) return '请填写账户名'
   if (!String(bankForm.accountNo || '').trim()) return '请填写银行账号'
   if (!String(bankForm.bankCode || '').trim() || !String(bankForm.bankName || '').trim()) return '请选择开户银行'
   if (!String(bankForm.province || '').trim() || !String(bankForm.city || '').trim()) return '请选择开户省市'
-  if (!String(bankForm.branchCode || '').trim() || !String(bankForm.branchName || '').trim()) return '请选择分支行'
+  if (!String(bankForm.branchCode || '').trim() || !String(bankForm.branchName || '').trim()) return '请选择开户网点'
   return ''
 }
 
@@ -448,15 +440,15 @@ async function submitBankAccount() {
   try {
     if (bankDialogMode.value === 'create') {
       await profileApi.createBankAccount(bankForm)
-      ElMessage.success('收款账户已新增')
+      ElMessage.success('个人银行账户已新增')
     } else if (editingBankAccountId.value) {
       await profileApi.updateBankAccount(editingBankAccountId.value, bankForm)
-      ElMessage.success('收款账户已更新')
+      ElMessage.success('个人银行账户已更新')
     }
     closeBankDialog()
     await loadBankAccounts()
   } catch (error: any) {
-    ElMessage.error(error.message || '保存收款账户失败')
+    ElMessage.error(error.message || '保存个人银行账户失败')
   } finally {
     savingBankAccount.value = false
   }
@@ -466,20 +458,20 @@ async function toggleBankAccountStatus(account: UserBankAccountRecord) {
   const nextStatus = account.status === 1 ? 0 : 1
   try {
     await profileApi.updateBankAccountStatus(account.id, nextStatus)
-    ElMessage.success(nextStatus === 1 ? '收款账户已启用' : '收款账户已停用')
+    ElMessage.success(nextStatus === 1 ? '个人银行账户已启用' : '个人银行账户已停用')
     await loadBankAccounts()
   } catch (error: any) {
-    ElMessage.error(error.message || '更新账户状态失败')
+    ElMessage.error(error.message || '更新个人银行账户状态失败')
   }
 }
 
 async function setDefaultBankAccount(account: UserBankAccountRecord) {
   try {
     await profileApi.setDefaultBankAccount(account.id)
-    ElMessage.success('默认账户已更新')
+    ElMessage.success('个人银行账户已设为默认')
     await loadBankAccounts()
   } catch (error: any) {
-    ElMessage.error(error.message || '设置默认账户失败')
+    ElMessage.error(error.message || '设置默认个人银行账户失败')
   }
 }
 

@@ -1364,8 +1364,7 @@ const companyBankAccountFieldMap = {
   city: 'city',
   branchCode: 'branchCode',
   branchName: 'branchName',
-  accountNo: 'accountNo',
-  cnapsCode: 'cnapsCode'
+  accountNo: 'accountNo'
 } as const
 
 const sourceLabelMap: Record<string, string> = {
@@ -1644,7 +1643,6 @@ function openCompanyBankAccountDialog(item?: CompanyBankAccountRecord) {
   companyBankAccountForm.branchName = item?.branchName
   companyBankAccountForm.bankCode = item?.bankCode
   companyBankAccountForm.branchCode = item?.branchCode
-  companyBankAccountForm.cnapsCode = item?.cnapsCode
   companyBankAccountForm.accountName = item?.accountName || ''
   companyBankAccountForm.accountNo = item?.accountNo || ''
   companyBankAccountForm.accountType = item?.accountType
@@ -1805,18 +1803,18 @@ async function saveCompanyBankAccount() {
   }
   companyBankAccountDialogVisible.value = false
   resetCompanyBankAccountForm()
-  ElMessage.success('公司账户已保存')
+  ElMessage.success('公司银行账户已保存')
   await loadBootstrap()
 }
 
 async function handleDeleteCompanyBankAccount(row: CompanyBankAccountRecord) {
   await ElMessageBox.confirm(
-    `确认删除公司账户“${row.accountName} / ${maskAccountNo(row.accountNo)}”吗？`,
+    `确认删除公司银行账户“${row.accountName} / ${maskAccountNo(row.accountNo)}”吗？`,
     '提示',
     { type: 'warning' }
   )
   await systemSettingsApi.deleteCompanyBankAccount(row.id)
-  ElMessage.success('公司账户已删除')
+  ElMessage.success('公司银行账户已删除')
   await loadBootstrap()
 }
 
@@ -1826,7 +1824,7 @@ async function toggleCompanyBankAccountStatus(row: CompanyBankAccountRecord, sta
     status,
     defaultAccount: status === 0 ? 0 : row.defaultAccount
   })
-  ElMessage.success(status === 1 ? '账户已启用' : '账户已停用')
+  ElMessage.success(status === 1 ? '公司银行账户已启用' : '公司银行账户已停用')
   await loadBootstrap()
 }
 
@@ -1836,7 +1834,7 @@ async function setCompanyBankAccountDefault(row: CompanyBankAccountRecord) {
     status: 1,
     defaultAccount: 1
   })
-  ElMessage.success('默认账户已更新')
+  ElMessage.success('公司银行账户已设为默认')
   await loadBootstrap()
 }
 
@@ -2104,7 +2102,6 @@ function resetCompanyBankAccountForm() {
   companyBankAccountForm.branchName = undefined
   companyBankAccountForm.bankCode = undefined
   companyBankAccountForm.branchCode = undefined
-  companyBankAccountForm.cnapsCode = undefined
   companyBankAccountForm.accountName = ''
   companyBankAccountForm.accountNo = ''
   companyBankAccountForm.accountType = undefined
@@ -2143,7 +2140,6 @@ function buildCompanyBankAccountPayload(
     branchName: source.branchName,
     bankCode: source.bankCode,
     branchCode: source.branchCode,
-    cnapsCode: source.cnapsCode,
     accountName: source.accountName,
     accountNo: source.accountNo,
     accountType: source.accountType,
@@ -2181,7 +2177,7 @@ function validateCompanyBankAccountForm() {
     return '请选择开户省市'
   }
   if (!String(companyBankAccountForm.branchCode || '').trim() || !String(companyBankAccountForm.branchName || '').trim()) {
-    return '请选择分支行'
+    return '请选择开户网点'
   }
   if (!String(companyBankAccountForm.accountName || '').trim()) return '请填写账户名'
   if (!String(companyBankAccountForm.accountNo || '').trim()) return '请填写银行账号'

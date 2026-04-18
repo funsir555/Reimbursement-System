@@ -413,7 +413,7 @@ describe('FinanceSupplierArchiveView', () => {
     await vm.saveSupplier()
 
     expect(mocks.financeArchiveApi.createSupplier).not.toHaveBeenCalled()
-    expect(mocks.elMessage.warning).toHaveBeenCalledWith('开户名最多 128 个字符')
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('账户名最多 128 个字符')
   })
 
   it('blocks supplier save when a tightened field exceeds the limit', async () => {

@@ -3,17 +3,27 @@ import type { ProcessFlowNode, ProcessFlowRoute } from '@/api'
 export type FlowInsertType = 'APPROVAL' | 'CC' | 'PAYMENT' | 'BRANCH'
 export type FlowContainerKey = string | null
 
+export type FlowCanvasInsertTarget = {
+  key: string
+  label: string
+  containerKey: FlowContainerKey
+  index: number
+}
+
 export type FlowCanvasInsertBlock = {
   key: string
   kind: 'insert'
   containerKey: FlowContainerKey
   index: number
+  depth: number
+  targets?: FlowCanvasInsertTarget[]
 }
 
 export type FlowCanvasNodeBlock = {
   key: string
   kind: 'node'
   node: ProcessFlowNode
+  depth: number
 }
 
 export type FlowCanvasRouteLane = {
@@ -26,6 +36,9 @@ export type FlowCanvasBranchBlock = {
   kind: 'branch'
   node: ProcessFlowNode
   routes: FlowCanvasRouteLane[]
+  depth: number
+  compact: boolean
+  symmetric: boolean
 }
 
 export type FlowCanvasBlock = FlowCanvasInsertBlock | FlowCanvasNodeBlock | FlowCanvasBranchBlock
@@ -61,7 +74,7 @@ export function buildFlowCanvasBlocks(
   routes: ProcessFlowRoute[],
   containerKey: FlowContainerKey = null
 ): FlowCanvasBlock[] {
-  return buildContainerBlocks(nodes, routes, containerKey, 0)
+  return buildContainerBlocks(nodes, routes, containerKey, 0, 0)
 }
 
 export function insertNodeIntoContainer(
@@ -315,9 +328,10 @@ function buildContainerBlocks(
   nodes: ProcessFlowNode[],
   routes: ProcessFlowRoute[],
   containerKey: FlowContainerKey,
-  startIndex: number
+  startIndex: number,
+  depth: number
 ): FlowCanvasBlock[] {
-  const blocks: FlowCanvasBlock[] = [createInsertBlock(containerKey, startIndex)]
+  const blocks: FlowCanvasBlock[] = [createInsertBlock(containerKey, startIndex, depth)]
   const orderedNodes = listNodesInContainer(nodes, containerKey)
 
   for (const [offset, node] of orderedNodes.slice(startIndex).entries()) {
@@ -329,9 +343,12 @@ function buildContainerBlocks(
         key: `branch-${node.nodeKey}`,
         kind: 'branch',
         node,
+        depth,
+        compact: depth > 0,
+        symmetric: branchRoutes.length === 2,
         routes: branchRoutes.map((route) => ({
           route,
-          blocks: buildRouteLaneBlocks(nodes, routes, route, containerKey, index)
+          blocks: buildRouteLaneBlocks(nodes, routes, route, containerKey, index, depth + 1)
         }))
       })
       if (attachedRoute) {
@@ -341,11 +358,12 @@ function buildContainerBlocks(
       blocks.push({
         key: `node-${node.nodeKey}`,
         kind: 'node',
-        node
+        node,
+        depth
       })
     }
 
-    blocks.push(createInsertBlock(containerKey, index + 1))
+    blocks.push(createInsertBlock(containerKey, index + 1, depth))
   }
 
   return blocks
@@ -356,16 +374,18 @@ function buildRouteLaneBlocks(
   routes: ProcessFlowRoute[],
   route: ProcessFlowRoute,
   parentContainerKey: FlowContainerKey,
-  branchIndex: number
+  branchIndex: number,
+  depth: number
 ) {
-  const laneBlocks = buildContainerBlocks(nodes, routes, route.routeKey, 0)
+  const laneBlocks = buildContainerBlocks(nodes, routes, route.routeKey, 0, depth)
   if (!route.attachBelowNodes) {
     return laneBlocks
   }
-  return [
-    ...laneBlocks,
-    ...buildContainerBlocks(nodes, routes, parentContainerKey, branchIndex + 1)
-  ]
+  return mergeAttachedTailBlocks(
+    laneBlocks,
+    buildContainerBlocks(nodes, routes, parentContainerKey, branchIndex + 1, depth),
+    depth
+  )
 }
 
 function listRoutesForBranch(routes: ProcessFlowRoute[], branchNodeKey: string) {
@@ -422,10 +442,60 @@ function collectBranchDescendantRouteKeys(nodes: ProcessFlowNode[], routes: Proc
   return routeKeys
 }
 
-function createInsertBlock(containerKey: FlowContainerKey, index: number): FlowCanvasInsertBlock {
+function createInsertBlock(containerKey: FlowContainerKey, index: number, depth: number): FlowCanvasInsertBlock {
   return {
     key: `insert-${containerKey ?? 'root'}-${index}`,
     kind: 'insert',
+    containerKey,
+    index,
+    depth
+  }
+}
+
+function mergeAttachedTailBlocks(
+  laneBlocks: FlowCanvasBlock[],
+  tailBlocks: FlowCanvasBlock[],
+  depth: number
+) {
+  const laneBoundary = laneBlocks[laneBlocks.length - 1]
+  const tailBoundary = tailBlocks[0]
+  if (laneBoundary?.kind !== 'insert' || tailBoundary?.kind !== 'insert') {
+    return [...laneBlocks, ...tailBlocks]
+  }
+  return [
+    ...laneBlocks.slice(0, -1),
+    createMergedInsertBlock(laneBoundary, tailBoundary, depth),
+    ...tailBlocks.slice(1)
+  ]
+}
+
+function createMergedInsertBlock(
+  currentBranchInsert: FlowCanvasInsertBlock,
+  attachedTailInsert: FlowCanvasInsertBlock,
+  depth: number
+): FlowCanvasInsertBlock {
+  return {
+    key: `insert-merged-${currentBranchInsert.key}-${attachedTailInsert.key}`,
+    kind: 'insert',
+    containerKey: currentBranchInsert.containerKey,
+    index: currentBranchInsert.index,
+    depth,
+    targets: [
+      createInsertTarget('current-branch', '插入当前分支', currentBranchInsert.containerKey, currentBranchInsert.index),
+      createInsertTarget('attached-tail', '插入附带下方节点', attachedTailInsert.containerKey, attachedTailInsert.index)
+    ]
+  }
+}
+
+function createInsertTarget(
+  key: string,
+  label: string,
+  containerKey: FlowContainerKey,
+  index: number
+): FlowCanvasInsertTarget {
+  return {
+    key: `${key}-${containerKey ?? 'root'}-${index}`,
+    label,
     containerKey,
     index
   }

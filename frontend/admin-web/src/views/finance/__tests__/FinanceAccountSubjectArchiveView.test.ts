@@ -326,6 +326,18 @@ describe('FinanceAccountSubjectArchiveView', () => {
           }
         }
       }
+      if (subjectCode === '112203') {
+        return {
+          data: {
+            parent_subject_code: '1122',
+            subject_level: 2,
+            subject_category: 'ASSET',
+            balance_direction: 'DEBIT',
+            leaf_flag: 1,
+            matched_by: 'EXISTING_PARENT'
+          }
+        }
+      }
       if (subjectCode === '100101') {
         return {
           data: {
@@ -509,6 +521,36 @@ describe('FinanceAccountSubjectArchiveView', () => {
 
     expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先创建上级科目，再新增当前科目')
     expect(mocks.financeArchiveApi.createAccountSubject).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
+  it('shows derived parent details for 112203 without parent warning', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openCreateDrawer: (parentSubjectCode?: string) => void
+      loadDerivedDefaults: () => Promise<void>
+      form: Record<string, unknown>
+      parentDisplayText: string
+      subjectLevelPreview?: number
+      categoryPreviewValue?: string
+      balanceDirectionPreview: string
+      leafFlagPreviewText: string
+      missingAutoParent: boolean
+    }
+
+    vm.openCreateDrawer()
+    vm.form.subject_code = '112203'
+    await vm.loadDerivedDefaults()
+    await flushPromises()
+
+    expect(vm.parentDisplayText).toContain('1122')
+    expect(vm.subjectLevelPreview).toBe(2)
+    expect(vm.categoryPreviewValue).toBe('ASSET')
+    expect(vm.balanceDirectionPreview).toBe('DEBIT')
+    expect(vm.leafFlagPreviewText).toBe('是')
+    expect(vm.missingAutoParent).toBe(false)
+    expect(mocks.elMessage.error).not.toHaveBeenCalledWith('系统异常，请稍后重试')
 
     wrapper.unmount()
   })

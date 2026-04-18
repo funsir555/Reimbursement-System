@@ -48,20 +48,22 @@
 
       <el-card class="designer-side-card !rounded-3xl !shadow-sm">
         <div class="space-y-6">
-          <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.2fr),minmax(0,0.8fr)]">
-            <el-form-item label="流程名称" required class="!mb-0">
+          <div
+            class="flow-meta-grid grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr),minmax(0,1fr),240px]"
+            data-testid="flow-meta-grid"
+          >
+            <el-form-item label="流程名称" required class="flow-meta-item !mb-0">
               <el-input v-model="working.flowName" maxlength="64" show-word-limit placeholder="请输入流程名称" />
             </el-form-item>
-            <el-form-item label="流程编码" class="!mb-0">
-              <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
+            <el-form-item label="流程说明" class="flow-meta-item !mb-0">
+              <el-input v-model="working.flowDescription" placeholder="请输入流程说明" />
+            </el-form-item>
+            <el-form-item label="流程编码" class="flow-meta-item !mb-0">
+              <div class="flow-meta-readonly rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600">
                 {{ working.flowCode || '保存后自动生成' }}
               </div>
             </el-form-item>
           </div>
-
-          <el-form-item label="流程说明" class="!mb-0">
-            <el-input v-model="working.flowDescription" type="textarea" :rows="3" placeholder="请输入流程说明" />
-          </el-form-item>
 
           <div class="flow-canvas-shell rounded-[32px] border border-slate-100 bg-slate-50/80 px-4 py-6 lg:px-8" :class="{ 'canvas-muted': hasSelection }">
             <div class="flow-canvas-scroll" data-testid="flow-canvas-scroll">
@@ -1299,6 +1301,11 @@ function cloneValue<T>(value: T): T {
 }
 
 function selectNode(nodeKey: string) {
+  const preferredSelection = resolveSelectionPreference({ nodeKey })
+  if (preferredSelection) {
+    applySelection(preferredSelection)
+    return
+  }
   selectedNodeKey.value = nodeKey
   selectedRouteKey.value = ''
 }
@@ -1999,6 +2006,24 @@ function appendQueryParam(path: string, key: string, value: string) {
 </script>
 
 <style scoped>
+.flow-meta-grid {
+  align-items: start;
+}
+
+:deep(.flow-meta-item .el-form-item__content) {
+  min-height: 44px;
+}
+
+:deep(.flow-meta-item .el-input__wrapper) {
+  min-height: 44px;
+}
+
+.flow-meta-readonly {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+}
+
 .canvas-muted {
   background: linear-gradient(180deg, rgba(241, 245, 249, 0.95), rgba(248, 250, 252, 0.92));
 }
@@ -2189,6 +2214,10 @@ function appendQueryParam(path: string, key: string, value: string) {
 }
 
 @media (max-width: 1279px) {
+  .flow-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
   .flow-canvas-shell {
     overflow: visible;
   }

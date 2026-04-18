@@ -75,6 +75,8 @@ SUSPICIOUS_TEXT_PATTERNS = (
 )
 INSERT_BATCH_SIZE = 200
 TEXT_LENGTH_PATTERN = re.compile(r"^(?:var)?char\((\d+)\)$")
+NULL_NORMALIZED_TEXT_COLUMNS = {"cnaps_code", "cVenBankNub"}
+NULL_PLACEHOLDER_TEXT_VALUES = {"null"}
 
 
 @dataclass
@@ -255,14 +257,17 @@ def check_text_value(value: Any, row_number: int, column_name: str, strict: bool
     if value is None:
         return None
     text = str(value)
-    if text.strip() == "":
+    normalized_text = text.strip()
+    if normalized_text == "":
+        return None
+    if column_name in NULL_NORMALIZED_TEXT_COLUMNS and normalized_text.lower() in NULL_PLACEHOLDER_TEXT_VALUES:
         return None
     for marker in SUSPICIOUS_TEXT_PATTERNS:
         if marker in text:
             raise ValidationError(row_number, column_name, value, "疑似乱码文本")
-    if strict and text.strip() in {"?", "??", "???", "????", "NULL", "null"}:
+    if strict and normalized_text in {"?", "??", "???", "????", "NULL", "null"}:
         raise ValidationError(row_number, column_name, value, "不允许使用占位文本")
-    if max_length is not None and len(text.strip()) > max_length:
+    if max_length is not None and len(normalized_text) > max_length:
         raise ValidationError(row_number, column_name, value, f"文本长度超过上限 {max_length}")
     return text
 

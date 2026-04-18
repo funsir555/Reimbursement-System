@@ -1,10 +1,13 @@
 package com.finex.auth.dto;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class FinanceCashFlowItemSaveDTO {
 
     @NotBlank(message = "现金流量编码不能为空")

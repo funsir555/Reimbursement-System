@@ -100,7 +100,7 @@
                 <SupplierPaymentInfoFields
                   :form-state="vendorForm"
                   auto-fill-source-key="cVenName"
-                  account-name-label="开户名"
+                  account-name-label="账户名"
                   business-scope="PUBLIC"
                 />
               </div>
@@ -194,7 +194,6 @@ const VENDOR_FIELD_MAX_LENGTH: Record<string, number> = {
   cVCCode: 64,
   cVenBank: 128,
   cVenAccount: 64,
-  cVenBankNub: 64,
   receiptAccountName: 128,
   receiptBranchName: 128,
   cVenPerson: 64,
@@ -351,8 +350,7 @@ const paymentFieldKeys = [
   'receiptBankProvince',
   'receiptBankCity',
   'receiptBranchCode',
-  'receiptBranchName',
-  'cVenBankNub'
+  'receiptBranchName'
 ] as const
 const allowedVendorFieldKeys = new Set([
   ...vendorSections.flatMap((section) => section.fields.map((field) => field.key)),
@@ -363,15 +361,14 @@ const vendorFieldLabels: Record<string, string> = {
     acc[field.key] = field.label
     return acc
   }, {}),
-  receiptAccountName: '开户名',
+  receiptAccountName: '账户名',
   cVenBankCode: '开户银行编码',
   cVenBank: '开户银行',
   cVenAccount: '银行账号',
   receiptBankProvince: '开户省',
   receiptBankCity: '开户市',
-  receiptBranchCode: '分支行编码',
-  receiptBranchName: '分支行',
-  cVenBankNub: '联行号'
+  receiptBranchCode: '开户网点编码',
+  receiptBranchName: '开户网点'
 }
 
 resetVendorForm()

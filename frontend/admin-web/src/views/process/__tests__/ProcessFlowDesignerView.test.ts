@@ -369,24 +369,24 @@ describe('ProcessFlowDesignerView', () => {
     expect(footerButtons.some((item) => item.classes().includes('process-flow-designer-floating-bar__button--success'))).toBe(true)
   })
 
-  it('shows current flow name in branch summary tag after selecting a branch node', async () => {
+  it('opens the first route panel after selecting a branch node', async () => {
     const wrapper = await mountView('Travel Approval Flow')
 
     await wrapper.get('[data-testid="select-branch"]').trigger('click')
     await flushPromises()
 
-    const tagTexts = wrapper.findAll('[data-testid="tag"]').map((item) => item.text())
-    expect(tagTexts).toContain('Travel Approval Flow')
+    expect(wrapper.find('[data-testid="attach-below-switch"]').exists()).toBe(true)
+    expect(wrapper.findAll('.route-pill')[0]?.classes()).toContain('is-selected')
   })
 
-  it('falls back to unnamed flow label when current flow name is empty', async () => {
+  it('still opens the first route panel when current flow name is empty', async () => {
     const wrapper = await mountView('')
 
     await wrapper.get('[data-testid="select-branch"]').trigger('click')
     await flushPromises()
 
-    const tagTexts = wrapper.findAll('[data-testid="tag"]').map((item) => item.text())
-    expect(tagTexts).toContain('未命名流程')
+    expect(wrapper.find('[data-testid="attach-below-switch"]').exists()).toBe(true)
+    expect(wrapper.findAll('.route-pill')[0]?.classes()).toContain('is-selected')
   })
 
   it('deletes the selected node after pressing Delete and confirming once', async () => {
@@ -502,6 +502,25 @@ describe('ProcessFlowDesignerView', () => {
     const routePills = wrapper.findAll('.route-pill').map((item) => item.text())
     expect(routePills[0]).toContain('B')
     expect(routePills[1]).toContain('A')
+  })
+
+  it('keeps flow name, flow description, and flow code in the shared top row and still saves flowDescription', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    const metaGrid = wrapper.get('[data-testid="flow-meta-grid"]')
+    expect(metaGrid.classes()).toContain('flow-meta-grid')
+    expect(metaGrid.text()).toContain('流程名称')
+    expect(metaGrid.text()).toContain('流程说明')
+    expect(metaGrid.text()).toContain('流程编码')
+
+    const descriptionInput = wrapper.findAll('input').find((item) => (item.element as HTMLInputElement).value === 'flow description')
+    expect(descriptionInput).toBeTruthy()
+    await descriptionInput!.setValue('updated flow description')
+    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
+    expect(mocks.processApi.updateFlow.mock.calls[0][1].flowDescription).toBe('updated flow description')
   })
 
 })

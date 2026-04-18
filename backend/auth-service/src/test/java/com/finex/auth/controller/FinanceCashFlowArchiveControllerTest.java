@@ -9,6 +9,7 @@ import com.finex.auth.service.FinanceCashFlowArchiveService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -58,10 +59,11 @@ class FinanceCashFlowArchiveControllerTest {
                         .param("companyId", "COMPANY_A")
                         .param("keyword", "1001")
                         .param("direction", "INFLOW")
-                        .param("status", "1"))
+                .param("status", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data[0].cashFlowCode").value("1001"));
+                .andExpect(jsonPath("$.data[0].cash_flow_code").value("1001"))
+                .andExpect(jsonPath("$.data[0].cash_flow_name").isNotEmpty());
 
         verify(accessControlService).requirePermission(1L, "finance:archives:projects:view");
         verify(financeCashFlowArchiveService).listCashFlows("COMPANY_A", "1001", "INFLOW", 1);
@@ -79,14 +81,19 @@ class FinanceCashFlowArchiveControllerTest {
                         .param("companyId", "COMPANY_A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"cashFlowCode":"1001","cashFlowName":"销售商品、提供劳务收到的现金","direction":"INFLOW","status":1,"sortOrder":10}
+                                {"cash_flow_code":"1001","cash_flow_name":"销售商品、提供劳务收到的现金","direction":"INFLOW","status":1,"sort_order":10}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.cashFlowName").value("销售商品、提供劳务收到的现金"));
+                .andExpect(jsonPath("$.data.cash_flow_name").value("销售商品、提供劳务收到的现金"));
 
         verify(accessControlService)
                 .requireAnyPermission(1L, "finance:archives:projects:create", "finance:archives:projects:edit");
-        verify(financeCashFlowArchiveService).createCashFlow(eq("COMPANY_A"), any(FinanceCashFlowItemSaveDTO.class));
+        ArgumentCaptor<FinanceCashFlowItemSaveDTO> dtoCaptor = ArgumentCaptor.forClass(FinanceCashFlowItemSaveDTO.class);
+        verify(financeCashFlowArchiveService).createCashFlow(eq("COMPANY_A"), dtoCaptor.capture());
+        FinanceCashFlowItemSaveDTO captured = dtoCaptor.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals("1001", captured.getCashFlowCode());
+        org.junit.jupiter.api.Assertions.assertEquals("INFLOW", captured.getDirection());
+        org.junit.jupiter.api.Assertions.assertEquals(10, captured.getSortOrder());
     }
 
     @Test
@@ -100,13 +107,18 @@ class FinanceCashFlowArchiveControllerTest {
                         .param("companyId", "COMPANY_A")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"cashFlowCode":"1001","cashFlowName":"销售商品、提供劳务收到的现金","direction":"INFLOW","status":1,"sortOrder":10}
+                                {"cash_flow_code":"1001","cash_flow_name":"销售商品、提供劳务收到的现金","direction":"INFLOW","status":1,"sort_order":10}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.cashFlowCode").value("1001"));
+                .andExpect(jsonPath("$.data.cash_flow_code").value("1001"));
 
         verify(accessControlService).requirePermission(1L, "finance:archives:projects:edit");
-        verify(financeCashFlowArchiveService).updateCashFlow(eq("COMPANY_A"), eq(9L), any(FinanceCashFlowItemSaveDTO.class));
+        ArgumentCaptor<FinanceCashFlowItemSaveDTO> dtoCaptor = ArgumentCaptor.forClass(FinanceCashFlowItemSaveDTO.class);
+        verify(financeCashFlowArchiveService).updateCashFlow(eq("COMPANY_A"), eq(9L), dtoCaptor.capture());
+        FinanceCashFlowItemSaveDTO captured = dtoCaptor.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals("1001", captured.getCashFlowCode());
+        org.junit.jupiter.api.Assertions.assertEquals("INFLOW", captured.getDirection());
+        org.junit.jupiter.api.Assertions.assertEquals(10, captured.getSortOrder());
     }
 
     @Test

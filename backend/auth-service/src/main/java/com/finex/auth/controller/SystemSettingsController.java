@@ -264,7 +264,7 @@ public class SystemSettingsController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), COMPANY_ACCOUNT_CREATE);
-        return Result.success("公司账户创建成功", systemSettingsService.createCompanyBankAccount(dto));
+        return Result.success("公司银行账户已新增", systemSettingsService.createCompanyBankAccount(dto));
     }
 
     // 处理 updateCompanyBankAccount 请求。
@@ -275,14 +275,14 @@ public class SystemSettingsController {
             HttpServletRequest request
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), COMPANY_ACCOUNT_EDIT);
-        return Result.success("公司账户更新成功", systemSettingsService.updateCompanyBankAccount(id, dto));
+        return Result.success("公司银行账户已更新", systemSettingsService.updateCompanyBankAccount(id, dto));
     }
 
     // 处理 deleteCompanyBankAccount 请求。
     @DeleteMapping("/company-bank-accounts/{id}")
     public Result<Boolean> deleteCompanyBankAccount(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), COMPANY_ACCOUNT_DELETE);
-        return Result.success("公司账户删除成功", systemSettingsService.deleteCompanyBankAccount(id));
+        return Result.success("公司银行账户已删除", systemSettingsService.deleteCompanyBankAccount(id));
     }
 
     // 处理 syncConnectors 请求。

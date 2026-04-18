@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -149,5 +150,115 @@ class ProfileBankAccountDomainSupportTest {
 
         assertEquals("停用账户不能设为默认", error.getMessage());
         verify(userBankAccountMapper, times(0)).updateById(any());
+    }
+
+    @Test
+    void updateBankAccountPreservesCnapsWhenBranchSelectionIsUnchanged() {
+        User user = new User();
+        user.setId(3L);
+        when(userService.getById(3L)).thenReturn(user);
+
+        UserBankAccount existing = new UserBankAccount();
+        existing.setId(20L);
+        existing.setUserId(3L);
+        existing.setBankCode("CMB");
+        existing.setBankName("招商银行");
+        existing.setProvince("广东省");
+        existing.setCity("深圳市");
+        existing.setBranchCode("CMB-SZ-FH");
+        existing.setBranchName("招商银行深圳福华支行");
+        existing.setCnapsCode("308584000013");
+        existing.setStatus(1);
+
+        UserBankAccount refreshed = new UserBankAccount();
+        refreshed.setId(20L);
+        refreshed.setUserId(3L);
+
+        when(userBankAccountMapper.selectOne(any())).thenReturn(existing, refreshed);
+
+        UserBankAccountSaveDTO dto = new UserBankAccountSaveDTO();
+        dto.setAccountName("Alice");
+        dto.setAccountNo("6222020202020202");
+        dto.setBankCode("CMB");
+        dto.setBankName("招商银行");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchCode("CMB-SZ-FH");
+        dto.setBranchName("招商银行深圳福华支行");
+        dto.setStatus(1);
+        dto.setDefaultAccount(0);
+
+        support.updateBankAccount(3L, 20L, dto);
+
+        ArgumentCaptor<UserBankAccount> captor = ArgumentCaptor.forClass(UserBankAccount.class);
+        verify(userBankAccountMapper).updateById(captor.capture());
+        assertEquals("308584000013", captor.getValue().getCnapsCode());
+    }
+
+    @Test
+    void updateBankAccountClearsCnapsWhenBranchSelectionChanges() {
+        User user = new User();
+        user.setId(3L);
+        when(userService.getById(3L)).thenReturn(user);
+
+        UserBankAccount existing = new UserBankAccount();
+        existing.setId(21L);
+        existing.setUserId(3L);
+        existing.setBankCode("CMB");
+        existing.setBankName("招商银行");
+        existing.setProvince("广东省");
+        existing.setCity("深圳市");
+        existing.setBranchCode("CMB-SZ-FH");
+        existing.setBranchName("招商银行深圳福华支行");
+        existing.setCnapsCode("308584000013");
+        existing.setStatus(1);
+
+        UserBankAccount refreshed = new UserBankAccount();
+        refreshed.setId(21L);
+        refreshed.setUserId(3L);
+
+        when(userBankAccountMapper.selectOne(any())).thenReturn(existing, refreshed);
+
+        UserBankAccountSaveDTO dto = new UserBankAccountSaveDTO();
+        dto.setAccountName("Alice");
+        dto.setAccountNo("6222020202020202");
+        dto.setBankCode("CMB");
+        dto.setBankName("招商银行");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchCode("CMB-SZ-NS");
+        dto.setBranchName("招商银行深圳南山支行");
+        dto.setStatus(1);
+        dto.setDefaultAccount(0);
+
+        support.updateBankAccount(3L, 21L, dto);
+
+        ArgumentCaptor<UserBankAccount> captor = ArgumentCaptor.forClass(UserBankAccount.class);
+        verify(userBankAccountMapper).updateById(captor.capture());
+        assertNull(captor.getValue().getCnapsCode());
+    }
+    @Test
+    void createBankAccountUsesUnifiedOutletValidationMessage() {
+        User user = new User();
+        user.setId(3L);
+        when(userService.getById(3L)).thenReturn(user);
+
+        UserBankAccountSaveDTO dto = new UserBankAccountSaveDTO();
+        dto.setAccountName("Alice");
+        dto.setAccountNo("6222020202020202");
+        dto.setBankCode("CMB");
+        dto.setBankName("招商银行");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchCode("CMB-SZ");
+        dto.setStatus(1);
+        dto.setDefaultAccount(0);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> support.createBankAccount(3L, dto)
+        );
+
+        assertEquals("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a", exception.getMessage());
     }
 }

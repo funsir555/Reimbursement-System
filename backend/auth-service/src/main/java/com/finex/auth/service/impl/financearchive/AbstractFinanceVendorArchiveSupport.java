@@ -14,6 +14,7 @@ import com.finex.auth.mapper.UserMapper;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 
 public abstract class AbstractFinanceVendorArchiveSupport {
 
@@ -48,8 +49,8 @@ public abstract class AbstractFinanceVendorArchiveSupport {
         validateLength(dto, "cVenBank", "\u5f00\u6237\u94f6\u884c", 128);
         validateLength(dto, "cVenAccount", "\u94f6\u884c\u8d26\u53f7", 64);
         validateLength(dto, "cVenBankNub", "\u8054\u884c\u53f7", 64);
-        validateLength(dto, "receiptAccountName", "\u6536\u6b3e\u5f00\u6237\u540d", 128);
-        validateLength(dto, "receiptBranchName", "\u6536\u6b3e\u5206\u652f\u884c\u540d\u79f0", 128);
+        validateLength(dto, "receiptAccountName", "\u8d26\u6237\u540d", 128);
+        validateLength(dto, "receiptBranchName", "\u5f00\u6237\u7f51\u70b9", 128);
         validateLength(dto, "cVenPerson", "\u8054\u7cfb\u4eba", 64);
         validateLength(dto, "cVenPhone", "\u7535\u8bdd", 32);
         validateLength(dto, "cVenHand", "\u624b\u673a", 32);
@@ -70,7 +71,7 @@ public abstract class AbstractFinanceVendorArchiveSupport {
 
         if (paymentInfoRequired) {
             if (effectiveReceiptAccountName(dto) == null) {
-                throw new IllegalArgumentException("\u5f00\u6237\u540d\u4e0d\u80fd\u4e3a\u7a7a");
+                throw new IllegalArgumentException("\u8d26\u6237\u540d\u4e0d\u80fd\u4e3a\u7a7a");
             }
             if (trimToNull(dto.getCVenAccount()) == null) {
                 throw new IllegalArgumentException("\u94f6\u884c\u8d26\u53f7\u4e0d\u80fd\u4e3a\u7a7a");
@@ -82,7 +83,7 @@ public abstract class AbstractFinanceVendorArchiveSupport {
                 throw new IllegalArgumentException("\u5f00\u6237\u884c\u6240\u5728\u7701\u5e02\u4e0d\u80fd\u4e3a\u7a7a");
             }
             if (trimToNull(dto.getReceiptBranchName()) == null) {
-                throw new IllegalArgumentException("\u652f\u884c\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
+                throw new IllegalArgumentException("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a");
             }
         }
 
@@ -146,15 +147,43 @@ public abstract class AbstractFinanceVendorArchiveSupport {
     }
 
     protected void normalizePaymentInfoFields(FinanceVendor vendor, FinanceVendorSaveDTO dto) {
+        String previousBankCode = trimToNull(vendor.getCVenBankCode());
+        String previousProvince = trimToNull(vendor.getReceiptBankProvince());
+        String previousCity = trimToNull(vendor.getReceiptBankCity());
+        String previousBranchCode = trimToNull(vendor.getReceiptBranchCode());
+        String previousBranchName = trimToNull(vendor.getReceiptBranchName());
+        String previousCnapsCode = trimToNull(vendor.getCVenBankNub());
+
+        String nextBankCode = trimToNull(dto.getCVenBankCode());
+        String nextProvince = trimToNull(dto.getReceiptBankProvince());
+        String nextCity = trimToNull(dto.getReceiptBankCity());
+        String nextBranchCode = trimToNull(dto.getReceiptBranchCode());
+        String nextBranchName = trimToNull(dto.getReceiptBranchName());
+        boolean branchSelectionChanged = !Objects.equals(previousBankCode, nextBankCode)
+                || !Objects.equals(previousProvince, nextProvince)
+                || !Objects.equals(previousCity, nextCity)
+                || !Objects.equals(previousBranchCode, nextBranchCode)
+                || !Objects.equals(previousBranchName, nextBranchName);
+
         vendor.setReceiptAccountName(effectiveReceiptAccountName(dto));
-        vendor.setReceiptBankProvince(trimToNull(dto.getReceiptBankProvince()));
-        vendor.setReceiptBankCity(trimToNull(dto.getReceiptBankCity()));
-        vendor.setReceiptBranchCode(trimToNull(dto.getReceiptBranchCode()));
-        vendor.setReceiptBranchName(trimToNull(dto.getReceiptBranchName()));
+        vendor.setReceiptBankProvince(nextProvince);
+        vendor.setReceiptBankCity(nextCity);
+        vendor.setReceiptBranchCode(nextBranchCode);
+        vendor.setReceiptBranchName(nextBranchName);
         vendor.setCVenBank(trimToNull(dto.getCVenBank()));
-        vendor.setCVenBankCode(trimToNull(dto.getCVenBankCode()));
-        vendor.setCVenBankNub(trimToNull(dto.getCVenBankNub()));
+        vendor.setCVenBankCode(nextBankCode);
+        vendor.setCVenBankNub(resolveWeakCnapsCode(previousCnapsCode, trimToNull(dto.getCVenBankNub()), branchSelectionChanged));
         vendor.setCVenAccount(trimToNull(dto.getCVenAccount()));
+    }
+
+    protected String resolveWeakCnapsCode(String previousCnapsCode, String submittedCnapsCode, boolean branchSelectionChanged) {
+        if (submittedCnapsCode != null) {
+            return submittedCnapsCode;
+        }
+        if (branchSelectionChanged) {
+            return null;
+        }
+        return previousCnapsCode;
     }
 
     protected String effectiveReceiptAccountName(FinanceVendorSaveDTO dto) {

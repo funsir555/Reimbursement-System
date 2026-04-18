@@ -342,12 +342,14 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
     protected Integer resolveSubjectLevel(FinanceAccountSubjectSaveDTO dto, FinanceAccountSubject parent) {
         if (parent != null) {
             int computedLevel = (parent.getSubjectLevel() == null ? 1 : parent.getSubjectLevel()) + 1;
-            if (dto.getSubjectLevel() != null && !Objects.equals(dto.getSubjectLevel(), computedLevel)) {
+            Integer requestedLevel = dto == null ? null : dto.getSubjectLevel();
+            if (requestedLevel != null && !Objects.equals(requestedLevel, computedLevel)) {
                 throw new IllegalArgumentException("子科目级次必须与上级科目层级匹配");
             }
             return computedLevel;
         }
-        if (dto.getSubjectLevel() != null && dto.getSubjectLevel() != 1) {
+        Integer requestedLevel = dto == null ? null : dto.getSubjectLevel();
+        if (requestedLevel != null && requestedLevel != 1) {
             throw new IllegalArgumentException("根科目级次必须为 1");
         }
         return 1;

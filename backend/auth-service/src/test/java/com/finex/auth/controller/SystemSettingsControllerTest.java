@@ -1,6 +1,7 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
+import com.finex.auth.dto.CompanyBankAccountVO;
 import com.finex.auth.dto.CompanyVO;
 import com.finex.auth.dto.DepartmentTreeNodeVO;
 import com.finex.auth.dto.EmployeeVO;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -170,6 +172,83 @@ class SystemSettingsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data[0].companyName").value("Finex Co"));
+    }
+
+    @Test
+    void createCompanyBankAccountReturnsUnifiedMessage() throws Exception {
+        CompanyBankAccountVO account = new CompanyBankAccountVO();
+        account.setId(8L);
+        account.setAccountName("测试公司账户");
+
+        doNothing().when(accessControlService).requirePermission(1L, "settings:company_accounts:create");
+        when(systemSettingsService.createCompanyBankAccount(any())).thenReturn(account);
+
+        mockMvc.perform(post("/auth/system-settings/company-bank-accounts")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyId": "COMPANY001",
+                                  "accountName": "测试公司账户",
+                                  "accountNo": "6222020202020202",
+                                  "bankCode": "ICBC",
+                                  "bankName": "中国工商银行",
+                                  "province": "上海市",
+                                  "city": "上海市",
+                                  "branchCode": "ICBC-SH-001",
+                                  "branchName": "中国工商银行上海分行",
+                                  "status": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("公司银行账户已新增"))
+                .andExpect(jsonPath("$.data.id").value(8));
+    }
+
+    @Test
+    void updateCompanyBankAccountReturnsUnifiedMessage() throws Exception {
+        CompanyBankAccountVO account = new CompanyBankAccountVO();
+        account.setId(8L);
+        account.setAccountName("测试公司账户");
+
+        doNothing().when(accessControlService).requirePermission(1L, "settings:company_accounts:edit");
+        when(systemSettingsService.updateCompanyBankAccount(eq(8L), any())).thenReturn(account);
+
+        mockMvc.perform(put("/auth/system-settings/company-bank-accounts/8")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyId": "COMPANY001",
+                                  "accountName": "测试公司账户",
+                                  "accountNo": "6222020202020202",
+                                  "bankCode": "ICBC",
+                                  "bankName": "中国工商银行",
+                                  "province": "上海市",
+                                  "city": "上海市",
+                                  "branchCode": "ICBC-SH-001",
+                                  "branchName": "中国工商银行上海分行",
+                                  "status": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("公司银行账户已更新"))
+                .andExpect(jsonPath("$.data.id").value(8));
+    }
+
+    @Test
+    void deleteCompanyBankAccountReturnsUnifiedMessage() throws Exception {
+        doNothing().when(accessControlService).requirePermission(1L, "settings:company_accounts:delete");
+        when(systemSettingsService.deleteCompanyBankAccount(8L)).thenReturn(Boolean.TRUE);
+
+        mockMvc.perform(delete("/auth/system-settings/company-bank-accounts/8")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("公司银行账户已删除"))
+                .andExpect(jsonPath("$.data").value(true));
     }
 
     @Test

@@ -204,6 +204,7 @@ class ExpenseDocumentControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("供应商及收款信息已保存"))
                 .andExpect(jsonPath("$.data.companyId").value("COMPANY_A"));
 
         verify(financeVendorService).createVendor(eq("COMPANY_A"), any(FinanceVendorSaveDTO.class), eq("tester"), eq(true));
@@ -242,6 +243,7 @@ class ExpenseDocumentControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("供应商收款信息已更新"))
                 .andExpect(jsonPath("$.data.companyId").value("COMPANY_A"));
 
         verify(financeVendorService).updateVendor(

@@ -259,6 +259,36 @@ class FinanceAccountSubjectArchiveServiceImplTest {
     }
 
     @Test
+    void getDerivedDefaultsReturnsExistingParentForChildSubject() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setStatus(1);
+
+        FinanceAccountSubject parent = new FinanceAccountSubject();
+        parent.setCompanyId("COMPANY_A");
+        parent.setSubjectCode("1122");
+        parent.setSubjectName("accounts-receivable");
+        parent.setSubjectLevel(1);
+        parent.setStatus(1);
+        parent.setBclose(0);
+        parent.setLeafFlag(0);
+        parent.setBalanceDirection("DEBIT");
+        parent.setSubjectCategory("ASSET");
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(parent));
+
+        FinanceAccountSubjectDerivedDefaultsVO defaults = service.getDerivedDefaults("COMPANY_A", "112203");
+
+        assertEquals("1122", defaults.getParentSubjectCode());
+        assertEquals(2, defaults.getSubjectLevel());
+        assertEquals("ASSET", defaults.getSubjectCategory());
+        assertEquals("DEBIT", defaults.getBalanceDirection());
+        assertEquals(1, defaults.getLeafFlag());
+        assertEquals("EXISTING_PARENT", defaults.getMatchedBy());
+    }
+
+    @Test
     void createSubjectRejectsWhenNoParentPrefixMatched() {
         SystemCompany company = new SystemCompany();
         company.setCompanyId("COMPANY_A");

@@ -73,7 +73,7 @@ public class UserCenterController {
     ) {
         Long userId = getCurrentUserId(request);
         accessControlService.requirePermission(userId, PROFILE_VIEW);
-        return Result.success(userCenterService.createBankAccount(userId, dto));
+        return Result.success("个人银行账户已新增", userCenterService.createBankAccount(userId, dto));
     }
 
     // 处理 updateBankAccount 请求。
@@ -85,7 +85,7 @@ public class UserCenterController {
     ) {
         Long userId = getCurrentUserId(request);
         accessControlService.requirePermission(userId, PROFILE_VIEW);
-        return Result.success(userCenterService.updateBankAccount(userId, accountId, dto));
+        return Result.success("个人银行账户已更新", userCenterService.updateBankAccount(userId, accountId, dto));
     }
 
     // 处理 updateBankAccountStatus 请求。
@@ -97,7 +97,8 @@ public class UserCenterController {
     ) {
         Long userId = getCurrentUserId(request);
         accessControlService.requirePermission(userId, PROFILE_VIEW);
-        return Result.success(userCenterService.updateBankAccountStatus(userId, accountId, dto.getStatus()));
+        String message = dto.getStatus() == 1 ? "个人银行账户已启用" : "个人银行账户已停用";
+        return Result.success(message, userCenterService.updateBankAccountStatus(userId, accountId, dto.getStatus()));
     }
 
     // 处理 setDefaultBankAccount 请求。
@@ -108,7 +109,7 @@ public class UserCenterController {
     ) {
         Long userId = getCurrentUserId(request);
         accessControlService.requirePermission(userId, PROFILE_VIEW);
-        return Result.success(userCenterService.setDefaultBankAccount(userId, accountId));
+        return Result.success("个人银行账户已设为默认", userCenterService.setDefaultBankAccount(userId, accountId));
     }
 
     // 处理 downloads 请求。

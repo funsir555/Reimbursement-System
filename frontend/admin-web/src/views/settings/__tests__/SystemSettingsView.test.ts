@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   systemSettingsApi: {
     getBootstrap: vi.fn(),
     updateDepartment: vi.fn(),
+    createCompanyBankAccount: vi.fn(),
+    updateCompanyBankAccount: vi.fn(),
+    deleteCompanyBankAccount: vi.fn(),
     updateSyncConnector: vi.fn(),
     runSync: vi.fn()
   },
@@ -390,8 +393,12 @@ describe('SystemSettingsView', () => {
     mocks.router.push.mockResolvedValue(undefined)
     mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: createBootstrap() })
     mocks.systemSettingsApi.updateDepartment.mockResolvedValue({})
+    mocks.systemSettingsApi.createCompanyBankAccount.mockResolvedValue({})
+    mocks.systemSettingsApi.updateCompanyBankAccount.mockResolvedValue({})
+    mocks.systemSettingsApi.deleteCompanyBankAccount.mockResolvedValue({})
     mocks.systemSettingsApi.updateSyncConnector.mockResolvedValue({})
     mocks.systemSettingsApi.runSync.mockResolvedValue({})
+    mocks.elMessageBox.confirm.mockResolvedValue(undefined)
   })
 
   it('renders the compact settings hero classes', async () => {
@@ -538,5 +545,94 @@ describe('SystemSettingsView', () => {
 
     expect(mocks.systemSettingsApi.updateDepartment).toHaveBeenCalledWith(1, expect.any(Object))
     expect(vm.departmentExpandedKeys).toEqual([])
+  })
+
+  it('uses the unified outlet wording when validating company bank accounts', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    Object.assign(vm.companyBankAccountForm, {
+      companyId: 'COMPANY-001',
+      bankCode: 'ICBC',
+      bankName: '中国工商银行',
+      province: '上海市',
+      city: '上海市',
+      branchCode: '',
+      branchName: '',
+      accountName: '测试账户',
+      accountNo: '622200001'
+    })
+
+    expect(vm.validateCompanyBankAccountForm()).toBe('\u8bf7\u9009\u62e9\u5f00\u6237\u7f51\u70b9')
+  })
+
+  it('shows the unified company bank account success wording when saving', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    Object.assign(vm.companyBankAccountForm, {
+      companyId: 'COMPANY-001',
+      bankCode: 'ICBC',
+      bankName: '中国工商银行',
+      province: '上海市',
+      city: '上海市',
+      branchCode: 'ICBC-SH-001',
+      branchName: '中国工商银行上海分行',
+      accountName: '测试账户',
+      accountNo: '622200001',
+      status: 1,
+      defaultAccount: 0
+    })
+
+    await vm.saveCompanyBankAccount()
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.createCompanyBankAccount).toHaveBeenCalled()
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('公司银行账户已保存')
+  })
+
+  it('shows the unified company bank account confirm and delete wording', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    const row = {
+      id: 7,
+      accountName: '测试账户',
+      accountNo: '6222000012345678'
+    }
+
+    await vm.handleDeleteCompanyBankAccount(row)
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '确认删除公司银行账户“测试账户 / 6222 **** **** 5678”吗？',
+      '提示',
+      { type: 'warning' }
+    )
+    expect(mocks.systemSettingsApi.deleteCompanyBankAccount).toHaveBeenCalledWith(7)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('公司银行账户已删除')
+  })
+
+  it('shows the unified company bank account status wording', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    await vm.toggleCompanyBankAccountStatus({
+      id: 9,
+      companyId: 'COMPANY-001',
+      bankCode: 'ICBC',
+      bankName: '中国工商银行',
+      province: '上海市',
+      city: '上海市',
+      branchCode: 'ICBC-SH-001',
+      branchName: '中国工商银行上海分行',
+      accountName: '测试账户',
+      accountNo: '622200001',
+      status: 0,
+      defaultAccount: 0
+    }, 1)
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateCompanyBankAccount).toHaveBeenCalled()
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('公司银行账户已启用')
   })
 })

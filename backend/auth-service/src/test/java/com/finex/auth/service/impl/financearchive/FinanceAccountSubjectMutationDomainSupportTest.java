@@ -343,6 +343,27 @@ class FinanceAccountSubjectMutationDomainSupportTest {
         assertEquals(1, defaults.getLeafFlag());
     }
 
+    @Test
+    void getDerivedDefaultsReturnsExistingParentForChildSubject() {
+        FinanceAccountSubject parent = subject("COMPANY_A", "1122", null, 1);
+        parent.setSubjectName("\u5e94\u6536\u8d26\u6b3e");
+        parent.setSubjectCategory("ASSET");
+        parent.setBalanceDirection("DEBIT");
+        parent.setLeafFlag(0);
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(enabledCompany("COMPANY_A"));
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(parent));
+
+        FinanceAccountSubjectDerivedDefaultsVO defaults = support.getDerivedDefaults("COMPANY_A", "112203");
+
+        assertEquals("1122", defaults.getParentSubjectCode());
+        assertEquals(2, defaults.getSubjectLevel());
+        assertEquals("ASSET", defaults.getSubjectCategory());
+        assertEquals("DEBIT", defaults.getBalanceDirection());
+        assertEquals(1, defaults.getLeafFlag());
+        assertEquals("EXISTING_PARENT", defaults.getMatchedBy());
+    }
+
     private SystemCompany enabledCompany(String companyId) {
         SystemCompany company = new SystemCompany();
         company.setCompanyId(companyId);

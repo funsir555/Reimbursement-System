@@ -151,11 +151,47 @@ class UserCenterControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("个人银行账户已新增"))
                 .andExpect(jsonPath("$.data.id").value(9))
                 .andExpect(jsonPath("$.data.accountName").value("测试账户"));
 
         verify(accessControlService).requirePermission(1L, "profile:view");
         verify(userCenterService).createBankAccount(any(), any());
+    }
+
+    @Test
+    void updateBankAccountReturnsUnifiedBankMessage() throws Exception {
+        BankAccountVO account = new BankAccountVO();
+        account.setId(12L);
+        account.setAccountName("测试账户");
+        account.setBankName("中国银行");
+
+        when(userCenterService.updateBankAccount(any(), any(), any())).thenReturn(account);
+        doNothing().when(accessControlService).requirePermission(1L, "profile:view");
+
+        mockMvc.perform(put("/auth/user-center/bank-accounts/12")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "accountName": "测试账户",
+                                  "accountNo": "6222020202020202",
+                                  "bankCode": "BOC",
+                                  "bankName": "中国银行",
+                                  "province": "上海市",
+                                  "city": "上海市",
+                                  "branchCode": "BOC-SH",
+                                  "branchName": "中国银行上海分行",
+                                  "status": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("个人银行账户已更新"))
+                .andExpect(jsonPath("$.data.id").value(12));
+
+        verify(accessControlService).requirePermission(1L, "profile:view");
+        verify(userCenterService).updateBankAccount(any(), any(), any());
     }
 
     @Test
@@ -171,10 +207,27 @@ class UserCenterControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("个人银行账户已停用"))
                 .andExpect(jsonPath("$.data").value(true));
 
         verify(accessControlService).requirePermission(1L, "profile:view");
         verify(userCenterService).updateBankAccountStatus(1L, 12L, 0);
+    }
+
+    @Test
+    void setDefaultBankAccountReturnsUnifiedBankMessage() throws Exception {
+        when(userCenterService.setDefaultBankAccount(1L, 12L)).thenReturn(Boolean.TRUE);
+        doNothing().when(accessControlService).requirePermission(1L, "profile:view");
+
+        mockMvc.perform(post("/auth/user-center/bank-accounts/12/default")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("个人银行账户已设为默认"))
+                .andExpect(jsonPath("$.data").value(true));
+
+        verify(accessControlService).requirePermission(1L, "profile:view");
+        verify(userCenterService).setDefaultBankAccount(1L, 12L);
     }
 
     @Test

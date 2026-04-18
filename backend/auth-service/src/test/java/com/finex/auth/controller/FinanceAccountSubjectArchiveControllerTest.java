@@ -127,6 +127,33 @@ class FinanceAccountSubjectArchiveControllerTest {
     }
 
     @Test
+    void getDerivedDefaultsReturnsChildParentMatchPayload() throws Exception {
+        FinanceAccountSubjectDerivedDefaultsVO defaults = new FinanceAccountSubjectDerivedDefaultsVO();
+        defaults.setParentSubjectCode("1122");
+        defaults.setSubjectLevel(2);
+        defaults.setSubjectCategory("ASSET");
+        defaults.setBalanceDirection("DEBIT");
+        defaults.setLeafFlag(1);
+        defaults.setMatchedBy("EXISTING_PARENT");
+
+        doNothing().when(accessControlService).requirePermission(1L, "finance:archives:account_subjects:view");
+        when(financeAccountSubjectArchiveService.getDerivedDefaults("COMPANY_A", "112203")).thenReturn(defaults);
+
+        mockMvc.perform(get("/auth/finance/archives/account-subjects/derived-defaults")
+                        .requestAttr("currentUserId", 1L)
+                        .param("companyId", "COMPANY_A")
+                        .param("subjectCode", "112203"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.parent_subject_code").value("1122"))
+                .andExpect(jsonPath("$.data.subject_level").value(2))
+                .andExpect(jsonPath("$.data.subject_category").value("ASSET"))
+                .andExpect(jsonPath("$.data.balance_direction").value("DEBIT"))
+                .andExpect(jsonPath("$.data.matched_by").value("EXISTING_PARENT"));
+
+        verify(financeAccountSubjectArchiveService).getDerivedDefaults("COMPANY_A", "112203");
+    }
+
+    @Test
     void createSubjectRequiresAnyPermissionAndDelegates() throws Exception {
         FinanceAccountSubjectDetailVO detail = new FinanceAccountSubjectDetailVO();
         detail.setSubjectCode("1001");

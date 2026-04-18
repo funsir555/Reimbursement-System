@@ -187,7 +187,7 @@ describe('ExpenseFormReadonlyRenderer', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('收款人姓名')
+    expect(wrapper.text()).toContain('账户名')
     expect(wrapper.text()).toContain('张三')
     expect(wrapper.text()).toContain('银行账号')
     expect(wrapper.text()).toContain('6222 **** 8899')

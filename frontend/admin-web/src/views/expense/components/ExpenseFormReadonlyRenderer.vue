@@ -106,7 +106,7 @@
 
             <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
               <div class="rounded-2xl border border-white/90 bg-white/90 px-4 py-3">
-                <p class="text-xs text-slate-400">收款人姓名</p>
+                <p class="text-xs text-slate-400">账户名</p>
                 <p class="mt-2 break-words text-sm font-semibold text-slate-800">
                   {{ resolvePayeeAccountCard(block)?.ownerName || '-' }}
                 </p>

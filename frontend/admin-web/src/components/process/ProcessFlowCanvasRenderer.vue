@@ -9,7 +9,10 @@
       <template v-if="block.kind === 'insert'">
         <div
           class="insert-trigger-shell"
-          :class="dropTargetKey === block.key ? 'is-drop-target' : ''"
+          :class="[
+            dropTargetKey === block.key ? 'is-drop-target' : '',
+            isMergedInsert(block) ? 'is-merged-target' : ''
+          ]"
           @dragenter.prevent="emit('drag-node-over', { containerKey: block.containerKey, index: block.index, blockKey: block.key })"
           @dragover.prevent="emit('drag-node-over', { containerKey: block.containerKey, index: block.index, blockKey: block.key })"
           @drop.prevent="emit('drop-node', { containerKey: block.containerKey, index: block.index, blockKey: block.key })"
@@ -18,24 +21,29 @@
             <button
               type="button"
               class="insert-trigger"
-              :aria-label="`在第 ${block.index + 1} 个位置插入节点`"
+              :aria-label="insertButtonAriaLabel(block)"
             >
               +
             </button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'APPROVAL' }">
-                  审批节点
-                </el-dropdown-item>
-                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'CC' }">
-                  抄送节点
-                </el-dropdown-item>
-                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'PAYMENT' }">
-                  支付节点
-                </el-dropdown-item>
-                <el-dropdown-item :command="{ containerKey: block.containerKey, index: block.index, nodeType: 'BRANCH' }">
-                  流程分支
-                </el-dropdown-item>
+                <template v-for="(group, groupIndex) in resolveInsertGroups(block)" :key="group.key">
+                  <el-dropdown-item
+                    v-if="group.label"
+                    class="insert-trigger-group-label"
+                    :disabled="true"
+                    :divided="groupIndex > 0"
+                  >
+                    {{ group.label }}
+                  </el-dropdown-item>
+                  <el-dropdown-item
+                    v-for="command in group.commands"
+                    :key="command.key"
+                    :command="command.command"
+                  >
+                    {{ command.label }}
+                  </el-dropdown-item>
+                </template>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -71,39 +79,48 @@
       </template>
 
       <template v-else>
-        <div class="branch-shell" :style="branchShellStyle(block.routes.length)">
-          <div class="branch-mainline-entry" aria-hidden="true"></div>
+        <div
+          class="branch-shell"
+          :class="[
+            block.compact ? 'is-compact' : '',
+            block.symmetric ? 'is-dual-lane' : '',
+            isBranchActive(block) ? 'is-selected' : ''
+          ]"
+          :style="branchShellStyle(block.routes.length, block.depth)"
+        >
+          <div class="branch-top-rail">
+            <div class="branch-top-rail__line" aria-hidden="true"></div>
+            <button
+              type="button"
+              class="branch-drag-handle"
+              :class="isBranchActive(block) ? 'is-selected' : ''"
+              aria-label="拖动整个流程分支"
+              draggable="true"
+              @click="emit('select-node', block.node.nodeKey)"
+              @dragstart="handleNodeDragStart($event, block.node.nodeKey)"
+              @dragend="emit('drag-node-end')"
+            >
+              <span class="branch-drag-handle__grip"></span>
+            </button>
+          </div>
+
           <div class="branch-split-line" aria-hidden="true"></div>
-          <button
-            type="button"
-            class="branch-node-card"
-            :class="[
-              selectedNodeKey === block.node.nodeKey ? 'is-selected' : '',
-              draggingNodeKey === block.node.nodeKey ? 'is-dragging' : ''
-            ]"
-            draggable="true"
-            @click="emit('select-node', block.node.nodeKey)"
-            @dragstart="handleNodeDragStart($event, block.node.nodeKey)"
-            @dragend="emit('drag-node-end')"
-          >
-            <div class="min-w-0 text-left">
-              <p class="truncate text-sm font-semibold text-slate-900">{{ block.node.nodeName }}</p>
-              <p class="mt-1 text-xs text-slate-500">{{ nodeTypeLabel(block.node.nodeType) }}</p>
-            </div>
-            <span class="branch-node-card__hint">拖动可调整位置</span>
-          </button>
 
           <div class="branch-lanes">
             <div
               v-for="lane in block.routes"
               :key="lane.route.routeKey"
               class="branch-lane"
+              :class="lane.route.attachBelowNodes ? 'has-attached-tail' : ''"
             >
               <div class="branch-lane-entry" aria-hidden="true"></div>
               <button
                 type="button"
                 class="route-head-card"
-                :class="selectedRouteKey === lane.route.routeKey ? 'is-selected' : ''"
+                :class="[
+                  selectedRouteKey === lane.route.routeKey ? 'is-selected' : '',
+                  lane.route.attachBelowNodes ? 'is-attached' : ''
+                ]"
                 @click="emit('select-route', lane.route.routeKey)"
               >
                 <div class="flex items-start justify-between gap-3">
@@ -118,7 +135,7 @@
                       </span>
                     </div>
                     <p class="mt-1 text-xs text-slate-400">
-                      优先级 {{ lane.route.priority || 1 }} · {{ countConditions(lane.route) }} 条条件
+                      优先级 {{ lane.route.priority || 1 }} 路 · {{ countConditions(lane.route) }} 条条件
                     </p>
                   </div>
                   <span class="route-head-link">条件设置</span>
@@ -161,7 +178,13 @@
 </template>
 
 <script setup lang="ts">
-import type { FlowCanvasBlock, FlowContainerKey, FlowInsertType } from '@/views/process/processFlowDesignerHelper'
+import type {
+  FlowCanvasBlock,
+  FlowCanvasBranchBlock,
+  FlowCanvasInsertBlock,
+  FlowContainerKey,
+  FlowInsertType
+} from '@/views/process/processFlowDesignerHelper'
 
 defineOptions({
   name: 'ProcessFlowCanvasRenderer'
@@ -179,7 +202,17 @@ type CanvasDropPayload = {
   blockKey: string
 }
 
-defineProps<{
+type InsertGroup = {
+  key: string
+  label: string
+  commands: Array<{
+    key: string
+    label: string
+    command: InsertCommand
+  }>
+}
+
+const props = defineProps<{
   blocks: FlowCanvasBlock[]
   selectedNodeKey: string
   selectedRouteKey: string
@@ -199,6 +232,8 @@ const emit = defineEmits<{
   (event: 'drag-node-over', payload: CanvasDropPayload): void
   (event: 'drop-node', payload: CanvasDropPayload): void
 }>()
+
+const INSERT_NODE_TYPES: FlowInsertType[] = ['APPROVAL', 'CC', 'PAYMENT', 'BRANCH']
 
 function handleInsertCommand(command: string | number | object) {
   if (!command || typeof command !== 'object') {
@@ -220,11 +255,87 @@ function countConditions(route: { conditionGroups?: Array<{ conditions?: unknown
   return (route.conditionGroups || []).reduce((total, group) => total + (group.conditions?.length || 0), 0)
 }
 
-function branchShellStyle(routeCount: number) {
+function resolveInsertGroups(block: FlowCanvasInsertBlock): InsertGroup[] {
+  const targets = block.targets?.length
+    ? block.targets
+    : [{
+        key: `${block.key}-default`,
+        label: '',
+        containerKey: block.containerKey,
+        index: block.index
+      }]
+
+  return targets.map((target) => ({
+    key: target.key,
+    label: target.label,
+    commands: INSERT_NODE_TYPES.map((nodeType) => ({
+      key: `${target.key}-${nodeType}`,
+      label: insertTypeLabel(nodeType),
+      command: {
+        containerKey: target.containerKey,
+        index: target.index,
+        nodeType
+      }
+    }))
+  }))
+}
+
+function insertTypeLabel(nodeType: FlowInsertType) {
+  switch (nodeType) {
+    case 'CC':
+      return '抄送节点'
+    case 'PAYMENT':
+      return '支付节点'
+    case 'BRANCH':
+      return '流程分支'
+    default:
+      return '审批节点'
+  }
+}
+
+function isMergedInsert(block: FlowCanvasInsertBlock) {
+  return Boolean(block.targets?.length)
+}
+
+function insertButtonAriaLabel(block: FlowCanvasInsertBlock) {
+  if (block.targets?.length) {
+    return '在当前分支与附带下方节点之间插入节点'
+  }
+  return `在第 ${block.index + 1} 个位置插入节点`
+}
+
+function isBranchActive(block: FlowCanvasBranchBlock) {
+  return props.selectedNodeKey === block.node.nodeKey || block.routes.some((lane) => lane.route.routeKey === props.selectedRouteKey)
+}
+
+function branchShellStyle(routeCount: number, depth: number) {
+  const compact = depth > 0
+  if (compact) {
+    return {
+      '--branch-lane-count': String(Math.max(routeCount, 1)),
+      '--branch-lane-gap': '12px',
+      '--branch-lane-min-width': '0px',
+      '--branch-shell-width': '100%',
+      '--branch-lane-padding': '8px'
+    }
+  }
+
+  if (routeCount === 2) {
+    return {
+      '--branch-lane-count': '2',
+      '--branch-lane-gap': '24px',
+      '--branch-lane-min-width': '0px',
+      '--branch-shell-width': 'min(100%, 760px)',
+      '--branch-lane-padding': '12px'
+    }
+  }
+
   return {
     '--branch-lane-count': String(Math.max(routeCount, 1)),
     '--branch-lane-gap': '18px',
-    '--branch-lane-width': '260px'
+    '--branch-lane-min-width': '240px',
+    '--branch-shell-width': 'max-content',
+    '--branch-lane-padding': '12px'
   }
 }
 </script>
@@ -331,6 +442,10 @@ function branchShellStyle(routeCount: number) {
   transform: scale(1.04);
 }
 
+.insert-trigger-shell.is-merged-target .insert-trigger {
+  background: linear-gradient(135deg, #0f766e, #0ea5e9);
+}
+
 .insert-trigger {
   display: inline-flex;
   height: 60px;
@@ -353,74 +468,99 @@ function branchShellStyle(routeCount: number) {
   box-shadow: 0 20px 42px rgba(15, 23, 42, 0.24);
 }
 
+.insert-trigger-group-label {
+  pointer-events: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f766e;
+}
+
 .branch-shell {
   position: relative;
   display: flex;
-  width: max-content;
-  min-width: min(100%, 980px);
+  width: var(--branch-shell-width);
+  max-width: 100%;
+  min-width: 0;
   flex-direction: column;
   align-items: center;
   gap: 0;
+  padding-inline: 6px;
   z-index: 1;
 }
 
-.branch-node-card {
+.branch-shell.is-compact {
+  width: 100%;
+  padding-inline: 0;
+}
+
+.branch-top-rail {
+  position: relative;
   display: flex;
-  width: min(100%, 320px);
+  min-height: 34px;
+  width: 100%;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 14px 0 18px;
-  border: 1px solid rgba(14, 165, 233, 0.18);
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(240, 249, 255, 0.98), rgba(255, 255, 255, 0.98));
-  padding: 14px 16px;
-  color: #0f172a;
-  text-align: left;
-  box-shadow: 0 16px 34px rgba(14, 165, 233, 0.08);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  justify-content: center;
 }
 
-.branch-node-card:hover {
-  transform: translateY(-1px);
-}
-
-.branch-node-card.is-selected {
-  border-color: #0ea5e9;
-  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.12), 0 16px 34px rgba(14, 165, 233, 0.12);
-}
-
-.branch-node-card.is-dragging {
-  opacity: 0.55;
-}
-
-.branch-node-card__hint {
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #0284c7;
-}
-
-.branch-mainline-entry {
-  height: 22px;
+.branch-top-rail__line {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
   width: 2px;
+  transform: translateX(-50%);
   background: linear-gradient(180deg, #cbd5e1, #94a3b8);
+}
+
+.branch-drag-handle {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  height: 36px;
+  width: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 20px rgba(14, 165, 233, 0.12);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.branch-drag-handle:hover {
+  transform: translateY(-1px);
+  border-color: #38bdf8;
+}
+
+.branch-drag-handle.is-selected,
+.branch-shell.is-selected .branch-drag-handle {
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.12), 0 10px 20px rgba(14, 165, 233, 0.18);
+}
+
+.branch-drag-handle__grip {
+  display: block;
+  height: 14px;
+  width: 14px;
+  border-radius: 999px;
+  background-image: radial-gradient(circle, #0ea5e9 1.3px, transparent 1.4px);
+  background-size: 6px 6px;
+  background-position: center;
 }
 
 .branch-split-line,
 .branch-merge-line {
   height: 2px;
-  align-self: stretch;
-  margin-inline: calc((100% - ((100% - ((var(--branch-lane-count) - 1) * var(--branch-lane-gap))) / var(--branch-lane-count))) / 2);
+  width: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, #cbd5e1, #94a3b8 50%, #cbd5e1);
 }
 
 .branch-lanes {
   display: grid;
-  width: max-content;
-  min-width: 100%;
-  grid-template-columns: repeat(var(--branch-lane-count), minmax(var(--branch-lane-width), var(--branch-lane-width)));
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(var(--branch-lane-count), minmax(var(--branch-lane-min-width), 1fr));
   gap: var(--branch-lane-gap);
   margin: 0;
 }
@@ -428,13 +568,18 @@ function branchShellStyle(routeCount: number) {
 .branch-lane {
   display: flex;
   height: 100%;
-  min-width: var(--branch-lane-width);
+  min-width: 0;
   flex-direction: column;
   align-items: center;
   gap: 0;
   border-radius: 28px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.86));
-  padding: 12px;
+  padding: var(--branch-lane-padding);
+}
+
+.branch-shell.is-compact .branch-lane {
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.9));
 }
 
 .branch-lane-entry,
@@ -446,7 +591,7 @@ function branchShellStyle(routeCount: number) {
 }
 
 .branch-lane-entry {
-  height: 22px;
+  height: 24px;
 }
 
 .branch-lane-card-connector {
@@ -454,11 +599,12 @@ function branchShellStyle(routeCount: number) {
 }
 
 .branch-lane-exit {
-  height: 22px;
+  height: 24px;
 }
 
 .route-head-card {
   width: 100%;
+  min-width: 0;
   border: 1px solid #e2e8f0;
   border-radius: 22px;
   background: linear-gradient(180deg, #fff, #f8fafc);
@@ -477,6 +623,10 @@ function branchShellStyle(routeCount: number) {
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
 }
 
+.route-head-card.is-attached {
+  border-color: rgba(14, 165, 233, 0.28);
+}
+
 .route-head-link {
   flex-shrink: 0;
   color: #0284c7;
@@ -488,18 +638,23 @@ function branchShellStyle(routeCount: number) {
   display: flex;
   flex: 1 1 auto;
   width: 100%;
+  min-width: 0;
   min-height: 110px;
   flex-direction: column;
   align-items: center;
   gap: 0;
 }
 
+.branch-shell.is-compact .branch-lane-body {
+  min-height: 90px;
+}
+
 .branch-merge {
   display: flex;
+  min-width: 168px;
   flex-direction: column;
   align-items: center;
   gap: 0;
-  min-width: 168px;
   justify-content: center;
 }
 
@@ -524,28 +679,21 @@ function branchShellStyle(routeCount: number) {
     width: min(86%, 420px);
   }
 
-  .branch-shell {
+  .branch-shell,
+  .branch-shell.is-compact {
     width: min(100%, 520px);
-    min-width: 0;
   }
 
   .branch-split-line,
   .branch-merge-line {
-    align-self: center;
     width: 2px;
     height: 18px;
-    margin-inline: 0;
     background: linear-gradient(180deg, #cbd5e1, #94a3b8);
   }
 
   .branch-lanes {
-    width: 100%;
-    min-width: 0;
     grid-template-columns: 1fr;
-  }
-
-  .branch-lane {
-    min-width: 0;
+    gap: 14px;
   }
 }
 </style>

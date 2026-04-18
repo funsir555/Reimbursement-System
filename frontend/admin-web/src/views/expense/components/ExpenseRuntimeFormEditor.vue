@@ -462,7 +462,7 @@
           :required="true"
           :show-section-header="true"
           auto-fill-source-key="cVenName"
-          account-name-label="开户名/收款单位名称"
+          account-name-label="账户名"
         />
 
         <el-form-item label="备注" class="!mb-0">
@@ -708,7 +708,6 @@ const EXPENSE_VENDOR_FIELD_MAX_LENGTH: Record<string, number> = {
   receiptAccountName: 128,
   cVenBank: 128,
   cVenAccount: 64,
-  cVenBankNub: 64,
   receiptBranchName: 128
 }
 const emptyVendorDraft = (): FinanceVendorSavePayload => ({
@@ -726,7 +725,6 @@ const emptyVendorDraft = (): FinanceVendorSavePayload => ({
   receiptBranchCode: '',
   receiptBranchName: '',
   cVenAccount: '',
-  cVenBankNub: '',
   cMemo: ''
 })
 const vendorDraft = reactive<FinanceVendorSavePayload>(emptyVendorDraft())
@@ -1410,7 +1408,7 @@ function validateVendorDraft() {
     return '请先填写供应商名称'
   }
   if (!String(vendorDraft.receiptAccountName || vendorDraft.cVenName || '').trim()) {
-    return '请先填写开户名'
+    return '请先填写账户名'
   }
   if (!String(vendorDraft.cVenAccount || '').trim()) {
     return '请先填写银行账号'
@@ -1422,18 +1420,17 @@ function validateVendorDraft() {
     return '请先选择开户省市'
   }
   if (!String(vendorDraft.receiptBranchName || '').trim()) {
-    return '请先选择分支行'
+    return '请先选择开户网点'
   }
   const lengthRules = [
     { key: 'cVenName', label: '供应商名称', max: 128 },
     { key: 'cVenAbbName', label: '供应商简称', max: 64 },
     { key: 'cVenPerson', label: '联系人', max: 64 },
     { key: 'cVenPhone', label: '联系电话', max: 32 },
-    { key: 'receiptAccountName', label: '开户名', max: 128 },
+    { key: 'receiptAccountName', label: '账户名', max: 128 },
     { key: 'cVenBank', label: '开户银行', max: 128 },
     { key: 'cVenAccount', label: '银行账号', max: 64 },
-    { key: 'cVenBankNub', label: '联行号', max: 64 },
-    { key: 'receiptBranchName', label: '分支行名称', max: 128 }
+    { key: 'receiptBranchName', label: '开户网点', max: 128 }
   ] as const
   for (const rule of lengthRules) {
     const value = String(vendorDraft[rule.key] || '').trim()
@@ -1460,7 +1457,6 @@ function hydrateVendorDraft(detail: Partial<FinanceVendorDetail>) {
     receiptBranchCode: detail.receiptBranchCode || '',
     receiptBranchName: detail.receiptBranchName || '',
     cVenAccount: detail.cVenAccount || '',
-    cVenBankNub: detail.cVenBankNub || '',
     cMemo: detail.cMemo || ''
   })
 }
@@ -1504,7 +1500,7 @@ async function saveVendor() {
       await loadVendorOptions(String(vendorDraft.cVenName || vendorCode))
       await loadPayeeAccountOptions('')
       assignFirstPayeeAccountOption()
-      ElMessage.success('收款账户已更新')
+      ElMessage.success('供应商收款信息已更新')
     } else {
       const res = await expenseCreateApi.createVendor(selectedPaymentCompanyId.value, buildVendorCreatePayload())
       await loadVendorOptions(String(res.data.cVenName || res.data.cVenCode || ''))
@@ -1513,13 +1509,13 @@ async function saveVendor() {
       }
       clearPayeeAccountSelections()
       await loadPayeeAccountOptions('')
-      ElMessage.success('供应商已新增')
+      ElMessage.success('供应商及收款信息已保存')
     }
     closeVendorDialog()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(
       error,
-      vendorDialogMode.value === 'edit' ? '维护收款账户失败' : '新增供应商失败'
+      vendorDialogMode.value === 'edit' ? '维护供应商收款信息失败' : '新增供应商及收款信息失败'
     ))
   } finally {
     vendorSaving.value = false

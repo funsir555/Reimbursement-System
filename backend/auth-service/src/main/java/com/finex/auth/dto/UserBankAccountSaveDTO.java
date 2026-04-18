@@ -26,10 +26,10 @@ public class UserBankAccountSaveDTO {
     @NotBlank(message = "开户市不能为空")
     private String city;
 
-    @NotBlank(message = "分支行不能为空")
+    @NotBlank(message = "开户网点不能为空")
     private String branchName;
 
-    @NotBlank(message = "分支行编码不能为空")
+    @NotBlank(message = "开户网点编码不能为空")
     private String branchCode;
 
     private String cnapsCode;

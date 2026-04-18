@@ -1653,6 +1653,13 @@ abstract class AbstractSystemSettingsDomainSupport {
     }
 
     private void applyCompanyBankAccount(SystemCompanyBankAccount account, CompanyBankAccountSaveDTO dto) {
+        String previousBankCode = trimToNull(account.getBankCode());
+        String previousProvince = trimToNull(account.getProvince());
+        String previousCity = trimToNull(account.getCity());
+        String previousBranchCode = trimToNull(account.getBranchCode());
+        String previousBranchName = trimToNull(account.getBranchName());
+        String previousCnapsCode = trimToNull(account.getCnapsCode());
+
         String companyId = trimToNull(dto.getCompanyId());
         String bankName = trimToNull(dto.getBankName());
         String bankCode = trimToNull(dto.getBankCode());
@@ -1678,13 +1685,13 @@ abstract class AbstractSystemSettingsDomainSupport {
             throw new IllegalArgumentException("\u5f00\u6237\u5e02\u4e0d\u80fd\u4e3a\u7a7a");
         }
         if (branchName == null) {
-            throw new IllegalArgumentException("\u5206\u652f\u884c\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new IllegalArgumentException("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a");
         }
         if (branchCode == null) {
-            throw new IllegalArgumentException("\u5206\u652f\u884c\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new IllegalArgumentException("\u5f00\u6237\u7f51\u70b9\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
         }
         if (accountName == null) {
-            throw new IllegalArgumentException("\u8d26\u6237\u540d\u79f0\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new IllegalArgumentException("\u8d26\u6237\u540d\u4e0d\u80fd\u4e3a\u7a7a");
         }
         if (accountNo == null) {
             throw new IllegalArgumentException("\u94f6\u884c\u8d26\u53f7\u4e0d\u80fd\u4e3a\u7a7a");
@@ -1697,7 +1704,12 @@ abstract class AbstractSystemSettingsDomainSupport {
         account.setCity(city);
         account.setBranchName(branchName);
         account.setBranchCode(branchCode);
-        account.setCnapsCode(trimToNull(dto.getCnapsCode()));
+        boolean branchSelectionChanged = !Objects.equals(previousBankCode, bankCode)
+                || !Objects.equals(previousProvince, province)
+                || !Objects.equals(previousCity, city)
+                || !Objects.equals(previousBranchCode, branchCode)
+                || !Objects.equals(previousBranchName, branchName);
+        account.setCnapsCode(resolveWeakCnapsCode(previousCnapsCode, trimToNull(dto.getCnapsCode()), branchSelectionChanged));
         account.setAccountName(accountName);
         account.setAccountNo(accountNo);
         account.setAccountType(trimToNull(dto.getAccountType()));
@@ -1723,6 +1735,16 @@ abstract class AbstractSystemSettingsDomainSupport {
         account.setDirectConnectLastSyncStatus(trimToNull(dto.getDirectConnectLastSyncStatus()));
         account.setDirectConnectLastErrorMsg(trimToNull(dto.getDirectConnectLastErrorMsg()));
         account.setDirectConnectExtJson(trimToNull(dto.getDirectConnectExtJson()));
+    }
+
+    private String resolveWeakCnapsCode(String previousCnapsCode, String submittedCnapsCode, boolean branchSelectionChanged) {
+        if (submittedCnapsCode != null) {
+            return submittedCnapsCode;
+        }
+        if (branchSelectionChanged) {
+            return null;
+        }
+        return previousCnapsCode;
     }
 
     private void ensureCompanyBankAccountUnique(String companyId, String accountNo, Long excludeId) {

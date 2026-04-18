@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -118,6 +119,79 @@ class FinanceVendorMutationDomainSupportTest {
     }
 
     @Test
+    void updateVendorPreservesCnapsWhenBranchSelectionIsUnchanged() {
+        FinanceVendor existing = new FinanceVendor();
+        existing.setCVenCode("VEN001");
+        existing.setCVenName("Old Vendor");
+        existing.setCompanyId("COMPANY_A");
+        existing.setCVenBankCode("CMB");
+        existing.setReceiptBankProvince("广东省");
+        existing.setReceiptBankCity("深圳市");
+        existing.setReceiptBranchCode("CMB-SZ-FH");
+        existing.setReceiptBranchName("招商银行深圳福华支行");
+        existing.setCVenBankNub("308584000013");
+
+        FinanceVendor refreshed = new FinanceVendor();
+        refreshed.setCVenCode("VEN001");
+        refreshed.setCVenName("New Vendor");
+        refreshed.setCompanyId("COMPANY_A");
+        refreshed.setCVenBankNub("308584000013");
+
+        FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
+        dto.setCVenName("New Vendor");
+        dto.setCVenBankCode("CMB");
+        dto.setReceiptBankProvince("广东省");
+        dto.setReceiptBankCity("深圳市");
+        dto.setReceiptBranchCode("CMB-SZ-FH");
+        dto.setReceiptBranchName("招商银行深圳福华支行");
+
+        when(financeVendorMapper.selectById("VEN001")).thenReturn(existing, refreshed);
+        when(financeVendorMapper.updateById(any(FinanceVendor.class))).thenReturn(1);
+
+        support.updateVendor("COMPANY_A", "VEN001", dto, "tester", false);
+
+        ArgumentCaptor<FinanceVendor> captor = ArgumentCaptor.forClass(FinanceVendor.class);
+        verify(financeVendorMapper).updateById(captor.capture());
+        assertEquals("308584000013", captor.getValue().getCVenBankNub());
+    }
+
+    @Test
+    void updateVendorClearsCnapsWhenBranchSelectionChanges() {
+        FinanceVendor existing = new FinanceVendor();
+        existing.setCVenCode("VEN001");
+        existing.setCVenName("Old Vendor");
+        existing.setCompanyId("COMPANY_A");
+        existing.setCVenBankCode("CMB");
+        existing.setReceiptBankProvince("广东省");
+        existing.setReceiptBankCity("深圳市");
+        existing.setReceiptBranchCode("CMB-SZ-FH");
+        existing.setReceiptBranchName("招商银行深圳福华支行");
+        existing.setCVenBankNub("308584000013");
+
+        FinanceVendor refreshed = new FinanceVendor();
+        refreshed.setCVenCode("VEN001");
+        refreshed.setCVenName("New Vendor");
+        refreshed.setCompanyId("COMPANY_A");
+
+        FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
+        dto.setCVenName("New Vendor");
+        dto.setCVenBankCode("CMB");
+        dto.setReceiptBankProvince("广东省");
+        dto.setReceiptBankCity("深圳市");
+        dto.setReceiptBranchCode("CMB-SZ-NS");
+        dto.setReceiptBranchName("招商银行深圳南山支行");
+
+        when(financeVendorMapper.selectById("VEN001")).thenReturn(existing, refreshed);
+        when(financeVendorMapper.updateById(any(FinanceVendor.class))).thenReturn(1);
+
+        support.updateVendor("COMPANY_A", "VEN001", dto, "tester", false);
+
+        ArgumentCaptor<FinanceVendor> captor = ArgumentCaptor.forClass(FinanceVendor.class);
+        verify(financeVendorMapper).updateById(captor.capture());
+        assertNull(captor.getValue().getCVenBankNub());
+    }
+
+    @Test
     void createVendorRejectsOverlongBankField() {
         FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
         dto.setCVenName("Vendor A");
@@ -174,5 +248,21 @@ class FinanceVendorMutationDomainSupportTest {
         );
 
         assertEquals("供应商编码长度不能超过 64 个字符", exception.getMessage());
+    }
+    @Test
+    void createVendorUsesUnifiedBankFieldMessages() {
+        FinanceVendorSaveDTO dto = new FinanceVendorSaveDTO();
+        dto.setCVenName("Vendor A");
+        dto.setCVenBank("招商银行");
+        dto.setCVenAccount("622200001");
+        dto.setReceiptBankProvince("广东省");
+        dto.setReceiptBankCity("深圳市");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> support.createVendor("COMPANY_A", dto, "tester", true)
+        );
+
+        assertEquals("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a", exception.getMessage());
     }
 }

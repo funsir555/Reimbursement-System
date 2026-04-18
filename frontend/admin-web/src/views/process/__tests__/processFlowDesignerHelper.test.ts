@@ -127,6 +127,37 @@ describe('processFlowDesignerHelper', () => {
     }
   })
 
+  it('merges the route-end insert trigger with the attached-tail insert trigger', () => {
+    const nodes = [
+      createBranchNode('branch-1', 1),
+      createApprovalNode('tail-1', 2)
+    ]
+    const routes = [
+      {
+        ...createRoute('route-1', 'branch-1', 1),
+        attachBelowNodes: true
+      },
+      createRoute('route-2', 'branch-1', 2)
+    ]
+
+    const blocks = buildFlowCanvasBlocks(nodes, routes)
+    const branchBlock = blocks.find((item) => item.kind === 'branch')
+
+    expect(branchBlock?.kind).toBe('branch')
+    if (branchBlock?.kind === 'branch') {
+      const insertBlocks = branchBlock.routes[0].blocks.filter((item) => item.kind === 'insert')
+      expect(insertBlocks).toHaveLength(2)
+
+      const mergedInsert = insertBlocks[0]
+      expect(mergedInsert?.kind).toBe('insert')
+      if (mergedInsert?.kind === 'insert') {
+        expect(mergedInsert.targets).toHaveLength(2)
+        expect(mergedInsert.targets?.map((item) => item.label)).toEqual(['插入当前分支', '插入附带下方节点'])
+        expect(mergedInsert.depth).toBe(1)
+      }
+    }
+  })
+
   it('attaches only the current nested container tail when nested branch uses attachBelowNodes', () => {
     const nodes = [
       createBranchNode('outer-branch', 1),
@@ -155,6 +186,9 @@ describe('processFlowDesignerHelper', () => {
       const innerBranch = outerBranch.routes[0].blocks.find((item) => item.kind === 'branch')
       expect(innerBranch?.kind).toBe('branch')
       if (innerBranch?.kind === 'branch') {
+        expect(innerBranch.depth).toBe(1)
+        expect(innerBranch.compact).toBe(true)
+        expect(innerBranch.symmetric).toBe(true)
         const innerAttachedNodes = innerBranch.routes[0].blocks
           .filter((item) => item.kind === 'node')
           .map((item) => item.kind === 'node' ? item.node.nodeKey : '')
@@ -165,6 +199,21 @@ describe('processFlowDesignerHelper', () => {
         .filter((item) => item.kind === 'node')
         .map((item) => item.kind === 'node' ? item.node.nodeKey : '')
       expect(outerAttachedNodes).toEqual(['outer-tail'])
+    }
+  })
+
+  it('marks root two-lane branches as symmetric without compact mode', () => {
+    const nodes = [createBranchNode('branch-1', 1)]
+    const routes = [createRoute('route-1', 'branch-1', 1), createRoute('route-2', 'branch-1', 2)]
+
+    const blocks = buildFlowCanvasBlocks(nodes, routes)
+    const branchBlock = blocks.find((item) => item.kind === 'branch')
+
+    expect(branchBlock?.kind).toBe('branch')
+    if (branchBlock?.kind === 'branch') {
+      expect(branchBlock.depth).toBe(0)
+      expect(branchBlock.symmetric).toBe(true)
+      expect(branchBlock.compact).toBe(false)
     }
   })
 

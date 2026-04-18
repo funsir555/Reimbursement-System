@@ -8,32 +8,32 @@ import java.time.LocalDateTime;
 @Data
 public class CompanyBankAccountSaveDTO {
 
-    @NotBlank(message = "Company is required")
+    @NotBlank(message = "\u516c\u53f8\u4e0d\u80fd\u4e3a\u7a7a")
     private String companyId;
 
-    @NotBlank(message = "Bank name is required")
+    @NotBlank(message = "\u5f00\u6237\u94f6\u884c\u4e0d\u80fd\u4e3a\u7a7a")
     private String bankName;
 
-    @NotBlank(message = "Bank code is required")
+    @NotBlank(message = "\u5f00\u6237\u94f6\u884c\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a")
     private String bankCode;
 
-    @NotBlank(message = "Province is required")
+    @NotBlank(message = "\u5f00\u6237\u7701\u4e0d\u80fd\u4e3a\u7a7a")
     private String province;
 
-    @NotBlank(message = "City is required")
+    @NotBlank(message = "\u5f00\u6237\u5e02\u4e0d\u80fd\u4e3a\u7a7a")
     private String city;
 
     private String branchName;
 
-    @NotBlank(message = "Branch code is required")
+    @NotBlank(message = "\u5f00\u6237\u7f51\u70b9\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a")
     private String branchCode;
 
     private String cnapsCode;
 
-    @NotBlank(message = "Account name is required")
+    @NotBlank(message = "\u8d26\u6237\u540d\u4e0d\u80fd\u4e3a\u7a7a")
     private String accountName;
 
-    @NotBlank(message = "Account number is required")
+    @NotBlank(message = "\u94f6\u884c\u8d26\u53f7\u4e0d\u80fd\u4e3a\u7a7a")
     private String accountNo;
 
     private String accountType;

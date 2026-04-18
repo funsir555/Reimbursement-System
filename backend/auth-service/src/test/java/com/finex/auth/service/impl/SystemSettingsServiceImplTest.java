@@ -35,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
@@ -188,6 +189,98 @@ class SystemSettingsServiceImplTest {
         verify(systemCompanyBankAccountMapper).updateById(captor.capture());
         assertEquals(0, captor.getValue().getStatus());
         assertEquals(0, captor.getValue().getDefaultAccount());
+    }
+
+    @Test
+    void updateCompanyBankAccountPreservesCnapsWhenBranchSelectionIsUnchanged() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setCompanyName("Company A");
+
+        SystemCompanyBankAccount current = new SystemCompanyBankAccount();
+        current.setId(3L);
+        current.setCompanyId("COMPANY_A");
+        current.setBankName("Bank A");
+        current.setBankCode("BANK_A");
+        current.setProvince("广东省");
+        current.setCity("深圳市");
+        current.setBranchName("深圳支行");
+        current.setBranchCode("BANK_A_SZ");
+        current.setCnapsCode("308584000013");
+        current.setAccountName("Primary Account");
+        current.setAccountNo("622200001");
+        current.setStatus(1);
+        current.setDefaultAccount(0);
+
+        CompanyBankAccountSaveDTO dto = new CompanyBankAccountSaveDTO();
+        dto.setCompanyId("COMPANY_A");
+        dto.setBankName("Bank A");
+        dto.setBankCode("BANK_A");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchName("深圳支行");
+        dto.setBranchCode("BANK_A_SZ");
+        dto.setAccountName("Primary Account");
+        dto.setAccountNo("622200001");
+        dto.setStatus(1);
+        dto.setDefaultAccount(0);
+
+        when(systemCompanyBankAccountMapper.selectById(3L)).thenReturn(current);
+        when(systemCompanyBankAccountMapper.selectCount(any())).thenReturn(0L);
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(company));
+
+        systemSettingsService.updateCompanyBankAccount(3L, dto);
+
+        ArgumentCaptor<SystemCompanyBankAccount> captor = ArgumentCaptor.forClass(SystemCompanyBankAccount.class);
+        verify(systemCompanyBankAccountMapper).updateById(captor.capture());
+        assertEquals("308584000013", captor.getValue().getCnapsCode());
+    }
+
+    @Test
+    void updateCompanyBankAccountClearsCnapsWhenBranchSelectionChanges() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setCompanyName("Company A");
+
+        SystemCompanyBankAccount current = new SystemCompanyBankAccount();
+        current.setId(4L);
+        current.setCompanyId("COMPANY_A");
+        current.setBankName("Bank A");
+        current.setBankCode("BANK_A");
+        current.setProvince("广东省");
+        current.setCity("深圳市");
+        current.setBranchName("深圳支行");
+        current.setBranchCode("BANK_A_SZ");
+        current.setCnapsCode("308584000013");
+        current.setAccountName("Primary Account");
+        current.setAccountNo("622200001");
+        current.setStatus(1);
+        current.setDefaultAccount(0);
+
+        CompanyBankAccountSaveDTO dto = new CompanyBankAccountSaveDTO();
+        dto.setCompanyId("COMPANY_A");
+        dto.setBankName("Bank A");
+        dto.setBankCode("BANK_A");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchName("南山支行");
+        dto.setBranchCode("BANK_A_NS");
+        dto.setAccountName("Primary Account");
+        dto.setAccountNo("622200001");
+        dto.setStatus(1);
+        dto.setDefaultAccount(0);
+
+        when(systemCompanyBankAccountMapper.selectById(4L)).thenReturn(current);
+        when(systemCompanyBankAccountMapper.selectCount(any())).thenReturn(0L);
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(company));
+
+        systemSettingsService.updateCompanyBankAccount(4L, dto);
+
+        ArgumentCaptor<SystemCompanyBankAccount> captor = ArgumentCaptor.forClass(SystemCompanyBankAccount.class);
+        verify(systemCompanyBankAccountMapper).updateById(captor.capture());
+        assertNull(captor.getValue().getCnapsCode());
     }
 
     @Test
@@ -371,5 +464,43 @@ class SystemSettingsServiceImplTest {
                 .toList();
 
         assertEquals(List.of("\u9489\u9489", "\u4f01\u5fae", "\u98de\u4e66"), platformNames);
+    }
+    @Test
+    void updateCompanyBankAccountUsesUnifiedOutletValidationMessage() {
+        SystemCompany company = new SystemCompany();
+        company.setCompanyId("COMPANY_A");
+        company.setCompanyName("Company A");
+
+        SystemCompanyBankAccount current = new SystemCompanyBankAccount();
+        current.setId(5L);
+        current.setCompanyId("COMPANY_A");
+        current.setBankName("Bank A");
+        current.setBankCode("BANK_A");
+        current.setProvince("广东省");
+        current.setCity("深圳市");
+        current.setBranchName("深圳支行");
+        current.setBranchCode("BANK_A_SZ");
+        current.setAccountName("Primary Account");
+        current.setAccountNo("622200001");
+        current.setStatus(1);
+
+        CompanyBankAccountSaveDTO dto = new CompanyBankAccountSaveDTO();
+        dto.setCompanyId("COMPANY_A");
+        dto.setBankName("Bank A");
+        dto.setBankCode("BANK_A");
+        dto.setProvince("广东省");
+        dto.setCity("深圳市");
+        dto.setBranchCode("BANK_A_SZ");
+        dto.setAccountName("Primary Account");
+        dto.setAccountNo("622200001");
+        dto.setStatus(1);
+
+        when(systemCompanyBankAccountMapper.selectById(5L)).thenReturn(current);
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> systemSettingsService.updateCompanyBankAccount(5L, dto)
+        );
+
+        assertEquals("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a", exception.getMessage());
     }
 }

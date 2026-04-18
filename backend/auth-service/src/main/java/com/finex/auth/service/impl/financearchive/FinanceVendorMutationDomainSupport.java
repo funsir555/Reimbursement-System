@@ -73,11 +73,53 @@ public class FinanceVendorMutationDomainSupport extends AbstractFinanceVendorArc
         FinanceVendor existing = requireVendor(normalizedCompanyId, vendorCode);
         validateSave(dto, existing, paymentInfoRequired);
 
+        String previousBankCode = trimToNull(existing.getCVenBankCode());
+        String previousProvince = trimToNull(existing.getReceiptBankProvince());
+        String previousCity = trimToNull(existing.getReceiptBankCity());
+        String previousBranchCode = trimToNull(existing.getReceiptBranchCode());
+        String previousBranchName = trimToNull(existing.getReceiptBranchName());
+        String previousCnapsCode = trimToNull(existing.getCVenBankNub());
+
         FinanceVendor next = objectMapper.convertValue(dto, FinanceVendor.class);
         String createdBy = existing.getCCreatePerson();
         LocalDateTime createdAt = existing.getCreatedAt();
-        normalizePaymentInfoFields(next, dto);
-        BeanUtils.copyProperties(next, existing, "cVenCode", "createdAt", "updatedAt", "cCreatePerson");
+        BeanUtils.copyProperties(
+                next,
+                existing,
+                "cVenCode",
+                "createdAt",
+                "updatedAt",
+                "cCreatePerson",
+                "receiptAccountName",
+                "receiptBankProvince",
+                "receiptBankCity",
+                "receiptBranchCode",
+                "receiptBranchName",
+                "cVenBank",
+                "cVenBankCode",
+                "cVenBankNub",
+                "cVenAccount"
+        );
+        String nextBankCode = trimToNull(dto.getCVenBankCode());
+        String nextProvince = trimToNull(dto.getReceiptBankProvince());
+        String nextCity = trimToNull(dto.getReceiptBankCity());
+        String nextBranchCode = trimToNull(dto.getReceiptBranchCode());
+        String nextBranchName = trimToNull(dto.getReceiptBranchName());
+        boolean branchSelectionChanged = !java.util.Objects.equals(previousBankCode, nextBankCode)
+                || !java.util.Objects.equals(previousProvince, nextProvince)
+                || !java.util.Objects.equals(previousCity, nextCity)
+                || !java.util.Objects.equals(previousBranchCode, nextBranchCode)
+                || !java.util.Objects.equals(previousBranchName, nextBranchName);
+
+        existing.setReceiptAccountName(effectiveReceiptAccountName(dto));
+        existing.setReceiptBankProvince(nextProvince);
+        existing.setReceiptBankCity(nextCity);
+        existing.setReceiptBranchCode(nextBranchCode);
+        existing.setReceiptBranchName(nextBranchName);
+        existing.setCVenBank(trimToNull(dto.getCVenBank()));
+        existing.setCVenBankCode(nextBankCode);
+        existing.setCVenBankNub(resolveWeakCnapsCode(previousCnapsCode, trimToNull(dto.getCVenBankNub()), branchSelectionChanged));
+        existing.setCVenAccount(trimToNull(dto.getCVenAccount()));
         existing.setCVenCode(vendorCode);
         existing.setCompanyId(normalizedCompanyId);
         existing.setCCreatePerson(createdBy);

@@ -4255,8 +4255,10 @@ class AbstractExpenseDocumentSupport {
      */
     private String buildVendorAccountSecondary(FinanceVendor vendor) {
         List<String> parts = new ArrayList<>();
-        if (trimToNull(vendor.getCVenBankNub()) != null) {
-            parts.add(vendor.getCVenBankNub().trim());
+        if (trimToNull(vendor.getReceiptBranchName()) != null) {
+            parts.add(vendor.getReceiptBranchName().trim());
+        } else if (trimToNull(vendor.getCVenBank()) != null) {
+            parts.add(vendor.getCVenBank().trim());
         }
         if (trimToNull(vendor.getCVenAccount()) != null) {
             parts.add(maskAccountNo(vendor.getCVenAccount()));

@@ -8,8 +8,7 @@ const mocks = vi.hoisted(() => ({
     listBanks: vi.fn(),
     listBankProvinces: vi.fn(),
     listBankCities: vi.fn(),
-    listBankBranches: vi.fn(),
-    lookupBranchByCnaps: vi.fn()
+    listBankBranches: vi.fn()
   },
   elMessage: {
     error: vi.fn()
@@ -60,7 +59,6 @@ function buildBranch() {
     city: '深圳市',
     branchCode: 'CMB-SZ-FH',
     branchName: '招商银行深圳福华支行',
-    cnapsCode: '308584000013',
     value: 'CMB-SZ-FH',
     label: '招商银行深圳福华支行 (广东省 / 深圳市)'
   }
@@ -77,10 +75,9 @@ describe('SupplierPaymentInfoFields', () => {
     mocks.financeBankApi.listBankProvinces.mockResolvedValue({ data: ['广东省'] })
     mocks.financeBankApi.listBankCities.mockResolvedValue({ data: ['深圳市'] })
     mocks.financeBankApi.listBankBranches.mockResolvedValue({ data: [buildBranch()] })
-    mocks.financeBankApi.lookupBranchByCnaps.mockResolvedValue({ data: buildBranch() })
   })
 
-  it('loads banks with the configured business scope and keeps cnaps read-only', async () => {
+  it('loads banks with the configured business scope without rendering cnaps input', async () => {
     const formState = reactive<Record<string, unknown>>({})
     const wrapper = mount(SupplierPaymentInfoFields, {
       props: {
@@ -105,8 +102,9 @@ describe('SupplierPaymentInfoFields', () => {
     })
 
     const inputs = wrapper.findAll('input')
-    expect(inputs[1]?.attributes('disabled')).toBeDefined()
-    expect(inputs[1]?.attributes('readonly')).toBeDefined()
+    expect(inputs).toHaveLength(2)
+    expect(wrapper.text()).not.toContain('联行号')
+    expect(wrapper.text()).not.toContain('自动匹配')
   })
 
   it('writes selected branch hierarchy back into the mapped form state', async () => {
@@ -152,6 +150,36 @@ describe('SupplierPaymentInfoFields', () => {
     expect(formState.receiptBankCity).toBe('深圳市')
     expect(formState.receiptBranchCode).toBe('CMB-SZ-FH')
     expect(formState.receiptBranchName).toBe('招商银行深圳福华支行')
-    expect(formState.cVenBankNub).toBe('308584000013')
+    expect(formState.cVenBankNub).toBeUndefined()
+  })
+
+  it('shows the unified province fallback instead of the old address wording', async () => {
+    mocks.financeBankApi.listBankProvinces.mockRejectedValueOnce(new Error(''))
+
+    const formState = reactive<Record<string, unknown>>({})
+    const wrapper = mount(SupplierPaymentInfoFields, {
+      props: {
+        formState,
+        businessScope: 'PUBLIC'
+      },
+      global: {
+        stubs: {
+          'el-form-item': SimpleContainer,
+          'el-input': InputStub,
+          'el-select': SelectStub,
+          'el-option': true,
+          'el-alert': SimpleContainer
+        }
+      }
+    })
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents(SelectStub)
+    await selects[0]!.vm.$emit('update:modelValue', 'CMB')
+    await selects[0]!.vm.$emit('change', 'CMB')
+    await flushPromises()
+
+    expect(mocks.elMessage.error).toHaveBeenCalledWith('\u52a0\u8f7d\u5f00\u6237\u7701\u4efd\u5931\u8d25')
+    expect(mocks.elMessage.error).not.toHaveBeenCalledWith('\u52a0\u8f7d\u5f00\u6237\u5730\u5740\u5931\u8d25')
   })
 })

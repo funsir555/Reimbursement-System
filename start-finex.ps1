@@ -235,6 +235,31 @@ function Start-ServiceShell {
   Write-Host ("[finex] Started {0} shell pid={1} port={2}" -f $Service.Title, $process.Id, $Service.Port)
 }
 
+function Ensure-AdminWebDependencies {
+  param([string]$WorkingDirectory)
+
+  $nodeModulesPath = Join-Path $WorkingDirectory 'node_modules'
+  if (Test-Path -LiteralPath $nodeModulesPath) {
+    return
+  }
+
+  Write-Host '[finex] admin-web dependencies are missing. Installing them before starting Vite...'
+  Push-Location $WorkingDirectory
+  try {
+    if (Test-Path -LiteralPath (Join-Path $WorkingDirectory 'package-lock.json')) {
+      & npm ci --no-audit --no-fund
+    } else {
+      & npm install --no-audit --no-fund
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm dependency install failed with exit code $LASTEXITCODE"
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
 $root = (Resolve-Path -LiteralPath $RootPath).Path
 $runDirectory = (New-Item -ItemType Directory -Force -Path $RunDir).FullName
 
@@ -341,6 +366,9 @@ if ($conflicts.Count -gt 0) {
 }
 
 foreach ($service in $services) {
+  if ($service.Name -eq 'admin-web') {
+    Ensure-AdminWebDependencies -WorkingDirectory $service.WorkingDirectory
+  }
   Start-ServiceShell -Service $service
 }
 

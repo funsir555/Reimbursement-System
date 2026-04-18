@@ -3,7 +3,7 @@
     <div v-if="showSectionHeader" class="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-sky-700">
       <p class="font-semibold">收款信息</p>
       <p class="mt-1 text-xs leading-6 text-sky-600">
-        银行、省、市与分支行均需从银行目录中选择；联行号会在选择分支行后自动带出。
+        银行、开户省、开户市与开户网点均需从银行目录中选择。
       </p>
     </div>
 
@@ -11,7 +11,7 @@
       v-if="needsBankReselection"
       type="warning"
       :closable="false"
-      title="当前记录的银行目录编码不完整，请重新选择开户银行、省市与分支行后再保存。"
+      title="当前记录的银行目录编码不完整，请重新选择开户银行、开户省、开户市与开户网点后再保存。"
     />
 
     <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -19,16 +19,7 @@
         <el-input
           v-model="accountNameModel"
           :maxlength="128"
-          :placeholder="required ? '请输入开户名/收款人姓名' : '请输入开户名/收款人姓名'"
-        />
-      </el-form-item>
-
-      <el-form-item label="联行号" class="!mb-0">
-        <el-input
-          :model-value="cnapsCodeModel"
-          disabled
-          readonly
-          placeholder="选择分支行后自动带出"
+          :placeholder="required ? '请输入账户名' : '请输入账户名'"
         />
       </el-form-item>
 
@@ -100,7 +91,7 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="分支行" :required="required" class="!mb-0 xl:col-span-2">
+      <el-form-item label="开户网点" :required="required" class="!mb-0 xl:col-span-2">
         <el-select
           v-model="branchCodeModel"
           filterable
@@ -108,7 +99,7 @@
           reserve-keyword
           clearable
           class="w-full"
-          placeholder="请选择或搜索分支行"
+          placeholder="请选择或搜索开户网点"
           :disabled="!bankCodeModel || !provinceModel || !cityModel"
           :remote-method="loadBranchOptions"
           :loading="branchOptionsLoading"
@@ -145,7 +136,6 @@ type PaymentFieldMap = {
   branchCode: string
   branchName: string
   accountNo: string
-  cnapsCode: string
 }
 
 const DEFAULT_FIELD_MAP: PaymentFieldMap = {
@@ -156,8 +146,7 @@ const DEFAULT_FIELD_MAP: PaymentFieldMap = {
   city: 'receiptBankCity',
   branchCode: 'receiptBranchCode',
   branchName: 'receiptBranchName',
-  accountNo: 'cVenAccount',
-  cnapsCode: 'cVenBankNub'
+  accountNo: 'cVenAccount'
 }
 
 const props = withDefaults(defineProps<{
@@ -171,7 +160,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   required: false,
   showSectionHeader: false,
-  accountNameLabel: '开户名',
+  accountNameLabel: '账户名',
   fieldMap: () => ({}),
   autoFillSourceKey: '',
   businessScope: 'BOTH'
@@ -192,11 +181,6 @@ const branchOptionsLoading = ref(false)
 const accountNameModel = computed({
   get: () => mappedStringValue('accountName'),
   set: (value: string) => setMappedField('accountName', value)
-})
-
-const cnapsCodeModel = computed({
-  get: () => mappedStringValue('cnapsCode'),
-  set: (value: string) => setMappedField('cnapsCode', value)
 })
 
 const bankCodeModel = computed({
@@ -239,8 +223,7 @@ const needsBankReselection = computed(() => {
     bankNameModel.value,
     provinceModel.value,
     cityModel.value,
-    branchNameModel.value,
-    cnapsCodeModel.value
+    branchNameModel.value
   ].some((item) => !!item)
   if (!hasAnyBankValue) {
     return false
@@ -322,7 +305,6 @@ async function handleBankChange(nextBankCode: string | undefined) {
   cityModel.value = ''
   branchCodeModel.value = ''
   branchNameModel.value = ''
-  cnapsCodeModel.value = ''
   if (!nextBankCode) {
     setMappedField('bankCode', '')
     setMappedField('bankName', '')
@@ -334,14 +316,12 @@ async function handleProvinceChange() {
   cityModel.value = ''
   branchCodeModel.value = ''
   branchNameModel.value = ''
-  cnapsCodeModel.value = ''
   await loadCityOptions()
 }
 
 async function handleCityChange() {
   branchCodeModel.value = ''
   branchNameModel.value = ''
-  cnapsCodeModel.value = ''
   await loadBranchOptions('')
 }
 
@@ -357,7 +337,7 @@ async function loadProvinceOptions() {
     })
     provinceOptions.value = res.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载开户地址失败'))
+    ElMessage.error(resolveErrorMessage(error, '加载开户省份失败'))
   }
 }
 
@@ -394,7 +374,7 @@ async function loadBranchOptions(keyword: string) {
     })
     branchOptions.value = res.data
   } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载分支行失败'))
+    ElMessage.error(resolveErrorMessage(error, '加载开户网点失败'))
   } finally {
     branchOptionsLoading.value = false
   }
@@ -405,7 +385,6 @@ function handleBranchChange(nextBranchCode: string | undefined) {
   if (!branch) {
     setMappedField('branchCode', '')
     setMappedField('branchName', '')
-    setMappedField('cnapsCode', '')
     return
   }
   applyBranchSelection(branch)
@@ -441,7 +420,6 @@ function applyBranchSelection(branch: FinanceBankBranchOption) {
   setMappedField('city', branch.city)
   setMappedField('branchCode', branch.branchCode)
   setMappedField('branchName', branch.branchName)
-  setMappedField('cnapsCode', branch.cnapsCode || '')
 }
 
 function mappedStringValue(key: keyof PaymentFieldMap) {

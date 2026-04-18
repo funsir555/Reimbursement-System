@@ -99,7 +99,10 @@ public class ExpenseDocumentController {
             HttpServletRequest request
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
-        return Result.success("供应商已保存", financeVendorService.createVendor(paymentCompanyId, dto, getCurrentUsername(request), true));
+        return Result.success(
+                "供应商及收款信息已保存",
+                financeVendorService.createVendor(paymentCompanyId, dto, getCurrentUsername(request), true)
+        );
     }
 
     @PutMapping("/vendors/{vendorCode}")
@@ -111,7 +114,7 @@ public class ExpenseDocumentController {
     ) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
         return Result.success(
-                "供应商已保存",
+                "供应商收款信息已更新",
                 financeVendorService.updateVendor(paymentCompanyId, vendorCode, dto, getCurrentUsername(request), true)
         );
     }

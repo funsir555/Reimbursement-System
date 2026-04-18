@@ -436,6 +436,7 @@ describe('ExpenseRuntimeFormEditor', () => {
         cVenBank: '中国工商银行'
       })
     )
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('供应商及收款信息已保存')
 
     const model = wrapper.props('modelValue') as Record<string, unknown>
     expect(model.counterparty).toBe('VEN-NEW')
@@ -496,12 +497,38 @@ describe('ExpenseRuntimeFormEditor', () => {
         cVenAccount: '6222020000000001'
       })
     )
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('供应商收款信息已更新')
 
     const model = wrapper.props('modelValue') as Record<string, unknown>
     expect(model.payeeAccount).toMatchObject({
       value: 'VENDOR_ACCOUNT:8',
       ownerCode: 'VEN-001'
     })
+  })
+
+  it('uses the unified vendor payment info failure wording', async () => {
+    mocks.expenseCreateApi.updateVendor.mockRejectedValueOnce(new Error(''))
+
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+    await wrapper.get('[data-testid="payee-account-maintain-vendor"]').trigger('click')
+    await flushPromises()
+
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存收款账户')
+    expect(saveButton).toBeTruthy()
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessage.error).toHaveBeenCalledWith('维护供应商收款信息失败')
   })
 
   it('applies the unified runtime control class to representative fill controls', async () => {
@@ -555,5 +582,37 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(datePickers[1].attributes('data-end-placeholder')).toBe('结束日期')
     expect(wrapper.text()).toContain('选择文件')
     expect(wrapper.text()).toContain('最多 3 个文件，单个不超过 1 MB')
+  })
+
+  it('uses the unified account and outlet wording when validating vendor drafts', async () => {
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: '',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    Object.assign(vm.vendorDraft, {
+      cVenName: '测试供应商',
+      receiptAccountName: 'A'.repeat(129),
+      cVenAccount: '622200001',
+      cVenBank: '中国工商银行',
+      receiptBankProvince: '上海市',
+      receiptBankCity: '上海市',
+      receiptBranchName: '上海营业部'
+    })
+    expect(vm.validateVendorDraft()).toBe('账户名最多 128 个字符')
+
+    Object.assign(vm.vendorDraft, {
+      receiptAccountName: '测试账户',
+      receiptBranchName: ''
+    })
+    expect(vm.validateVendorDraft()).toBe('请先选择开户网点')
   })
 })

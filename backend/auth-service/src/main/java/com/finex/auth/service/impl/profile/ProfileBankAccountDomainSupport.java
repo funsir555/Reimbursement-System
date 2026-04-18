@@ -158,18 +158,47 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
     }
 
     private void applyBankAccount(UserBankAccount account, UserBankAccountSaveDTO dto) {
+        String previousBankCode = trimToNull(account.getBankCode());
+        String previousProvince = trimToNull(account.getProvince());
+        String previousCity = trimToNull(account.getCity());
+        String previousBranchCode = trimToNull(account.getBranchCode());
+        String previousBranchName = trimToNull(account.getBranchName());
+        String previousCnapsCode = trimToNull(account.getCnapsCode());
+
+        String nextBankCode = requireText(dto.getBankCode(), "开户银行编码不能为空");
+        String nextBankName = requireText(dto.getBankName(), "开户银行不能为空");
+        String nextProvince = requireText(dto.getProvince(), "开户省不能为空");
+        String nextCity = requireText(dto.getCity(), "开户市不能为空");
+        String nextBranchCode = requireText(dto.getBranchCode(), "开户网点编码不能为空");
+        String nextBranchName = requireText(dto.getBranchName(), "开户网点不能为空");
+        boolean branchSelectionChanged = !Objects.equals(previousBankCode, nextBankCode)
+                || !Objects.equals(previousProvince, nextProvince)
+                || !Objects.equals(previousCity, nextCity)
+                || !Objects.equals(previousBranchCode, nextBranchCode)
+                || !Objects.equals(previousBranchName, nextBranchName);
+
         account.setAccountName(requireText(dto.getAccountName(), "账户名不能为空"));
         account.setAccountNo(requireText(dto.getAccountNo(), "银行账号不能为空"));
         account.setAccountType(defaultText(trimToNull(dto.getAccountType()), "对私账户"));
-        account.setBankCode(requireText(dto.getBankCode(), "开户银行编码不能为空"));
-        account.setBankName(requireText(dto.getBankName(), "开户银行不能为空"));
-        account.setProvince(requireText(dto.getProvince(), "开户省不能为空"));
-        account.setCity(requireText(dto.getCity(), "开户市不能为空"));
-        account.setBranchCode(requireText(dto.getBranchCode(), "分支行编码不能为空"));
-        account.setBranchName(requireText(dto.getBranchName(), "分支行不能为空"));
-        account.setCnapsCode(trimToNull(dto.getCnapsCode()));
+        account.setBankCode(nextBankCode);
+        account.setBankName(nextBankName);
+        account.setProvince(nextProvince);
+        account.setCity(nextCity);
+        account.setBranchCode(nextBranchCode);
+        account.setBranchName(nextBranchName);
+        account.setCnapsCode(resolveWeakCnapsCode(previousCnapsCode, trimToNull(dto.getCnapsCode()), branchSelectionChanged));
         account.setStatus(normalizeStatus(dto.getStatus()));
         account.setDefaultAccount(Integer.valueOf(1).equals(account.getStatus()) && normalizeFlag(dto.getDefaultAccount()) == 1 ? 1 : 0);
+    }
+
+    private String resolveWeakCnapsCode(String previousCnapsCode, String submittedCnapsCode, boolean branchSelectionChanged) {
+        if (submittedCnapsCode != null) {
+            return submittedCnapsCode;
+        }
+        if (branchSelectionChanged) {
+            return null;
+        }
+        return previousCnapsCode;
     }
 
     /**
