@@ -21,6 +21,7 @@ describe('navigation configuration', () => {
     expect(financeGroup).toBeTruthy()
     expect(fallbackMatch('settings:roles:view')).toBe('/settings?tab=organization')
     expect(fallbackMatch('settings:company_accounts:view')).toBe('/settings?tab=companyAccounts')
+    expect(fallbackMatch('settings:api_interfaces:view')).toBe('/settings?tab=apiInterfaces')
   })
 
   it('resolves finance tab titles and placeholder copy from route meta', () => {

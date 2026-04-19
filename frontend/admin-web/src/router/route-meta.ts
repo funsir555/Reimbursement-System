@@ -7,7 +7,8 @@ export const SETTINGS_ROUTE_PERMISSION_CODES = [
   'settings:employees:view',
   'settings:roles:view',
   'settings:companies:view',
-  'settings:company_accounts:view'
+  'settings:company_accounts:view',
+  'settings:api_interfaces:view'
 ] as const
 
 export const SETTINGS_ORGANIZATION_FALLBACK_PERMISSION_CODES = [

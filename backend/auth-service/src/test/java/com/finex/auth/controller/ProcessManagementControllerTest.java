@@ -2,6 +2,7 @@ package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
 import com.finex.auth.dto.ProcessCenterOverviewVO;
+import com.finex.auth.dto.ProcessCenterNavItemVO;
 import com.finex.auth.dto.ProcessFormDesignSummaryVO;
 import com.finex.auth.dto.ProcessFlowDetailVO;
 import com.finex.auth.dto.ProcessFlowSummaryVO;
@@ -97,6 +98,16 @@ class ProcessManagementControllerTest {
         category.setTemplates(List.of(template));
 
         ProcessCenterOverviewVO overview = new ProcessCenterOverviewVO();
+        ProcessCenterNavItemVO documentFlow = new ProcessCenterNavItemVO();
+        documentFlow.setKey("document-flow");
+        documentFlow.setLabel("单据与流程");
+        ProcessCenterNavItemVO formDesign = new ProcessCenterNavItemVO();
+        formDesign.setKey("form-design");
+        formDesign.setLabel("费用表单");
+        ProcessCenterNavItemVO approvalFlow = new ProcessCenterNavItemVO();
+        approvalFlow.setKey("approval-flow");
+        approvalFlow.setLabel("审批流程");
+        overview.setNavItems(List.of(documentFlow, formDesign, approvalFlow));
         overview.setCategories(List.of(category));
 
         doNothing().when(accessControlService).requirePermission(1L, "expense:process_management:view");
@@ -105,6 +116,9 @@ class ProcessManagementControllerTest {
         mockMvc.perform(get("/auth/process-management/overview").requestAttr("currentUserId", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.navItems[0].key").value("document-flow"))
+                .andExpect(jsonPath("$.data.navItems[1].key").value("form-design"))
+                .andExpect(jsonPath("$.data.navItems[2].key").value("approval-flow"))
                 .andExpect(jsonPath("$.data.categories[0].templates[0].flowCode").value("FLOW-001"))
                 .andExpect(jsonPath("$.data.categories[0].templates[0].formCode").value("FD-001"))
                 .andExpect(jsonPath("$.data.categories[0].templates[0].formName").value("Form Alpha"));

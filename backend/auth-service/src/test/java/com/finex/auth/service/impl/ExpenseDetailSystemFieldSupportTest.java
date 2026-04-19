@@ -15,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ExpenseDetailSystemFieldSupportTest {
@@ -40,12 +39,12 @@ class ExpenseDetailSystemFieldSupportTest {
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> blocks = (List<Map<String, Object>>) schema.get("blocks");
-        assertEquals("费用类型", blocks.get(0).get("label"));
-        assertEquals("业务场景", blocks.get(1).get("label"));
-        assertEquals("发票金额", blocks.get(2).get("label"));
-        assertEquals("实际支付金额", blocks.get(3).get("label"));
-        assertEquals("发票附件", blocks.get(4).get("label"));
-        assertEquals("待核销金额", blocks.get(5).get("label"));
+        assertEquals("\u8d39\u7528\u7c7b\u578b", blocks.get(0).get("label"));
+        assertEquals("\u4e1a\u52a1\u573a\u666f", blocks.get(1).get("label"));
+        assertEquals("\u53d1\u7968\u91d1\u989d", blocks.get(2).get("label"));
+        assertEquals("\u5b9e\u9645\u652f\u4ed8\u91d1\u989d", blocks.get(3).get("label"));
+        assertEquals("\u53d1\u7968\u9644\u4ef6", blocks.get(4).get("label"));
+        assertEquals("\u5f85\u6838\u9500\u91d1\u989d", blocks.get(5).get("label"));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> expenseTypeProps = (Map<String, Object>) blocks.get(0).get("props");
@@ -53,15 +52,19 @@ class ExpenseDetailSystemFieldSupportTest {
         Map<String, Object> scenarioProps = (Map<String, Object>) blocks.get(1).get("props");
         @SuppressWarnings("unchecked")
         Map<String, Object> amountProps = (Map<String, Object>) blocks.get(2).get("props");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> invoiceAttachmentProps = (Map<String, Object>) blocks.get(4).get("props");
 
-        assertEquals("请选择费用类型", expenseTypeProps.get("placeholder"));
-        assertEquals("请选择业务场景", scenarioProps.get("placeholder"));
-        assertEquals("请输入金额", amountProps.get("placeholder"));
+        assertEquals("\u8bf7\u9009\u62e9\u8d39\u7528\u7c7b\u578b", expenseTypeProps.get("placeholder"));
+        assertEquals("\u8bf7\u9009\u62e9\u4e1a\u52a1\u573a\u666f", scenarioProps.get("placeholder"));
+        assertEquals("\u8bf7\u8f93\u5165\u91d1\u989d", amountProps.get("placeholder"));
+        assertEquals(30, invoiceAttachmentProps.get("maxCount"));
+        assertEquals(".pdf,.png,.jpg,.jpeg", invoiceAttachmentProps.get("accept"));
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> scenarioOptions = (List<Map<String, Object>>) scenarioProps.get("options");
-        assertEquals("全额付款", scenarioOptions.get(0).get("label"));
-        assertEquals("预付未到票", scenarioOptions.get(1).get("label"));
+        assertEquals("\u5168\u989d\u4ed8\u6b3e", scenarioOptions.get(0).get("label"));
+        assertEquals("\u9884\u4ed8\u672a\u5230\u7968", scenarioOptions.get(1).get("label"));
     }
 
     @Test
@@ -71,6 +74,6 @@ class ExpenseDetailSystemFieldSupportTest {
                 () -> support.readSchema("{bad-json", ExpenseDetailSystemFieldSupport.DETAIL_TYPE_NORMAL)
         );
 
-        assertEquals("读取费用明细 schema 失败", error.getMessage());
+        assertEquals("\u8bfb\u53d6\u8d39\u7528\u660e\u7ec6 schema \u5931\u8d25", error.getMessage());
     }
 }

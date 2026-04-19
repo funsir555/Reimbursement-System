@@ -38,6 +38,7 @@ describe('permissions utilities', () => {
   it('resolves the first accessible fallback route', () => {
     expect(resolveFirstAccessiblePath({ permissionCodes: ['archives:invoices:view'] })).toBe('/archives/invoices')
     expect(resolveFirstAccessiblePath({ permissionCodes: ['settings:roles:view'] })).toBe('/settings?tab=organization')
+    expect(resolveFirstAccessiblePath({ permissionCodes: ['settings:api_interfaces:view'] })).toBe('/settings?tab=apiInterfaces')
     expect(resolveFirstAccessiblePath({ permissionCodes: [] })).toBe('/login')
   })
 })

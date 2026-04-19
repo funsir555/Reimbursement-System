@@ -49,7 +49,23 @@ function createBranchNode(nodeKey: string, nodeName: string): ProcessFlowNode {
   }
 }
 
-function createRoute(routeKey: string, sourceNodeKey: string, routeName: string, priority: number, attachBelowNodes = false): ProcessFlowRoute {
+function createApprovalNode(nodeKey: string, nodeName: string): ProcessFlowNode {
+  return {
+    nodeKey,
+    nodeName,
+    nodeType: 'APPROVAL',
+    displayOrder: 1,
+    config: {}
+  }
+}
+
+function createRoute(
+  routeKey: string,
+  sourceNodeKey: string,
+  routeName: string,
+  priority: number,
+  attachBelowNodes = false
+): ProcessFlowRoute {
   return {
     routeKey,
     sourceNodeKey,
@@ -79,15 +95,16 @@ function createInsertTargets(containerKey: string, index: number): FlowCanvasIns
 }
 
 function buildBlocks(): FlowCanvasBlock[] {
-  const rootNode = createBranchNode('branch-root', '根分支')
-  const nestedNode = createBranchNode('branch-nested', '嵌套分支')
+  const rootNode = createBranchNode('branch-root', 'Root branch')
+  const nestedNode = createBranchNode('branch-nested', 'Nested branch')
+  const reviewNode = createApprovalNode('approval-lane', 'Lane approval node')
   const rootRoutes = [
-    createRoute('route-root-a', 'branch-root', '分支 A', 1, true),
-    createRoute('route-root-b', 'branch-root', '分支 B', 2)
+    createRoute('route-root-a', 'branch-root', 'Branch A', 1, true),
+    createRoute('route-root-b', 'branch-root', 'Branch B', 2)
   ]
   const nestedRoutes = [
-    createRoute('route-nested-a', 'branch-nested', '内层 A', 1, true),
-    createRoute('route-nested-b', 'branch-nested', '内层 B', 2)
+    createRoute('route-nested-a', 'branch-nested', 'Nested A', 1),
+    createRoute('route-nested-b', 'branch-nested', 'Nested B', 2)
   ]
 
   return [
@@ -98,6 +115,14 @@ function buildBlocks(): FlowCanvasBlock[] {
       depth: 0,
       compact: false,
       symmetric: true,
+      postMergeInsert: {
+        key: 'insert-root-1-post-merge',
+        kind: 'insert',
+        containerKey: null,
+        index: 1,
+        depth: 0,
+        placement: 'post-merge'
+      },
       routes: [
         {
           route: rootRoutes[0],
@@ -109,6 +134,12 @@ function buildBlocks(): FlowCanvasBlock[] {
               index: 0,
               depth: 1,
               targets: createInsertTargets('route-root-a', 0)
+            },
+            {
+              key: 'node-approval-lane',
+              kind: 'node',
+              node: reviewNode,
+              depth: 1
             },
             {
               key: 'branch-branch-nested',
@@ -150,7 +181,7 @@ function buildBlocks(): FlowCanvasBlock[] {
 }
 
 describe('ProcessFlowCanvasRenderer', () => {
-  it('uses the branch drag handle, keeps dual-lane symmetry, and renders merged insert groups', () => {
+  it('expands nested compact branches through the parent lane while keeping branch elements aligned', async () => {
     const wrapper = mount(ProcessFlowCanvasRenderer, {
       props: {
         blocks: buildBlocks(),
@@ -158,7 +189,7 @@ describe('ProcessFlowCanvasRenderer', () => {
         selectedRouteKey: 'route-root-a',
         sceneNameById: () => '',
         nodeTypeLabel: (nodeType: string) => nodeType,
-        nodeCardClass: () => 'is-branch'
+        nodeCardClass: (nodeType: string) => `is-${nodeType.toLowerCase()}`
       },
       global: {
         stubs: {
@@ -170,15 +201,30 @@ describe('ProcessFlowCanvasRenderer', () => {
       }
     })
 
-    expect(wrapper.find('.branch-node-card').exists()).toBe(false)
+    const branchShells = wrapper.findAll('.branch-shell')
+
     expect(wrapper.find('.branch-drag-handle').exists()).toBe(true)
     expect(wrapper.find('.branch-shell.is-dual-lane').exists()).toBe(true)
     expect(wrapper.find('.branch-shell.is-compact').exists()).toBe(true)
-    expect(wrapper.findAll('.branch-shell')[0]?.attributes('style')).toContain('--branch-shell-width: max-content;')
-    expect(wrapper.findAll('.branch-shell')[0]?.attributes('style')).toContain('--branch-lane-min-width: 144px;')
-    expect(wrapper.findAll('.branch-shell')[1]?.attributes('style')).toContain('--branch-shell-min-width: 100%;')
+    expect(branchShells[0]?.attributes('style')).toContain('--branch-shell-width: max-content;')
+    expect(branchShells[0]?.attributes('style')).toContain('--branch-lane-min-width: 144px;')
+    expect(branchShells[0]?.attributes('style')).toContain('--branch-element-width: 144px;')
+    expect(branchShells[1]?.attributes('style')).toContain('--branch-shell-width: max-content;')
+    expect(branchShells[1]?.attributes('style')).toContain('--branch-shell-max-width: none;')
+    expect(branchShells[1]?.attributes('style')).toContain('--branch-element-width: 144px;')
+    expect(branchShells[1]?.attributes('style')).not.toContain('--branch-shell-width: 100%;')
+    expect(branchShells[1]?.attributes('style')).not.toContain('--branch-shell-max-width: 100%;')
+    expect(wrapper.find('.branch-shell.is-compact .branch-lanes').exists()).toBe(true)
+    expect(wrapper.find('.node-shell.is-lane-node .flow-node-card').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="branch-add-route-trigger"]')).toHaveLength(2)
     expect(wrapper.findAll('.insert-trigger-shell.is-merged-target')).toHaveLength(1)
-    expect(wrapper.text()).toContain('插入当前分支')
-    expect(wrapper.text()).toContain('插入附带下方节点')
+    expect(wrapper.findAll('.branch-post-merge-insert .insert-trigger')).toHaveLength(1)
+    expect(wrapper.find('.branch-post-merge-insert .insert-trigger').attributes('aria-label')).toContain('2')
+    expect(wrapper.findAll('[data-testid="branch-add-route-trigger"]')[0]?.attributes('aria-label')).toBeTruthy()
+
+
+    const addRouteTriggers = wrapper.findAll('[data-testid="branch-add-route-trigger"]')
+    await addRouteTriggers[addRouteTriggers.length - 1]!.trigger('click')
+    expect(wrapper.emitted('add-route-lane')).toEqual([['branch-root']])
   })
 })

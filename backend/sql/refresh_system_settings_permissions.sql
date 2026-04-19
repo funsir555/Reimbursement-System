@@ -203,7 +203,8 @@ INSERT INTO tmp_permission_seed (
     ('settings:company_accounts:view', '公司账户管理', 'MENU', 'settings:menu', 'companyAccounts', '/settings?tab=companyAccounts', 605, 1),
     ('settings:company_accounts:create', '新增公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6051, 1),
     ('settings:company_accounts:edit', '编辑公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6052, 1),
-    ('settings:company_accounts:delete', '删除公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6053, 1);
+    ('settings:company_accounts:delete', '删除公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6053, 1),
+    ('settings:api_interfaces:view', 'API接口', 'MENU', 'settings:menu', 'apiInterfaces', '/settings?tab=apiInterfaces', 606, 1);
 
 INSERT INTO sys_permission (
     permission_code,

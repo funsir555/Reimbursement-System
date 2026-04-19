@@ -301,9 +301,9 @@ public class ExpenseDetailSystemFieldSupport {
         }
         if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_ATTACHMENTS)) {
             props.put("controlType", CONTROL_TYPE_ATTACHMENT);
-            props.put("maxCount", 20);
+            props.put("maxCount", 30);
             props.put("maxSizeMb", 10);
-            props.put("accept", ".pdf,.jpg,.jpeg,.png,.webp");
+            props.put("accept", ".pdf,.png,.jpg,.jpeg");
             if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
                 props.put("visibleSceneModes", List.of(MODE_INVOICE_FULL_PAYMENT));
             }

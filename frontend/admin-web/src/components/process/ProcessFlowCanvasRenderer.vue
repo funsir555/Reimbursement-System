@@ -1,10 +1,13 @@
 <template>
-  <div class="flow-stack">
+  <div class="flow-stack" :class="props.layoutMode === 'lane' ? 'is-lane-layout' : 'is-root-layout'">
     <div
       v-for="block in blocks"
       :key="block.key"
       class="flow-step"
-      :class="block.kind === 'branch' ? 'is-branch-step' : ''"
+      :class="[
+        block.kind === 'branch' ? 'is-branch-step' : '',
+        props.layoutMode === 'lane' ? 'is-lane-layout' : 'is-root-layout'
+      ]"
     >
       <template v-if="block.kind === 'insert'">
         <div
@@ -51,7 +54,7 @@
       </template>
 
       <template v-else-if="block.kind === 'node'">
-        <div class="node-shell">
+        <div class="node-shell" :class="block.depth > 0 ? 'is-lane-node' : ''">
           <button
             type="button"
             class="flow-node-card"
@@ -108,44 +111,57 @@
 
           <div class="branch-lanes">
             <div
-              v-for="lane in block.routes"
+              v-for="(lane, laneIndex) in block.routes"
               :key="lane.route.routeKey"
               class="branch-lane"
               :class="lane.route.attachBelowNodes ? 'has-attached-tail' : ''"
             >
               <div class="branch-lane-entry" aria-hidden="true"></div>
-              <button
-                type="button"
-                class="route-head-card"
-                :class="[
-                  selectedRouteKey === lane.route.routeKey ? 'is-selected' : '',
-                  lane.route.attachBelowNodes ? 'is-attached' : ''
-                ]"
-                @click="emit('select-route', lane.route.routeKey)"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 text-left">
-                    <div class="flex items-center gap-2">
-                      <p class="truncate text-sm font-semibold text-slate-800">{{ lane.route.routeName || '未命名分支' }}</p>
-                      <span
-                        v-if="lane.route.attachBelowNodes"
-                        class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-600"
-                      >
-                        附带下方节点
-                      </span>
+              <div class="route-head-row" :class="laneIndex === block.routes.length - 1 ? 'is-last-lane' : ''">
+                <button
+                  type="button"
+                  class="route-head-card"
+                  :class="[
+                    selectedRouteKey === lane.route.routeKey ? 'is-selected' : '',
+                    lane.route.attachBelowNodes ? 'is-attached' : ''
+                  ]"
+                  @click="emit('select-route', lane.route.routeKey)"
+                >
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0 text-left">
+                      <div class="flex items-center gap-2">
+                        <p class="truncate text-sm font-semibold text-slate-800">{{ lane.route.routeName || '\u672a\u547d\u540d\u5206\u652f' }}</p>
+                        <span
+                          v-if="lane.route.attachBelowNodes"
+                          class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-600"
+                        >
+                          {{ '\u9644\u5e26\u4e0b\u65b9\u8282\u70b9' }}
+                        </span>
+                      </div>
+                      <p class="mt-1 text-xs text-slate-400">
+                        {{ `\u4f18\u5148\u7ea7 ${lane.route.priority || 1} / ${countConditions(lane.route)} \u6761\u6761\u4ef6` }}
+                      </p>
                     </div>
-                    <p class="mt-1 text-xs text-slate-400">
-                      优先级 {{ lane.route.priority || 1 }} 路 · {{ countConditions(lane.route) }} 条条件
-                    </p>
+                    <span class="route-head-link">{{ '\u6761\u4ef6\u8bbe\u7f6e' }}</span>
                   </div>
-                  <span class="route-head-link">条件设置</span>
-                </div>
-              </button>
+                </button>
+                <button
+                  v-if="laneIndex === block.routes.length - 1"
+                  type="button"
+                  class="route-lane-add-trigger"
+                  data-testid="branch-add-route-trigger"
+                  :aria-label="'\u65b0\u589e\u6761\u4ef6\u5206\u652f'"
+                  @click.stop="emit('add-route-lane', block.node.nodeKey)"
+                >
+                  +
+                </button>
+              </div>
 
               <div class="branch-lane-card-connector" aria-hidden="true"></div>
               <div class="branch-lane-body">
                 <ProcessFlowCanvasRenderer
                   :blocks="lane.blocks"
+                  layout-mode="lane"
                   :selected-node-key="selectedNodeKey"
                   :selected-route-key="selectedRouteKey"
                   :dragging-node-key="draggingNodeKey"
@@ -156,6 +172,7 @@
                   @insert-node="emit('insert-node', $event)"
                   @select-node="emit('select-node', $event)"
                   @select-route="emit('select-route', $event)"
+                  @add-route-lane="emit('add-route-lane', $event)"
                   @drag-node-start="emit('drag-node-start', $event)"
                   @drag-node-end="emit('drag-node-end')"
                   @drag-node-over="emit('drag-node-over', $event)"
@@ -170,6 +187,61 @@
           <div class="branch-merge">
             <div class="branch-merge-entry" aria-hidden="true"></div>
             <span>分支汇合</span>
+          </div>
+          <div v-if="block.postMergeInsert" class="branch-post-merge-insert">
+            <div
+              class="insert-trigger-shell is-post-merge"
+              :class="dropTargetKey === block.postMergeInsert.key ? 'is-drop-target' : ''"
+              @dragenter.prevent="emit('drag-node-over', {
+                containerKey: block.postMergeInsert.containerKey,
+                index: block.postMergeInsert.index,
+                blockKey: block.postMergeInsert.key
+              })"
+              @dragover.prevent="emit('drag-node-over', {
+                containerKey: block.postMergeInsert.containerKey,
+                index: block.postMergeInsert.index,
+                blockKey: block.postMergeInsert.key
+              })"
+              @drop.prevent="emit('drop-node', {
+                containerKey: block.postMergeInsert.containerKey,
+                index: block.postMergeInsert.index,
+                blockKey: block.postMergeInsert.key
+              })"
+            >
+              <el-dropdown trigger="click" @command="handleInsertCommand">
+                <button
+                  type="button"
+                  class="insert-trigger"
+                  :aria-label="insertButtonAriaLabel(block.postMergeInsert)"
+                >
+                  +
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <template
+                      v-for="(group, groupIndex) in resolveInsertGroups(block.postMergeInsert)"
+                      :key="group.key"
+                    >
+                      <el-dropdown-item
+                        v-if="group.label"
+                        class="insert-trigger-group-label"
+                        :disabled="true"
+                        :divided="groupIndex > 0"
+                      >
+                        {{ group.label }}
+                      </el-dropdown-item>
+                      <el-dropdown-item
+                        v-for="command in group.commands"
+                        :key="command.key"
+                        :command="command.command"
+                      >
+                        {{ command.label }}
+                      </el-dropdown-item>
+                    </template>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </div>
         </div>
       </template>
@@ -214,6 +286,7 @@ type InsertGroup = {
 
 const props = defineProps<{
   blocks: FlowCanvasBlock[]
+  layoutMode?: 'root' | 'lane'
   selectedNodeKey: string
   selectedRouteKey: string
   draggingNodeKey?: string
@@ -227,6 +300,7 @@ const emit = defineEmits<{
   (event: 'insert-node', payload: InsertCommand): void
   (event: 'select-node', nodeKey: string): void
   (event: 'select-route', routeKey: string): void
+  (event: 'add-route-lane', branchNodeKey: string): void
   (event: 'drag-node-start', nodeKey: string): void
   (event: 'drag-node-end'): void
   (event: 'drag-node-over', payload: CanvasDropPayload): void
@@ -315,8 +389,10 @@ function branchShellStyle(routeCount: number, depth: number) {
       '--branch-lane-count': String(Math.max(routeCount, 1)),
       '--branch-lane-gap': '10px',
       '--branch-lane-min-width': '144px',
+      '--branch-element-width': '144px',
       '--branch-shell-width': 'max-content',
-      '--branch-shell-min-width': '100%',
+      '--branch-shell-max-width': 'none',
+      '--branch-shell-min-width': '0px',
       '--branch-lane-padding': '8px'
     }
   }
@@ -326,7 +402,9 @@ function branchShellStyle(routeCount: number, depth: number) {
       '--branch-lane-count': '2',
       '--branch-lane-gap': '16px',
       '--branch-lane-min-width': '144px',
+      '--branch-element-width': '144px',
       '--branch-shell-width': 'max-content',
+      '--branch-shell-max-width': 'none',
       '--branch-shell-min-width': '0px',
       '--branch-lane-padding': '8px'
     }
@@ -336,7 +414,9 @@ function branchShellStyle(routeCount: number, depth: number) {
     '--branch-lane-count': String(Math.max(routeCount, 1)),
     '--branch-lane-gap': '14px',
     '--branch-lane-min-width': '144px',
+    '--branch-element-width': '144px',
     '--branch-shell-width': 'max-content',
+    '--branch-shell-max-width': 'none',
     '--branch-shell-min-width': '0px',
     '--branch-lane-padding': '8px'
   }
@@ -347,6 +427,7 @@ function branchShellStyle(routeCount: number, depth: number) {
 .flow-stack {
   display: flex;
   width: 100%;
+  min-width: 0;
   flex-direction: column;
   align-items: center;
   gap: 18px;
@@ -356,6 +437,7 @@ function branchShellStyle(routeCount: number, depth: number) {
   position: relative;
   display: flex;
   width: 100%;
+  min-width: 0;
   justify-content: center;
 }
 
@@ -388,6 +470,13 @@ function branchShellStyle(routeCount: number, depth: number) {
   display: flex;
   width: 100%;
   justify-content: center;
+}
+
+.node-shell.is-lane-node {
+  justify-content: stretch;
+  width: var(--branch-element-width, var(--branch-lane-min-width));
+  min-width: var(--branch-element-width, var(--branch-lane-min-width));
+  max-width: var(--branch-element-width, var(--branch-lane-min-width));
 }
 
 .flow-node-card {
@@ -428,6 +517,12 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .flow-node-card.is-branch {
   background: linear-gradient(135deg, #ea580c, #fb923c);
+}
+
+.node-shell.is-lane-node .flow-node-card {
+  width: var(--branch-element-width, var(--branch-lane-min-width));
+  min-width: var(--branch-element-width, var(--branch-lane-min-width));
+  max-width: var(--branch-element-width, var(--branch-lane-min-width));
 }
 
 .insert-trigger-shell {
@@ -482,7 +577,7 @@ function branchShellStyle(routeCount: number, depth: number) {
   position: relative;
   display: flex;
   width: var(--branch-shell-width);
-  max-width: none;
+  max-width: var(--branch-shell-max-width, none);
   min-width: var(--branch-shell-min-width, 0);
   flex-direction: column;
   align-items: center;
@@ -560,6 +655,7 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .branch-lanes {
   display: flex;
+  align-items: stretch;
   width: max-content;
   min-width: 100%;
   justify-content: center;
@@ -570,7 +666,8 @@ function branchShellStyle(routeCount: number, depth: number) {
 .branch-lane {
   display: flex;
   height: 100%;
-  width: fit-content;
+  width: max-content;
+  max-width: none;
   min-width: var(--branch-lane-min-width);
   flex-direction: column;
   align-items: center;
@@ -583,6 +680,10 @@ function branchShellStyle(routeCount: number, depth: number) {
 .branch-shell.is-compact .branch-lane {
   border-radius: 24px;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.9));
+}
+
+.branch-shell.is-compact .branch-lanes {
+  min-width: var(--branch-lane-min-width);
 }
 
 .branch-lane-entry,
@@ -630,6 +731,13 @@ function branchShellStyle(routeCount: number, depth: number) {
   border-color: rgba(14, 165, 233, 0.28);
 }
 
+.route-head-row {
+  position: relative;
+  width: var(--branch-element-width, var(--branch-lane-min-width));
+  min-width: var(--branch-element-width, var(--branch-lane-min-width));
+  max-width: var(--branch-element-width, var(--branch-lane-min-width));
+}
+
 .route-head-link {
   flex-shrink: 0;
   color: #0284c7;
@@ -637,11 +745,39 @@ function branchShellStyle(routeCount: number, depth: number) {
   font-weight: 600;
 }
 
+.route-lane-add-trigger {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(14, 165, 233, 0.24);
+  border-radius: 999px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  transform: translateY(-50%);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.route-lane-add-trigger:hover {
+  border-color: #38bdf8;
+  box-shadow: 0 10px 22px rgba(14, 165, 233, 0.16);
+  transform: translateY(-50%) scale(1.04);
+}
+
 .branch-lane-body {
   display: flex;
   flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
+  width: max-content;
+  max-width: none;
+  min-width: var(--branch-element-width, var(--branch-lane-min-width));
   min-height: 110px;
   flex-direction: column;
   align-items: center;
@@ -650,6 +786,15 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .branch-shell.is-compact .branch-lane-body {
   min-height: 90px;
+}
+
+.flow-stack.is-lane-layout {
+  width: max-content;
+  min-width: var(--branch-element-width, var(--branch-lane-min-width));
+}
+
+.flow-step.is-lane-layout {
+  min-width: 0;
 }
 
 .branch-merge {
@@ -675,6 +820,12 @@ function branchShellStyle(routeCount: number, depth: number) {
   font-size: 13px;
   font-weight: 600;
   color: #1e3a8a;
+}
+
+.branch-post-merge-insert {
+  display: flex;
+  width: 100%;
+  justify-content: center;
 }
 
 @media (max-width: 1279px) {
@@ -706,6 +857,11 @@ function branchShellStyle(routeCount: number, depth: number) {
   .branch-lane {
     width: 100%;
     min-width: 0;
+  }
+
+  .route-lane-add-trigger {
+    left: auto;
+    right: 10px;
   }
 }
 </style>

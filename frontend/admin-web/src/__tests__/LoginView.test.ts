@@ -19,14 +19,18 @@ vi.mock('@/api', () => ({
   }
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: {
-    warning: vi.fn(),
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn()
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: {
+      warning: vi.fn(),
+      success: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn()
+    }
   }
-}))
+})
 
 const ElFormStub = defineComponent({
   template: '<form><slot /></form>'

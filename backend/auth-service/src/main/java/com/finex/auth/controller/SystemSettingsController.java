@@ -72,6 +72,7 @@ public class SystemSettingsController {
     private static final String COMPANY_EDIT = "settings:companies:edit";
     private static final String COMPANY_DELETE = "settings:companies:delete";
     private static final String COMPANY_ACCOUNT_VIEW = "settings:company_accounts:view";
+    private static final String API_INTERFACE_VIEW = "settings:api_interfaces:view";
     private static final String COMPANY_ACCOUNT_CREATE = "settings:company_accounts:create";
     private static final String COMPANY_ACCOUNT_EDIT = "settings:company_accounts:edit";
     private static final String COMPANY_ACCOUNT_DELETE = "settings:company_accounts:delete";
@@ -84,7 +85,7 @@ public class SystemSettingsController {
     public Result<SystemSettingsBootstrapVO> bootstrap(HttpServletRequest request) {
         accessControlService.requireAnyPermission(
                 getCurrentUserId(request),
-                SETTINGS_MENU, ORG_VIEW, EMP_VIEW, ROLE_VIEW, COMPANY_VIEW, COMPANY_ACCOUNT_VIEW
+                SETTINGS_MENU, ORG_VIEW, EMP_VIEW, ROLE_VIEW, COMPANY_VIEW, COMPANY_ACCOUNT_VIEW, API_INTERFACE_VIEW
         );
         return Result.success(systemSettingsService.getBootstrap(getCurrentUserId(request)));
     }

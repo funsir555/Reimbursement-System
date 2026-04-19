@@ -57,6 +57,7 @@
             :shared-archives="templateDetail.expenseDetailSharedArchives || []"
             :company-options="templateDetail.companyOptions || []"
             :department-options="templateDetail.departmentOptions || []"
+            :current-user-company-id="templateDetail.currentUserCompanyId || ''"
             :detail-type="templateDetail.expenseDetailType"
             :default-business-scenario="templateDetail.expenseDetailModeDefault || ''"
           />

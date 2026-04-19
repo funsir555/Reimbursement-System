@@ -167,6 +167,130 @@
         <custom-archive-management-panel />
       </template>
 
+      <template v-else-if="activeSection === 'form-design'">
+        <section class="space-y-6" data-testid="process-form-section">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">费用表单</h2>
+              <p class="mt-1 text-sm text-slate-400">统一维护模板绑定的业务表单，延续单据与流程的卡片风格与修改入口。</p>
+            </div>
+            <span class="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-500">
+              {{ formDesignSummaries.length }} 个表单
+            </span>
+          </div>
+
+          <div
+            v-if="formDesignSummaries.length"
+            class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            data-testid="process-form-grid"
+          >
+            <el-card
+              v-for="form in formDesignSummaries"
+              :key="form.id"
+              class="resource-card !rounded-3xl !shadow-sm"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="truncate text-base font-semibold text-slate-800">{{ form.formName }}</h3>
+                  <p class="mt-1 truncate text-xs text-slate-400">{{ form.formCode }}</p>
+                </div>
+                <el-tag size="small" type="primary" effect="plain">{{ form.templateTypeLabel }}</el-tag>
+              </div>
+
+              <p class="mt-3 min-h-[40px] text-sm leading-5 text-slate-500">{{ form.formDescription || '暂无说明' }}</p>
+
+              <div class="mt-4 space-y-2 rounded-2xl bg-slate-50 px-3.5 py-3">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-400">模板类型</span>
+                  <span class="font-medium text-slate-700">{{ form.templateTypeLabel }}</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-400">更新时间</span>
+                  <span class="text-slate-700">{{ form.updatedAt || '-' }}</span>
+                </div>
+              </div>
+
+              <div class="mt-4 flex justify-end">
+                <el-button type="primary" text @click="openFormDesignEditor(form.id)">修改</el-button>
+              </div>
+            </el-card>
+          </div>
+
+          <el-card v-else class="!rounded-3xl !shadow-sm">
+            <div class="flex min-h-[220px] items-center justify-center text-sm text-slate-400" data-testid="process-form-empty">
+              暂无费用表单
+            </div>
+          </el-card>
+        </section>
+      </template>
+
+      <template v-else-if="activeSection === 'approval-flow'">
+        <section class="space-y-6" data-testid="process-flow-section">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">审批流程</h2>
+              <p class="mt-1 text-sm text-slate-400">集中展示流程卡片与状态信息，点击修改直接进入现有流程设计器。</p>
+            </div>
+            <span class="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-500">
+              {{ flowSummaries.length }} 个流程
+            </span>
+          </div>
+
+          <div
+            v-if="flowSummaries.length"
+            class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            data-testid="process-flow-grid"
+          >
+            <el-card
+              v-for="flow in flowSummaries"
+              :key="flow.id"
+              class="resource-card !rounded-3xl !shadow-sm"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="truncate text-base font-semibold text-slate-800">{{ flow.flowName }}</h3>
+                  <p class="mt-1 truncate text-xs text-slate-400">{{ flow.flowCode }}</p>
+                </div>
+                <el-tag
+                  size="small"
+                  :type="flow.status === 'ENABLED' ? 'success' : 'warning'"
+                  effect="light"
+                >
+                  {{ flow.statusLabel }}
+                </el-tag>
+              </div>
+
+              <p class="mt-3 min-h-[40px] text-sm leading-5 text-slate-500">{{ flow.flowDescription || '暂无说明' }}</p>
+
+              <div class="mt-4 space-y-2 rounded-2xl bg-slate-50 px-3.5 py-3">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-400">流程状态</span>
+                  <span class="font-medium text-slate-700">{{ flow.statusLabel }}</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-400">当前版本</span>
+                  <span class="text-slate-700">{{ resolveFlowVersionLabel(flow.currentVersionNo) }}</span>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-400">更新时间</span>
+                  <span class="text-slate-700">{{ flow.updatedAt || '-' }}</span>
+                </div>
+              </div>
+
+              <div class="mt-4 flex justify-end">
+                <el-button type="primary" text @click="openFlowEditor(flow.id)">修改</el-button>
+              </div>
+            </el-card>
+          </div>
+
+          <el-card v-else class="!rounded-3xl !shadow-sm">
+            <div class="flex min-h-[220px] items-center justify-center text-sm text-slate-400" data-testid="process-flow-empty">
+              暂无审批流程
+            </div>
+          </el-card>
+        </section>
+      </template>
+
       <template v-else-if="activeSection === 'expense-detail-form'">
         <expense-detail-design-management-panel />
       </template>
@@ -328,6 +452,11 @@ const filteredCategories = computed(() => {
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
+
+function resolveFlowVersionLabel(versionNo?: number) {
+  return typeof versionNo === 'number' ? `V${versionNo}` : '-'
+}
+
 onMounted(async () => {
   await loadOverview()
 })
@@ -447,6 +576,20 @@ const openBoundForm = (template: ProcessTemplateCard) => {
   })
 }
 
+const openFormDesignEditor = (id: number) => {
+  router.push({
+    name: 'expense-workbench-process-form-edit',
+    params: { id }
+  })
+}
+
+const openFlowEditor = (id: number) => {
+  router.push({
+    name: 'expense-workbench-process-flow-edit',
+    params: { id }
+  })
+}
+
 const openBoundExpenseDetailDesign = (template: ProcessTemplateCard) => {
   const detailCode = template.expenseDetailDesignCode?.trim()
   const detailId = detailCode ? expenseDetailDesignIdMap.value.get(detailCode) : undefined
@@ -530,6 +673,14 @@ const confirmDeleteTemplate = async (template: ProcessTemplateCard) => {
 }
 
 .template-card {
+  border: 1px solid #e2e8f0 !important;
+}
+
+:deep(.resource-card .el-card__body) {
+  padding: 18px;
+}
+
+.resource-card {
   border: 1px solid #e2e8f0 !important;
 }
 

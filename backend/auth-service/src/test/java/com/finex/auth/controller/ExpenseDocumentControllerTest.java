@@ -66,6 +66,8 @@ class ExpenseDocumentControllerTest {
         ExpenseCreateTemplateSummaryVO summary = new ExpenseCreateTemplateSummaryVO();
         summary.setTemplateCode("TPL-001");
         summary.setTemplateName("Travel Reimbursement");
+        summary.setCategoryCode("employee-expense");
+        summary.setCategoryName("员工费用类");
 
         doNothing().when(accessControlService).requireAnyPermission(
                 1L,
@@ -78,7 +80,9 @@ class ExpenseDocumentControllerTest {
         mockMvc.perform(get("/auth/expenses/create/templates").requestAttr("currentUserId", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data[0].templateCode").value("TPL-001"));
+                .andExpect(jsonPath("$.data[0].templateCode").value("TPL-001"))
+                .andExpect(jsonPath("$.data[0].categoryCode").value("employee-expense"))
+                .andExpect(jsonPath("$.data[0].categoryName").value("员工费用类"));
 
         verify(accessControlService).requireAnyPermission(
                 1L,

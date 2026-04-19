@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, inject, provide } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SystemSettingsView from '@/views/settings/SystemSettingsView.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -39,10 +39,14 @@ vi.mock('@/api', () => ({
   systemSettingsApi: mocks.systemSettingsApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/permissions', () => ({
   hasAnyPermission: () => true,
@@ -195,7 +199,8 @@ function createBootstrap() {
         'settings:employees:delete',
         'settings:roles:assign_users',
         'settings:companies:view',
-        'settings:company_accounts:view'
+        'settings:company_accounts:view',
+        'settings:api_interfaces:view'
       ]
     },
     departments: [],
@@ -424,6 +429,39 @@ describe('SystemSettingsView', () => {
     expect(wrapper.text()).not.toContain('????')
   })
 
+  it('selects the api interfaces tab from route query and defaults to OCR', async () => {
+    mocks.route.query = { tab: 'apiInterfaces' }
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    expect(vm.activeTab).toBe('apiInterfaces')
+    expect(vm.activeApiInterface).toBe('ocr')
+    expect(wrapper.text()).toContain('OCR')
+    expect(wrapper.text()).toContain('发票验真')
+    expect(wrapper.text()).toContain('接口文档')
+    expect(wrapper.find('[data-testid="api-interface-title"]').text()).toBe('OCR 接口配置')
+  })
+
+  it('switches api interface placeholder panels without firing extra requests', async () => {
+    mocks.route.query = { tab: 'apiInterfaces' }
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    expect(mocks.systemSettingsApi.getBootstrap).toHaveBeenCalledTimes(1)
+    await wrapper.find('[data-testid="api-interface-nav-apiDocs"]').trigger('click')
+    await flushPromises()
+
+    expect(vm.activeApiInterface).toBe('apiDocs')
+    expect(wrapper.find('[data-testid="api-interface-title"]').text()).toBe('本项目接口文档')
+    expect(wrapper.find('[data-testid="api-interface-note"]').text()).toContain('认证、报销、发票')
+    expect(mocks.systemSettingsApi.getBootstrap).toHaveBeenCalledTimes(1)
+    expect(mocks.systemSettingsApi.updateDepartment).not.toHaveBeenCalled()
+    expect(mocks.systemSettingsApi.updateSyncConnector).not.toHaveBeenCalled()
+    expect(mocks.systemSettingsApi.runSync).not.toHaveBeenCalled()
+  })
+
   it('keeps synced employee core fields readonly while stat fields stay editable', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as any
@@ -634,5 +672,9 @@ describe('SystemSettingsView', () => {
 
     expect(mocks.systemSettingsApi.updateCompanyBankAccount).toHaveBeenCalled()
     expect(mocks.elMessage.success).toHaveBeenCalledWith('公司银行账户已启用')
+  })
+
+  afterEach(() => {
+    mocks.route.query = { tab: 'organization' }
   })
 })

@@ -13,6 +13,7 @@ export interface ExpenseCreateTemplateSummary {
   templateType: string
   templateTypeLabel: string
   categoryCode: string
+  categoryName?: string
   formDesignCode?: string
 }
 

@@ -285,18 +285,20 @@ class AbstractExpenseDocumentSupport {
     private final ObjectMapper objectMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     private final ExpenseReadonlyPayeeAccountSnapshotEnhancer readonlyPayeeAccountSnapshotEnhancer;
+    private final ExpenseTemplateCategorySupport expenseTemplateCategorySupport;
 
     /**
      * 查询可用模板列表。
      */
     List<ExpenseCreateTemplateSummaryVO> listAvailableTemplates() {
+        Map<String, String> categoryNameMap = expenseTemplateCategorySupport.loadCategoryNameMap();
         return templateMapper.selectList(
                 Wrappers.<ProcessDocumentTemplate>lambdaQuery()
                         .eq(ProcessDocumentTemplate::getEnabled, 1)
                         .orderByAsc(ProcessDocumentTemplate::getSortOrder, ProcessDocumentTemplate::getId)
         ).stream()
                 .filter(this::isTemplateAvailableForCreate)
-                .map(this::toTemplateSummary)
+                .map(template -> toTemplateSummary(template, categoryNameMap))
                 .toList();
     }
 
@@ -2236,13 +2238,14 @@ class AbstractExpenseDocumentSupport {
         saveExpenseDetailInstances(documentCode, template, expenseDetailDesign, expenseDetails);
     }
 
-    private ExpenseCreateTemplateSummaryVO toTemplateSummary(ProcessDocumentTemplate template) {
+    private ExpenseCreateTemplateSummaryVO toTemplateSummary(ProcessDocumentTemplate template, Map<String, String> categoryNameMap) {
         ExpenseCreateTemplateSummaryVO summary = new ExpenseCreateTemplateSummaryVO();
         summary.setTemplateCode(template.getTemplateCode());
         summary.setTemplateName(template.getTemplateName());
         summary.setTemplateType(template.getTemplateType());
         summary.setTemplateTypeLabel(resolveTemplateTypeLabel(template.getTemplateType(), template.getTemplateTypeLabel()));
         summary.setCategoryCode(template.getCategoryCode());
+        summary.setCategoryName(categoryNameMap.get(trimToNull(template.getCategoryCode())));
         summary.setFormDesignCode(template.getFormDesignCode());
         return summary;
     }

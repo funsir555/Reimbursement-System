@@ -82,26 +82,34 @@ vi.mock('@/utils/downloadCenter', () => ({
   onDownloadCenterOpen: vi.fn(() => mocks.stopDownloadListener)
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
-vi.mock('@element-plus/icons-vue', () => ({
-  ArrowDown: { template: '<span />' },
-  Bell: { template: '<span />' },
-  Coin: { template: '<span />' },
-  Download: { template: '<span />' },
-  FolderOpened: { template: '<span />' },
-  House: { template: '<span />' },
-  Money: { template: '<span />' },
-  Plus: { template: '<span />' },
-  Search: { template: '<span />' },
-  Setting: { template: '<span />' },
-  SwitchButton: { template: '<span />' },
-  User: { template: '<span />' },
-  UserFilled: { template: '<span />' },
-  Wallet: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  const actual = await vi.importActual<typeof import('@element-plus/icons-vue')>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    ArrowDown: { template: '<span />' },
+    Bell: { template: '<span />' },
+    Coin: { template: '<span />' },
+    Download: { template: '<span />' },
+    FolderOpened: { template: '<span />' },
+    House: { template: '<span />' },
+    Money: { template: '<span />' },
+    Plus: { template: '<span />' },
+    Search: { template: '<span />' },
+    Setting: { template: '<span />' },
+    SwitchButton: { template: '<span />' },
+    User: { template: '<span />' },
+    UserFilled: { template: '<span />' },
+    Wallet: { template: '<span />' }
+  }
+})
 
 const MenuStub = defineComponent({
   template: '<div><slot /></div>'

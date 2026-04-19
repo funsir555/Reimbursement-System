@@ -39,8 +39,6 @@ class ExpenseQueryDomainSupportTest {
     @Mock
     private ExpenseSummaryAssembler expenseSummaryAssembler;
     @Mock
-    private ExpenseDocumentDetailAssembler expenseDocumentDetailAssembler;
-    @Mock
     private ProcessDocumentTaskMapper processDocumentTaskMapper;
     @Mock
     private ProcessDocumentActionLogMapper processDocumentActionLogMapper;
@@ -55,7 +53,6 @@ class ExpenseQueryDomainSupportTest {
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-001");
-        com.finex.auth.entity.ProcessDocumentExpenseDetail expenseDetail = new com.finex.auth.entity.ProcessDocumentExpenseDetail();
         ExpenseDetailInstanceDetailVO expenseDetailVo = new ExpenseDetailInstanceDetailVO();
         ExpenseQueryDomainSupport support = new ExpenseQueryDomainSupport(
                 expenseDocumentReadSupport,
@@ -63,7 +60,6 @@ class ExpenseQueryDomainSupportTest {
                 expenseDocumentTemplateSupport,
                 expenseRelationWriteOffService,
                 expenseSummaryAssembler,
-                expenseDocumentDetailAssembler,
                 processDocumentTaskMapper,
                 processDocumentActionLogMapper,
                 processDocumentInstanceMapper,
@@ -73,8 +69,7 @@ class ExpenseQueryDomainSupportTest {
         when(expenseSummaryAssembler.toExpenseSummaries(List.of(instance))).thenReturn(summaries);
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
         when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
-        when(expenseDocumentReadSupport.requireExpenseDetail("DOC-001", "D1")).thenReturn(expenseDetail);
-        when(expenseDocumentDetailAssembler.toExpenseDetailDetailVO(expenseDetail)).thenReturn(expenseDetailVo);
+        when(expenseDocumentReadSupport.getExpenseDetail(1L, "DOC-001", "D1", false)).thenReturn(expenseDetailVo);
 
         assertSame(summaries, support.listExpenseSummaries(1L));
         assertSame(detail, support.getDocumentDetail(1L, "DOC-001", false));
@@ -90,7 +85,6 @@ class ExpenseQueryDomainSupportTest {
                 expenseDocumentTemplateSupport,
                 expenseRelationWriteOffService,
                 expenseSummaryAssembler,
-                expenseDocumentDetailAssembler,
                 processDocumentTaskMapper,
                 processDocumentActionLogMapper,
                 processDocumentInstanceMapper,
@@ -125,7 +119,6 @@ class ExpenseQueryDomainSupportTest {
                 expenseDocumentTemplateSupport,
                 expenseRelationWriteOffService,
                 expenseSummaryAssembler,
-                expenseDocumentDetailAssembler,
                 processDocumentTaskMapper,
                 processDocumentActionLogMapper,
                 processDocumentInstanceMapper,

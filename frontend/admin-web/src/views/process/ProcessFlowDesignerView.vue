@@ -88,11 +88,12 @@
                     :drop-target-key="dropTargetKey"
                     :scene-name-by-id="sceneName"
                     :node-type-label="nodeTypeLabel"
-                    :node-card-class="nodeCardClass"
-                    @insert-node="handleCanvasInsert"
-                    @select-node="selectNode"
-                    @select-route="selectRoute"
-                    @drag-node-start="handleCanvasDragStart"
+                  :node-card-class="nodeCardClass"
+                  @insert-node="handleCanvasInsert"
+                  @select-node="selectNode"
+                  @select-route="selectRoute"
+                  @add-route-lane="addRouteLane"
+                  @drag-node-start="handleCanvasDragStart"
                     @drag-node-end="handleCanvasDragEnd"
                     @drag-node-over="handleCanvasDragOver"
                     @drop-node="handleCanvasDrop"
@@ -119,7 +120,7 @@
               <p class="mt-1 text-sm text-slate-400">{{ panelDescription }}</p>
             </div>
             <el-button
-              v-if="selectedNode || selectedRoute"
+              v-if="selectedNode"
               type="danger"
               text
               :icon="Delete"
@@ -142,12 +143,12 @@
                   </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                  <el-button plain @click="addRouteLane(selectedRoute.sourceNodeKey)">新增分支</el-button>
+                  <el-button plain @click="addRouteLane(selectedRoute.sourceNodeKey)">{{ "\u65b0\u589e\u5206\u652f" }}</el-button>
                   <el-button type="danger" plain :disabled="currentBranchRoutes.length <= 2" @click="removeSelectedItem">
-                    删除当前分支
+                    {{ "\u5220\u9664\u5f53\u524d\u5206\u652f" }}
                   </el-button>
-                  <el-button type="danger" text @click="removeActiveBranchBlock">
-                    删除整个分支块
+                  <el-button type="danger" plain data-testid="remove-branch-block-button" @click="removeActiveBranchBlock">
+                    {{ "\u5220\u9664\u6574\u4e2a\u5206\u652f\u5757" }}
                   </el-button>
                 </div>
               </div>
@@ -205,11 +206,6 @@
                 </div>
                 <el-button type="primary" plain @click="addConditionGroup(selectedRoute)">新增条件组</el-button>
               </div>
-
-              <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-500">
-                分支条件直接保存在当前 route 的 <code>conditionGroups</code> 上，不会新增额外节点类型。
-              </div>
-
               <div v-if="selectedRoute.conditionGroups.length" class="space-y-4">
                 <div
                   v-for="group in selectedRoute.conditionGroups"
@@ -233,8 +229,9 @@
                       :key="`${group.groupNo}-${conditionIndex}`"
                       class="rounded-2xl border border-slate-200 bg-white p-4 space-y-4"
                     >
-                      <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr),minmax(0,0.9fr),minmax(0,1.6fr)]">
-                        <el-form-item label="条件字段" class="!mb-0">
+                      <div class="space-y-4">
+                        <div class="process-flow-condition-primary-grid grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr),minmax(0,0.9fr)]">
+                          <el-form-item label="条件字段" class="!mb-0">
                           <el-select
                             v-model="condition.fieldKey"
                             placeholder="请选择条件字段"
@@ -264,7 +261,13 @@
                           </el-select>
                         </el-form-item>
 
-                        <el-form-item label="比较值" class="!mb-0">
+                        </div>
+
+                        <el-form-item
+                          label="比较值"
+                          class="process-flow-condition-value-row !mb-0"
+                          data-testid="process-flow-condition-value-row"
+                        >
                           <template v-if="isBetweenOperator(condition.operator)">
                             <div class="grid grid-cols-2 gap-3">
                               <el-input-number
@@ -903,13 +906,17 @@ function resolveErrorMessage(error: unknown, fallback: string) {
 }
 
 function handleDesignerKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Delete' || !selectedNode.value || selectedRoute.value) {
+  if (event.key !== 'Delete' || (!selectedRoute.value && !selectedNode.value)) {
     return
   }
   if (hasOpenMessageBox() || isEditingElement(event.target)) {
     return
   }
   event.preventDefault()
+  if (selectedRoute.value) {
+    void removeSelectedRoute()
+    return
+  }
   void removeSelectedNode()
 }
 

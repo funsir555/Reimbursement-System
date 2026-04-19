@@ -323,4 +323,24 @@ class ProcessManagementServiceImplTest {
         assertEquals("\u8349\u7a3f", overview.getCategories().get(0).getTemplates().get(1).getStatusLabel());
     }
 
+    @Test
+    void getOverviewIncludesFormAndApprovalNavItemsInExpectedOrder() {
+        when(categoryMapper.selectList(any())).thenReturn(List.of());
+        when(templateMapper.selectList(any())).thenReturn(List.of());
+        when(processFormDesignService.listFormDesigns(null)).thenReturn(List.of());
+        when(processExpenseDetailDesignService.listExpenseDetailDesigns()).thenReturn(List.of());
+
+        ProcessCenterOverviewVO overview = service.getOverview();
+
+        assertNotNull(overview);
+        assertEquals(List.of(
+                "document-flow",
+                "form-design",
+                "approval-flow",
+                "expense-detail-form",
+                "custom-archive",
+                "expense-type"
+        ), overview.getNavItems().stream().map(item -> item.getKey()).toList());
+    }
+
 }

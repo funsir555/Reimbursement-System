@@ -10,5 +10,6 @@ public class ExpenseCreateTemplateSummaryVO {
     private String templateType;
     private String templateTypeLabel;
     private String categoryCode;
+    private String categoryName;
     private String formDesignCode;
 }

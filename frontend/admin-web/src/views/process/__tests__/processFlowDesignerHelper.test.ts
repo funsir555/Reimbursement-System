@@ -119,6 +119,12 @@ describe('processFlowDesignerHelper', () => {
     const branchBlock = blocks.find((item) => item.kind === 'branch')
     expect(branchBlock?.kind).toBe('branch')
     if (branchBlock?.kind === 'branch') {
+      expect(branchBlock.postMergeInsert).toMatchObject({
+        kind: 'insert',
+        containerKey: null,
+        index: 1,
+        placement: 'post-merge'
+      })
       expect(branchBlock.routes[0].route.routeKey).toBe('route-1')
       const attachedNodes = branchBlock.routes[0].blocks
         .filter((item) => item.kind === 'node')
@@ -154,6 +160,7 @@ describe('processFlowDesignerHelper', () => {
         expect(mergedInsert.targets).toHaveLength(2)
         expect(mergedInsert.targets?.map((item) => item.label)).toEqual(['插入当前分支', '插入附带下方节点'])
         expect(mergedInsert.depth).toBe(1)
+        expect(mergedInsert.placement).toBe('default')
       }
     }
   })
@@ -183,12 +190,24 @@ describe('processFlowDesignerHelper', () => {
 
     expect(outerBranch?.kind).toBe('branch')
     if (outerBranch?.kind === 'branch') {
+      expect(outerBranch.postMergeInsert).toMatchObject({
+        kind: 'insert',
+        containerKey: null,
+        index: 1,
+        placement: 'post-merge'
+      })
       const innerBranch = outerBranch.routes[0].blocks.find((item) => item.kind === 'branch')
       expect(innerBranch?.kind).toBe('branch')
       if (innerBranch?.kind === 'branch') {
         expect(innerBranch.depth).toBe(1)
         expect(innerBranch.compact).toBe(true)
         expect(innerBranch.symmetric).toBe(true)
+        expect(innerBranch.postMergeInsert).toMatchObject({
+          kind: 'insert',
+          containerKey: 'outer-route-1',
+          index: 1,
+          placement: 'post-merge'
+        })
         const innerAttachedNodes = innerBranch.routes[0].blocks
           .filter((item) => item.kind === 'node')
           .map((item) => item.kind === 'node' ? item.node.nodeKey : '')
@@ -214,6 +233,7 @@ describe('processFlowDesignerHelper', () => {
       expect(branchBlock.depth).toBe(0)
       expect(branchBlock.symmetric).toBe(true)
       expect(branchBlock.compact).toBe(false)
+      expect(branchBlock.postMergeInsert).toBeUndefined()
     }
   })
 

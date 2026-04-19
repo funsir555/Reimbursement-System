@@ -199,6 +199,7 @@ export const FALLBACK_NAVIGATION_TARGETS: NavigationFallbackTarget[] = [
   createFallbackTarget('/archives/agents', ['agents:menu', 'agents:view']),
   createRouteFallback('archives-invoices'),
   createFallbackTarget('/settings?tab=companyAccounts', ['settings:company_accounts:view']),
+  createFallbackTarget('/settings?tab=apiInterfaces', ['settings:api_interfaces:view']),
   createFallbackTarget('/settings?tab=organization', [...SETTINGS_ORGANIZATION_FALLBACK_PERMISSION_CODES])
 ]
 

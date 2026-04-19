@@ -74,7 +74,8 @@ class SystemSettingsControllerTest {
                 "settings:employees:view",
                 "settings:roles:view",
                 "settings:companies:view",
-                "settings:company_accounts:view");
+                "settings:company_accounts:view",
+                "settings:api_interfaces:view");
         when(systemSettingsService.getBootstrap(1L)).thenReturn(bootstrap);
 
         mockMvc.perform(get("/auth/system-settings/bootstrap").requestAttr("currentUserId", 1L))
@@ -83,6 +84,42 @@ class SystemSettingsControllerTest {
                 .andExpect(jsonPath("$.data.departments[0].deptName").value("Finance"));
 
         verify(systemSettingsService).getBootstrap(1L);
+        verify(accessControlService).requireAnyPermission(1L,
+                "settings:menu",
+                "settings:organization:view",
+                "settings:employees:view",
+                "settings:roles:view",
+                "settings:companies:view",
+                "settings:company_accounts:view",
+                "settings:api_interfaces:view");
+    }
+
+    @Test
+    void bootstrapAllowsApiInterfacePermissionOnly() throws Exception {
+        SystemSettingsBootstrapVO bootstrap = new SystemSettingsBootstrapVO();
+
+        doNothing().when(accessControlService).requireAnyPermission(1L,
+                "settings:menu",
+                "settings:organization:view",
+                "settings:employees:view",
+                "settings:roles:view",
+                "settings:companies:view",
+                "settings:company_accounts:view",
+                "settings:api_interfaces:view");
+        when(systemSettingsService.getBootstrap(1L)).thenReturn(bootstrap);
+
+        mockMvc.perform(get("/auth/system-settings/bootstrap").requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        verify(accessControlService).requireAnyPermission(1L,
+                "settings:menu",
+                "settings:organization:view",
+                "settings:employees:view",
+                "settings:roles:view",
+                "settings:companies:view",
+                "settings:company_accounts:view",
+                "settings:api_interfaces:view");
     }
 
     @Test

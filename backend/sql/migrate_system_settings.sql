@@ -461,6 +461,7 @@ FROM (
     UNION ALL SELECT 'settings:roles:view', 'Roles', 'MENU', p.id, 'roles', '/settings?tab=roles', 30, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'settings:companies:view', 'Companies', 'MENU', p.id, 'companies', '/settings?tab=companies', 40, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'settings:company_accounts:view', 'Company Accounts', 'MENU', p.id, 'companyAccounts', '/settings?tab=companyAccounts', 605, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
+    UNION ALL SELECT 'settings:api_interfaces:view', 'API Interfaces', 'MENU', p.id, 'apiInterfaces', '/settings?tab=apiInterfaces', 606, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'dashboard:view', 'Dashboard Home', 'MENU', p.id, 'dashboard', '/dashboard', 101, 1 FROM sys_permission p WHERE p.permission_code = 'dashboard:menu'
     UNION ALL SELECT 'profile:view', 'Profile Center', 'MENU', p.id, 'profile', '/profile', 201, 1 FROM sys_permission p WHERE p.permission_code = 'profile:menu'
     UNION ALL SELECT 'expense:create:view', 'Expense Create', 'MENU', p.id, 'expense', '/expense/create', 301, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
@@ -807,7 +808,12 @@ INSERT INTO tmp_permission_seed (
     ('settings:companies:view', '公司管理', 'MENU', 'settings:menu', 'companies', '/settings?tab=companies', 604, 1),
     ('settings:companies:create', '新增公司', 'BUTTON', 'settings:companies:view', 'companies', NULL, 6041, 1),
     ('settings:companies:edit', '编辑公司', 'BUTTON', 'settings:companies:view', 'companies', NULL, 6042, 1),
-    ('settings:companies:delete', '删除公司', 'BUTTON', 'settings:companies:view', 'companies', NULL, 6043, 1);
+    ('settings:companies:delete', '删除公司', 'BUTTON', 'settings:companies:view', 'companies', NULL, 6043, 1),
+    ('settings:company_accounts:view', '公司账户管理', 'MENU', 'settings:menu', 'companyAccounts', '/settings?tab=companyAccounts', 605, 1),
+    ('settings:company_accounts:create', '新增公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6051, 1),
+    ('settings:company_accounts:edit', '编辑公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6052, 1),
+    ('settings:company_accounts:delete', '删除公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6053, 1),
+    ('settings:api_interfaces:view', 'API接口', 'MENU', 'settings:menu', 'apiInterfaces', '/settings?tab=apiInterfaces', 606, 1);
 
 INSERT INTO sys_permission (
     permission_code,

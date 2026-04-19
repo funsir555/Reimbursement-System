@@ -43,10 +43,14 @@ vi.mock('@/api', () => ({
   processApi: mocks.processApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/permissions', () => ({
   readStoredUser: () => ({
@@ -68,12 +72,16 @@ vi.mock('@/utils/permissions', () => ({
   }
 }))
 
-vi.mock('@element-plus/icons-vue', () => ({
-  ArrowLeft: { template: '<span />' },
-  Check: { template: '<span />' },
-  Delete: { template: '<span />' },
-  RefreshRight: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  const actual = await vi.importActual<typeof import('@element-plus/icons-vue')>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    ArrowLeft: { template: '<span />' },
+    Check: { template: '<span />' },
+    Delete: { template: '<span />' },
+    RefreshRight: { template: '<span />' }
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="header" /><slot /><slot name="footer" /></div>'
@@ -141,7 +149,7 @@ const EmptyStub = defineComponent({
 })
 
 const ProcessFlowCanvasRendererStub = defineComponent({
-  emits: ['select-node', 'select-route', 'insert-node', 'drag-node-start', 'drag-node-end', 'drag-node-over', 'drop-node'],
+  emits: ['select-node', 'select-route', 'add-route-lane', 'insert-node', 'drag-node-start', 'drag-node-end', 'drag-node-over', 'drop-node'],
   template: `
     <div>
       <button type="button" data-testid="select-branch" @click="$emit('select-node', 'branch-1')">
@@ -155,6 +163,9 @@ const ProcessFlowCanvasRendererStub = defineComponent({
       </button>
       <button type="button" data-testid="select-route-2" @click="$emit('select-route', 'route-2')">
         select route 2
+      </button>
+      <button type="button" data-testid="add-route-lane" @click="$emit('add-route-lane', 'branch-1')">
+        add route lane
       </button>
       <button
         type="button"
@@ -394,6 +405,33 @@ describe('ProcessFlowDesignerView', () => {
     expect(wrapper.findAll('.route-pill')[0]?.classes()).toContain('is-selected')
   })
 
+  it('moves compare value to its own row and removes the conditionGroups helper copy', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.routes[0].conditionGroups = [
+      {
+        groupNo: 1,
+        conditions: [
+          {
+            fieldKey: 'amount',
+            operator: 'EQ',
+            compareValue: '100'
+          }
+        ]
+      }
+    ]
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
+    await wrapper.get('[data-testid="select-route"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('分支条件直接保存在当前 route 的')
+    expect(wrapper.find('.process-flow-condition-primary-grid').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="process-flow-condition-value-row"]').exists()).toBe(true)
+    expect(wrapper.html().indexOf('process-flow-condition-primary-grid')).toBeLessThan(
+      wrapper.html().indexOf('process-flow-condition-value-row')
+    )
+  })
+
   it('deletes the selected node after pressing Delete and confirming once', async () => {
     mocks.elMessageBox.confirm.mockResolvedValue(undefined)
 
@@ -419,15 +457,44 @@ describe('ProcessFlowDesignerView', () => {
     expect(mocks.elMessageBox.confirm).not.toHaveBeenCalled()
   })
 
-  it('does not trigger Delete shortcut when only a route is selected', async () => {
+  it('deletes the selected route after pressing Delete and confirming once', async () => {
     mocks.elMessageBox.confirm.mockResolvedValue(undefined)
 
-    const wrapper = await mountView('Travel Approval Flow')
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.routes.push({
+      routeKey: 'route-3',
+      sourceNodeKey: 'branch-1',
+      routeName: '分支 C',
+      priority: 3,
+      attachBelowNodes: false,
+      conditionGroups: []
+    })
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
     await wrapper.get('[data-testid="select-route"]').trigger('click')
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
     await flushPromises()
 
-    expect(mocks.elMessageBox.confirm).not.toHaveBeenCalled()
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledTimes(1)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('分支已删除')
+  })
+
+  it('keeps route delete actions inside the route panel and selects the newly added route', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    await wrapper.get('[data-testid="select-route"]').trigger('click')
+    await flushPromises()
+
+    const routeDeleteButtons = wrapper.findAll('button').filter((item) => item.text().includes('删除当前分支'))
+    expect(routeDeleteButtons).toHaveLength(1)
+    expect(wrapper.find('[data-testid="remove-branch-block-button"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="add-route-lane"]').trigger('click')
+    await flushPromises()
+
+    const routePills = wrapper.findAll('.route-pill')
+    expect(routePills).toHaveLength(3)
+    expect(routePills[2]?.classes()).toContain('is-selected')
   })
 
   it('confirms before moving a node to a new insert position', async () => {

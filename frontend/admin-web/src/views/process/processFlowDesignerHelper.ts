@@ -17,6 +17,7 @@ export type FlowCanvasInsertBlock = {
   index: number
   depth: number
   targets?: FlowCanvasInsertTarget[]
+  placement?: 'default' | 'post-merge'
 }
 
 export type FlowCanvasNodeBlock = {
@@ -39,6 +40,7 @@ export type FlowCanvasBranchBlock = {
   depth: number
   compact: boolean
   symmetric: boolean
+  postMergeInsert?: FlowCanvasInsertBlock
 }
 
 export type FlowCanvasBlock = FlowCanvasInsertBlock | FlowCanvasNodeBlock | FlowCanvasBranchBlock
@@ -339,6 +341,9 @@ function buildContainerBlocks(
     if (node.nodeType === 'BRANCH') {
       const branchRoutes = listRoutesForBranch(routes, node.nodeKey)
       const attachedRoute = branchRoutes.find((item) => item.attachBelowNodes)
+      const postMergeInsert = attachedRoute
+        ? createInsertBlock(containerKey, index + 1, depth, 'post-merge')
+        : undefined
       blocks.push({
         key: `branch-${node.nodeKey}`,
         kind: 'branch',
@@ -346,6 +351,7 @@ function buildContainerBlocks(
         depth,
         compact: depth > 0,
         symmetric: branchRoutes.length === 2,
+        postMergeInsert,
         routes: branchRoutes.map((route) => ({
           route,
           blocks: buildRouteLaneBlocks(nodes, routes, route, containerKey, index, depth + 1)
@@ -442,13 +448,19 @@ function collectBranchDescendantRouteKeys(nodes: ProcessFlowNode[], routes: Proc
   return routeKeys
 }
 
-function createInsertBlock(containerKey: FlowContainerKey, index: number, depth: number): FlowCanvasInsertBlock {
+function createInsertBlock(
+  containerKey: FlowContainerKey,
+  index: number,
+  depth: number,
+  placement: FlowCanvasInsertBlock['placement'] = 'default'
+): FlowCanvasInsertBlock {
   return {
     key: `insert-${containerKey ?? 'root'}-${index}`,
     kind: 'insert',
     containerKey,
     index,
-    depth
+    depth,
+    placement
   }
 }
 
@@ -480,6 +492,7 @@ function createMergedInsertBlock(
     containerKey: currentBranchInsert.containerKey,
     index: currentBranchInsert.index,
     depth,
+    placement: currentBranchInsert.placement,
     targets: [
       createInsertTarget('current-branch', '插入当前分支', currentBranchInsert.containerKey, currentBranchInsert.index),
       createInsertTarget('attached-tail', '插入附带下方节点', attachedTailInsert.containerKey, attachedTailInsert.index)

@@ -76,14 +76,14 @@
       <div v-else-if="groupedTemplates.length" class="space-y-8">
         <section
           v-for="group in groupedTemplates"
-          :key="group.templateType"
+          :key="group.categoryCode"
           class="space-y-4"
           data-testid="expense-template-group"
-          :data-template-type="group.templateType"
+          :data-category-code="group.categoryCode"
         >
           <div class="flex items-center gap-3">
             <h3 class="text-xl font-semibold text-slate-800" data-testid="expense-template-group-title">
-              {{ group.templateTypeLabel }}
+              {{ group.categoryName }}
             </h3>
             <span class="text-sm text-slate-400">{{ group.items.length }} 个模板</span>
           </div>
@@ -106,7 +106,7 @@
                     <p class="expense-wb-template-card__subtitle">{{ template.templateTypeLabel }}</p>
                   </div>
                 </div>
-                <el-tag effect="plain">{{ template.categoryCode || '默认分类' }}</el-tag>
+                <el-tag effect="plain">{{ template.categoryName || template.categoryCode || '默认分类' }}</el-tag>
               </div>
 
               <div class="expense-wb-template-card__description">
@@ -254,6 +254,7 @@
               :shared-archives="templateDetail?.sharedArchives || []"
               :company-options="templateDetail?.companyOptions || []"
               :department-options="templateDetail?.departmentOptions || []"
+              :current-user-company-id="templateDetail?.currentUserCompanyId || ''"
             />
           </div>
         </el-card>
@@ -384,17 +385,16 @@ type ExpenseCreateDraft = {
 }
 
 type TemplateGroup = {
-  templateType: string
-  templateTypeLabel: string
+  categoryCode: string
+  categoryName: string
   items: ExpenseCreateTemplateSummary[]
 }
 
 const DRAFT_PREFIX = 'expense-create-draft:'
-const TEMPLATE_GROUP_ORDER: Array<{ templateType: string; templateTypeLabel: string }> = [
-  { templateType: 'report', templateTypeLabel: '报销单' },
-  { templateType: 'application', templateTypeLabel: '申请单' },
-  { templateType: 'loan', templateTypeLabel: '借款单' },
-  { templateType: 'contract', templateTypeLabel: '合同单' }
+const TEMPLATE_CATEGORY_GROUP_ORDER: Array<{ categoryCode: string; categoryName: string }> = [
+  { categoryCode: 'enterprise-payment', categoryName: '企业往来类' },
+  { categoryCode: 'employee-expense', categoryName: '员工费用类' },
+  { categoryCode: 'business-application', categoryName: '事项申请类' }
 ]
 
 const route = useRoute()
@@ -467,15 +467,26 @@ const filteredTemplates = computed(() => {
   return templates.value.filter((item) => item.templateName.includes(keyword))
 })
 
-const groupedTemplates = computed<TemplateGroup[]>(() =>
-  TEMPLATE_GROUP_ORDER
+const groupedTemplates = computed<TemplateGroup[]>(() => {
+  const groups = TEMPLATE_CATEGORY_GROUP_ORDER
     .map((group) => ({
-      templateType: group.templateType,
-      templateTypeLabel: group.templateTypeLabel,
-      items: filteredTemplates.value.filter((item) => item.templateType === group.templateType)
+      categoryCode: group.categoryCode,
+      categoryName: filteredTemplates.value.find((item) => item.categoryCode === group.categoryCode)?.categoryName || group.categoryName,
+      items: filteredTemplates.value.filter((item) => item.categoryCode === group.categoryCode)
     }))
     .filter((group) => group.items.length > 0)
-)
+
+  const uncategorizedItems = filteredTemplates.value.filter((item) => !isKnownTemplateCategory(item.categoryCode))
+  if (uncategorizedItems.length) {
+    groups.push({
+      categoryCode: 'uncategorized',
+      categoryName: '未分类',
+      items: uncategorizedItems
+    })
+  }
+
+  return groups
+})
 
 const formTotalAmount = computed(() =>
   addMoney(
@@ -1341,6 +1352,10 @@ function cloneDetail(detail: ExpenseDetailInstance): ExpenseDetailInstance {
 
 function cloneRecord(value: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(value || {})) as Record<string, unknown>
+}
+
+function isKnownTemplateCategory(categoryCode?: string) {
+  return TEMPLATE_CATEGORY_GROUP_ORDER.some((item) => item.categoryCode === categoryCode)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

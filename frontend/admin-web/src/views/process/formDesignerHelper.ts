@@ -48,7 +48,7 @@ export const FORM_PERMISSION_VALUE_OPTIONS: Array<{ value: ProcessFormPermission
 
 export const CONTROL_PALETTE_ITEMS: FormDesignerPaletteItem[] = [
   createPaletteItem('text', '单行文本', '输入简短文本内容', 1, { controlType: 'TEXT', placeholder: '请输入内容' }, false, '基础输入'),
-  createPaletteItem('textarea', '多行文本', '适合填写较长说明', 1, { controlType: 'TEXTAREA', placeholder: '请输入详细说明' }, false, '基础输入'),
+  createPaletteItem('textarea', '多行文本', '适合填写较长说明', 1, { controlType: 'TEXTAREA', placeholder: '请填写详细说明' }, false, '基础输入'),
   createPaletteItem('number', '数字', '填写整数或普通数值', 1, { controlType: 'NUMBER', placeholder: '请输入数字' }, false, '基础输入'),
   createPaletteItem('amount', '金额', '带两位小数的金额输入', 1, { controlType: 'AMOUNT', placeholder: '请输入金额', precision: 2 }, false, '基础输入'),
   createPaletteItem('date', '日期', '选择单个日期', 1, { controlType: 'DATE' }, false, '基础输入'),
@@ -56,13 +56,13 @@ export const CONTROL_PALETTE_ITEMS: FormDesignerPaletteItem[] = [
   createPaletteItem('select', '下拉单选', '从固定选项中选择一项', 1, { controlType: 'SELECT', options: buildDefaultOptions() }, false, '选项选择'),
   createPaletteItem('multi-select', '下拉多选', '从固定选项中选择多项', 1, { controlType: 'MULTI_SELECT', options: buildDefaultOptions() }, false, '选项选择'),
   createPaletteItem('radio', '单选组', '平铺展示单选项', 1, { controlType: 'RADIO', options: buildDefaultOptions() }, false, '选项选择'),
-  createPaletteItem('checkbox', '复选组', '平铺展示复选项', 1, { controlType: 'CHECKBOX', options: buildDefaultOptions() }, false, '选项选择'),
+  createPaletteItem('checkbox', '复选组', '平铺展示多选项', 1, { controlType: 'CHECKBOX', options: buildDefaultOptions() }, false, '选项选择'),
   createPaletteItem('switch', '开关', '是/否切换', 1, { controlType: 'SWITCH' }, false, '选项选择'),
   createPaletteItem('attachment', '附件', '上传附件文件', 1, {
     controlType: 'ATTACHMENT',
-    maxCount: 5,
+    maxCount: 30,
     maxSizeMb: 10,
-    accept: '.pdf,.doc,.docx,.xls,.xlsx,.zip'
+    accept: ''
   }, false, '上传展示'),
   createPaletteItem('image', '图片', '上传图片文件', 1, {
     controlType: 'IMAGE',

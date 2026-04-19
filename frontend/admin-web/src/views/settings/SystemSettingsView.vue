@@ -834,6 +834,109 @@
             </el-table>
           </el-card>
         </el-tab-pane>
+
+        <el-tab-pane
+          v-if="can('settings:api_interfaces:view')"
+          label="API接口"
+          name="apiInterfaces"
+        >
+          <div class="grid gap-4 xl:grid-cols-[1fr,9fr]">
+            <el-card shadow="never">
+              <template #header>
+                <div class="font-semibold text-slate-900">接口列表</div>
+              </template>
+              <div class="space-y-2">
+                <el-button
+                  v-for="item in apiInterfaceOptions"
+                  :key="item.key"
+                  :type="activeApiInterface === item.key ? 'primary' : 'info'"
+                  :plain="activeApiInterface !== item.key"
+                  class="api-interface-nav-btn"
+                  :data-testid="`api-interface-nav-${item.key}`"
+                  @click="activeApiInterface = item.key"
+                >
+                  <span class="api-interface-nav-content">
+                    <span class="font-semibold">{{ item.label }}</span>
+                    <span class="text-xs text-slate-500">{{ item.caption }}</span>
+                  </span>
+                </el-button>
+              </div>
+            </el-card>
+
+            <div class="space-y-4">
+              <section class="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-5">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p class="text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
+                      API Interface
+                    </p>
+                    <h2
+                      class="mt-1 text-2xl font-bold text-slate-900"
+                      data-testid="api-interface-title"
+                    >
+                      {{ activeApiInterfaceOption.title }}
+                    </h2>
+                    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                      {{ activeApiInterfaceOption.description }}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <span class="api-interface-status-chip">静态占位</span>
+                    <span class="api-interface-status-chip api-interface-status-chip-muted">
+                      待接入
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              <el-card shadow="never">
+                <template #header>
+                  <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="font-semibold text-slate-900">预留配置项</div>
+                    <div class="text-xs text-slate-500">当前仅展示字段规划，不保存配置</div>
+                  </div>
+                </template>
+                <div class="grid gap-4 md:grid-cols-2">
+                  <div
+                    v-for="field in activeApiInterfaceOption.fields"
+                    :key="`${activeApiInterfaceOption.key}-${field.label}`"
+                    class="rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                  >
+                    <div class="text-xs uppercase tracking-[0.2em] text-slate-400">
+                      {{ field.label }}
+                    </div>
+                    <div class="mt-2 text-sm font-medium leading-6 text-slate-800">
+                      {{ field.value }}
+                    </div>
+                  </div>
+                </div>
+              </el-card>
+
+              <el-card shadow="never">
+                <template #header>
+                  <div class="font-semibold text-slate-900">接入说明</div>
+                </template>
+                <div class="space-y-3">
+                  <div class="flex flex-wrap gap-2">
+                    <span
+                      v-for="tag in activeApiInterfaceOption.tags"
+                      :key="`${activeApiInterfaceOption.key}-${tag}`"
+                      class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+                    >
+                      {{ tag }}
+                    </span>
+                  </div>
+                  <p
+                    class="text-sm leading-6 text-slate-500"
+                    data-testid="api-interface-note"
+                  >
+                    {{ activeApiInterfaceOption.note }}
+                  </p>
+                </div>
+              </el-card>
+            </div>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -1248,6 +1351,20 @@ type CompanyBankAccountFormState = CompanyBankAccountSavePayload & {
   defaultAccount: number
   directConnectEnabled: number
 }
+type ApiInterfaceKey = 'ocr' | 'invoiceVerification' | 'apiDocs'
+type ApiInterfaceOption = {
+  key: ApiInterfaceKey
+  label: string
+  caption: string
+  title: string
+  description: string
+  note: string
+  tags: string[]
+  fields: Array<{
+    label: string
+    value: string
+  }>
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -1284,6 +1401,7 @@ const employeeStatusFilter = ref<number>()
 const companyAccountCompanyFilter = ref<string>()
 const companyAccountStatusFilter = ref<number>()
 const companyAccountDirectConnectFilter = ref<number>()
+const activeApiInterface = ref<ApiInterfaceKey>('ocr')
 
 const departmentDialogVisible = ref(false)
 const employeeDialogVisible = ref(false)
@@ -1374,6 +1492,65 @@ const sourceLabelMap: Record<string, string> = {
   FEISHU: '飞书'
 }
 
+const apiInterfaceOptions: ApiInterfaceOption[] = [
+  {
+    key: 'ocr',
+    label: 'OCR',
+    caption: '票据识别与结构化解析',
+    title: 'OCR 接口配置',
+    description:
+      '用于发票、回单等影像资料的文字识别与结构化抽取，当前页面仅保留字段规划与接入说明。',
+    note:
+      '后续将补充服务商接入、鉴权配置、异步回调处理与识别字段映射；本次先完成静态占位。',
+    tags: ['票据识别', '异步回调', '字段映射', '结构化输出'],
+    fields: [
+      { label: '服务商', value: '预留第三方 OCR 厂商配置，例如云厂商 OCR / 专票识别服务。' },
+      { label: '鉴权方式', value: '预留 AppKey、AppSecret、Token 或签名鉴权等只读说明。' },
+      { label: '回调地址', value: '预留识别完成后的异步通知地址与重试策略说明。' },
+      { label: '识别场景', value: '预留发票、回单、附件图片等场景切换与模板映射。' },
+      { label: '返回字段', value: '预留票种、金额、税额、开票日期、销售方等字段定义。' }
+    ]
+  },
+  {
+    key: 'invoiceVerification',
+    label: '发票验真',
+    caption: '校验发票真伪与状态',
+    title: '发票验真接口配置',
+    description:
+      '用于统一管理发票查验通道与结果处理规则，当前只展示验真接入所需的静态配置占位。',
+    note:
+      '后续将补充查验渠道、频控策略、异常重试和结果落库逻辑；本次不接真实验真服务。',
+    tags: ['验真通道', '频控', '重试机制', '结果归档'],
+    fields: [
+      { label: '验真通道', value: '预留税局/第三方验真渠道选择及主备通道说明。' },
+      { label: '请求频控', value: '预留单票查验频率、批量查验并发数与限流阈值。' },
+      { label: '超时重试', value: '预留超时阈值、重试次数与退避策略配置。' },
+      { label: '验真结果字段', value: '预留真伪状态、作废状态、重复报销标识等结果定义。' },
+      { label: '异常处理', value: '预留网络异常、额度不足、验真失败等兜底提示规则。' }
+    ]
+  },
+  {
+    key: 'apiDocs',
+    label: '接口文档',
+    caption: '本项目接口目录占位',
+    title: '本项目接口文档',
+    description:
+      '用于沉淀本项目接口文档入口与模块目录，当前只提供静态说明，不跳转到真实文档地址。',
+    note:
+      '后续将补充认证、报销、发票、流程、财务档案等模块文档入口，并支持按环境查看。',
+    tags: ['认证模块', '报销模块', '发票模块', '流程模块', '财务模块'],
+    fields: [
+      { label: '文档范围', value: '预留认证、报销、发票、流程、财务等模块接口目录。' },
+      { label: '访问方式', value: '预留在线调试地址、环境切换与文档权限控制说明。' },
+      { label: '接口规范', value: '预留鉴权规则、分页约定、错误码与幂等要求说明。' },
+      { label: '示例数据', value: '预留请求示例、响应示例与联调注意事项。' },
+      { label: '发布说明', value: '预留版本记录、变更日志与废弃接口提示。' }
+    ]
+  }
+]
+
+const DEFAULT_API_INTERFACE_OPTION: ApiInterfaceOption = apiInterfaceOptions[0]!
+
 const selectedDepartment = computed(() =>
   findDepartmentById(departments.value, selectedDepartmentId.value)
 )
@@ -1384,8 +1561,13 @@ const visibleTabs = computed(() =>
     can('settings:employees:view') ? 'employees' : null,
     can('settings:roles:view') ? 'roles' : null,
     can('settings:companies:view') ? 'companies' : null,
-    can('settings:company_accounts:view') ? 'companyAccounts' : null
+    can('settings:company_accounts:view') ? 'companyAccounts' : null,
+    can('settings:api_interfaces:view') ? 'apiInterfaces' : null
   ].filter((item): item is string => !!item)
+)
+
+const activeApiInterfaceOption = computed<ApiInterfaceOption>(
+  () => apiInterfaceOptions.find((item) => item.key === activeApiInterface.value) ?? DEFAULT_API_INTERFACE_OPTION
 )
 
 const departmentCount = computed(() => flattenDepartments(departments.value).length)
@@ -2265,5 +2447,41 @@ onMounted(loadBootstrap)
 <style scoped>
 :deep(.settings-tabs .el-tabs__header) {
   margin-bottom: 24px;
+}
+
+.api-interface-nav-btn {
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  padding: 12px 16px;
+}
+
+:deep(.api-interface-nav-btn > span) {
+  width: 100%;
+}
+
+.api-interface-nav-content {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+}
+
+.api-interface-status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  background: #e0f2fe;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0369a1;
+}
+
+.api-interface-status-chip-muted {
+  background: #e2e8f0;
+  color: #475569;
 }
 </style>

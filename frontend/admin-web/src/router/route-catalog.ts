@@ -1,7 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router'
 import type { AppRouteMetaKey } from './route-meta'
 import { resolveRouteMeta } from './route-meta'
-import LoginView from '../views/LoginView.vue'
 
 type RouteComponent = NonNullable<RouteRecordRaw['component']>
 
@@ -26,7 +25,7 @@ export const routeCatalog: AppRouteDefinition[] = [
     // 登录页：未登录用户的公开入口页面。
     path: '/login',
     name: 'login',
-    component: LoginView,
+    component: () => import('../views/LoginView.vue'),
     metaKey: 'login'
   },
   {

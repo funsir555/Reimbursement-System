@@ -41,6 +41,15 @@ describe('formDesignerHelper', () => {
     expect(block.span).toBe(1)
   })
 
+  it('defaults generic attachment controls to 30 files with no format restriction', () => {
+    const attachmentPaletteItem = CONTROL_PALETTE_ITEMS.find((item) => item.props.controlType === 'ATTACHMENT')
+    const block = createBlockFromPaletteItem(attachmentPaletteItem!)
+
+    expect(attachmentPaletteItem).toBeTruthy()
+    expect(block.props.maxCount).toBe(30)
+    expect(block.props.accept).toBe('')
+  })
+
   it('creates business component blocks with registered component code', () => {
     const paletteItem = buildBusinessComponentPaletteItems()[0]
     const block = createBlockFromPaletteItem(paletteItem)

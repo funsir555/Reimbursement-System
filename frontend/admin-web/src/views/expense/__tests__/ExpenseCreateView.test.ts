@@ -117,6 +117,10 @@ const ExpenseRuntimeFormEditorStub = defineComponent({
     modelValue: {
       type: Object,
       default: () => ({})
+    },
+    currentUserCompanyId: {
+      type: String,
+      default: ''
     }
   },
   setup(props, { expose }) {
@@ -125,7 +129,8 @@ const ExpenseRuntimeFormEditorStub = defineComponent({
     })
     return () => h('div', {
       'data-testid': 'expense-runtime-form-editor',
-      'data-model-value': JSON.stringify(props.modelValue || {})
+      'data-model-value': JSON.stringify(props.modelValue || {}),
+      'data-current-user-company-id': props.currentUserCompanyId || ''
     })
   }
 })
@@ -144,14 +149,17 @@ function buildTemplateSummary(
   templateCode = 'TPL-001',
   templateName = '差旅报销模板',
   templateType = 'report',
-  templateTypeLabel = '报销单'
+  templateTypeLabel = '报销单',
+  categoryCode = 'employee-expense',
+  categoryName = '员工费用类'
 ) {
   return {
     templateCode,
     templateName,
     templateType,
     templateTypeLabel,
-    categoryCode: 'travel',
+    categoryCode,
+    categoryName,
     formDesignCode: 'FD-001'
   }
 }
@@ -357,41 +365,43 @@ describe('ExpenseCreateView', () => {
     expect(wrapper.text()).toContain('备用合同模板')
   })
 
-  it('groups template cards by template type in the fixed business order and keeps grouping after search', async () => {
+  it('groups template cards by category in the fixed business order and keeps grouping after search', async () => {
     mocks.expenseCreateApi.listTemplates.mockResolvedValue({
       data: [
-        buildTemplateSummary('TPL-001', '差旅报销模板', 'report', '报销单'),
-        buildTemplateSummary('TPL-002', '用章申请模板', 'application', '申请单'),
-        buildTemplateSummary('TPL-003', '备用金借款模板', 'loan', '借款单'),
-        buildTemplateSummary('TPL-004', '采购合同模板', 'contract', '合同单')
+        buildTemplateSummary('TPL-001', '对公付款报销模板', 'report', '报销单', 'enterprise-payment', '企业往来类'),
+        buildTemplateSummary('TPL-002', '对公付款申请模板', 'application', '申请单', 'enterprise-payment', '企业往来类'),
+        buildTemplateSummary('TPL-003', '员工借款模板', 'loan', '借款单', 'employee-expense', '员工费用类'),
+        buildTemplateSummary('TPL-004', '专项事项申请模板', 'contract', '合同单', 'business-application', '事项申请类')
       ]
     })
 
     const wrapper = await mountView()
     const groupTitles = wrapper.findAll('[data-testid="expense-template-group-title"]').map((item) => item.text())
 
-    expect(groupTitles).toEqual(['报销单', '申请单', '借款单', '合同单'])
+    expect(groupTitles).toEqual(['企业往来类', '员工费用类', '事项申请类'])
 
     const groups = wrapper.findAll('[data-testid="expense-template-group"]')
-    expect(groups).toHaveLength(4)
-    expect(groups[0]!.text()).toContain('差旅报销模板')
-    expect(groups[1]!.text()).toContain('用章申请模板')
-    expect(groups[2]!.text()).toContain('备用金借款模板')
-    expect(groups[3]!.text()).toContain('采购合同模板')
+    expect(groups).toHaveLength(3)
+    expect(groups[0]!.text()).toContain('对公付款报销模板')
+    expect(groups[0]!.text()).toContain('对公付款申请模板')
+    expect(groups[0]!.text()).toContain('报销单')
+    expect(groups[0]!.text()).toContain('申请单')
+    expect(groups[1]!.text()).toContain('员工借款模板')
+    expect(groups[2]!.text()).toContain('专项事项申请模板')
     expect(wrapper.findAll('[data-testid="expense-template-grid"]').every((item) => (
       item.classes().includes('expense-wb-template-grid')
     ))).toBe(true)
     expect(wrapper.findAll('.expense-wb-template-card')).toHaveLength(4)
 
-    await wrapper.get('input').setValue('借款')
+    await wrapper.get('input').setValue('对公')
     await flushPromises()
 
     const filteredGroupTitles = wrapper.findAll('[data-testid="expense-template-group-title"]').map((item) => item.text())
-    expect(filteredGroupTitles).toEqual(['借款单'])
-    expect(wrapper.text()).toContain('备用金借款模板')
-    expect(wrapper.text()).not.toContain('差旅报销模板')
-    expect(wrapper.text()).not.toContain('用章申请模板')
-    expect(wrapper.text()).not.toContain('采购合同模板')
+    expect(filteredGroupTitles).toEqual(['企业往来类'])
+    expect(wrapper.text()).toContain('对公付款报销模板')
+    expect(wrapper.text()).toContain('对公付款申请模板')
+    expect(wrapper.text()).not.toContain('员工借款模板')
+    expect(wrapper.text()).not.toContain('专项事项申请模板')
   })
 
   it('shows only the bottom floating action bar in create mode with route context', async () => {
@@ -755,6 +765,22 @@ describe('ExpenseCreateView', () => {
     const wrapper = await mountView()
 
     expect(runtimeFormValue(wrapper).paymentCompany).toBe('COMPANY_B')
+  })
+
+  it('passes current user company id to the runtime form editor', async () => {
+    mocks.route.query = { templateCode: 'TPL-007A', draftKey: 'draft-runtime-company-context' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-007A&draftKey=draft-runtime-company-context'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-007A', '付款公司模板', 'contract', '合同单'),
+        currentUserCompanyId: 'COMPANY_CTX',
+        currentUserCompanyName: '上下文公司'
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="expense-runtime-form-editor"]').attributes('data-current-user-company-id')).toBe('COMPANY_CTX')
   })
 
   it('keeps the restored draft payment company instead of overriding it with a default', async () => {
