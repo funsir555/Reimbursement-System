@@ -668,7 +668,7 @@ const formId = computed(() => {
   return Number.isFinite(raw) && raw > 0 ? raw : null
 })
 const copyFromId = computed(() => {
-  if (!isExpenseDetailDesigner.value || formId.value !== null) {
+  if (formId.value !== null) {
     return null
   }
   const raw = Number(route.query.copyFromId)
@@ -808,6 +808,21 @@ function assignCopiedExpenseDetail(detail: ProcessExpenseDetailDesignDetail) {
   })
 }
 
+function assignCopiedFormDesign(detail: ProcessFormDesignDetail) {
+  const sourceTemplateType = detail.templateType || resolveRouteTemplateType()
+  const sourceName = (detail.formName || '').trim()
+  Object.assign(working, {
+    ...createEmptyDetail(sourceTemplateType),
+    formName: sourceName ? `${sourceName}-副本` : '费用表单-副本',
+    formDescription: detail.formDescription || '',
+    schema: normalizeFormSchema(detail.schema),
+    templateType: sourceTemplateType,
+    templateTypeLabel: detail.templateTypeLabel || resolveTemplateTypeLabel(sourceTemplateType),
+    detailType: '',
+    detailTypeLabel: ''
+  })
+}
+
 function referencedSharedArchiveCodes() {
   return Array.from(new Set(
     working.schema.blocks
@@ -880,10 +895,20 @@ async function loadPage() {
       assignDetail(detailRes.data)
     } else if (copyFromId.value !== null) {
       try {
-        const detailRes = await processApi.getExpenseDetailDesignDetail(copyFromId.value)
-        assignCopiedExpenseDetail(detailRes.data)
+        if (isExpenseDetailDesigner.value) {
+          const detailRes = await processApi.getExpenseDetailDesignDetail(copyFromId.value)
+          assignCopiedExpenseDetail(detailRes.data)
+        } else {
+          const detailRes = await processApi.getFormDesignDetail(copyFromId.value)
+          assignCopiedFormDesign(detailRes.data)
+        }
       } catch (error: unknown) {
-        ElMessage.error(resolveErrorMessage(error, '复制源费用明细表单加载失败，已为你打开空白新建页'))
+        ElMessage.error(resolveErrorMessage(
+          error,
+          isExpenseDetailDesigner.value
+            ? '复制源费用明细表单加载失败，已为你打开空白新建页'
+            : '复制源费用表单加载失败，已为你打开空白新建页'
+        ))
       }
     }
     await ensureSharedArchiveDetailsByCodes(referencedSharedArchiveCodes())

@@ -52,10 +52,14 @@ vi.mock('@/api', () => ({
   expenseCreateApi: mocks.expenseCreateApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/permissions', () => ({
   readStoredUser: () => ({
@@ -334,6 +338,19 @@ describe('ExpenseCreateView', () => {
     expect(mocks.expenseCreateApi.getTemplateDetail).not.toHaveBeenCalled()
     expect(mocks.expenseApi.getEditContext).not.toHaveBeenCalled()
     expect(mocks.expenseApprovalApi.getModifyContext).not.toHaveBeenCalled()
+  })
+
+  it('does not render a standalone invoice OCR workbench after template detail is loaded', async () => {
+    mocks.route.query = { templateCode: 'TPL-001', draftKey: 'draft-001' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-001&draftKey=draft-001'
+    writeDraft('draft-001', 'TPL-001')
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({ data: buildTemplateDetail() })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="expense-invoice-workbench-stub"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('发票附件 OCR')
+    expect(wrapper.find('[data-testid="expense-runtime-form-editor"]').exists()).toBe(true)
   })
 
   it('does not fetch template detail when templateCode exists but draftKey is missing', async () => {

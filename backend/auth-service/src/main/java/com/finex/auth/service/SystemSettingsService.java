@@ -14,6 +14,8 @@ import com.finex.auth.dto.DepartmentTreeNodeVO;
 import com.finex.auth.dto.EmployeeQueryDTO;
 import com.finex.auth.dto.EmployeeSaveDTO;
 import com.finex.auth.dto.EmployeeVO;
+import com.finex.auth.dto.OcrProviderConfigVO;
+import com.finex.auth.dto.OcrProviderSaveDTO;
 import com.finex.auth.dto.PermissionTreeNodeVO;
 import com.finex.auth.dto.RolePermissionAssignDTO;
 import com.finex.auth.dto.RoleSaveDTO;
@@ -172,4 +174,8 @@ public interface SystemSettingsService {
      * 执行Due同步Jobs。
      */
     void runDueSyncJobs();
+
+    OcrProviderConfigVO updateOcrProvider(String providerCode, OcrProviderSaveDTO dto);
+
+    OcrProviderConfigVO testOcrProvider(String providerCode);
 }

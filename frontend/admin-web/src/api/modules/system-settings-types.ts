@@ -263,6 +263,31 @@ export interface SyncJobRecord {
   finishedAt?: string
 }
 
+export interface OcrProviderConfig {
+  id: number
+  providerCode: string
+  providerName: string
+  enabled: boolean
+  accessKeyId?: string
+  hasSecret?: boolean
+  maskedSecret?: string
+  endpoint?: string
+  connectTimeoutMs?: number
+  readTimeoutMs?: number
+  lastTestAt?: string
+  lastTestStatus?: string
+  lastTestMessage?: string
+}
+
+export interface OcrProviderSavePayload {
+  enabled?: number
+  accessKeyId?: string
+  accessKeySecret?: string
+  endpoint?: string
+  connectTimeoutMs?: number
+  readTimeoutMs?: number
+}
+
 // 这是 SystemSettingsBootstrapData 的数据结构。
 export interface SystemSettingsBootstrapData {
   currentUser: UserProfile
@@ -274,4 +299,5 @@ export interface SystemSettingsBootstrapData {
   companyBankAccounts: CompanyBankAccountRecord[]
   connectors: SyncConnectorConfig[]
   jobs: SyncJobRecord[]
+  ocrProviders: OcrProviderConfig[]
 }

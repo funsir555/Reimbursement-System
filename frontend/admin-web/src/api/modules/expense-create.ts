@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { ExpenseAttachmentMeta, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseCreateVendorOptionsParams, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult } from './expense-create-types'
+import type { ExpenseAttachmentMeta, ExpenseAttachmentOcrResult, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseCreateVendorOptionsParams, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult } from './expense-create-types'
 import type { FinanceVendorDetail, FinanceVendorSavePayload } from './finance-archive-types'
 
 // 这一组方法供对应页面统一调用。
@@ -49,6 +49,12 @@ export const expenseCreateApi = {
       body: formData
     })
   },
+  recognizeAttachmentOcr: (attachmentId: string) =>
+    request<ExpenseAttachmentOcrResult>(`/auth/expenses/attachments/${encodeURIComponent(attachmentId)}/ocr`, {
+      method: 'POST',
+      timeoutMs: 30000,
+      timeoutMessage: 'OCR 识别超时，请稍后重试'
+    }),
   submit: (payload: ExpenseDocumentSubmitPayload) =>
     request<ExpenseDocumentSubmitResult>('/auth/expenses/create/documents', {
       method: 'POST',

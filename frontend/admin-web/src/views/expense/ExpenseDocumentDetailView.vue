@@ -137,6 +137,7 @@
                     :detail-no="activeExpenseDetail?.detailNo || activeExpenseDetailNo"
                     :loading="expenseDetailLoadingNo === activeExpenseDetailNo && !activeExpenseDetail"
                     :error-message="activeExpenseDetailError"
+                    result-mode="verification-placeholder"
                   />
                 </div>
               </div>

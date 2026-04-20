@@ -128,4 +128,23 @@ export interface ExpenseAttachmentMeta {
   contentType?: string
   fileSize?: number
   previewUrl?: string
+  ocr?: ExpenseAttachmentOcrSnapshot
 }
+
+export interface ExpenseAttachmentOcrSnapshot {
+  status: string
+  providerCode?: string
+  providerName?: string
+  requestId?: string
+  recognizedAt?: string
+  invoiceCode?: string
+  invoiceNumber?: string
+  invoiceDate?: string
+  invoiceType?: string
+  sellerName?: string
+  totalAmount?: number
+  taxAmount?: number
+  message?: string
+}
+
+export type ExpenseAttachmentOcrResult = ExpenseAttachmentOcrSnapshot

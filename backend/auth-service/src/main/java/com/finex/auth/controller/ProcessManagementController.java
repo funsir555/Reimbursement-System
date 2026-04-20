@@ -426,6 +426,12 @@ public class ProcessManagementController {
         return Result.success("娴佺▼淇濆瓨鎴愬姛", processManagementService.updateFlow(id, dto));
     }
 
+    @DeleteMapping("/flows/{id}")
+    public Result<Boolean> deleteFlow(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("\u5ba1\u6279\u6d41\u7a0b\u5df2\u5220\u9664", processManagementService.deleteFlow(id));
+    }
+
     // 处理 publishFlow 请求。
     @PostMapping("/flows/{id}/publish")
     public Result<ProcessFlowDetailVO> publishFlow(@PathVariable Long id, HttpServletRequest request) {

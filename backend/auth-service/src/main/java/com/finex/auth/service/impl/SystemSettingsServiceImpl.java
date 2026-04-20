@@ -15,6 +15,8 @@ import com.finex.auth.dto.DepartmentTreeNodeVO;
 import com.finex.auth.dto.EmployeeQueryDTO;
 import com.finex.auth.dto.EmployeeSaveDTO;
 import com.finex.auth.dto.EmployeeVO;
+import com.finex.auth.dto.OcrProviderConfigVO;
+import com.finex.auth.dto.OcrProviderSaveDTO;
 import com.finex.auth.dto.PermissionTreeNodeVO;
 import com.finex.auth.dto.RolePermissionAssignDTO;
 import com.finex.auth.dto.RoleSaveDTO;
@@ -40,15 +42,19 @@ import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.SystemSettingsService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.settings.SettingsBootstrapSupport;
+import com.finex.auth.service.impl.settings.SettingsApiInterfaceDomainSupport;
 import com.finex.auth.service.impl.settings.SettingsCompanyDomainSupport;
 import com.finex.auth.service.impl.settings.SettingsOrganizationDomainSupport;
 import com.finex.auth.service.impl.settings.SettingsRoleDomainSupport;
 import com.finex.auth.service.impl.settings.SettingsSyncDomainSupport;
 import com.finex.auth.support.systemsettings.OrganizationSyncAdapter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * SystemSettingsServiceImpl：service 入口实现。
@@ -56,6 +62,7 @@ import java.util.List;
  * 改这里时，要特别关注 权限体系、组织架构和历史单据可用性是否会被一起带坏。
  */
 @Service
+@Slf4j
 public class SystemSettingsServiceImpl implements SystemSettingsService {
 
     private final SettingsBootstrapSupport settingsBootstrapSupport;
@@ -63,6 +70,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     private final SettingsRoleDomainSupport settingsRoleDomainSupport;
     private final SettingsCompanyDomainSupport settingsCompanyDomainSupport;
     private final SettingsSyncDomainSupport settingsSyncDomainSupport;
+    private final SettingsApiInterfaceDomainSupport settingsApiInterfaceDomainSupport;
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -82,7 +90,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             SystemSyncJobMapper systemSyncJobMapper,
             SystemSyncJobDetailMapper systemSyncJobDetailMapper,
             ObjectMapper objectMapper,
-            List<OrganizationSyncAdapter> syncAdapters
+            List<OrganizationSyncAdapter> syncAdapters,
+            SettingsApiInterfaceDomainSupport settingsApiInterfaceDomainSupport
     ) {
         this.settingsBootstrapSupport = new SettingsBootstrapSupport(
                 userService,
@@ -169,6 +178,7 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 objectMapper,
                 syncAdapters
         );
+        this.settingsApiInterfaceDomainSupport = settingsApiInterfaceDomainSupport;
     }
 
     /**
@@ -176,7 +186,60 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
      */
     @Override
     public SystemSettingsBootstrapVO getBootstrap(Long currentUserId) {
-        return settingsBootstrapSupport.getBootstrap(currentUserId);
+        SystemSettingsBootstrapVO bootstrap = settingsBootstrapSupport.getBootstrap(currentUserId);
+        bootstrap.setOcrProviders(loadOcrProvidersSafely());
+        return bootstrap;
+    }
+
+    private List<OcrProviderConfigVO> loadOcrProvidersSafely() {
+        try {
+            return settingsApiInterfaceDomainSupport.listOcrProviders();
+        } catch (RuntimeException ex) {
+            if (isMissingSqlObjectException(ex)) {
+                log.warn("Skipping OCR bootstrap because OCR schema is not ready: {}", resolveThrowableMessage(ex));
+                return Collections.emptyList();
+            }
+            throw ex;
+        }
+    }
+
+    private boolean isMissingSqlObjectException(Throwable ex) {
+        String message = resolveThrowableMessage(ex);
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("doesn't exist")
+                || normalized.contains("unknown column")
+                || normalized.contains("unknown table")
+                || normalized.contains("unknown database")
+                || normalized.contains("unknown index")
+                || normalized.contains("can't open");
+    }
+
+    private String resolveThrowableMessage(Throwable ex) {
+        Throwable rootCause = getRootCause(ex);
+        String message = trimToNull(rootCause == null ? null : rootCause.getMessage());
+        if (message != null) {
+            return message;
+        }
+        return trimToNull(ex == null ? null : ex.getMessage());
+    }
+
+    private Throwable getRootCause(Throwable ex) {
+        Throwable current = ex == null ? null : ex;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current == null ? ex : current;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     /**
@@ -419,5 +482,17 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
     @Override
     public void runDueSyncJobs() {
         settingsSyncDomainSupport.runDueSyncJobs();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OcrProviderConfigVO updateOcrProvider(String providerCode, OcrProviderSaveDTO dto) {
+        return settingsApiInterfaceDomainSupport.updateOcrProvider(providerCode, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OcrProviderConfigVO testOcrProvider(String providerCode) {
+        return settingsApiInterfaceDomainSupport.testOcrProvider(providerCode);
     }
 }

@@ -18,6 +18,9 @@ set "SHADOW_BACKEND_DIR=%SHADOW_ROOT%\backend"
 set "SHADOW_ENV_PATH=%SHADOW_BACKEND_DIR%\.env.shadow.cmd"
 set "SHADOW_START_PATH=%SHADOW_ROOT%\start-finex.bat"
 set "SHADOW_SYNC_HINT_PATH=%SHADOW_ROOT%\sync-shadow.bat"
+set "SOURCE_FRONTEND_DIR=%SOURCE_ROOT%\frontend\admin-web"
+set "SHADOW_FRONTEND_DIR=%SHADOW_ROOT%\frontend\admin-web"
+set "SHADOW_FRONTEND_STAMP_PATH=%SHADOW_FRONTEND_DIR%\.shadow-deps.hash"
 
 if /I "%SOURCE_ROOT%"=="%SHADOW_ROOT%" (
   echo [shadow] Shadow workspace path must differ from the source workspace path.
@@ -31,7 +34,7 @@ if not exist "%SHADOW_ROOT%" (
 echo [shadow] Syncing workspace snapshot to %SHADOW_ROOT%
 robocopy "%SOURCE_ROOT%" "%SHADOW_ROOT%" /MIR /R:1 /W:1 /NFL /NDL /NJH /NJS /NP ^
   /XD .git node_modules target .idea .vscode storage ^
-  /XF *.log *.tmp tmp-admin-token.txt start-finex.bat sync-shadow.bat .env.shadow.cmd
+  /XF *.log *.tmp tmp-admin-token.txt start-finex.bat sync-shadow.bat .env.shadow.cmd .shadow-deps.hash
 
 if errorlevel 8 (
   echo [shadow] Robocopy failed with exit code %errorlevel%.
@@ -139,7 +142,70 @@ if not exist "%SHADOW_BACKEND_DIR%" (
   echo echo [shadow] Please run sync-shadow.bat from the main workspace, not from the shadow workspace.
 ) > "%SHADOW_SYNC_HINT_PATH%"
 
+call :sync_frontend_dependencies
+if errorlevel 1 (
+  exit /b 1
+)
+
 echo [shadow] Refreshed %SHADOW_ENV_PATH%
 echo [shadow] Refreshed %SHADOW_START_PATH%
 echo [shadow] Refreshed %SHADOW_SYNC_HINT_PATH%
 echo [shadow] Shadow workspace is ready. Run start-finex.bat inside the shadow directory when needed.
+exit /b 0
+
+:sync_frontend_dependencies
+if not exist "%SOURCE_FRONTEND_DIR%\package.json" (
+  exit /b 0
+)
+
+if not exist "%SHADOW_FRONTEND_DIR%\package.json" (
+  echo [shadow] Missing shadow frontend package.json after sync.
+  exit /b 1
+)
+
+set "CURRENT_DEPS_HASH="
+for /f "usebackq delims=" %%H in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$pkg = Get-FileHash -Algorithm SHA256 '%SOURCE_FRONTEND_DIR%\package.json'; if (Test-Path '%SOURCE_FRONTEND_DIR%\package-lock.json') { $lock = Get-FileHash -Algorithm SHA256 '%SOURCE_FRONTEND_DIR%\package-lock.json'; Write-Output ($pkg.Hash + '_' + $lock.Hash) } else { Write-Output $pkg.Hash }"`) do set "CURRENT_DEPS_HASH=%%H"
+
+if not defined CURRENT_DEPS_HASH (
+  echo [shadow] Failed to calculate frontend dependency hash.
+  exit /b 1
+)
+
+set "INSTALLED_DEPS_HASH="
+if exist "%SHADOW_FRONTEND_STAMP_PATH%" (
+  set /p INSTALLED_DEPS_HASH=<"%SHADOW_FRONTEND_STAMP_PATH%"
+)
+
+set "SHADOW_FRONTEND_NEEDS_INSTALL="
+if not exist "%SHADOW_FRONTEND_DIR%\node_modules\.bin\vite.cmd" (
+  set "SHADOW_FRONTEND_NEEDS_INSTALL=1"
+)
+
+if not "%CURRENT_DEPS_HASH%"=="%INSTALLED_DEPS_HASH%" (
+  set "SHADOW_FRONTEND_NEEDS_INSTALL=1"
+)
+
+if not defined SHADOW_FRONTEND_NEEDS_INSTALL (
+  echo [shadow] Shadow frontend dependencies are up to date.
+  exit /b 0
+)
+
+echo [shadow] Installing shadow frontend dependencies...
+pushd "%SHADOW_FRONTEND_DIR%" >nul
+call npm install
+set "SHADOW_NPM_EXIT=%ERRORLEVEL%"
+popd >nul
+
+if not "%SHADOW_NPM_EXIT%"=="0" (
+  echo [shadow] npm install failed in %SHADOW_FRONTEND_DIR%
+  exit /b %SHADOW_NPM_EXIT%
+)
+
+if not exist "%SHADOW_FRONTEND_DIR%\node_modules\.bin\vite.cmd" (
+  echo [shadow] Frontend dependencies finished installing, but vite.cmd is still missing.
+  exit /b 1
+)
+
+> "%SHADOW_FRONTEND_STAMP_PATH%" echo %CURRENT_DEPS_HASH%
+echo [shadow] Shadow frontend dependencies are ready.
+exit /b 0

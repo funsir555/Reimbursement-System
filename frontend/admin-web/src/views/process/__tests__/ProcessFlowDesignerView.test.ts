@@ -286,7 +286,8 @@ function buildSavedFlowDetail(payload: { flowName: string; flowDescription?: str
 
 async function mountView(
   flowName = 'Travel Approval Flow',
-  detail = buildFlowDetail(flowName)
+  detail = buildFlowDetail(flowName),
+  options?: { detailError?: Error }
 ) {
   mocks.processApi.listFlows.mockResolvedValue({
     data: [
@@ -301,7 +302,11 @@ async function mountView(
     ]
   })
   mocks.processApi.getFlowMeta.mockResolvedValue({ data: buildFlowMeta() })
-  mocks.processApi.getFlowDetail.mockResolvedValue({ data: detail })
+  if (options?.detailError) {
+    mocks.processApi.getFlowDetail.mockRejectedValue(options.detailError)
+  } else {
+    mocks.processApi.getFlowDetail.mockResolvedValue({ data: detail })
+  }
   mocks.processApi.updateFlow.mockImplementation(async (_id: number, payload: any) => ({ data: buildSavedFlowDetail(payload) }))
 
   const wrapper = mount(ProcessFlowDesignerView, {
@@ -596,6 +601,45 @@ describe('ProcessFlowDesignerView', () => {
 
     expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
     expect(mocks.processApi.updateFlow.mock.calls[0][1].flowDescription).toBe('updated flow description')
+  })
+
+
+  it('prefills copied approval flows in create mode and still saves through createFlow', async () => {
+    mocks.route.name = 'expense-workbench-process-flow-create'
+    mocks.route.params = {}
+    mocks.route.query = { copyFromId: '1' }
+    mocks.processApi.createFlow.mockImplementation(async (payload: any) => ({ data: buildSavedFlowDetail(payload) }))
+
+    const wrapper = await mountView('Travel Approval Flow')
+
+    expect(mocks.processApi.getFlowDetail).toHaveBeenCalledWith(1)
+    expect(
+      wrapper.findAll('input').some((item) => (item.element as HTMLInputElement).value === 'Travel Approval Flow-\u526f\u672c')
+    ).toBe(true)
+
+    await wrapper.findAll('button').find((item) => item.text().includes('\u4fdd\u5b58\u8349\u7a3f'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.createFlow).toHaveBeenCalledWith(expect.objectContaining({
+      flowName: 'Travel Approval Flow-\u526f\u672c',
+      flowDescription: 'flow description',
+      nodes: expect.any(Array),
+      routes: expect.any(Array)
+    }))
+    expect(mocks.processApi.updateFlow).not.toHaveBeenCalled()
+  })
+
+  it('falls back to a blank approval flow create page when copy source loading fails', async () => {
+    mocks.route.name = 'expense-workbench-process-flow-create'
+    mocks.route.params = {}
+    mocks.route.query = { copyFromId: '1' }
+
+    const wrapper = await mountView('Travel Approval Flow', buildFlowDetail('Travel Approval Flow'), {
+      detailError: new Error('\u6e90\u6d41\u7a0b\u4e0d\u5b58\u5728')
+    })
+
+    expect(mocks.elMessage.error).toHaveBeenCalledWith('\u6e90\u6d41\u7a0b\u4e0d\u5b58\u5728')
+    expect(wrapper.find('input').element.value).toBe('')
   })
 
 })

@@ -95,6 +95,10 @@ export const processApi = {
       method: 'PUT',
       body: JSON.stringify(payload)
     }),
+  deleteFlow: (id: number) =>
+    request<boolean>(`/auth/process-management/flows/${id}`, {
+      method: 'DELETE'
+    }),
   publishFlow: (id: number) =>
     request<ProcessFlowDetail>(`/auth/process-management/flows/${id}/publish`, {
       method: 'POST'

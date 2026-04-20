@@ -25,4 +25,6 @@ public class SystemSettingsBootstrapVO {
     private List<SyncConnectorVO> connectors = new ArrayList<>();
 
     private List<SyncJobVO> jobs = new ArrayList<>();
+
+    private List<OcrProviderConfigVO> ocrProviders = new ArrayList<>();
 }

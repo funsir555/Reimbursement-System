@@ -921,7 +921,7 @@ function handleDesignerKeydown(event: KeyboardEvent) {
 }
 
 watch(
-  () => route.params.id,
+  () => [route.params.id, route.query.copyFromId],
   async () => {
     const routeId = parseRouteFlowId()
     if (routeId) {
@@ -929,7 +929,11 @@ watch(
       return
     }
     if (isCreateRoute()) {
+      const copyFromId = parseCopyFromFlowId()
       createNewFlow(false)
+      if (copyFromId !== null) {
+        await openCopiedFlow(copyFromId)
+      }
     }
   }
 )
@@ -945,14 +949,22 @@ onBeforeUnmount(() => {
 
 function createEmptyFlow(): ProcessFlowDetail {
   return {
+    id: undefined,
+    flowCode: '',
     flowName: '',
     flowDescription: '',
     status: 'DRAFT',
-    statusLabel: '草稿',
+    statusLabel: '\u8349\u7a3f',
+    editableVersionId: undefined,
+    editableVersionNo: undefined,
+    publishedVersionId: undefined,
+    publishedVersionNo: undefined,
+    hasDraftVersion: false,
     nodes: [],
     routes: []
   }
 }
+
 
 function createBaseNodeConfig() {
   return {
@@ -1010,8 +1022,10 @@ async function reloadPageData() {
     }
 
     if (isCreateRoute()) {
-      if (!working.id) {
-        createNewFlow(false)
+      const copyFromId = parseCopyFromFlowId()
+      createNewFlow(false)
+      if (copyFromId !== null) {
+        await openCopiedFlow(copyFromId)
       }
       return
     }
@@ -1044,6 +1058,14 @@ function parseRouteFlowId() {
   return Number.isFinite(value) ? value : null
 }
 
+function parseCopyFromFlowId() {
+  if (!isCreateRoute()) {
+    return null
+  }
+  const raw = Number(route.query.copyFromId)
+  return Number.isFinite(raw) && raw > 0 ? raw : null
+}
+
 function isCreateRoute() {
   return route.name === 'expense-workbench-process-flow-create'
 }
@@ -1072,6 +1094,28 @@ async function openFlow(id: number, showMessage = false) {
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '加载流程详情失败'))
   }
+}
+
+async function openCopiedFlow(id: number) {
+  try {
+    const res = await processApi.getFlowDetail(id)
+    assignCopiedFlow(res.data)
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '\u590d\u5236\u6e90\u5ba1\u6279\u6d41\u7a0b\u52a0\u8f7d\u5931\u8d25\uff0c\u5df2\u4e3a\u4f60\u6253\u5f00\u7a7a\u767d\u65b0\u5efa\u9875'))
+  }
+}
+
+function assignCopiedFlow(detail: ProcessFlowDetail) {
+  const graph = prepareGraph(detail.nodes || [], detail.routes || [])
+  const sourceName = (detail.flowName || '').trim()
+  Object.assign(working, {
+    ...createEmptyFlow(),
+    flowName: sourceName ? `${sourceName}-\u526f\u672c` : '\u5ba1\u6279\u6d41\u7a0b-\u526f\u672c',
+    flowDescription: detail.flowDescription || '',
+    nodes: graph.nodes,
+    routes: graph.routes
+  })
+  restoreSelection()
 }
 
 function normalizeFlowDetail(detail: ProcessFlowDetail): ProcessFlowDetail {

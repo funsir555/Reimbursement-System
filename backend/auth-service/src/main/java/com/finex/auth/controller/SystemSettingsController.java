@@ -13,6 +13,8 @@ import com.finex.auth.dto.DepartmentTreeNodeVO;
 import com.finex.auth.dto.EmployeeQueryDTO;
 import com.finex.auth.dto.EmployeeSaveDTO;
 import com.finex.auth.dto.EmployeeVO;
+import com.finex.auth.dto.OcrProviderConfigVO;
+import com.finex.auth.dto.OcrProviderSaveDTO;
 import com.finex.auth.dto.PermissionTreeNodeVO;
 import com.finex.auth.dto.RolePermissionAssignDTO;
 import com.finex.auth.dto.RoleSaveDTO;
@@ -73,6 +75,8 @@ public class SystemSettingsController {
     private static final String COMPANY_DELETE = "settings:companies:delete";
     private static final String COMPANY_ACCOUNT_VIEW = "settings:company_accounts:view";
     private static final String API_INTERFACE_VIEW = "settings:api_interfaces:view";
+    private static final String API_INTERFACE_OCR_EDIT = "settings:api_interfaces:ocr_edit";
+    private static final String API_INTERFACE_OCR_TEST = "settings:api_interfaces:ocr_test";
     private static final String COMPANY_ACCOUNT_CREATE = "settings:company_accounts:create";
     private static final String COMPANY_ACCOUNT_EDIT = "settings:company_accounts:edit";
     private static final String COMPANY_ACCOUNT_DELETE = "settings:company_accounts:delete";
@@ -256,6 +260,25 @@ public class SystemSettingsController {
     public Result<List<CompanyBankAccountVO>> companyBankAccounts(HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), SETTINGS_MENU, COMPANY_ACCOUNT_VIEW);
         return Result.success(systemSettingsService.listCompanyBankAccounts());
+    }
+
+    @PutMapping("/ocr/providers/{providerCode}")
+    public Result<OcrProviderConfigVO> updateOcrProvider(
+            @PathVariable String providerCode,
+            @RequestBody OcrProviderSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), API_INTERFACE_OCR_EDIT);
+        return Result.success("OCR 配置已保存", systemSettingsService.updateOcrProvider(providerCode, dto));
+    }
+
+    @PostMapping("/ocr/providers/{providerCode}/test")
+    public Result<OcrProviderConfigVO> testOcrProvider(
+            @PathVariable String providerCode,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), API_INTERFACE_OCR_TEST);
+        return Result.success("OCR 配置测试已完成", systemSettingsService.testOcrProvider(providerCode));
     }
 
     // 处理 createCompanyBankAccount 请求。

@@ -1,8 +1,10 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
+import com.finex.auth.dto.ExpenseAttachmentOcrResultVO;
 import com.finex.auth.dto.ExpenseAttachmentVO;
 import com.finex.auth.service.AccessControlService;
+import com.finex.auth.service.ExpenseAttachmentOcrService;
 import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.common.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +37,9 @@ class ExpenseAttachmentControllerTest {
     private ExpenseAttachmentService expenseAttachmentService;
 
     @Mock
+    private ExpenseAttachmentOcrService expenseAttachmentOcrService;
+
+    @Mock
     private AccessControlService accessControlService;
 
     private MockMvc mockMvc;
@@ -42,7 +47,7 @@ class ExpenseAttachmentControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ExpenseAttachmentController(expenseAttachmentService, accessControlService))
+                .standaloneSetup(new ExpenseAttachmentController(expenseAttachmentService, expenseAttachmentOcrService, accessControlService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -82,6 +87,34 @@ class ExpenseAttachmentControllerTest {
                 .andExpect(jsonPath("$.data.previewUrl").value("/api/auth/expenses/attachments/abc123def456ghi7/content"));
 
         verify(expenseAttachmentService).uploadAttachment(any());
+    }
+
+    @Test
+    void recognizeAttachmentReturnsStructuredOcrResult() throws Exception {
+        ExpenseAttachmentOcrResultVO result = new ExpenseAttachmentOcrResultVO();
+        result.setStatus("SUCCESS");
+        result.setProviderCode("ALIYUN");
+        result.setInvoiceCode("1234567890");
+
+        doNothing().when(accessControlService).requireAnyPermission(
+                eq(1L),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+        when(expenseAttachmentOcrService.recognizeAttachment("abc123def456ghi7")).thenReturn(result);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/auth/expenses/attachments/abc123def456ghi7/ocr")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.providerCode").value("ALIYUN"))
+                .andExpect(jsonPath("$.data.invoiceCode").value("1234567890"));
+
+        verify(expenseAttachmentOcrService).recognizeAttachment("abc123def456ghi7");
     }
 
     @Test

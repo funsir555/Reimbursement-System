@@ -210,8 +210,12 @@
                 </div>
               </div>
 
-              <div class="mt-4 flex justify-end">
+              <div class="mt-4 flex flex-wrap justify-end gap-2 process-card-footer">
+                <el-button v-if="canEditTemplates" text type="danger" @click="confirmDeleteFormDesign(form)">
+                  删除
+                </el-button>
                 <el-button type="primary" text @click="openFormDesignEditor(form.id)">修改</el-button>
+                <el-button v-if="canEditTemplates" text @click="copyFormDesign(form)">复制</el-button>
               </div>
             </el-card>
           </div>
@@ -277,8 +281,12 @@
                 </div>
               </div>
 
-              <div class="mt-4 flex justify-end">
+              <div class="mt-4 flex flex-wrap justify-end gap-2 process-card-footer">
+                <el-button v-if="canEditTemplates" text type="danger" @click="confirmDeleteFlow(flow)">
+                  删除
+                </el-button>
                 <el-button type="primary" text @click="openFlowEditor(flow.id)">修改</el-button>
+                <el-button v-if="canEditTemplates" text @click="copyFlow(flow)">复制</el-button>
               </div>
             </el-card>
           </div>
@@ -583,10 +591,29 @@ const openFormDesignEditor = (id: number) => {
   })
 }
 
+const copyFormDesign = (form: ProcessFormDesignSummary) => {
+  router.push({
+    name: 'expense-workbench-process-form-create',
+    query: {
+      templateType: form.templateType,
+      copyFromId: String(form.id)
+    }
+  })
+}
+
 const openFlowEditor = (id: number) => {
   router.push({
     name: 'expense-workbench-process-flow-edit',
     params: { id }
+  })
+}
+
+const copyFlow = (flow: ProcessFlowSummary) => {
+  router.push({
+    name: 'expense-workbench-process-flow-create',
+    query: {
+      copyFromId: String(flow.id)
+    }
   })
 }
 
@@ -622,6 +649,50 @@ const confirmDeleteTemplate = async (template: ProcessTemplateCard) => {
       return
     }
     ElMessage.error(resolveErrorMessage(error, '\u5220\u9664\u6a21\u677f\u5931\u8d25'))
+  }
+}
+
+const confirmDeleteFormDesign = async (form: ProcessFormDesignSummary) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除“${form.formName}”吗？删除后将不能再被模板绑定，已绑定模板需要重新选择。`,
+      '删除费用表单',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+      }
+    )
+    await processApi.deleteFormDesign(form.id)
+    ElMessage.success('费用表单已删除')
+    await loadOverview()
+  } catch (error: unknown) {
+    if (error === 'cancel' || String(error).includes('cancel')) {
+      return
+    }
+    ElMessage.error(resolveErrorMessage(error, '删除费用表单失败'))
+  }
+}
+
+const confirmDeleteFlow = async (flow: ProcessFlowSummary) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除“${flow.flowName}”吗？删除后流程设计与版本数据会一并清理，已绑定模板需要先解除绑定。`,
+      '删除审批流程',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+      }
+    )
+    await processApi.deleteFlow(flow.id)
+    ElMessage.success('审批流程已删除')
+    await loadOverview()
+  } catch (error: unknown) {
+    if (error === 'cancel' || String(error).includes('cancel')) {
+      return
+    }
+    ElMessage.error(resolveErrorMessage(error, '删除审批流程失败'))
   }
 }
 </script>
@@ -682,6 +753,10 @@ const confirmDeleteTemplate = async (template: ProcessTemplateCard) => {
 
 .resource-card {
   border: 1px solid #e2e8f0 !important;
+}
+
+.process-card-footer {
+  align-items: center;
 }
 
 :deep(.template-card .el-card__body) {

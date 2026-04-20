@@ -49,10 +49,14 @@ vi.mock('@/api', () => ({
   processApi: mocks.processApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/permissions', () => ({
   readStoredUser: () => ({
@@ -74,12 +78,16 @@ vi.mock('@/utils/permissions', () => ({
   }
 }))
 
-vi.mock('@element-plus/icons-vue', () => ({
-  ArrowLeft: { template: '<span />' },
-  Check: { template: '<span />' },
-  Delete: { template: '<span />' },
-  RefreshRight: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  const actual = await vi.importActual<typeof import('@element-plus/icons-vue')>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    ArrowLeft: { template: '<span />' },
+    Check: { template: '<span />' },
+    Delete: { template: '<span />' },
+    RefreshRight: { template: '<span />' }
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="header" /><slot /><slot name="footer" /></div>'
@@ -181,14 +189,19 @@ function buildExpenseDetailDesignDetail(overrides: Record<string, unknown> = {})
 
 async function mountView(options?: {
   formDesignDetail?: Record<string, unknown>
+  formDesignError?: Error
   expenseDetailDesignDetail?: Record<string, unknown>
   expenseDetailDesignError?: Error
 }) {
   mocks.processApi.getFlowMeta.mockResolvedValue({ data: buildFlowMeta() })
   mocks.processApi.listCustomArchives.mockResolvedValue({ data: [] })
-  mocks.processApi.getFormDesignDetail.mockResolvedValue({
-    data: buildFormDesignDetail(options?.formDesignDetail)
-  })
+  if (options?.formDesignError) {
+    mocks.processApi.getFormDesignDetail.mockRejectedValue(options.formDesignError)
+  } else {
+    mocks.processApi.getFormDesignDetail.mockResolvedValue({
+      data: buildFormDesignDetail(options?.formDesignDetail)
+    })
+  }
   if (options?.expenseDetailDesignError) {
     mocks.processApi.getExpenseDetailDesignDetail.mockRejectedValue(options.expenseDetailDesignError)
   } else {
@@ -402,6 +415,44 @@ describe('ProcessFormDesignerView', () => {
 
     expect(mocks.elMessage.error).toHaveBeenCalledWith('源设计不存在')
     expect(wrapper.text()).toContain('保存后自动生成')
+    expect(wrapper.find('input').element.value).toBe('')
+  })
+
+
+  it('prefills copied normal form designs in create mode and still creates a new record', async () => {
+    mocks.route.name = 'expense-workbench-process-form-create'
+    mocks.route.params = {}
+    mocks.route.query = { templateType: 'report', copyFromId: '8' }
+    mocks.processApi.createFormDesign.mockResolvedValue({
+      data: buildFormDesignDetail({ id: 18, formCode: 'FORM-018', formName: '\u5dee\u65c5\u62a5\u9500\u8868\u5355-\u526f\u672c' })
+    })
+
+    const wrapper = await mountView()
+
+    expect(mocks.processApi.getFormDesignDetail).toHaveBeenCalledWith(8)
+    expect(wrapper.find('input').element.value).toBe('\u5dee\u65c5\u62a5\u9500\u8868\u5355-\u526f\u672c')
+
+    await wrapper.findAll('button').find((item) => item.text().includes('\u4fdd\u5b58\u8868\u5355\u8bbe\u8ba1'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.createFormDesign).toHaveBeenCalledWith(expect.objectContaining({
+      formName: '\u5dee\u65c5\u62a5\u9500\u8868\u5355-\u526f\u672c',
+      formDescription: 'description',
+      templateType: 'report'
+    }))
+    expect(mocks.processApi.updateFormDesign).not.toHaveBeenCalled()
+  })
+
+  it('falls back to a blank normal form create page when copy source loading fails', async () => {
+    mocks.route.name = 'expense-workbench-process-form-create'
+    mocks.route.params = {}
+    mocks.route.query = { templateType: 'report', copyFromId: '8' }
+
+    const wrapper = await mountView({
+      formDesignError: new Error('\u6e90\u8868\u5355\u4e0d\u5b58\u5728')
+    })
+
+    expect(mocks.elMessage.error).toHaveBeenCalledWith('\u6e90\u8868\u5355\u4e0d\u5b58\u5728')
     expect(wrapper.find('input').element.value).toBe('')
   })
 

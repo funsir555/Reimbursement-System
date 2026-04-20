@@ -26,6 +26,7 @@ import com.finex.auth.dto.ProcessFlowSceneVO;
 import com.finex.auth.dto.ProcessFlowSummaryVO;
 import com.finex.auth.dto.ProcessFormOptionVO;
 import com.finex.auth.entity.ProcessCustomArchiveDesign;
+import com.finex.auth.entity.ProcessDocumentTemplate;
 import com.finex.auth.entity.ProcessExpenseType;
 import com.finex.auth.entity.ProcessFlow;
 import com.finex.auth.entity.ProcessFlowNode;
@@ -36,6 +37,7 @@ import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
+import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessFlowMapper;
 import com.finex.auth.mapper.ProcessFlowNodeMapper;
@@ -136,6 +138,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     private final UserMapper userMapper;
     private final ProcessExpenseTypeMapper processExpenseTypeMapper;
     private final ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
+    private final ProcessDocumentTemplateMapper processDocumentTemplateMapper;
     private final ObjectMapper objectMapper;
 
     /**
@@ -368,6 +371,44 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         flow.setCurrentDraftVersionId(null);
         processFlowMapper.updateById(flow);
         return buildFlowDetail(requireFlow(id));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean deleteFlow(Long id) {
+        ProcessFlow flow = requireFlow(id);
+        Long boundTemplateCount = processDocumentTemplateMapper.selectCount(
+                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .eq(ProcessDocumentTemplate::getApprovalFlow, flow.getFlowCode())
+        );
+        if (boundTemplateCount != null && boundTemplateCount > 0) {
+            throw new IllegalStateException("当前审批流程仍被单据模板绑定，解绑后才可删除");
+        }
+
+        List<ProcessFlowVersion> versions = processFlowVersionMapper.selectList(
+                Wrappers.<ProcessFlowVersion>lambdaQuery()
+                        .eq(ProcessFlowVersion::getFlowId, id)
+        );
+        if (!versions.isEmpty()) {
+            List<Long> versionIds = versions.stream()
+                    .map(ProcessFlowVersion::getId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            if (!versionIds.isEmpty()) {
+                processFlowRouteMapper.delete(
+                        Wrappers.<ProcessFlowRoute>lambdaQuery().in(ProcessFlowRoute::getVersionId, versionIds)
+                );
+                processFlowNodeMapper.delete(
+                        Wrappers.<ProcessFlowNode>lambdaQuery().in(ProcessFlowNode::getVersionId, versionIds)
+                );
+                processFlowVersionMapper.delete(
+                        Wrappers.<ProcessFlowVersion>lambdaQuery().in(ProcessFlowVersion::getId, versionIds)
+                );
+            }
+        }
+
+        processFlowMapper.deleteById(id);
+        return Boolean.TRUE;
     }
 
     /**

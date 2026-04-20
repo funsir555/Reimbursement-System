@@ -2,6 +2,7 @@ package com.finex.auth.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ProcessFlowDetailVO;
+import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.entity.ProcessFlow;
 import com.finex.auth.entity.ProcessFlowNode;
 import com.finex.auth.entity.ProcessFlowRoute;
@@ -30,9 +31,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,6 +62,8 @@ class ProcessFlowDesignServiceImplTest {
     private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock
     private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
+    @Mock
+    private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
 
     private ObjectMapper objectMapper;
     private ProcessFlowDesignServiceImpl service;
@@ -77,6 +82,7 @@ class ProcessFlowDesignServiceImplTest {
                 userMapper,
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
+                processDocumentTemplateMapper,
                 objectMapper
         );
     }
@@ -404,6 +410,48 @@ class ProcessFlowDesignServiceImplTest {
         assertEquals(List.of(0, 0), storedRoutes.stream().map(ProcessFlowRoute::getAttachBelowNodes).toList());
         assertEquals(List.of("route-1", "route-2"), storedRoutes.stream().map(ProcessFlowRoute::getRouteKey).toList());
         assertTrue(detail.getRoutes().stream().allMatch(item -> !Boolean.TRUE.equals(item.getAttachBelowNodes())));
+    }
+
+    @Test
+    void deleteFlowRemovesVersionsNodesAndRoutesWhenFlowIsUnbound() {
+        ProcessFlow flow = new ProcessFlow();
+        flow.setId(9L);
+        flow.setFlowCode("FLOW-009");
+        flow.setFlowName("Flow Delete");
+        when(processFlowMapper.selectById(9L)).thenReturn(flow);
+        when(processDocumentTemplateMapper.selectCount(any())).thenReturn(0L);
+
+        ProcessFlowVersion draft = new ProcessFlowVersion();
+        draft.setId(21L);
+        draft.setFlowId(9L);
+        ProcessFlowVersion published = new ProcessFlowVersion();
+        published.setId(22L);
+        published.setFlowId(9L);
+        when(processFlowVersionMapper.selectList(any())).thenReturn(List.of(draft, published));
+
+        assertTrue(service.deleteFlow(9L));
+
+        verify(processFlowRouteMapper).delete(any());
+        verify(processFlowNodeMapper).delete(any());
+        verify(processFlowVersionMapper).delete(any());
+        verify(processFlowMapper).deleteById(9L);
+    }
+
+    @Test
+    void deleteFlowRejectsBoundTemplates() {
+        ProcessFlow flow = new ProcessFlow();
+        flow.setId(9L);
+        flow.setFlowCode("FLOW-009");
+        when(processFlowMapper.selectById(9L)).thenReturn(flow);
+        when(processDocumentTemplateMapper.selectCount(any())).thenReturn(1L);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.deleteFlow(9L));
+
+        assertEquals("当前审批流程仍被单据模板绑定，解绑后才可删除", error.getMessage());
+        verify(processFlowMapper, never()).deleteById((java.io.Serializable) 9L);
+        verify(processFlowVersionMapper, never()).delete(any());
+        verify(processFlowNodeMapper, never()).delete(any());
+        verify(processFlowRouteMapper, never()).delete(any());
     }
 
     private com.finex.auth.entity.User createActiveUser(Long id, String name) {

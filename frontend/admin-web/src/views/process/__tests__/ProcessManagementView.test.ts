@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => ({
     listFormDesigns: vi.fn(),
     listExpenseDetailDesigns: vi.fn(),
     copyTemplate: vi.fn(),
-    deleteTemplate: vi.fn()
+    deleteTemplate: vi.fn(),
+    deleteFormDesign: vi.fn(),
+    deleteFlow: vi.fn()
   },
   elMessage: {
     warning: vi.fn(),
@@ -39,10 +41,14 @@ vi.mock('@/api', () => ({
   processApi: mocks.processApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/permissions', () => ({
   readStoredUser: () => ({
@@ -64,16 +70,20 @@ vi.mock('@/utils/permissions', () => ({
   }
 }))
 
-vi.mock('@element-plus/icons-vue', () => ({
-  CircleCheckFilled: { template: '<span />' },
-  CopyDocument: { template: '<span />' },
-  Document: { template: '<span />' },
-  Files: { template: '<span />' },
-  Plus: { template: '<span />' },
-  Search: { template: '<span />' },
-  Tools: { template: '<span />' },
-  TrendCharts: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  const actual = await vi.importActual<typeof import('@element-plus/icons-vue')>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    CircleCheckFilled: { template: '<span />' },
+    CopyDocument: { template: '<span />' },
+    Document: { template: '<span />' },
+    Files: { template: '<span />' },
+    Plus: { template: '<span />' },
+    Search: { template: '<span />' },
+    Tools: { template: '<span />' },
+    TrendCharts: { template: '<span />' }
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="header" /><slot /><slot name="footer" /></div>'
@@ -284,9 +294,13 @@ describe('ProcessManagementView', () => {
     mocks.route.query = {}
     mocks.router.push.mockResolvedValue(undefined)
     mocks.router.replace.mockResolvedValue(undefined)
+    mocks.elMessageBox.confirm.mockResolvedValue('confirm')
     mocks.processApi.copyTemplate.mockResolvedValue({
       data: { id: 101, templateCode: 'FX202604170099', templateName: '副本', status: 'DRAFT' }
     })
+    mocks.processApi.deleteTemplate.mockResolvedValue({ data: true })
+    mocks.processApi.deleteFormDesign.mockResolvedValue({ data: true })
+    mocks.processApi.deleteFlow.mockResolvedValue({ data: true })
   })
 
   it('renders the sidebar with the new section order', async () => {
@@ -421,6 +435,47 @@ describe('ProcessManagementView', () => {
     expect(mocks.processApi.copyTemplate).toHaveBeenCalledWith(1)
     expect(mocks.processApi.getOverview).toHaveBeenCalledTimes(2)
     expect(mocks.elMessage.success).toHaveBeenCalledWith('模板副本已创建')
+  })
+
+
+  it('adds copy and delete actions to form cards', async () => {
+    mocks.route.query = { section: 'form-design' }
+    const wrapper = await mountView([buildTemplate()], { forms: [buildFormSummary()] })
+
+    const buttons = wrapper.findAll('button')
+    await buttons.find((item) => item.text() === '\u590d\u5236')!.trigger('click')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-workbench-process-form-create',
+      query: { templateType: 'report', copyFromId: '66' }
+    })
+
+    await buttons.find((item) => item.text() === '\u5220\u9664')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalled()
+    expect(mocks.processApi.deleteFormDesign).toHaveBeenCalledWith(66)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('\u8d39\u7528\u8868\u5355\u5df2\u5220\u9664')
+    expect(mocks.processApi.getOverview).toHaveBeenCalledTimes(2)
+  })
+
+  it('adds copy and delete actions to approval flow cards', async () => {
+    mocks.route.query = { section: 'approval-flow' }
+    const wrapper = await mountView([buildTemplate()], { flows: [buildFlowSummary()] })
+
+    const buttons = wrapper.findAll('button')
+    await buttons.find((item) => item.text() === '\u590d\u5236')!.trigger('click')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-workbench-process-flow-create',
+      query: { copyFromId: '88' }
+    })
+
+    await buttons.find((item) => item.text() === '\u5220\u9664')!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalled()
+    expect(mocks.processApi.deleteFlow).toHaveBeenCalledWith(88)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('\u5ba1\u6279\u6d41\u7a0b\u5df2\u5220\u9664')
+    expect(mocks.processApi.getOverview).toHaveBeenCalledTimes(2)
   })
 
   it('switches sections through the sidebar without changing the route domain', async () => {

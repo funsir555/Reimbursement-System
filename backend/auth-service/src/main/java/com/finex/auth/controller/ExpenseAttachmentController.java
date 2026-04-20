@@ -4,8 +4,10 @@
 
 package com.finex.auth.controller;
 
+import com.finex.auth.dto.ExpenseAttachmentOcrResultVO;
 import com.finex.auth.dto.ExpenseAttachmentVO;
 import com.finex.auth.service.AccessControlService;
+import com.finex.auth.service.ExpenseAttachmentOcrService;
 import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.common.JwtUtil;
 import com.finex.common.Result;
@@ -47,6 +49,7 @@ public class ExpenseAttachmentController {
     private static final String EXPENSE_DOCUMENTS_VIEW = "expense:documents:view";
 
     private final ExpenseAttachmentService expenseAttachmentService;
+    private final ExpenseAttachmentOcrService expenseAttachmentOcrService;
     private final AccessControlService accessControlService;
 
     // 处理 uploadAttachment 请求。
@@ -63,7 +66,23 @@ public class ExpenseAttachmentController {
                 EXPENSE_APPROVAL_VIEW,
                 EXPENSE_APPROVAL_APPROVE
         );
-        return Result.success("闄勪欢涓婁紶鎴愬姛", expenseAttachmentService.uploadAttachment(file));
+        return Result.success("附件上传成功", expenseAttachmentService.uploadAttachment(file));
+    }
+
+    @PostMapping("/{attachmentId}/ocr")
+    public Result<ExpenseAttachmentOcrResultVO> recognizeAttachment(
+            @PathVariable String attachmentId,
+            HttpServletRequest request
+    ) {
+        accessControlService.requireAnyPermission(
+                getCurrentUserId(request),
+                EXPENSE_CREATE_VIEW,
+                EXPENSE_CREATE_CREATE,
+                EXPENSE_CREATE_SUBMIT,
+                EXPENSE_APPROVAL_VIEW,
+                EXPENSE_APPROVAL_APPROVE
+        );
+        return Result.success("OCR 识别已完成", expenseAttachmentOcrService.recognizeAttachment(attachmentId));
     }
 
     // 处理 previewAttachment 请求。
@@ -73,7 +92,7 @@ public class ExpenseAttachmentController {
             @RequestParam("token") String token
     ) {
         if (!JwtUtil.verify(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.unauthorized("鏈櫥褰曟垨鐧诲綍宸茶繃鏈?"));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.unauthorized("未登录或登录已过期"));
         }
 
         accessControlService.requireAnyPermission(
@@ -119,6 +138,6 @@ public class ExpenseAttachmentController {
         if (userId instanceof Integer value) {
             return value.longValue();
         }
-        throw new IllegalStateException("鏃犳硶鑾峰彇褰撳墠鐧诲綍鐢ㄦ埛");
+        throw new IllegalStateException("无法获取当前登录用户");
     }
 }

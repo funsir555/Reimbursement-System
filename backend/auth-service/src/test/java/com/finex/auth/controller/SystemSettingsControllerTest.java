@@ -5,6 +5,7 @@ import com.finex.auth.dto.CompanyBankAccountVO;
 import com.finex.auth.dto.CompanyVO;
 import com.finex.auth.dto.DepartmentTreeNodeVO;
 import com.finex.auth.dto.EmployeeVO;
+import com.finex.auth.dto.OcrProviderConfigVO;
 import com.finex.auth.dto.RolePermissionAssignDTO;
 import com.finex.auth.dto.SyncJobVO;
 import com.finex.auth.dto.SystemSettingsBootstrapVO;
@@ -67,6 +68,10 @@ class SystemSettingsControllerTest {
         department.setId(9L);
         department.setDeptName("Finance");
         bootstrap.setDepartments(List.of(department));
+        OcrProviderConfigVO ocrProvider = new OcrProviderConfigVO();
+        ocrProvider.setProviderCode("ALIYUN");
+        ocrProvider.setProviderName("阿里云");
+        bootstrap.setOcrProviders(List.of(ocrProvider));
 
         doNothing().when(accessControlService).requireAnyPermission(1L,
                 "settings:menu",
@@ -81,7 +86,8 @@ class SystemSettingsControllerTest {
         mockMvc.perform(get("/auth/system-settings/bootstrap").requestAttr("currentUserId", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.departments[0].deptName").value("Finance"));
+                .andExpect(jsonPath("$.data.departments[0].deptName").value("Finance"))
+                .andExpect(jsonPath("$.data.ocrProviders[0].providerCode").value("ALIYUN"));
 
         verify(systemSettingsService).getBootstrap(1L);
         verify(accessControlService).requireAnyPermission(1L,
@@ -120,6 +126,53 @@ class SystemSettingsControllerTest {
                 "settings:companies:view",
                 "settings:company_accounts:view",
                 "settings:api_interfaces:view");
+    }
+
+    @Test
+    void updateOcrProviderUsesExpectedPermission() throws Exception {
+        OcrProviderConfigVO config = new OcrProviderConfigVO();
+        config.setProviderCode("ALIYUN");
+        config.setProviderName("阿里云");
+        config.setEnabled(Boolean.TRUE);
+
+        doNothing().when(accessControlService).requirePermission(1L, "settings:api_interfaces:ocr_edit");
+        when(systemSettingsService.updateOcrProvider(eq("ALIYUN"), any())).thenReturn(config);
+
+        mockMvc.perform(put("/auth/system-settings/ocr/providers/ALIYUN")
+                        .requestAttr("currentUserId", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "enabled": 1,
+                                  "accessKeyId": "ak",
+                                  "accessKeySecret": "sk"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.providerCode").value("ALIYUN"));
+
+        verify(accessControlService).requirePermission(1L, "settings:api_interfaces:ocr_edit");
+        verify(systemSettingsService).updateOcrProvider(eq("ALIYUN"), any());
+    }
+
+    @Test
+    void testOcrProviderUsesExpectedPermission() throws Exception {
+        OcrProviderConfigVO config = new OcrProviderConfigVO();
+        config.setProviderCode("ALIYUN");
+        config.setLastTestStatus("SUCCESS");
+
+        doNothing().when(accessControlService).requirePermission(1L, "settings:api_interfaces:ocr_test");
+        when(systemSettingsService.testOcrProvider("ALIYUN")).thenReturn(config);
+
+        mockMvc.perform(post("/auth/system-settings/ocr/providers/ALIYUN/test")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.lastTestStatus").value("SUCCESS"));
+
+        verify(accessControlService).requirePermission(1L, "settings:api_interfaces:ocr_test");
+        verify(systemSettingsService).testOcrProvider("ALIYUN");
     }
 
     @Test

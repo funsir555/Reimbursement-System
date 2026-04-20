@@ -33,6 +33,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -298,6 +299,20 @@ class ProcessManagementControllerTest {
                 "expense:process_management:publish"
         );
         verify(processManagementService).publishFlow(10L);
+    }
+
+    @Test
+    void deleteFlowChecksEditPermissionAndDelegatesToService() throws Exception {
+        doNothing().when(accessControlService).requirePermission(1L, "expense:process_management:edit");
+        when(processManagementService.deleteFlow(10L)).thenReturn(Boolean.TRUE);
+
+        mockMvc.perform(delete("/auth/process-management/flows/10").requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(true));
+
+        verify(accessControlService).requirePermission(1L, "expense:process_management:edit");
+        verify(processManagementService).deleteFlow(10L);
     }
 
     @Test

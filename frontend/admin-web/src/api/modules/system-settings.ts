@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request from './core'
-import type { CompanyBankAccountRecord, CompanyBankAccountSavePayload, CompanyRecord, CompanySavePayload, DepartmentSavePayload, DepartmentTreeNode, EmployeeQueryPayload, EmployeeRecord, EmployeeSavePayload, PermissionTreeNode, RoleRecord, RoleSavePayload, SyncConnectorConfig, SyncConnectorSavePayload, SyncJobRecord, SystemSettingsBootstrapData } from './system-settings-types'
+import type { CompanyBankAccountRecord, CompanyBankAccountSavePayload, CompanyRecord, CompanySavePayload, DepartmentSavePayload, DepartmentTreeNode, EmployeeQueryPayload, EmployeeRecord, EmployeeSavePayload, OcrProviderConfig, OcrProviderSavePayload, PermissionTreeNode, RoleRecord, RoleSavePayload, SyncConnectorConfig, SyncConnectorSavePayload, SyncJobRecord, SystemSettingsBootstrapData } from './system-settings-types'
 
 // 这一组方法供对应页面统一调用。
 export const systemSettingsApi = {
@@ -103,6 +103,19 @@ export const systemSettingsApi = {
     request<SyncConnectorConfig>('/auth/system-settings/sync/connectors', {
       method: 'PUT',
       body: JSON.stringify(payload)
+    }),
+  updateOcrProvider: (providerCode: string, payload: OcrProviderSavePayload) =>
+    request<OcrProviderConfig>(`/auth/system-settings/ocr/providers/${encodeURIComponent(providerCode)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+      timeoutMs: 30000,
+      timeoutMessage: 'OCR 配置保存超时，请检查后端服务后重试'
+    }),
+  testOcrProvider: (providerCode: string) =>
+    request<OcrProviderConfig>(`/auth/system-settings/ocr/providers/${encodeURIComponent(providerCode)}/test`, {
+      method: 'POST',
+      timeoutMs: 30000,
+      timeoutMessage: 'OCR 配置测试超时，请稍后重试'
     }),
   runSync: (platformCodes: string[], triggerType = 'MANUAL') =>
     request<SyncJobRecord>('/auth/system-settings/sync/run', {

@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
     createCompanyBankAccount: vi.fn(),
     updateCompanyBankAccount: vi.fn(),
     deleteCompanyBankAccount: vi.fn(),
+    updateOcrProvider: vi.fn(),
+    testOcrProvider: vi.fn(),
     updateSyncConnector: vi.fn(),
     runSync: vi.fn()
   },
@@ -200,7 +202,9 @@ function createBootstrap() {
         'settings:roles:assign_users',
         'settings:companies:view',
         'settings:company_accounts:view',
-        'settings:api_interfaces:view'
+        'settings:api_interfaces:view',
+        'settings:api_interfaces:ocr_edit',
+        'settings:api_interfaces:ocr_test'
       ]
     },
     departments: [],
@@ -259,7 +263,54 @@ function createBootstrap() {
         lastSyncMessage: '\u5c1a\u672a\u6267\u884c\u540c\u6b65'
       }
     ],
-    jobs: []
+    jobs: [],
+    ocrProviders: [
+      {
+        id: 1,
+        providerCode: 'ALIYUN',
+        providerName: '阿里云',
+        enabled: true,
+        accessKeyId: 'test-ak',
+        hasSecret: true,
+        maskedSecret: 'abc******xyz',
+        endpoint: 'ocr-api.cn-hangzhou.aliyuncs.com',
+        connectTimeoutMs: 5000,
+        readTimeoutMs: 15000,
+        lastTestAt: '2026-04-19 10:30:00',
+        lastTestStatus: 'SUCCESS',
+        lastTestMessage: '测试通过'
+      },
+      {
+        id: 2,
+        providerCode: 'TENCENT',
+        providerName: '腾讯云',
+        enabled: false,
+        accessKeyId: '',
+        hasSecret: false,
+        maskedSecret: '',
+        endpoint: '',
+        connectTimeoutMs: 5000,
+        readTimeoutMs: 15000,
+        lastTestAt: '',
+        lastTestStatus: 'IDLE',
+        lastTestMessage: '待接入'
+      },
+      {
+        id: 3,
+        providerCode: 'BAIDU',
+        providerName: '百度云',
+        enabled: false,
+        accessKeyId: '',
+        hasSecret: false,
+        maskedSecret: '',
+        endpoint: '',
+        connectTimeoutMs: 5000,
+        readTimeoutMs: 15000,
+        lastTestAt: '',
+        lastTestStatus: 'IDLE',
+        lastTestMessage: '待接入'
+      }
+    ]
   }
 }
 
@@ -401,6 +452,14 @@ describe('SystemSettingsView', () => {
     mocks.systemSettingsApi.createCompanyBankAccount.mockResolvedValue({})
     mocks.systemSettingsApi.updateCompanyBankAccount.mockResolvedValue({})
     mocks.systemSettingsApi.deleteCompanyBankAccount.mockResolvedValue({})
+    mocks.systemSettingsApi.updateOcrProvider.mockResolvedValue({ data: createBootstrap().ocrProviders[0] })
+    mocks.systemSettingsApi.testOcrProvider.mockResolvedValue({
+      data: {
+        ...createBootstrap().ocrProviders[0],
+        lastTestStatus: 'SUCCESS',
+        lastTestMessage: '测试通过'
+      }
+    })
     mocks.systemSettingsApi.updateSyncConnector.mockResolvedValue({})
     mocks.systemSettingsApi.runSync.mockResolvedValue({})
     mocks.elMessageBox.confirm.mockResolvedValue(undefined)
@@ -440,7 +499,22 @@ describe('SystemSettingsView', () => {
     expect(wrapper.text()).toContain('OCR')
     expect(wrapper.text()).toContain('发票验真')
     expect(wrapper.text()).toContain('接口文档')
-    expect(wrapper.find('[data-testid="api-interface-title"]').text()).toBe('OCR 接口配置')
+    expect(wrapper.find('[data-testid="api-interface-title"]').text()).toBe('OCR 云端接入配置')
+    expect(wrapper.text()).toContain('阿里云')
+    expect(wrapper.text()).toContain('腾讯云')
+    expect(wrapper.text()).toContain('百度云')
+    expect(wrapper.find('[data-testid="ocr-provider-panel"]').exists()).toBe(true)
+  })
+
+  it('renders aliyun ram least-privilege guidance in the ocr settings panel', async () => {
+    mocks.route.query = { tab: 'apiInterfaces' }
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="ocr-ram-guidance"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('finex-ocr-runtime')
+    expect(wrapper.text()).toContain('FinexInvoiceOcrRuntimePolicy')
+    expect(wrapper.find('[data-testid="ocr-ram-policy-snippet"]').text()).toContain('"ocr:RecognizeInvoice"')
   })
 
   it('switches api interface placeholder panels without firing extra requests', async () => {
@@ -460,6 +534,71 @@ describe('SystemSettingsView', () => {
     expect(mocks.systemSettingsApi.updateDepartment).not.toHaveBeenCalled()
     expect(mocks.systemSettingsApi.updateSyncConnector).not.toHaveBeenCalled()
     expect(mocks.systemSettingsApi.runSync).not.toHaveBeenCalled()
+  })
+
+  it('blocks save when access key id changes but secret is blank', async () => {
+    mocks.route.query = { tab: 'apiInterfaces' }
+    const wrapper = await mountView()
+
+    const vm = wrapper.vm as any
+    vm.ocrForm.enabled = true
+    vm.ocrForm.accessKeyId = 'new-ak'
+    vm.ocrForm.accessKeySecret = ''
+    vm.ocrForm.endpoint = 'ocr-api.cn-hangzhou.aliyuncs.com'
+    vm.ocrForm.connectTimeoutMs = 6000
+    vm.ocrForm.readTimeoutMs = 20000
+
+    await vm.saveOcrProvider()
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateOcrProvider).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith(
+      '更换 AccessKey ID 时，必须同时重新填写 AccessKey Secret'
+    )
+  })
+
+  it('saves aliyun ocr config when access key id is unchanged and secret stays blank', async () => {
+    mocks.route.query = { tab: 'apiInterfaces' }
+    const wrapper = await mountView()
+
+    const vm = wrapper.vm as any
+    vm.ocrForm.enabled = true
+    vm.ocrForm.accessKeyId = 'test-ak'
+    vm.ocrForm.accessKeySecret = ''
+    vm.ocrForm.endpoint = 'ocr-api.cn-hangzhou.aliyuncs.com'
+    vm.ocrForm.connectTimeoutMs = 6000
+    vm.ocrForm.readTimeoutMs = 20000
+
+    await vm.saveOcrProvider()
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateOcrProvider).toHaveBeenCalledWith('ALIYUN', {
+      enabled: 1,
+      accessKeyId: 'test-ak',
+      accessKeySecret: '',
+      endpoint: 'ocr-api.cn-hangzhou.aliyuncs.com',
+      connectTimeoutMs: 6000,
+      readTimeoutMs: 20000
+    })
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('OCR 配置已保存')
+  })
+
+  it('shows placeholder status for tencent and does not call real ocr save', async () => {
+    mocks.route.query = { tab: 'apiInterfaces' }
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    vm.activeOcrProviderCode = 'TENCENT'
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('待接入')
+    expect(wrapper.text()).toContain('首期仅开放阿里云 OCR 真实接入')
+
+    await vm.saveOcrProvider()
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateOcrProvider).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('当前厂商待接入，暂不支持保存真实配置')
   })
 
   it('keeps synced employee core fields readonly while stat fields stay editable', async () => {

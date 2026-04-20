@@ -7,8 +7,8 @@
         <template #header>
           <div class="expense-invoice-panel__header">
             <div>
-              <p class="expense-invoice-panel__title">上传发票列表</p>
-              <p class="expense-invoice-panel__desc">按已上传附件生成发票预览列表，点击可切换右侧验真信息与原始文件预览。</p>
+              <p class="expense-invoice-panel__title">发票附件列表</p>
+              <p class="expense-invoice-panel__desc">上传发票后会自动触发 OCR，识别结果会直接写回当前发票列表。</p>
             </div>
             <el-tag effect="plain">{{ invoiceItems.length }} 张</el-tag>
           </div>
@@ -36,7 +36,7 @@
                 <p class="expense-invoice-card__name">{{ item.fileName }}</p>
                 <p class="expense-invoice-card__meta">发票代码 {{ item.invoiceCode }} · 发票号码 {{ item.invoiceNumber }}</p>
               </div>
-              <el-tag size="small" :type="item.verifyTone" effect="plain">{{ item.verifyStatus }}</el-tag>
+              <el-tag size="small" :type="item.statusTone" effect="plain">{{ item.statusLabel }}</el-tag>
             </div>
 
             <div class="expense-invoice-card__grid">
@@ -46,52 +46,67 @@
               </div>
               <div>
                 <span class="expense-invoice-card__label">销方名称</span>
-                <span class="expense-invoice-card__value">{{ item.seller }}</span>
+                <span class="expense-invoice-card__value">{{ item.sellerName }}</span>
               </div>
               <div>
                 <span class="expense-invoice-card__label">开票日期</span>
-                <span class="expense-invoice-card__value">{{ item.issueDate }}</span>
+                <span class="expense-invoice-card__value">{{ item.invoiceDate }}</span>
               </div>
               <div>
-                <span class="expense-invoice-card__label">金额</span>
-                <span class="expense-invoice-card__value">{{ formatCurrency(item.amount) }}</span>
+                <span class="expense-invoice-card__label">含税金额</span>
+                <span class="expense-invoice-card__value">{{ formatCurrency(item.totalAmount) }}</span>
               </div>
             </div>
 
             <div class="expense-invoice-card__footer">
               <div class="flex items-center gap-2">
-                <el-tag size="small" effect="plain" :type="item.ocrTone">{{ item.ocrStatus }}</el-tag>
                 <el-tag size="small" effect="plain">{{ previewKindLabel(item.previewKind) }}</el-tag>
+                <el-tag size="small" effect="plain">{{ item.providerName }}</el-tag>
               </div>
-              <span class="expense-invoice-card__tip">验真时间 {{ item.checkTime }}</span>
+              <span class="expense-invoice-card__tip">{{ item.recognizedAt === '--' ? '等待识别' : `识别时间 ${item.recognizedAt}` }}</span>
             </div>
           </button>
         </div>
         <el-empty
           v-else
-          description="暂未上传发票文件，上传后这里会自动生成发票列表。"
+          description="暂未上传发票文件，上传后这里会展示真实 OCR 识别结果。"
           :image-size="90"
         />
       </el-card>
     </div>
 
     <div class="expense-invoice-workbench__preview">
-      <el-card :class="verifyPanelClasses">
+      <el-card :class="resultPanelClasses">
         <template #header>
           <div class="expense-invoice-panel__header">
             <div>
-              <p class="expense-invoice-panel__title">税务验真结果</p>
-              <p class="expense-invoice-panel__desc">当前沿用演示验真数据，后续可替换为真实验真结果。</p>
+              <p class="expense-invoice-panel__title">{{ resultPanelTitle }}</p>
+              <p class="expense-invoice-panel__desc">{{ resultPanelDesc }}</p>
             </div>
-            <el-tag v-if="activeInvoice" effect="plain" :type="activeInvoice.verifyTone">{{ activeInvoice.verifyStatus }}</el-tag>
+            <el-tag
+              v-if="activeInvoice && !isVerificationPlaceholderMode"
+              effect="plain"
+              :type="activeInvoice.statusTone"
+            >
+              {{ activeInvoice.statusLabel }}
+            </el-tag>
           </div>
         </template>
 
         <div v-if="loading" class="expense-invoice-placeholder expense-invoice-placeholder--compact">
           <div v-for="index in 6" :key="index" class="expense-invoice-fact expense-invoice-fact--skeleton" />
         </div>
+        <div
+          v-else-if="isVerificationPlaceholderMode"
+          class="expense-invoice-feedback"
+          data-testid="expense-invoice-verify-panel"
+        >
+          <p class="expense-invoice-feedback__title">发票验真（预留）</p>
+          <p class="expense-invoice-feedback__desc">当前版本暂未接入真实发票验真能力，后续将在这里展示验真结果。</p>
+          <p v-if="activeInvoice" class="expense-invoice-feedback__desc">当前已选择：{{ activeInvoice.fileName }}</p>
+        </div>
         <div v-else-if="errorMessage" class="expense-invoice-feedback expense-invoice-feedback--error">
-          <p class="expense-invoice-feedback__title">无法展示验真结果</p>
+          <p class="expense-invoice-feedback__title">无法展示 OCR 结果</p>
           <p class="expense-invoice-feedback__desc">{{ errorMessage }}</p>
         </div>
         <div v-else-if="activeInvoice" class="expense-invoice-facts" data-testid="expense-invoice-verify-panel">
@@ -100,7 +115,7 @@
             <span class="expense-invoice-fact__value">{{ fact.value }}</span>
           </div>
         </div>
-        <el-empty v-else description="请选择一张发票查看验真结果" :image-size="82" />
+        <el-empty v-else :description="resultPanelEmptyDescription" :image-size="82" />
       </el-card>
 
       <el-card class="expense-wb-panel expense-invoice-panel">
@@ -124,7 +139,7 @@
               <p class="expense-invoice-image__title">{{ activeInvoice.invoiceType }}</p>
               <p class="expense-invoice-image__file" data-testid="expense-invoice-preview-file">{{ activeInvoice.fileName }}</p>
             </div>
-            <div class="expense-invoice-image__amount">{{ formatCurrency(activeInvoice.amount) }}</div>
+            <div class="expense-invoice-image__amount">{{ formatCurrency(activeInvoice.totalAmount) }}</div>
           </div>
 
           <div class="expense-invoice-image__preview-shell">
@@ -166,7 +181,7 @@
             </div>
             <div>
               <span class="expense-invoice-image__label">开票日期</span>
-              <span class="expense-invoice-image__value">{{ activeInvoice.issueDate }}</span>
+              <span class="expense-invoice-image__value">{{ activeInvoice.invoiceDate }}</span>
             </div>
             <div>
               <span class="expense-invoice-image__label">税额</span>
@@ -176,12 +191,12 @@
 
           <div class="expense-invoice-image__seller">
             <span class="expense-invoice-image__label">销方名称</span>
-            <span class="expense-invoice-image__value">{{ activeInvoice.seller }}</span>
+            <span class="expense-invoice-image__value">{{ activeInvoice.sellerName }}</span>
           </div>
 
           <div class="expense-invoice-image__footer">
             <span>{{ detailTitle || detailNo || '当前费用明细' }}</span>
-            <span>{{ activeInvoice.checkTime }}</span>
+            <span>{{ activeInvoice.statusMessage }}</span>
           </div>
         </div>
         <el-empty v-else description="请选择一张发票查看图像预览" :image-size="82" />
@@ -196,6 +211,7 @@ import type { ProcessFormDesignSchema } from '@/api'
 import {
   buildAuthorizedAttachmentPreviewUrl,
   buildExpenseInvoicePreviewItems,
+  type ExpenseInvoicePreviewItem,
   type ExpenseInvoicePreviewKind
 } from '@/views/expense/expenseInvoicePreview'
 
@@ -208,6 +224,7 @@ const props = withDefaults(defineProps<{
   errorMessage?: string
   layout?: 'default' | 'balanced'
   compactVerify?: boolean
+  resultMode?: 'ocr' | 'verification-placeholder'
 }>(), {
   schema: null,
   formData: () => ({}),
@@ -216,7 +233,8 @@ const props = withDefaults(defineProps<{
   loading: false,
   errorMessage: '',
   layout: 'default',
-  compactVerify: false
+  compactVerify: false,
+  resultMode: 'ocr'
 })
 
 const activeInvoiceId = ref('')
@@ -228,7 +246,7 @@ const workbenchClasses = computed(() => [
   }
 ])
 
-const verifyPanelClasses = computed(() => [
+const resultPanelClasses = computed(() => [
   'expense-wb-panel',
   'expense-invoice-panel',
   {
@@ -236,14 +254,30 @@ const verifyPanelClasses = computed(() => [
   }
 ])
 
+const isVerificationPlaceholderMode = computed(() => props.resultMode === 'verification-placeholder')
+
+const resultPanelTitle = computed(() => (
+  isVerificationPlaceholderMode.value ? '发票验真' : 'OCR 识别结果'
+))
+
+const resultPanelDesc = computed(() => (
+  isVerificationPlaceholderMode.value
+    ? '预留发票验真展示区域，当前版本暂未接入真实验真能力。'
+    : '仅展示当前附件的真实 OCR 快照，不再显示文件名推导的模拟数据。'
+))
+
+const resultPanelEmptyDescription = computed(() => (
+  isVerificationPlaceholderMode.value
+    ? '发票验真能力预留中'
+    : '请选择一张发票查看 OCR 识别结果'
+))
+
 const invoiceItems = computed(() => buildExpenseInvoicePreviewItems({
   schema: props.schema,
-  formData: props.formData,
-  detailTitle: props.detailTitle,
-  detailNo: props.detailNo
+  formData: props.formData
 }))
 
-const activeInvoice = computed(() => (
+const activeInvoice = computed<ExpenseInvoicePreviewItem | null>(() => (
   invoiceItems.value.find((item) => item.id === activeInvoiceId.value) || null
 ))
 
@@ -255,48 +289,49 @@ const activeInvoiceFacts = computed(() => {
   }
 
   return [
-    { label: '验真状态', value: activeInvoice.value.verifyStatus },
-    { label: 'OCR 状态', value: activeInvoice.value.ocrStatus },
-    { label: '验真时间', value: activeInvoice.value.checkTime },
+    { label: 'OCR 状态', value: activeInvoice.value.statusLabel },
+    { label: '状态说明', value: activeInvoice.value.statusMessage },
+    { label: 'OCR 厂商', value: activeInvoice.value.providerName },
     { label: '发票代码', value: activeInvoice.value.invoiceCode },
     { label: '发票号码', value: activeInvoice.value.invoiceNumber },
-    { label: '开票日期', value: activeInvoice.value.issueDate },
-    { label: '发票类型', value: activeInvoice.value.invoiceType },
-    { label: '销方名称', value: activeInvoice.value.seller },
-    { label: '发票金额', value: formatCurrency(activeInvoice.value.amount) },
-    { label: '税额', value: formatCurrency(activeInvoice.value.taxAmount) }
+    { label: '发票日期', value: activeInvoice.value.invoiceDate },
+    { label: '票种', value: activeInvoice.value.invoiceType },
+    { label: '销方名称', value: activeInvoice.value.sellerName },
+    { label: '含税金额', value: formatCurrency(activeInvoice.value.totalAmount) },
+    { label: '税额', value: formatCurrency(activeInvoice.value.taxAmount) },
+    { label: '识别时间', value: activeInvoice.value.recognizedAt }
   ]
 })
 
-watch(
-  invoiceItems,
-  (nextItems) => {
-    if (!nextItems.length) {
-      activeInvoiceId.value = ''
-      return
-    }
-    if (!nextItems.some((item) => item.id === activeInvoiceId.value)) {
-      activeInvoiceId.value = nextItems[0]?.id || ''
-    }
-  },
-  { immediate: true }
-)
+watch(invoiceItems, (items) => {
+  if (!items.length) {
+    activeInvoiceId.value = ''
+    return
+  }
+  if (!items.some((item) => item.id === activeInvoiceId.value)) {
+    activeInvoiceId.value = items[0]?.id || ''
+  }
+}, { immediate: true })
 
 function selectInvoice(invoiceId: string) {
   activeInvoiceId.value = invoiceId
 }
 
 function previewKindLabel(kind: ExpenseInvoicePreviewKind) {
-  if (kind === 'image') {
-    return '图片'
+  switch (kind) {
+    case 'image':
+      return '图片附件'
+    case 'pdf':
+      return 'PDF 附件'
+    default:
+      return '文件附件'
   }
-  if (kind === 'pdf') {
-    return 'PDF'
-  }
-  return '文件'
 }
 
-function formatCurrency(value: number) {
+function formatCurrency(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '--'
+  }
   return `¥ ${value.toFixed(2)}`
 }
 </script>

@@ -411,6 +411,20 @@ CREATE TABLE IF NOT EXISTS sys_sync_connector (
     CONSTRAINT uk_sys_sync_connector_platform_code UNIQUE (platform_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='sync connectors';
 
+CREATE TABLE IF NOT EXISTS sys_ocr_provider_config (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    provider_code VARCHAR(32) NOT NULL,
+    provider_name VARCHAR(50) NOT NULL,
+    enabled TINYINT NOT NULL DEFAULT 0,
+    config_json JSON NULL,
+    last_test_at DATETIME NULL,
+    last_test_status VARCHAR(32) NULL,
+    last_test_message VARCHAR(500) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT uk_sys_ocr_provider_config_code UNIQUE (provider_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='cloud ocr providers';
+
 CREATE TABLE IF NOT EXISTS sys_sync_job (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     job_no VARCHAR(64) NOT NULL,
@@ -462,6 +476,8 @@ FROM (
     UNION ALL SELECT 'settings:companies:view', 'Companies', 'MENU', p.id, 'companies', '/settings?tab=companies', 40, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'settings:company_accounts:view', 'Company Accounts', 'MENU', p.id, 'companyAccounts', '/settings?tab=companyAccounts', 605, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
     UNION ALL SELECT 'settings:api_interfaces:view', 'API Interfaces', 'MENU', p.id, 'apiInterfaces', '/settings?tab=apiInterfaces', 606, 1 FROM sys_permission p WHERE p.permission_code = 'settings:menu'
+    UNION ALL SELECT 'settings:api_interfaces:ocr_edit', 'Edit OCR Config', 'BUTTON', p.id, 'apiInterfaces', NULL, 6061, 1 FROM sys_permission p WHERE p.permission_code = 'settings:api_interfaces:view'
+    UNION ALL SELECT 'settings:api_interfaces:ocr_test', 'Test OCR Config', 'BUTTON', p.id, 'apiInterfaces', NULL, 6062, 1 FROM sys_permission p WHERE p.permission_code = 'settings:api_interfaces:view'
     UNION ALL SELECT 'dashboard:view', 'Dashboard Home', 'MENU', p.id, 'dashboard', '/dashboard', 101, 1 FROM sys_permission p WHERE p.permission_code = 'dashboard:menu'
     UNION ALL SELECT 'profile:view', 'Profile Center', 'MENU', p.id, 'profile', '/profile', 201, 1 FROM sys_permission p WHERE p.permission_code = 'profile:menu'
     UNION ALL SELECT 'expense:create:view', 'Expense Create', 'MENU', p.id, 'expense', '/expense/create', 301, 1 FROM sys_permission p WHERE p.permission_code = 'expense:menu'
@@ -627,6 +643,18 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_sync_connector WHERE platform_code = 'WECOM'
 INSERT INTO sys_sync_connector (platform_code, platform_name, enabled, auto_sync_enabled, sync_interval_minutes, config_json, last_sync_status, last_sync_message)
 SELECT 'FEISHU', 'Feishu', 1, 0, 60, JSON_OBJECT(), 'IDLE', 'Not synced yet'
 WHERE NOT EXISTS (SELECT 1 FROM sys_sync_connector WHERE platform_code = 'FEISHU');
+
+INSERT INTO sys_ocr_provider_config (provider_code, provider_name, enabled, config_json, last_test_status, last_test_message)
+SELECT 'ALIYUN', '阿里云', 0, JSON_OBJECT('endpoint', 'ocr-api.cn-hangzhou.aliyuncs.com', 'connectTimeoutMs', 5000, 'readTimeoutMs', 15000), 'IDLE', '尚未测试'
+WHERE NOT EXISTS (SELECT 1 FROM sys_ocr_provider_config WHERE provider_code = 'ALIYUN');
+
+INSERT INTO sys_ocr_provider_config (provider_code, provider_name, enabled, config_json, last_test_status, last_test_message)
+SELECT 'TENCENT', '腾讯云', 0, JSON_OBJECT('endpoint', '', 'connectTimeoutMs', 5000, 'readTimeoutMs', 15000), 'IDLE', '待接入'
+WHERE NOT EXISTS (SELECT 1 FROM sys_ocr_provider_config WHERE provider_code = 'TENCENT');
+
+INSERT INTO sys_ocr_provider_config (provider_code, provider_name, enabled, config_json, last_test_status, last_test_message)
+SELECT 'BAIDU', '百度云', 0, JSON_OBJECT('endpoint', '', 'connectTimeoutMs', 5000, 'readTimeoutMs', 15000), 'IDLE', '待接入'
+WHERE NOT EXISTS (SELECT 1 FROM sys_ocr_provider_config WHERE provider_code = 'BAIDU');
 
 /*
 权限目录最终规范化:
@@ -813,7 +841,9 @@ INSERT INTO tmp_permission_seed (
     ('settings:company_accounts:create', '新增公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6051, 1),
     ('settings:company_accounts:edit', '编辑公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6052, 1),
     ('settings:company_accounts:delete', '删除公司账户', 'BUTTON', 'settings:company_accounts:view', 'companyAccounts', NULL, 6053, 1),
-    ('settings:api_interfaces:view', 'API接口', 'MENU', 'settings:menu', 'apiInterfaces', '/settings?tab=apiInterfaces', 606, 1);
+    ('settings:api_interfaces:view', 'API接口', 'MENU', 'settings:menu', 'apiInterfaces', '/settings?tab=apiInterfaces', 606, 1),
+    ('settings:api_interfaces:ocr_edit', '编辑 OCR 配置', 'BUTTON', 'settings:api_interfaces:view', 'apiInterfaces', NULL, 6061, 1),
+    ('settings:api_interfaces:ocr_test', '测试 OCR 配置', 'BUTTON', 'settings:api_interfaces:view', 'apiInterfaces', NULL, 6062, 1);
 
 INSERT INTO sys_permission (
     permission_code,

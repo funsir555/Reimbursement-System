@@ -2191,7 +2191,7 @@
 
 
 
-                缁存姢鏀舵璐︽埛
+                维护收款账户
 
 
 
@@ -10913,23 +10913,15 @@ async function handleFileChange(block: ProcessFormDesignBlock, uploadFile: Uploa
 
 
 
-    const res = await expenseCreateApi.uploadAttachment(uploadFile.raw)
-
-
-
-
-
-
-
+    const uploadRes = await expenseCreateApi.uploadAttachment(uploadFile.raw)
+    const uploadedAttachment = attachResolvedOcr(
+      uploadRes.data,
+      isInvoiceAttachmentBlock(block)
+        ? await resolveAttachmentOcrSnapshot(uploadRes.data)
+        : undefined
+    )
     const current = normalizeAttachments(formData.value[block.fieldKey])
-
-
-
-
-
-
-
-    formData.value[block.fieldKey] = [...current, res.data]
+    formData.value[block.fieldKey] = [...current, uploadedAttachment]
 
 
 
@@ -10945,7 +10937,7 @@ async function handleFileChange(block: ProcessFormDesignBlock, uploadFile: Uploa
 
 
 
-    ElMessage.error(resolveErrorMessage(error, '闄勪欢涓婁紶澶辫触'))
+    ElMessage.error(resolveErrorMessage(error, '附件上传失败'))
 
 
 
@@ -10976,6 +10968,39 @@ async function handleFileChange(block: ProcessFormDesignBlock, uploadFile: Uploa
 
 
 
+
+async function resolveAttachmentOcrSnapshot(attachment: ExpenseAttachmentMeta): Promise<ExpenseAttachmentMeta['ocr']> {
+  const attachmentId = typeof attachment.attachmentId === 'string' ? attachment.attachmentId.trim() : ''
+  if (!attachmentId) {
+    return {
+      status: 'FAILED',
+      message: '附件上传成功，但未返回附件标识'
+    }
+  }
+
+  try {
+    const res = await expenseCreateApi.recognizeAttachmentOcr(attachmentId)
+    return normalizeOcrSnapshot(res.data)
+  } catch (error: unknown) {
+    return {
+      status: 'FAILED',
+      message: resolveErrorMessage(error, 'OCR 识别失败，请稍后重试')
+    }
+  }
+}
+
+function attachResolvedOcr(
+  attachment: ExpenseAttachmentMeta,
+  snapshot?: ExpenseAttachmentMeta['ocr']
+): ExpenseAttachmentMeta {
+  if (!snapshot) {
+    return attachment
+  }
+  return {
+    ...attachment,
+    ocr: snapshot
+  }
+}
 
 function handleFileRemove(block: ProcessFormDesignBlock, uploadFile: UploadFile) {
 
@@ -12866,7 +12891,8 @@ function normalizeAttachments(value: unknown): ExpenseAttachmentMeta[] {
 
 
 
-      previewUrl: firstNonBlank(record.previewUrl, record.fileUrl, record.url)
+      previewUrl: firstNonBlank(record.previewUrl, record.fileUrl, record.url),
+      ocr: normalizeOcrSnapshot(record.ocr)
 
 
 
@@ -12906,6 +12932,34 @@ function normalizeAttachments(value: unknown): ExpenseAttachmentMeta[] {
 
 
 
+}
+
+function normalizeOcrSnapshot(value: unknown): ExpenseAttachmentMeta['ocr'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  const status = firstNonBlank(record.status)
+  if (!status) {
+    return undefined
+  }
+
+  return {
+    status,
+    providerCode: firstNonBlank(record.providerCode),
+    providerName: firstNonBlank(record.providerName),
+    requestId: firstNonBlank(record.requestId),
+    recognizedAt: firstNonBlank(record.recognizedAt),
+    invoiceCode: firstNonBlank(record.invoiceCode),
+    invoiceNumber: firstNonBlank(record.invoiceNumber),
+    invoiceDate: firstNonBlank(record.invoiceDate),
+    invoiceType: firstNonBlank(record.invoiceType),
+    sellerName: firstNonBlank(record.sellerName),
+    totalAmount: toOptionalNumber(record.totalAmount),
+    taxAmount: toOptionalNumber(record.taxAmount),
+    message: firstNonBlank(record.message)
+  }
 }
 
 

@@ -76,6 +76,7 @@ declare module 'vue' {
     NewExpenseDialog: typeof import('./src/components/NewExpenseDialog.vue')['default']
     NotificationCenterDrawer: typeof import('./src/components/NotificationCenterDrawer.vue')['default']
     PixelDuckBotIcon: typeof import('./src/components/icons/PixelDuckBotIcon.vue')['default']
+    PixelWhaleBrandIcon: typeof import('./src/components/icons/PixelWhaleBrandIcon.vue')['default']
     ProcessFlowCanvasRenderer: typeof import('./src/components/process/ProcessFlowCanvasRenderer.vue')['default']
     ProcessWorkbenchSidebar: typeof import('./src/components/process/ProcessWorkbenchSidebar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

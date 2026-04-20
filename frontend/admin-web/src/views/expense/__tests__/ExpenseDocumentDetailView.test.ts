@@ -59,10 +59,14 @@ vi.mock('@/api', () => ({
   expenseApprovalApi: mocks.expenseApprovalApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/views/expense/useReadonlyPayeeLookups', () => ({
   useReadonlyPayeeLookups: () => ({
@@ -325,6 +329,8 @@ describe('ExpenseDocumentDetailView', () => {
     expect(mocks.expenseApi.getExpenseDetail).toHaveBeenCalledWith('DOC-001', 'D001')
     expect(wrapper.get('[data-testid="expense-invoice-preview-file"]').text()).toContain('hotel.pdf')
     expect(wrapper.find('[data-testid="expense-invoice-preview-pdf"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="expense-invoice-verify-panel"]').text()).toContain('发票验真（预留）')
+    expect(wrapper.text()).not.toContain('OCR 识别结果')
 
     await detailCards[0]!.trigger('click')
     await flushPromises()

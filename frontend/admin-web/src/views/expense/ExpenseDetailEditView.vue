@@ -30,6 +30,7 @@
       :detail-title="detailTitle"
       :detail-no="detailNo"
       :loading="loading"
+      result-mode="verification-placeholder"
       layout="balanced"
       compact-verify
     >

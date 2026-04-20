@@ -14,7 +14,8 @@ const mocks = vi.hoisted(() => ({
     getVendorDetail: vi.fn(),
     createVendor: vi.fn(),
     updateVendor: vi.fn(),
-    uploadAttachment: vi.fn()
+    uploadAttachment: vi.fn(),
+    recognizeAttachmentOcr: vi.fn()
   },
   elMessage: {
     error: vi.fn(),
@@ -304,6 +305,21 @@ describe('ExpenseRuntimeFormEditor', () => {
         fileName: 'invoice.pdf',
         contentType: 'application/pdf',
         previewUrl: '/api/auth/expenses/attachments/ATT-001/content'
+      }
+    })
+    mocks.expenseCreateApi.recognizeAttachmentOcr.mockResolvedValue({
+      data: {
+        status: 'SUCCESS',
+        providerCode: 'ALIYUN',
+        providerName: '阿里云',
+        invoiceCode: '1234567890',
+        invoiceNumber: '87654321',
+        invoiceDate: '2026-04-19',
+        invoiceType: '增值税电子普通发票',
+        sellerName: '上海测试商户',
+        totalAmount: 188.5,
+        taxAmount: 10.68,
+        message: '识别成功'
       }
     })
   })
@@ -722,8 +738,8 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(mocks.elMessage.warning).toHaveBeenCalledWith('发票附件仅支持 PDF、PNG、JPG、JPEG 文件')
   })
 
-  it('accepts jpeg invoice attachments and uploads them normally', async () => {
-    const { wrapper } = mountEditor({ invoiceAttachments: [] }, [
+  it('accepts jpeg invoice attachments, uploads them, and merges OCR snapshot', async () => {
+    const { wrapper, model } = mountEditor({ invoiceAttachments: [] }, [
       createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', {
         maxCount: 30,
         maxSizeMb: 10,
@@ -739,6 +755,12 @@ describe('ExpenseRuntimeFormEditor', () => {
     await flushPromises()
 
     expect(mocks.expenseCreateApi.uploadAttachment).toHaveBeenCalledTimes(1)
+    expect(mocks.expenseCreateApi.recognizeAttachmentOcr).toHaveBeenCalledWith('ATT-001')
+    expect((model.value.invoiceAttachments as Array<Record<string, unknown>>)[0]?.ocr).toMatchObject({
+      status: 'SUCCESS',
+      providerCode: 'ALIYUN',
+      invoiceCode: '1234567890'
+    })
   })
 
   it('uses the unified account and outlet wording when validating vendor drafts', async () => {

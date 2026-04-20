@@ -359,6 +359,67 @@ CREATE TABLE IF NOT EXISTS pm_custom_archive_rule (
     KEY idx_archive_item_group (archive_item_id, group_no, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义档案自动划分规则表';
 
+CREATE TABLE IF NOT EXISTS sys_ocr_provider_config (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'OCR 厂商配置ID',
+    provider_code VARCHAR(32) NOT NULL COMMENT '厂商编码',
+    provider_name VARCHAR(50) NOT NULL COMMENT '厂商名称',
+    enabled TINYINT NOT NULL DEFAULT 0 COMMENT '是否启用',
+    config_json JSON NULL COMMENT '配置 JSON',
+    last_test_at DATETIME NULL COMMENT '最近测试时间',
+    last_test_status VARCHAR(32) NULL COMMENT '最近测试状态',
+    last_test_message VARCHAR(500) NULL COMMENT '最近测试消息',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    CONSTRAINT uk_sys_ocr_provider_config_code UNIQUE (provider_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='云端 OCR 厂商配置表';
+
+INSERT INTO sys_ocr_provider_config (provider_code, provider_name, enabled, config_json, last_test_status, last_test_message) VALUES
+    ('ALIYUN', '阿里云', 0, JSON_OBJECT('endpoint', 'ocr-api.cn-hangzhou.aliyuncs.com', 'connectTimeoutMs', 5000, 'readTimeoutMs', 15000), 'IDLE', '尚未测试'),
+    ('TENCENT', '腾讯云', 0, JSON_OBJECT('endpoint', '', 'connectTimeoutMs', 5000, 'readTimeoutMs', 15000), 'IDLE', '待接入'),
+    ('BAIDU', '百度云', 0, JSON_OBJECT('endpoint', '', 'connectTimeoutMs', 5000, 'readTimeoutMs', 15000), 'IDLE', '待接入')
+ON DUPLICATE KEY UPDATE
+    provider_name = VALUES(provider_name),
+    config_json = VALUES(config_json),
+    updated_at = CURRENT_TIMESTAMP;
+
+INSERT INTO sys_permission (
+    permission_code,
+    permission_name,
+    permission_type,
+    parent_id,
+    module_code,
+    route_path,
+    sort_order,
+    status
+)
+SELECT 'settings:api_interfaces:ocr_edit', '编辑 OCR 配置', 'BUTTON', parent.id, 'apiInterfaces', NULL, 6061, 1
+FROM sys_permission parent
+WHERE parent.permission_code = 'settings:api_interfaces:view'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM sys_permission permission
+      WHERE permission.permission_code = 'settings:api_interfaces:ocr_edit'
+  );
+
+INSERT INTO sys_permission (
+    permission_code,
+    permission_name,
+    permission_type,
+    parent_id,
+    module_code,
+    route_path,
+    sort_order,
+    status
+)
+SELECT 'settings:api_interfaces:ocr_test', '测试 OCR 配置', 'BUTTON', parent.id, 'apiInterfaces', NULL, 6062, 1
+FROM sys_permission parent
+WHERE parent.permission_code = 'settings:api_interfaces:view'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM sys_permission permission
+      WHERE permission.permission_code = 'settings:api_interfaces:ocr_test'
+  );
+
 ALTER TABLE pm_custom_archive_rule
     DROP COLUMN IF EXISTS sort_order;
 

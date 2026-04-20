@@ -56,6 +56,11 @@ public interface ProcessFlowDesignService {
     ProcessFlowDetailVO publishFlow(Long id);
 
     /**
+     * 删除流程。
+     */
+    Boolean deleteFlow(Long id);
+
+    /**
      * 更新流程Status。
      */
     Boolean updateFlowStatus(Long id, String status);

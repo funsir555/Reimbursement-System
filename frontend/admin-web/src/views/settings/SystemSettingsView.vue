@@ -864,76 +864,268 @@
             </el-card>
 
             <div class="space-y-4">
-              <section class="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-5">
-                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p class="text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
-                      API Interface
-                    </p>
-                    <h2
-                      class="mt-1 text-2xl font-bold text-slate-900"
-                      data-testid="api-interface-title"
-                    >
-                      {{ activeApiInterfaceOption.title }}
-                    </h2>
-                    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                      {{ activeApiInterfaceOption.description }}
-                    </p>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="api-interface-status-chip">静态占位</span>
-                    <span class="api-interface-status-chip api-interface-status-chip-muted">
-                      待接入
-                    </span>
-                  </div>
-                </div>
-              </section>
-
-              <el-card shadow="never">
-                <template #header>
-                  <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                    <div class="font-semibold text-slate-900">预留配置项</div>
-                    <div class="text-xs text-slate-500">当前仅展示字段规划，不保存配置</div>
-                  </div>
-                </template>
-                <div class="grid gap-4 md:grid-cols-2">
-                  <div
-                    v-for="field in activeApiInterfaceOption.fields"
-                    :key="`${activeApiInterfaceOption.key}-${field.label}`"
-                    class="rounded-2xl border border-slate-200 bg-white px-4 py-3"
-                  >
-                    <div class="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      {{ field.label }}
+              <template v-if="activeApiInterface === 'ocr'">
+                <section class="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-5">
+                  <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p class="text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
+                        OCR Cloud Provider
+                      </p>
+                      <h2
+                        class="mt-1 text-2xl font-bold text-slate-900"
+                        data-testid="api-interface-title"
+                      >
+                        OCR 云端接入配置
+                      </h2>
+                      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                        OCR 真实能力仅用于发票附件上传链路；上传成功不等于 OCR 成功，识别失败不会回滚附件上传。
+                      </p>
                     </div>
-                    <div class="mt-2 text-sm font-medium leading-6 text-slate-800">
-                      {{ field.value }}
+                    <div class="flex flex-wrap gap-2">
+                      <el-button
+                        v-for="vendor in ocrVendorOptions"
+                        :key="vendor.code"
+                        size="small"
+                        :type="activeOcrProviderCode === vendor.code ? 'primary' : 'info'"
+                        :plain="activeOcrProviderCode !== vendor.code"
+                        :data-testid="`ocr-provider-switch-${vendor.code.toLowerCase()}`"
+                        @click="activeOcrProviderCode = vendor.code"
+                      >
+                        {{ vendor.label }}
+                      </el-button>
                     </div>
                   </div>
-                </div>
-              </el-card>
+                </section>
 
-              <el-card shadow="never">
-                <template #header>
-                  <div class="font-semibold text-slate-900">接入说明</div>
-                </template>
-                <div class="space-y-3">
-                  <div class="flex flex-wrap gap-2">
-                    <span
-                      v-for="tag in activeApiInterfaceOption.tags"
-                      :key="`${activeApiInterfaceOption.key}-${tag}`"
-                      class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
-                    >
-                      {{ tag }}
-                    </span>
+                <el-card shadow="never" data-testid="ocr-ram-guidance">
+                  <template #header>
+                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div class="font-semibold text-slate-900">RAM 最小权限建议</div>
+                      <div class="text-xs text-slate-500">后续发票 OCR 调用请优先使用专用 RAM 用户，不要使用主账号 AccessKey</div>
+                    </div>
+                  </template>
+
+                  <div class="grid gap-4 xl:grid-cols-[1.5fr,1fr]">
+                    <div class="grid gap-4 md:grid-cols-2">
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">推荐账号模型</div>
+                        <div class="mt-2 text-sm font-medium text-slate-800">专用 RAM 用户：`finex-ocr-runtime`</div>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">
+                          仅用于后端调用阿里云发票 OCR，不复用主账号 AccessKey，不和其它云服务共用同一组 AK/SK。
+                        </p>
+                      </div>
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">最小权限策略</div>
+                        <div class="mt-2 text-sm font-medium text-slate-800">`FinexInvoiceOcrRuntimePolicy`</div>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">
+                          首期只放行 `ocr:RecognizeInvoice`；若未来接发票验真，再单独增加 `ocr:VerifyVATInvoice`。
+                        </p>
+                      </div>
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">密钥治理</div>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">
+                          Secret 只允许后端保存和测试；前端只展示脱敏值，日志中禁止打印明文 `AccessKey Secret` 或完整 `Authorization` 头。
+                        </p>
+                      </div>
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">轮换建议</div>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">
+                          建议保留双 Key 窗口：新增新 Key、切配置、验证成功后再禁用旧 Key；若出口 IP 固定，再额外加来源 IP 条件限制。
+                        </p>
+                      </div>
+                    </div>
+
+                    <div class="rounded-2xl border border-slate-200 bg-slate-950 px-4 py-4 text-slate-100">
+                      <div class="text-xs uppercase tracking-[0.2em] text-slate-400">策略片段</div>
+                      <p class="mt-2 text-xs leading-5 text-slate-300">
+                        复制后可在阿里云 RAM 自定义策略中直接使用；OCR 是操作级授权，`Resource` 固定为 `*`。
+                      </p>
+                      <pre
+                        class="mt-3 overflow-x-auto rounded-2xl bg-slate-900/80 p-3 text-xs leading-6 text-emerald-200"
+                        data-testid="ocr-ram-policy-snippet"
+                      ><code>{{ ocrRamPolicySnippet }}</code></pre>
+                    </div>
                   </div>
-                  <p
-                    class="text-sm leading-6 text-slate-500"
-                    data-testid="api-interface-note"
-                  >
-                    {{ activeApiInterfaceOption.note }}
-                  </p>
-                </div>
-              </el-card>
+                </el-card>
+
+                <el-card shadow="never">
+                  <template #header>
+                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div class="font-semibold text-slate-900">厂商配置</div>
+                      <div class="text-xs text-slate-500">运行时只允许一个启用中的 OCR 厂商</div>
+                    </div>
+                  </template>
+
+                  <div v-if="activeOcrProviderCode !== 'ALIYUN'" class="space-y-4">
+                    <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-700">
+                      {{ activeOcrProvider?.providerName || activeOcrProviderLabel }} OCR 将在后续版本接入；当前页面仅保留厂商切换入口，不保存真实配置。
+                    </div>
+                    <div class="grid gap-4 md:grid-cols-2">
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">当前状态</div>
+                        <div class="mt-2 text-sm font-medium text-slate-800">待接入</div>
+                      </div>
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">接入范围</div>
+                        <div class="mt-2 text-sm font-medium text-slate-800">首期仅开放阿里云 OCR 真实接入</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-else class="space-y-5" data-testid="ocr-provider-panel">
+                    <div class="grid gap-4 md:grid-cols-3">
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">启用状态</div>
+                        <div class="mt-2 flex items-center gap-3">
+                          <el-switch
+                            v-model="ocrForm.enabled"
+                            :active-value="true"
+                            :inactive-value="false"
+                          />
+                          <span class="text-sm font-medium text-slate-800">
+                            {{ ocrForm.enabled ? '已启用' : '未启用' }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">最近测试</div>
+                        <div class="mt-2 text-sm font-medium text-slate-800">
+                          {{ activeOcrProvider?.lastTestStatus || 'IDLE' }}
+                        </div>
+                        <div class="mt-1 text-xs leading-5 text-slate-500">
+                          {{ activeOcrProvider?.lastTestMessage || '尚未测试' }}
+                        </div>
+                      </div>
+                      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <div class="text-xs uppercase tracking-[0.2em] text-slate-400">最近测试时间</div>
+                        <div class="mt-2 text-sm font-medium text-slate-800">
+                          {{ activeOcrProvider?.lastTestAt || '--' }}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="grid gap-4 md:grid-cols-2">
+                      <el-form-item label="AccessKey ID">
+                        <el-input v-model="ocrForm.accessKeyId" data-testid="ocr-access-key-id" />
+                      </el-form-item>
+                      <el-form-item label="Endpoint">
+                        <el-input v-model="ocrForm.endpoint" data-testid="ocr-endpoint" />
+                      </el-form-item>
+                      <el-form-item label="AccessKey Secret">
+                        <el-input
+                          v-model="ocrForm.accessKeySecret"
+                          type="password"
+                          show-password
+                          placeholder="留空则保留当前已保存的密钥"
+                          data-testid="ocr-access-key-secret"
+                        />
+                        <div class="mt-2 text-xs leading-5 text-slate-500">
+                          {{ activeOcrSecretHint }}
+                        </div>
+                      </el-form-item>
+                      <el-form-item label="连接超时 (ms)">
+                        <el-input v-model.number="ocrForm.connectTimeoutMs" type="number" data-testid="ocr-connect-timeout" />
+                      </el-form-item>
+                      <el-form-item label="读取超时 (ms)">
+                        <el-input v-model.number="ocrForm.readTimeoutMs" type="number" data-testid="ocr-read-timeout" />
+                      </el-form-item>
+                    </div>
+
+                    <div class="flex flex-wrap gap-3">
+                      <el-button
+                        type="primary"
+                        :loading="ocrSaveLoading"
+                        :disabled="!can('settings:api_interfaces:ocr_edit')"
+                        data-testid="ocr-save-button"
+                        @click="saveOcrProvider"
+                      >
+                        保存配置
+                      </el-button>
+                      <el-button
+                        :loading="ocrTestLoading"
+                        :disabled="!can('settings:api_interfaces:ocr_test')"
+                        data-testid="ocr-test-button"
+                        @click="testOcrProviderConfig"
+                      >
+                        测试配置
+                      </el-button>
+                    </div>
+                  </div>
+                </el-card>
+              </template>
+
+              <template v-else>
+                <section class="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-5">
+                  <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p class="text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
+                        API Interface
+                      </p>
+                      <h2
+                        class="mt-1 text-2xl font-bold text-slate-900"
+                        data-testid="api-interface-title"
+                      >
+                        {{ activeApiInterfaceOption.title }}
+                      </h2>
+                      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                        {{ activeApiInterfaceOption.description }}
+                      </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <span class="api-interface-status-chip">静态占位</span>
+                      <span class="api-interface-status-chip api-interface-status-chip-muted">
+                        待接入
+                      </span>
+                    </div>
+                  </div>
+                </section>
+
+                <el-card shadow="never">
+                  <template #header>
+                    <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div class="font-semibold text-slate-900">预留配置项</div>
+                      <div class="text-xs text-slate-500">当前仅展示字段规划，不保存配置</div>
+                    </div>
+                  </template>
+                  <div class="grid gap-4 md:grid-cols-2">
+                    <div
+                      v-for="field in activeApiInterfaceOption.fields"
+                      :key="`${activeApiInterfaceOption.key}-${field.label}`"
+                      class="rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                    >
+                      <div class="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        {{ field.label }}
+                      </div>
+                      <div class="mt-2 text-sm font-medium leading-6 text-slate-800">
+                        {{ field.value }}
+                      </div>
+                    </div>
+                  </div>
+                </el-card>
+
+                <el-card shadow="never">
+                  <template #header>
+                    <div class="font-semibold text-slate-900">接入说明</div>
+                  </template>
+                  <div class="space-y-3">
+                    <div class="flex flex-wrap gap-2">
+                      <span
+                        v-for="tag in activeApiInterfaceOption.tags"
+                        :key="`${activeApiInterfaceOption.key}-${tag}`"
+                        class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+                      >
+                        {{ tag }}
+                      </span>
+                    </div>
+                    <p
+                      class="text-sm leading-6 text-slate-500"
+                      data-testid="api-interface-note"
+                    >
+                      {{ activeApiInterfaceOption.note }}
+                    </p>
+                  </div>
+                </el-card>
+              </template>
             </div>
           </div>
         </el-tab-pane>
@@ -1336,6 +1528,8 @@ import {
   type EmployeeEditorFormState,
   type EmployeeRecord,
   type EmployeeSavePayload,
+  type OcrProviderConfig,
+  type OcrProviderSavePayload,
   type PermissionTreeNode,
   type RoleRecord,
   type RoleSavePayload,
@@ -1350,6 +1544,10 @@ type CompanyBankAccountFormState = CompanyBankAccountSavePayload & {
   status: number
   defaultAccount: number
   directConnectEnabled: number
+}
+type OcrProviderCode = 'ALIYUN' | 'TENCENT' | 'BAIDU'
+type OcrFormState = Required<Pick<OcrProviderSavePayload, 'accessKeyId' | 'accessKeySecret' | 'endpoint' | 'connectTimeoutMs' | 'readTimeoutMs'>> & {
+  enabled: boolean
 }
 type ApiInterfaceKey = 'ocr' | 'invoiceVerification' | 'apiDocs'
 type ApiInterfaceOption = {
@@ -1382,6 +1580,7 @@ const companies = ref<CompanyRecord[]>([])
 const companyBankAccounts = ref<CompanyBankAccountRecord[]>([])
 const connectors = ref<SyncConnectorConfig[]>([])
 const jobs = ref<SyncJobRecord[]>([])
+const ocrProviders = ref<OcrProviderConfig[]>([])
 const currentUser = ref<SystemSettingsBootstrapData['currentUser'] | null>(null)
 
 const selectedDepartmentId = ref<number>()
@@ -1402,6 +1601,9 @@ const companyAccountCompanyFilter = ref<string>()
 const companyAccountStatusFilter = ref<number>()
 const companyAccountDirectConnectFilter = ref<number>()
 const activeApiInterface = ref<ApiInterfaceKey>('ocr')
+const activeOcrProviderCode = ref<OcrProviderCode>('ALIYUN')
+const ocrSaveLoading = ref(false)
+const ocrTestLoading = ref(false)
 
 const departmentDialogVisible = ref(false)
 const employeeDialogVisible = ref(false)
@@ -1474,6 +1676,15 @@ const companyBankAccountForm = reactive<CompanyBankAccountFormState>({
   directConnectEnabled: 0
 })
 
+const ocrForm = reactive<OcrFormState>({
+  enabled: false,
+  accessKeyId: '',
+  accessKeySecret: '',
+  endpoint: 'ocr-api.cn-hangzhou.aliyuncs.com',
+  connectTimeoutMs: 5000,
+  readTimeoutMs: 15000
+})
+
 const companyBankAccountFieldMap = {
   accountName: 'accountName',
   bankCode: 'bankCode',
@@ -1492,23 +1703,29 @@ const sourceLabelMap: Record<string, string> = {
   FEISHU: '飞书'
 }
 
+const ocrVendorOptions: Array<{ code: OcrProviderCode; label: string }> = [
+  { code: 'ALIYUN', label: '阿里云' },
+  { code: 'TENCENT', label: '腾讯云' },
+  { code: 'BAIDU', label: '百度云' }
+]
+
 const apiInterfaceOptions: ApiInterfaceOption[] = [
   {
     key: 'ocr',
     label: 'OCR',
-    caption: '票据识别与结构化解析',
-    title: 'OCR 接口配置',
+    caption: '云端票据识别配置',
+    title: 'OCR 云端接入配置',
     description:
-      '用于发票、回单等影像资料的文字识别与结构化抽取，当前页面仅保留字段规划与接入说明。',
+      '用于维护云端 OCR 厂商配置与测试结果，首期只将真实识别能力应用到发票附件上传链路。',
     note:
-      '后续将补充服务商接入、鉴权配置、异步回调处理与识别字段映射；本次先完成静态占位。',
-    tags: ['票据识别', '异步回调', '字段映射', '结构化输出'],
+      '当前支持阿里云真实保存与测试；腾讯云、百度云仅保留切换入口与待接入说明。',
+    tags: ['发票附件', '阿里云', '配置测试', '唯一启用厂商'],
     fields: [
-      { label: '服务商', value: '预留第三方 OCR 厂商配置，例如云厂商 OCR / 专票识别服务。' },
-      { label: '鉴权方式', value: '预留 AppKey、AppSecret、Token 或签名鉴权等只读说明。' },
-      { label: '回调地址', value: '预留识别完成后的异步通知地址与重试策略说明。' },
-      { label: '识别场景', value: '预留发票、回单、附件图片等场景切换与模板映射。' },
-      { label: '返回字段', value: '预留票种、金额、税额、开票日期、销售方等字段定义。' }
+      { label: '服务商', value: '支持阿里云 AccessKey 配置，腾讯云/百度云待后续接入。' },
+      { label: '鉴权方式', value: '运行时走 AccessKey ID + AccessKey Secret；密钥读取时仅返回脱敏值。' },
+      { label: '测试方式', value: '使用系统内置发票样张发起一次真实 OCR，并回写最近测试状态。' },
+      { label: '识别场景', value: '首期仅覆盖 invoiceAttachments 上传后自动识别，不扩散到其它附件。' },
+      { label: '返回字段', value: '输出发票代码、号码、日期、票种、销方、金额、税额和状态说明。' }
     ]
   },
   {
@@ -1569,6 +1786,34 @@ const visibleTabs = computed(() =>
 const activeApiInterfaceOption = computed<ApiInterfaceOption>(
   () => apiInterfaceOptions.find((item) => item.key === activeApiInterface.value) ?? DEFAULT_API_INTERFACE_OPTION
 )
+
+const activeOcrProvider = computed<OcrProviderConfig | null>(() =>
+  ocrProviders.value.find((item) => item.providerCode === activeOcrProviderCode.value) || null
+)
+
+const activeOcrProviderLabel = computed(() =>
+  ocrVendorOptions.find((item) => item.code === activeOcrProviderCode.value)?.label || 'OCR'
+)
+
+const ocrRamPolicySnippet = `{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ocr:RecognizeInvoice"
+      ],
+      "Resource": "*"
+    }
+  ]
+}`
+
+const activeOcrSecretHint = computed(() => {
+  if (!activeOcrProvider.value?.hasSecret) {
+    return '当前未保存密钥，保存前请填写 AccessKey Secret。'
+  }
+  return `仅当 AccessKey ID 不变时，留空才表示继续沿用当前已保存的 Secret：${activeOcrProvider.value.maskedSecret || '******'}`
+})
 
 const departmentCount = computed(() => flattenDepartments(departments.value).length)
 const flatCompanies = computed<FlatCompanyRecord[]>(() => flattenCompanies(companies.value))
@@ -1694,6 +1939,14 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => [activeOcrProviderCode.value, ocrProviders.value],
+  () => {
+    syncOcrFormFromProvider()
+  },
+  { immediate: true, deep: true }
+)
+
 function can(code: string) {
   const codes = currentUser.value?.permissionCodes || []
   if (code.endsWith(':view')) {
@@ -1724,6 +1977,8 @@ async function loadBootstrap() {
     companyBankAccounts.value = data.companyBankAccounts
     connectors.value = data.connectors
     jobs.value = data.jobs
+    ocrProviders.value = data.ocrProviders || []
+    syncOcrFormFromProvider()
     localStorage.setItem('user', JSON.stringify(data.currentUser))
 
     selectedEmployee.value = selectedEmployee.value
@@ -2018,6 +2273,72 @@ async function setCompanyBankAccountDefault(row: CompanyBankAccountRecord) {
   })
   ElMessage.success('公司银行账户已设为默认')
   await loadBootstrap()
+}
+
+function syncOcrFormFromProvider() {
+  const provider = activeOcrProvider.value
+  ocrForm.enabled = provider?.enabled || false
+  ocrForm.accessKeyId = provider?.accessKeyId || ''
+  ocrForm.accessKeySecret = ''
+  ocrForm.endpoint = provider?.endpoint || 'ocr-api.cn-hangzhou.aliyuncs.com'
+  ocrForm.connectTimeoutMs = provider?.connectTimeoutMs || 5000
+  ocrForm.readTimeoutMs = provider?.readTimeoutMs || 15000
+}
+
+function normalizeOcrText(value?: string | null) {
+  return String(value || '').trim()
+}
+
+function isChangingAccessKeyIdWithoutSecret() {
+  const nextAccessKeyId = normalizeOcrText(ocrForm.accessKeyId)
+  const nextAccessKeySecret = normalizeOcrText(ocrForm.accessKeySecret)
+  const savedAccessKeyId = normalizeOcrText(activeOcrProvider.value?.accessKeyId)
+  return nextAccessKeyId !== savedAccessKeyId && nextAccessKeySecret.length === 0
+}
+
+async function saveOcrProvider() {
+  if (activeOcrProviderCode.value !== 'ALIYUN') {
+    ElMessage.warning('当前厂商待接入，暂不支持保存真实配置')
+    return
+  }
+  if (isChangingAccessKeyIdWithoutSecret()) {
+    ElMessage.warning('更换 AccessKey ID 时，必须同时重新填写 AccessKey Secret')
+    return
+  }
+  ocrSaveLoading.value = true
+  try {
+    await systemSettingsApi.updateOcrProvider(activeOcrProviderCode.value, {
+      enabled: ocrForm.enabled ? 1 : 0,
+      accessKeyId: normalizeOcrText(ocrForm.accessKeyId),
+      accessKeySecret: normalizeOcrText(ocrForm.accessKeySecret),
+      endpoint: normalizeOcrText(ocrForm.endpoint),
+      connectTimeoutMs: ocrForm.connectTimeoutMs,
+      readTimeoutMs: ocrForm.readTimeoutMs
+    })
+    ElMessage.success('OCR 配置已保存')
+    await loadBootstrap()
+  } catch (error: unknown) {
+    ElMessage.error(error instanceof Error && error.message ? error.message : 'OCR 配置保存失败')
+  } finally {
+    ocrSaveLoading.value = false
+  }
+}
+
+async function testOcrProviderConfig() {
+  if (activeOcrProviderCode.value !== 'ALIYUN') {
+    ElMessage.warning('当前厂商待接入，暂不支持真实测试')
+    return
+  }
+  ocrTestLoading.value = true
+  try {
+    const res = await systemSettingsApi.testOcrProvider(activeOcrProviderCode.value)
+    ElMessage.success(res.data.lastTestStatus === 'SUCCESS' ? 'OCR 配置测试通过' : 'OCR 配置测试已完成')
+    await loadBootstrap()
+  } catch (error: unknown) {
+    ElMessage.error(error instanceof Error && error.message ? error.message : 'OCR 配置测试失败')
+  } finally {
+    ocrTestLoading.value = false
+  }
 }
 
 async function saveConnector(connector: SyncConnectorConfig) {

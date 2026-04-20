@@ -11,9 +11,8 @@
         >
           <span class="main-layout-brand__icon-shell">
             <span class="main-layout-brand__icon-glow" aria-hidden="true"></span>
-            <pixel-duck-bot-icon
-              variant="brand"
-              aria-label="FinEx brand duck"
+            <pixel-whale-brand-icon
+              aria-label="FinEx brand whale"
               class="main-layout-brand__icon"
             />
           </span>
@@ -193,6 +192,7 @@ import { authApi, downloadApi, notificationApi, type UserProfile } from '@/api'
 import DownloadCenterDrawer from '@/components/DownloadCenterDrawer.vue'
 import NotificationCenterDrawer from '@/components/NotificationCenterDrawer.vue'
 import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
+import PixelWhaleBrandIcon from '@/components/icons/PixelWhaleBrandIcon.vue'
 import FinanceWorkspaceTabs from '@/components/finance/FinanceWorkspaceTabs.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'

@@ -5,22 +5,7 @@ import { FIELD_INVOICE_ATTACHMENTS } from './expenseDetailRuntime'
 export type ExpenseInvoiceTone = 'success' | 'warning' | 'danger' | 'info'
 export type ExpenseInvoicePreviewKind = 'image' | 'pdf' | 'file'
 
-export interface ExpenseInvoiceVerifyInfo {
-  verifyStatus: string
-  verifyTone: ExpenseInvoiceTone
-  ocrStatus: string
-  ocrTone: ExpenseInvoiceTone
-  checkTime: string
-  invoiceCode: string
-  invoiceNumber: string
-  invoiceType: string
-  seller: string
-  amount: number
-  taxAmount: number
-  issueDate: string
-}
-
-export interface ExpenseInvoicePreviewItem extends ExpenseInvoiceVerifyInfo {
+export interface ExpenseInvoicePreviewItem {
   id: string
   fileName: string
   attachmentId?: string
@@ -30,65 +15,46 @@ export interface ExpenseInvoicePreviewItem extends ExpenseInvoiceVerifyInfo {
   isImage: boolean
   isPdf: boolean
   isPreviewable: boolean
+  statusLabel: string
+  statusTone: ExpenseInvoiceTone
+  statusMessage: string
+  providerName: string
+  recognizedAt: string
+  invoiceCode: string
+  invoiceNumber: string
+  invoiceType: string
+  sellerName: string
+  invoiceDate: string
+  totalAmount: number | null
+  taxAmount: number | null
 }
 
 type BuildExpenseInvoicePreviewOptions = {
   schema?: ProcessFormDesignSchema | null
   formData?: Record<string, unknown> | null
-  detailTitle?: string
-  detailNo?: string
 }
 
-type ExpenseInvoiceVerifyInfoProfile = {
-  verifyStatus: string
-  verifyTone: ExpenseInvoiceTone
-  ocrStatus: string
-  ocrTone: ExpenseInvoiceTone
+type OcrStatusView = {
+  label: string
+  tone: ExpenseInvoiceTone
+  fallbackMessage: string
 }
 
-const INVOICE_TYPES = [
-  '增值税电子普通发票',
-  '增值税专用发票',
-  '电子发票（铁路客票）',
-  '数电发票（普通）'
-] as const
-
-const SELLERS = [
-  '上海云旅服务有限公司',
-  '杭州数智科技有限公司',
-  '苏州商务会展有限公司',
-  '深圳航信商务服务有限公司',
-  '北京华誉企业管理有限公司'
-] as const
-
-const DEFAULT_VERIFY_PROFILE: ExpenseInvoiceVerifyInfoProfile = {
-  verifyStatus: '已验真',
-  verifyTone: 'success',
-  ocrStatus: '已识别',
-  ocrTone: 'success'
+const OCR_STATUS_VIEW_MAP: Record<string, OcrStatusView> = {
+  SUCCESS: { label: '已识别', tone: 'success', fallbackMessage: '发票信息识别成功' },
+  UNCONFIGURED: { label: '未配置 OCR', tone: 'info', fallbackMessage: '请先在系统设置中心配置并启用 OCR 厂商' },
+  UNSUPPORTED_FILE: { label: '文件不支持', tone: 'warning', fallbackMessage: '当前仅支持 PDF、PNG、JPG、JPEG 发票附件' },
+  TIMEOUT: { label: '识别超时', tone: 'warning', fallbackMessage: 'OCR 请求超时，请稍后重试' },
+  PROVIDER_ERROR: { label: '厂商异常', tone: 'danger', fallbackMessage: '云端 OCR 服务调用失败，请稍后重试' },
+  PARSE_FAILED: { label: '解析失败', tone: 'warning', fallbackMessage: 'OCR 返回结果无法解析，请人工复核' },
+  FAILED: { label: '识别失败', tone: 'danger', fallbackMessage: 'OCR 识别失败，请人工复核' }
 }
 
-const VERIFY_PROFILES: ExpenseInvoiceVerifyInfoProfile[] = [
-  DEFAULT_VERIFY_PROFILE,
-  {
-    verifyStatus: '验真中',
-    verifyTone: 'warning',
-    ocrStatus: '识别中',
-    ocrTone: 'warning'
-  },
-  {
-    verifyStatus: '待验真',
-    verifyTone: 'info',
-    ocrStatus: '待识别',
-    ocrTone: 'info'
-  },
-  {
-    verifyStatus: '验真异常',
-    verifyTone: 'danger',
-    ocrStatus: '需复核',
-    ocrTone: 'warning'
-  }
-]
+const PENDING_STATUS_VIEW: OcrStatusView = {
+  label: '待识别',
+  tone: 'info',
+  fallbackMessage: '上传成功后会自动触发 OCR 识别'
+}
 
 export function buildExpenseInvoicePreviewItems(
   options: BuildExpenseInvoicePreviewOptions
@@ -151,11 +117,7 @@ function normalizeAttachments(value: unknown): ExpenseAttachmentMeta[] {
 
   if (typeof value === 'string') {
     const trimmed = value.trim()
-    return trimmed
-      ? [{
-          fileName: trimmed
-        }]
-      : []
+    return trimmed ? [{ fileName: trimmed }] : []
   }
 
   if (isRecord(value)) {
@@ -168,7 +130,8 @@ function normalizeAttachments(value: unknown): ExpenseAttachmentMeta[] {
       fileName,
       contentType: firstNonBlank(value.contentType, value.mimeType, value.type),
       fileSize: toOptionalNumber(value.fileSize, value.size),
-      previewUrl: firstNonBlank(value.previewUrl, value.fileUrl, value.url)
+      previewUrl: firstNonBlank(value.previewUrl, value.fileUrl, value.url),
+      ocr: normalizeOcrSnapshot(value.ocr)
     }]
   }
 
@@ -176,40 +139,62 @@ function normalizeAttachments(value: unknown): ExpenseAttachmentMeta[] {
 }
 
 function buildExpenseInvoicePreviewItem(attachment: ExpenseAttachmentMeta, index: number): ExpenseInvoicePreviewItem {
-  const fileName = attachment.fileName
-  const seed = stableHash(fileName)
-  const typeIndex = seed % INVOICE_TYPES.length
-  const sellerIndex = (seed >> 3) % SELLERS.length
-  const verifyProfile = VERIFY_PROFILES[(seed >> 5) % VERIFY_PROFILES.length] ?? DEFAULT_VERIFY_PROFILE
-  const issueDate = buildStableDate(seed, 0)
-  const checkTime = buildStableDateTime(seed, 4)
-  const amount = normalizeAmount(260 + (seed % 7800) + ((seed >> 7) % 100) / 100)
-  const taxRate = [0.03, 0.06, 0.09, 0.13][(seed >> 9) % 4] || 0.06
-  const taxAmount = normalizeAmount(amount * taxRate)
   const previewKind = resolvePreviewKind(attachment)
+  const snapshot = normalizeOcrSnapshot(attachment.ocr)
+  const statusView = resolveStatusView(snapshot?.status)
+  const totalAmount = toOptionalNumber(snapshot?.totalAmount)
+  const taxAmount = toOptionalNumber(snapshot?.taxAmount)
 
   return {
-    id: attachment.attachmentId || `${seed}-${index}`,
+    id: attachment.attachmentId || `${attachment.fileName}-${index}`,
     attachmentId: attachment.attachmentId,
-    fileName,
+    fileName: attachment.fileName,
     contentType: attachment.contentType,
     previewUrl: attachment.previewUrl,
     previewKind,
     isImage: previewKind === 'image',
     isPdf: previewKind === 'pdf',
     isPreviewable: Boolean(attachment.previewUrl) && previewKind !== 'file',
-    invoiceCode: padNumber(String(seed % 10 ** 10), 10),
-    invoiceNumber: padNumber(String((seed * 97) % 10 ** 8), 8),
-    invoiceType: INVOICE_TYPES[typeIndex] || INVOICE_TYPES[0],
-    seller: SELLERS[sellerIndex] || SELLERS[0],
-    amount,
-    taxAmount,
-    issueDate,
-    checkTime,
-    verifyStatus: verifyProfile.verifyStatus,
-    verifyTone: verifyProfile.verifyTone,
-    ocrStatus: verifyProfile.ocrStatus,
-    ocrTone: verifyProfile.ocrTone
+    statusLabel: statusView.label,
+    statusTone: statusView.tone,
+    statusMessage: firstNonBlank(snapshot?.message) || statusView.fallbackMessage,
+    providerName: firstNonBlank(snapshot?.providerName) || '未配置',
+    recognizedAt: firstNonBlank(snapshot?.recognizedAt) || '--',
+    invoiceCode: firstNonBlank(snapshot?.invoiceCode) || '--',
+    invoiceNumber: firstNonBlank(snapshot?.invoiceNumber) || '--',
+    invoiceType: firstNonBlank(snapshot?.invoiceType) || '--',
+    sellerName: firstNonBlank(snapshot?.sellerName) || '--',
+    invoiceDate: firstNonBlank(snapshot?.invoiceDate) || '--',
+    totalAmount,
+    taxAmount
+  }
+}
+
+function resolveStatusView(status?: string) {
+  if (!status) {
+    return PENDING_STATUS_VIEW
+  }
+  return OCR_STATUS_VIEW_MAP[String(status).trim().toUpperCase()] || OCR_STATUS_VIEW_MAP.FAILED
+}
+
+function normalizeOcrSnapshot(value: unknown): ExpenseAttachmentMeta['ocr'] {
+  if (!isRecord(value)) {
+    return undefined
+  }
+  return {
+    status: firstNonBlank(value.status) || '',
+    providerCode: firstNonBlank(value.providerCode),
+    providerName: firstNonBlank(value.providerName),
+    requestId: firstNonBlank(value.requestId),
+    recognizedAt: firstNonBlank(value.recognizedAt),
+    invoiceCode: firstNonBlank(value.invoiceCode),
+    invoiceNumber: firstNonBlank(value.invoiceNumber),
+    invoiceDate: firstNonBlank(value.invoiceDate),
+    invoiceType: firstNonBlank(value.invoiceType),
+    sellerName: firstNonBlank(value.sellerName),
+    totalAmount: toOptionalNumber(value.totalAmount),
+    taxAmount: toOptionalNumber(value.taxAmount),
+    message: firstNonBlank(value.message)
   }
 }
 
@@ -245,51 +230,28 @@ function uniqueAttachments(attachments: ExpenseAttachmentMeta[]): ExpenseAttachm
       fileName,
       contentType: item.contentType,
       fileSize: item.fileSize,
-      previewUrl: item.previewUrl
+      previewUrl: item.previewUrl,
+      ocr: normalizeOcrSnapshot(item.ocr)
     })
   })
 
   return result
 }
 
-function buildStableDate(seed: number, dayOffset: number) {
-  const year = 2024 + (seed % 3)
-  const month = (seed % 12) + 1
-  const day = ((seed >> 4) % 26) + 1 + dayOffset
-  return `${year}-${padNumber(String(month), 2)}-${padNumber(String(Math.min(day, 28)), 2)}`
-}
-
-function buildStableDateTime(seed: number, dayOffset: number) {
-  const date = buildStableDate(seed, dayOffset)
-  const hour = padNumber(String((seed >> 6) % 24), 2)
-  const minute = padNumber(String((seed >> 10) % 60), 2)
-  const second = padNumber(String((seed >> 12) % 60), 2)
-  return `${date} ${hour}:${minute}:${second}`
-}
-
-function normalizeAmount(value: number) {
-  return Number(value.toFixed(2))
-}
-
-function padNumber(value: string, length: number) {
-  return value.padStart(length, '0').slice(-length)
-}
-
-function stableHash(input: string) {
-  let hash = 0
-  for (const char of input) {
-    hash = (hash * 131 + char.charCodeAt(0)) % 2147483647
-  }
-  return Math.abs(hash)
-}
-
 function firstNonBlank(...values: unknown[]) {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim()
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed) {
+        return trimmed
+      }
+      continue
+    }
+    if (typeof value === 'number') {
+      return String(value)
     }
   }
-  return undefined
+  return ''
 }
 
 function toOptionalNumber(...values: unknown[]) {
@@ -297,14 +259,18 @@ function toOptionalNumber(...values: unknown[]) {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return value
     }
-    if (typeof value === 'string' && value.trim()) {
-      const parsed = Number(value)
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) {
+        continue
+      }
+      const parsed = Number(trimmed)
       if (Number.isFinite(parsed)) {
         return parsed
       }
     }
   }
-  return undefined
+  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

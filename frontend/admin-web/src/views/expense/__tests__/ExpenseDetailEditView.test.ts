@@ -25,9 +25,13 @@ vi.mock('vue-router', () => ({
   useRouter: () => mocks.router
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="header" /><slot /><slot name="footer" /></div>'
@@ -196,6 +200,8 @@ describe('ExpenseDetailEditView', () => {
     expect(wrapper.find('[data-testid="expense-invoice-preview-image"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="expense-invoice-workbench"]').classes()).toContain('expense-invoice-workbench--balanced')
     expect(wrapper.find('.expense-invoice-panel--compact-verify').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="expense-invoice-verify-panel"]').text()).toContain('发票验真（预留）')
+    expect(wrapper.text()).not.toContain('OCR 识别结果')
   })
 
   it('shows an empty state when no invoice files are present', async () => {

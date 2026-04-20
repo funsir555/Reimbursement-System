@@ -7,6 +7,8 @@ import com.finex.auth.dto.DepartmentSaveDTO;
 import com.finex.auth.dto.DepartmentTreeNodeVO;
 import com.finex.auth.dto.EmployeeSaveDTO;
 import com.finex.auth.dto.EmployeeVO;
+import com.finex.auth.dto.OcrProviderConfigVO;
+import com.finex.auth.dto.SystemSettingsBootstrapVO;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemCompanyBankAccount;
 import com.finex.auth.entity.SystemDepartment;
@@ -25,16 +27,20 @@ import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.UserService;
+import com.finex.auth.service.impl.settings.SettingsApiInterfaceDomainSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.BadSqlGrammarException;
 
+import java.sql.SQLSyntaxErrorException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -72,6 +78,8 @@ class SystemSettingsServiceImplTest {
     private SystemSyncJobMapper systemSyncJobMapper;
     @Mock
     private SystemSyncJobDetailMapper systemSyncJobDetailMapper;
+    @Mock
+    private SettingsApiInterfaceDomainSupport settingsApiInterfaceDomainSupport;
 
     private SystemSettingsServiceImpl systemSettingsService;
 
@@ -92,8 +100,61 @@ class SystemSettingsServiceImplTest {
                 systemSyncJobMapper,
                 systemSyncJobDetailMapper,
                 new ObjectMapper(),
-                List.of()
+                List.of(),
+                settingsApiInterfaceDomainSupport
         );
+    }
+
+    @Test
+    void getBootstrapIncludesOcrProvidersWhenSchemaIsReady() {
+        mockBootstrapDependencies();
+
+        OcrProviderConfigVO provider = new OcrProviderConfigVO();
+        provider.setProviderCode("ALIYUN");
+        provider.setProviderName("阿里云");
+        when(settingsApiInterfaceDomainSupport.listOcrProviders()).thenReturn(List.of(provider));
+
+        SystemSettingsBootstrapVO bootstrap = systemSettingsService.getBootstrap(1L);
+
+        assertEquals("admin", bootstrap.getCurrentUser().getUsername());
+        assertEquals(1, bootstrap.getOcrProviders().size());
+        assertEquals("ALIYUN", bootstrap.getOcrProviders().get(0).getProviderCode());
+    }
+
+    @Test
+    void getBootstrapReturnsEmptyOcrProvidersWhenSchemaIsMissing() {
+        mockBootstrapDependencies();
+
+        when(settingsApiInterfaceDomainSupport.listOcrProviders()).thenThrow(
+                new BadSqlGrammarException(
+                        "listOcrProviders",
+                        "select * from sys_ocr_provider_config",
+                        new SQLSyntaxErrorException("Table 'finex_db.sys_ocr_provider_config' doesn't exist")
+                )
+        );
+
+        SystemSettingsBootstrapVO bootstrap = systemSettingsService.getBootstrap(1L);
+
+        assertNotNull(bootstrap.getCurrentUser());
+        assertEquals("admin", bootstrap.getCurrentUser().getUsername());
+        assertNotNull(bootstrap.getOcrProviders());
+        assertEquals(0, bootstrap.getOcrProviders().size());
+    }
+
+    @Test
+    void getBootstrapStillThrowsForNonSchemaOcrErrors() {
+        mockBootstrapDependencies();
+
+        when(settingsApiInterfaceDomainSupport.listOcrProviders()).thenThrow(
+                new IllegalStateException("OCR 厂商配置序列化失败，请检查输入内容")
+        );
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> systemSettingsService.getBootstrap(1L)
+        );
+
+        assertEquals("OCR 厂商配置序列化失败，请检查输入内容", error.getMessage());
     }
 
     @Test
@@ -308,10 +369,6 @@ class SystemSettingsServiceImplTest {
         dto.setDefaultAccount(0);
 
         when(systemCompanyBankAccountMapper.selectById(5L)).thenReturn(current);
-        when(systemCompanyBankAccountMapper.selectCount(any())).thenReturn(0L);
-        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
-        when(systemCompanyMapper.selectList(any())).thenReturn(List.of(company));
-
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> systemSettingsService.updateCompanyBankAccount(5L, dto)
@@ -402,6 +459,26 @@ class SystemSettingsServiceImplTest {
         assertEquals("\u540c\u6b65\u5458\u5de5\u4e0d\u80fd\u76f4\u63a5\u5220\u9664\uff0c\u8bf7\u901a\u8fc7\u540c\u6b65\u6e05\u7406", error.getMessage());
         verify(systemUserRoleMapper, never()).delete(any());
         verify(userMapper, never()).deleteById(12L);
+    }
+
+    private void mockBootstrapDependencies() {
+        User currentUser = new User();
+        currentUser.setId(1L);
+        currentUser.setUsername("admin");
+        currentUser.setName("管理员");
+
+        when(userMapper.selectById(1L)).thenReturn(currentUser);
+        when(accessControlService.getRoleCodes(1L)).thenReturn(List.of("SUPER_ADMIN"));
+        when(accessControlService.getPermissionCodes(1L)).thenReturn(List.of("settings:menu"));
+        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of());
+        when(userMapper.selectList(any())).thenReturn(List.of(currentUser));
+        when(systemRoleMapper.selectList(any())).thenReturn(List.of());
+        when(systemPermissionMapper.selectList(any())).thenReturn(List.of());
+        when(systemUserRoleMapper.selectList(any())).thenReturn(List.of());
+        when(systemCompanyMapper.selectList(any())).thenReturn(List.of());
+        when(systemCompanyBankAccountMapper.selectList(any())).thenReturn(List.of());
+        when(systemSyncConnectorMapper.selectList(any())).thenReturn(List.of());
+        when(systemSyncJobMapper.selectList(any())).thenReturn(List.of());
     }
 
     @Test
@@ -538,6 +615,6 @@ class SystemSettingsServiceImplTest {
                 () -> systemSettingsService.updateCompanyBankAccount(5L, dto)
         );
 
-        assertEquals("\u5f00\u6237\u7f51\u70b9\u4e0d\u80fd\u4e3a\u7a7a", exception.getMessage());
+        assertEquals("请选择开户银行、开户省、开户市与开户网点后再保存", exception.getMessage());
     }
 }

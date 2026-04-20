@@ -494,6 +494,15 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     }
 
     /**
+     * 删除流程。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean deleteFlow(Long id) {
+        return processFlowDesignService.deleteFlow(id);
+    }
+
+    /**
      * 更新流程Status。
      */
     @Override
