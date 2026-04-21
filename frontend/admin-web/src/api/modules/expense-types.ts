@@ -78,6 +78,11 @@ export interface ExpenseApprovalNodeStatus {
   description?: string
 }
 
+export interface ExpenseManualApproverSelectionPayload {
+  nodeKey: string
+  userIds: number[]
+}
+
 export interface ExpenseApprovalTimelineItem {
   key: string
   nodeKey?: string
@@ -141,6 +146,12 @@ export interface ExpenseDocumentDetail {
   actionLogs: ExpenseApprovalLog[]
   approvalNodeStatuses?: ExpenseApprovalNodeStatus[]
   approvalTimeline?: ExpenseApprovalTimelineItem[]
+  relatedDocumentBindings?: ExpenseDocumentRelationBinding[]
+  writeOffDocumentBindings?: ExpenseDocumentWriteOffBinding[]
+  manualApproverSelectionPending?: boolean
+  manualApproverSelectionNodeKey?: string
+  manualApproverSelectionNodeName?: string
+  manualApproverOptions?: ProcessFormOption[]
   bankPayment?: ExpenseDocumentBankPayment
   bankReceipts?: ExpenseDocumentBankReceipt[]
 }
@@ -227,6 +238,28 @@ export interface ExpenseWriteOffDocumentValue extends ExpenseRelatedDocumentValu
   writeOffAmount?: MoneyValue
   remainingAmount?: MoneyValue
   effectiveStatus?: string
+}
+
+export interface ExpenseDocumentRelationBinding {
+  direction: 'OUTBOUND' | 'INBOUND'
+  fieldKey?: string
+  documentCode: string
+  documentTitle?: string
+  templateType?: string
+  templateTypeLabel?: string
+  templateName?: string
+  status?: string
+  statusLabel?: string
+  submitterName?: string
+}
+
+export interface ExpenseDocumentWriteOffBinding extends ExpenseDocumentRelationBinding {
+  writeOffSourceKind?: string
+  requestedAmount?: MoneyValue
+  effectiveAmount?: MoneyValue
+  remainingAmount?: MoneyValue
+  effectiveStatus?: string
+  effectiveStatusLabel?: string
 }
 
 export interface ExpenseDocumentPickerItem {

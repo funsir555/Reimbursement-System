@@ -61,6 +61,198 @@
             <el-empty v-else description="暂无单据数据" :image-size="96" />
           </el-card>
 
+          <el-card class="expense-wb-panel" data-testid="related-bindings-card">
+            <template #header>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-lg font-semibold text-slate-800">关联单据</p>
+                  <p class="mt-1 text-sm text-slate-500">展示当前单据主动关联与被其它单据反向引用的真实业务关系。</p>
+                </div>
+                <el-tag effect="plain">{{ relatedDocumentBindings.length }} 条</el-tag>
+              </div>
+            </template>
+
+            <div class="space-y-5">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-slate-800">当前单据主动关联</p>
+                  <el-tag size="small" effect="plain">{{ outboundRelatedBindings.length }} 条</el-tag>
+                </div>
+                <div v-if="outboundRelatedBindings.length" class="space-y-3">
+                  <div
+                    v-for="item in outboundRelatedBindings"
+                    :key="`related-outbound-${item.fieldKey || 'field'}-${item.documentCode}`"
+                    class="expense-wb-detail-card"
+                    data-testid="related-binding-item"
+                  >
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div class="space-y-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
+                          <el-tag v-if="item.statusLabel" size="small" effect="plain">{{ item.statusLabel }}</el-tag>
+                        </div>
+                        <p class="text-sm text-slate-500">
+                          单据编号：{{ item.documentCode }} · 发起人：{{ item.submitterName || '-' }}
+                        </p>
+                        <p class="text-xs leading-6 text-slate-500">
+                          来源字段：{{ item.fieldKey || '-' }}
+                        </p>
+                      </div>
+                      <div class="expense-wb-compact-actions">
+                        <el-button
+                          plain
+                          :data-testid="`open-bound-document-${item.documentCode}`"
+                          @click="openBoundDocument(item.documentCode)"
+                        >
+                          查看单据
+                        </el-button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <el-empty v-else description="暂无主动关联记录" :image-size="72" />
+              </div>
+
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-slate-800">被其它单据关联</p>
+                  <el-tag size="small" effect="plain">{{ inboundRelatedBindings.length }} 条</el-tag>
+                </div>
+                <div v-if="inboundRelatedBindings.length" class="space-y-3">
+                  <div
+                    v-for="item in inboundRelatedBindings"
+                    :key="`related-inbound-${item.fieldKey || 'field'}-${item.documentCode}`"
+                    class="expense-wb-detail-card"
+                    data-testid="related-binding-item"
+                  >
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div class="space-y-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
+                          <el-tag v-if="item.statusLabel" size="small" effect="plain">{{ item.statusLabel }}</el-tag>
+                        </div>
+                        <p class="text-sm text-slate-500">
+                          单据编号：{{ item.documentCode }} · 发起人：{{ item.submitterName || '-' }}
+                        </p>
+                        <p class="text-xs leading-6 text-slate-500">
+                          关联字段：{{ item.fieldKey || '-' }}
+                        </p>
+                      </div>
+                      <div class="expense-wb-compact-actions">
+                        <el-button
+                          plain
+                          :data-testid="`open-bound-document-${item.documentCode}`"
+                          @click="openBoundDocument(item.documentCode)"
+                        >
+                          查看单据
+                        </el-button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <el-empty v-else description="暂无反向关联记录" :image-size="72" />
+              </div>
+            </div>
+          </el-card>
+
+          <el-card class="expense-wb-panel" data-testid="writeoff-bindings-card">
+            <template #header>
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-lg font-semibold text-slate-800">核销单据</p>
+                  <p class="mt-1 text-sm text-slate-500">展示当前单据主动核销与被其它单据反向核销的真实金额和生效状态。</p>
+                </div>
+                <el-tag effect="plain">{{ writeOffDocumentBindings.length }} 条</el-tag>
+              </div>
+            </template>
+
+            <div class="space-y-5">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-slate-800">当前单据主动核销</p>
+                  <el-tag size="small" effect="plain">{{ outboundWriteOffBindings.length }} 条</el-tag>
+                </div>
+                <div v-if="outboundWriteOffBindings.length" class="space-y-3">
+                  <div
+                    v-for="item in outboundWriteOffBindings"
+                    :key="`writeoff-outbound-${item.fieldKey || 'field'}-${item.documentCode}`"
+                    class="expense-wb-detail-card"
+                    data-testid="writeoff-binding-item"
+                  >
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div class="space-y-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || '状态未知' }}</el-tag>
+                        </div>
+                        <p class="text-sm text-slate-500">
+                          单据编号：{{ item.documentCode }} · 核销来源：{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
+                        </p>
+                        <p class="text-xs leading-6 text-slate-500">
+                          请求核销：{{ formatBindingMoney(item.requestedAmount) }} · 已生效：{{ formatBindingMoney(item.effectiveAmount) }} · 剩余金额：{{ formatBindingMoney(item.remainingAmount) }}
+                        </p>
+                      </div>
+                      <div class="expense-wb-compact-actions">
+                        <el-button
+                          plain
+                          :data-testid="`open-bound-document-${item.documentCode}`"
+                          @click="openBoundDocument(item.documentCode)"
+                        >
+                          查看单据
+                        </el-button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <el-empty v-else description="暂无主动核销记录" :image-size="72" />
+              </div>
+
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-slate-800">被其它单据核销</p>
+                  <el-tag size="small" effect="plain">{{ inboundWriteOffBindings.length }} 条</el-tag>
+                </div>
+                <div v-if="inboundWriteOffBindings.length" class="space-y-3">
+                  <div
+                    v-for="item in inboundWriteOffBindings"
+                    :key="`writeoff-inbound-${item.fieldKey || 'field'}-${item.documentCode}`"
+                    class="expense-wb-detail-card"
+                    data-testid="writeoff-binding-item"
+                  >
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div class="space-y-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || '状态未知' }}</el-tag>
+                        </div>
+                        <p class="text-sm text-slate-500">
+                          单据编号：{{ item.documentCode }} · 核销来源：{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
+                        </p>
+                        <p class="text-xs leading-6 text-slate-500">
+                          请求核销：{{ formatBindingMoney(item.requestedAmount) }} · 已生效：{{ formatBindingMoney(item.effectiveAmount) }} · 剩余金额：{{ formatBindingMoney(item.remainingAmount) }}
+                        </p>
+                      </div>
+                      <div class="expense-wb-compact-actions">
+                        <el-button
+                          plain
+                          :data-testid="`open-bound-document-${item.documentCode}`"
+                          @click="openBoundDocument(item.documentCode)"
+                        >
+                          查看单据
+                        </el-button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <el-empty v-else description="暂无反向核销记录" :image-size="72" />
+              </div>
+            </div>
+          </el-card>
+
           <el-card v-if="detail?.expenseDetails?.length" class="expense-wb-panel">
             <template #header>
               <div class="flex items-center justify-between gap-3">
@@ -256,6 +448,55 @@
               </div>
             </div>
 
+            <div
+              v-if="isManualApproverSelectionPending"
+              class="rounded-[24px] border border-amber-200 bg-amber-50 p-5 space-y-4"
+              data-testid="manual-approver-selection-card"
+            >
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="text-sm font-semibold text-slate-800">当前节点手动选择审批人</p>
+                  <el-tag size="small" type="warning" effect="plain">待处理</el-tag>
+                </div>
+                <p class="text-sm text-slate-600">
+                  当前流程停留在“{{ detail.manualApproverSelectionNodeName || detail.manualApproverSelectionNodeKey }}”节点，
+                  需要由提单人指定本节点审批人后继续流转。
+                </p>
+              </div>
+              <template v-if="canSubmitManualApproverSelection">
+                <el-select
+                  v-model="manualApproverForm.userIds"
+                  class="w-full"
+                  multiple
+                  collapse-tags
+                  collapse-tags-tooltip
+                  filterable
+                  clearable
+                  placeholder="请选择当前节点审批人"
+                  data-testid="manual-approver-selection-select"
+                >
+                  <el-option
+                    v-for="item in manualApproverOptions"
+                    :key="String(item.value || '')"
+                    :label="item.label"
+                    :value="Number(item.value)"
+                  />
+                </el-select>
+                <div class="flex justify-end">
+                  <el-button
+                    type="primary"
+                    :loading="manualApproverSubmitting"
+                    @click="submitManualApproverSelection"
+                  >
+                    提交审批人
+                  </el-button>
+                </div>
+              </template>
+              <p v-else class="text-xs leading-6 text-slate-500">
+                当前节点等待提单人完成手动选人；你可查看全流程轨迹，但不能代为提交。
+              </p>
+            </div>
+
             <div class="space-y-3">
               <div class="flex items-center justify-between">
                 <p class="text-sm font-semibold text-slate-800">&#30495;&#23454;&#20219;&#21153;&#29366;&#24577;</p>
@@ -272,7 +513,7 @@
                   :key="item.nodeKey"
                   class="approval-node-status-card"
                   :class="{
-                    'approval-node-status-card--pending': item.status === 'PENDING' || item.status === 'PAYMENT_PENDING',
+                    'approval-node-status-card--pending': item.status === 'PENDING' || item.status === 'PAYMENT_PENDING' || item.status === 'MANUAL_SELECTION_PENDING',
                     'approval-node-status-card--future': item.status === 'NOT_REACHED'
                   }"
                   data-testid="approval-node-status-item"
@@ -440,7 +681,7 @@
             <el-option
               v-for="node in rejectTargetOptions"
               :key="node.nodeKey"
-              :label="node.nodeName || node.nodeKey"
+              :label="node.optionLabel || node.nodeName || node.nodeKey"
               :value="node.nodeKey"
             />
           </el-select>
@@ -523,8 +764,10 @@ import {
   type ExpenseDocumentDetail,
   type ExpenseDocumentNavigation,
   type ProcessFlowNode,
-  type ProcessFormDesignSchema
+  type ProcessFormDesignSchema,
+  type ProcessFormOption
 } from '@/api'
+import type { ExpenseDocumentRelationBinding, ExpenseDocumentWriteOffBinding } from '@/api/modules/expense-types'
 import ExpenseFormReadonlyRenderer from './components/ExpenseFormReadonlyRenderer.vue'
 import ExpenseInvoiceWorkbench from './components/ExpenseInvoiceWorkbench.vue'
 import ExpenseDocumentPrintSheet from './components/ExpenseDocumentPrintSheet.vue'
@@ -542,6 +785,13 @@ import { buildExpenseDetailPrintHref, isExpenseDetailPrintMode, loadExpenseDocum
 
 type UserActionMode = 'transfer' | 'add-sign' | ''
 type TaskActionMode = 'approve' | 'reject' | ''
+
+type RejectTargetOption = {
+  nodeKey: string
+  nodeName: string
+  optionLabel: string
+  isSubmitter?: boolean
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -572,6 +822,10 @@ const taskActionSubmitting = ref(false)
 const taskActionForm = ref({
   comment: '',
   targetNodeKey: ''
+})
+const manualApproverSubmitting = ref(false)
+const manualApproverForm = ref({
+  userIds: [] as number[]
 })
 const userActionDialogVisible = ref(false)
 const userActionMode = ref<UserActionMode>('')
@@ -620,20 +874,57 @@ const canModifyCurrentTask = computed(() => (
   currentApprovalSpecialSettings.value.has('ALLOW_EDIT_FORM_MODULE')
   || currentApprovalSpecialSettings.value.has('ALLOW_EDIT_PAY_ACCOUNT')
 ))
-const rejectTargetOptions = computed(() => {
+const rejectTargetOptions = computed<RejectTargetOption[]>(() => {
   if (!currentApprovalSpecialSettings.value.has('REJECT_TO_ANY_NODE')) {
-    return [] as ProcessFlowNode[]
+    return []
   }
-  const nodes = Array.isArray(detail.value?.flowSnapshot?.nodes) ? detail.value?.flowSnapshot?.nodes || [] : []
-  return nodes.filter((node) => node.nodeType === 'APPROVAL' && node.nodeKey !== currentApprovalNode.value?.nodeKey)
+  const currentNodeKey = currentApprovalNode.value?.nodeKey || detail.value?.currentNodeKey || ''
+  const options: RejectTargetOption[] = [
+    {
+      nodeKey: '__SUBMITTER__',
+      nodeName: '驳回到提单人',
+      optionLabel: formatRejectTargetLabel('驳回到提单人', detail.value?.submitterName),
+      isSubmitter: true
+    }
+  ]
+  const upstreamApprovalNodes = (detail.value?.approvalNodeStatuses || [])
+    .filter((item) =>
+      item.nodeType === 'APPROVAL'
+      && item.nodeKey !== currentNodeKey
+      && item.status !== 'NOT_REACHED'
+      && item.status !== 'PENDING'
+      && item.status !== 'MANUAL_SELECTION_PENDING'
+    )
+    .map((item) => ({
+      nodeKey: item.nodeKey,
+      nodeName: item.nodeName || item.nodeKey,
+      optionLabel: formatRejectTargetLabel(item.nodeName || item.nodeKey, item.assigneeNames)
+    }))
+  return [...options, ...upstreamApprovalNodes]
 })
+function formatRejectTargetLabel(nodeName: string, assigneeNames?: string[] | string) {
+  const names = Array.isArray(assigneeNames)
+    ? assigneeNames.filter((item) => Boolean(String(item || '').trim()))
+    : [String(assigneeNames || '').trim()].filter(Boolean)
+  if (!names.length) {
+    return nodeName
+  }
+  return `${nodeName}（${names.join('、')}）`
+}
 const canApprovalView = computed(() =>
   hasPermission('expense:approval:view', permissionCodes.value)
   || hasPermission('expense:approval:approve', permissionCodes.value)
   || hasPermission('expense:approval:reject', permissionCodes.value)
 )
 const isSubmitter = computed(() => detail.value?.submitterUserId === currentUserId.value)
+const isManualApproverSelectionPending = computed(() => Boolean(detail.value?.manualApproverSelectionPending))
+const canSubmitManualApproverSelection = computed(() => isSubmitter.value && isManualApproverSelectionPending.value)
+const manualApproverOptions = computed<ProcessFormOption[]>(() => detail.value?.manualApproverOptions || [])
 const isActiveApprover = computed(() => approvableTasks.value.length > 0)
+const canResubmitEdit = computed(() => {
+  const status = detail.value?.status || ''
+  return isSubmitter.value && (status === 'DRAFT' || status === 'REJECTED')
+})
 const isFlowParticipant = computed(() => {
   if (!detail.value) {
     return false
@@ -651,6 +942,12 @@ const isFlowParticipant = computed(() => {
   })
 })
 const canComment = computed(() => isSubmitter.value || isFlowParticipant.value)
+const relatedDocumentBindings = computed<ExpenseDocumentRelationBinding[]>(() => detail.value?.relatedDocumentBindings || [])
+const outboundRelatedBindings = computed<ExpenseDocumentRelationBinding[]>(() => relatedDocumentBindings.value.filter((item) => item.direction === 'OUTBOUND'))
+const inboundRelatedBindings = computed<ExpenseDocumentRelationBinding[]>(() => relatedDocumentBindings.value.filter((item) => item.direction === 'INBOUND'))
+const writeOffDocumentBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => detail.value?.writeOffDocumentBindings || [])
+const outboundWriteOffBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => writeOffDocumentBindings.value.filter((item) => item.direction === 'OUTBOUND'))
+const inboundWriteOffBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => writeOffDocumentBindings.value.filter((item) => item.direction === 'INBOUND'))
 const statusBucket = computed<'pending' | 'exception' | 'terminal' | 'other'>(() => {
   const status = detail.value?.status || ''
   if (status === 'PENDING_APPROVAL') {
@@ -683,6 +980,7 @@ const actionItems = computed<ActionItem[]>(() => {
   return resolveExpenseDetailActions({
     statusBucket: statusBucket.value,
     isSubmitter: isSubmitter.value,
+    canResubmitEdit: canResubmitEdit.value,
     isActiveApprover: isActiveApprover.value,
     canModify: canModifyCurrentTask.value,
     isFlowParticipant: isFlowParticipant.value,
@@ -727,6 +1025,13 @@ function openExpenseDetail(detailNo: string) {
       detailNo
     }
   })
+}
+
+function openBoundDocument(documentCode?: string) {
+  if (!documentCode) {
+    return
+  }
+  void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
 }
 
 async function selectExpenseDetail(detailNo: string) {
@@ -776,6 +1081,9 @@ async function loadDetail() {
   detailLoadError.value = ''
   printLoadError.value = ''
   detail.value = null
+  manualApproverForm.value = {
+    userIds: []
+  }
   printExpenseDetails.value = []
   navigation.value = {}
   activeExpenseDetailNo.value = ''
@@ -858,6 +1166,7 @@ function approvalStatusLabel(status?: string) {
   const labels: Record<string, string> = {
     NOT_REACHED: '未到达',
     PENDING: '审批中',
+    MANUAL_SELECTION_PENDING: '待手动选择审批人',
     APPROVED: '已通过',
     REJECTED: '已驳回',
     AUTO_SKIPPED: '已自动跳过',
@@ -873,6 +1182,7 @@ function approvalStatusTagType(status?: string) {
   switch (status) {
     case 'PENDING':
     case 'PAYMENT_PENDING':
+    case 'MANUAL_SELECTION_PENDING':
       return 'warning'
     case 'APPROVED':
     case 'PAYMENT_COMPLETED':
@@ -892,7 +1202,7 @@ function openTaskActionDialog(action: 'approve' | 'reject') {
   taskActionMode.value = action
   taskActionForm.value = {
     comment: action === 'approve' ? '通过' : '驳回',
-    targetNodeKey: ''
+    targetNodeKey: action === 'reject' && rejectTargetOptions.value.length ? '__SUBMITTER__' : ''
   }
   taskActionDialogVisible.value = true
 }
@@ -929,7 +1239,7 @@ async function submitTaskAction() {
     const api = action === 'approve' ? expenseApprovalApi.approve : expenseApprovalApi.reject
     const payload = {
       comment: taskActionForm.value.comment || '',
-      ...(action === 'reject' && taskActionForm.value.targetNodeKey
+      ...(action === 'reject' && taskActionForm.value.targetNodeKey && taskActionForm.value.targetNodeKey !== '__SUBMITTER__'
         ? { targetNodeKey: taskActionForm.value.targetNodeKey }
         : {})
     }
@@ -944,6 +1254,31 @@ async function submitTaskAction() {
   }
 }
 
+async function submitManualApproverSelection() {
+  const documentCode = detail.value?.documentCode || ''
+  const nodeKey = detail.value?.manualApproverSelectionNodeKey || ''
+  if (!documentCode || !nodeKey) {
+    return
+  }
+  if (!manualApproverForm.value.userIds.length) {
+    ElMessage.warning('请至少选择一位审批人')
+    return
+  }
+  manualApproverSubmitting.value = true
+  try {
+    await expenseApi.submitManualApproverSelection(documentCode, {
+      nodeKey,
+      userIds: manualApproverForm.value.userIds
+    })
+    ElMessage.success('手动审批人已提交')
+    await loadDetail()
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '提交手动审批人失败'))
+  } finally {
+    manualApproverSubmitting.value = false
+  }
+}
+
 async function handleActionClick(action: ActionItem) {
   if (action.disabled) {
     ElMessage.warning(action.reason || '\u5f53\u524d\u52a8\u4f5c\u6682\u4e0d\u53ef\u7528')
@@ -951,6 +1286,9 @@ async function handleActionClick(action: ActionItem) {
   }
 
   switch (action.key) {
+    case 'resubmit':
+      await openResubmitPage()
+      return
     case 'recall':
       await handleRecall()
       return
@@ -1214,6 +1552,31 @@ function formatDetailMoney(value: unknown) {
     return formatMoney(value as string | number | null | undefined)
   } catch {
     return '0.00'
+  }
+}
+
+async function openResubmitPage() {
+  const documentCode = detail.value?.documentCode || String(route.params.documentCode || '')
+  if (!documentCode) {
+    ElMessage.warning('缺少单据编码，无法打开编辑页')
+    return
+  }
+  const query = detail.value?.status === 'DRAFT' ? '?entry=draft' : ''
+  await router.push(`/expense/documents/${encodeURIComponent(documentCode)}/resubmit${query}`)
+}
+
+function formatBindingMoney(value: unknown) {
+  return `¥ ${formatDetailMoney(value)}`
+}
+
+function writeOffSourceKindLabel(kind?: string) {
+  switch (kind) {
+    case 'LOAN':
+      return '借款单'
+    case 'PREPAY_REPORT':
+      return '预付报销单'
+    default:
+      return '-'
   }
 }
 

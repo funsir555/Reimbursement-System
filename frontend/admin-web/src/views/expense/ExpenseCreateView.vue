@@ -262,45 +262,6 @@
           </div>
         </el-card>
 
-        <el-card v-if="showManualApproverSection" class="expense-wb-panel" data-testid="expense-manual-approver-card">
-          <div class="space-y-6">
-            <div class="expense-wb-toolbar__heading">
-              <p class="expense-wb-toolbar__title">手动选择审批人</p>
-              <p class="expense-wb-toolbar__desc">以下节点配置为手动选人，请在提交前为每个节点选择至少一位审批人。</p>
-            </div>
-            <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <div
-                v-for="node in manualApprovalNodes"
-                :key="node.nodeKey"
-                class="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
-              >
-                <div class="space-y-2">
-                  <p class="text-base font-semibold text-slate-800">{{ node.nodeName || '未命名审批节点' }}</p>
-                  <p class="text-sm text-slate-500">节点 Key：{{ node.nodeKey }}</p>
-                </div>
-                <el-select
-                  v-model="manualApproverSelections[node.nodeKey]"
-                  class="mt-4 w-full"
-                  multiple
-                  collapse-tags
-                  collapse-tags-tooltip
-                  filterable
-                  clearable
-                  placeholder="请选择审批人"
-                  data-testid="expense-manual-approver-select"
-                >
-                  <el-option
-                    v-for="item in manualApproverOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="String(item.value || '')"
-                  />
-                </el-select>
-              </div>
-            </div>
-          </div>
-        </el-card>
-
         <el-card v-if="isReportTemplate" class="expense-wb-panel">
           <template #header>
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -398,7 +359,6 @@ import {
   type ExpenseDetailInstance,
   type ExpenseDocumentEditContext,
   type ExpenseDocumentSubmitResult,
-  type ProcessFlowNode,
   type ProcessFormDesignBlock,
   type ProcessFormDesignSchema
 } from '@/api'
@@ -506,16 +466,6 @@ const canSubmit = computed(() => {
   return hasPermission('expense:create:submit', permissionCodes.value) || hasPermission('expense:create:create', permissionCodes.value)
 })
 
-const manualApprovalNodes = computed<ProcessFlowNode[]>(() => {
-  const nodes = Array.isArray(templateDetail.value?.flowSnapshot?.nodes) ? templateDetail.value?.flowSnapshot?.nodes || [] : []
-  return nodes.filter((node) => (
-    node?.nodeType === 'APPROVAL'
-    && String(node?.config?.approverType || '') === 'MANUAL_SELECT'
-  ))
-})
-
-const manualApproverOptions = computed(() => templateDetail.value?.userOptions || [])
-const showManualApproverSection = computed(() => pageMode.value !== 'modify' && manualApprovalNodes.value.length > 0)
 const canEditExpenseDetails = computed(() => pageMode.value !== 'modify')
 const isApprovalModifyMode = computed(() => pageMode.value === 'modify')
 
@@ -579,9 +529,11 @@ const heroMetaSecondary = computed(() =>
   showTemplateChooser.value ? `搜索结果 ${filteredTemplates.value.length} 个` : `金额汇总 ${totalAmountText.value}`
 )
 
+const isDraftEditEntry = computed(() => pageMode.value === 'resubmit' && String(route.query.entry || '') === 'draft')
+
 const heroEyebrow = computed(() => {
   if (pageMode.value === 'resubmit') {
-    return 'Resubmit Flow'
+    return isDraftEditEntry.value ? 'Draft Edit' : 'Resubmit Flow'
   }
   if (pageMode.value === 'modify') {
     return 'Approval Revision'
@@ -591,7 +543,7 @@ const heroEyebrow = computed(() => {
 
 const pageTitle = computed(() => {
   if (pageMode.value === 'resubmit') {
-    return '召回后重新提交审批单'
+    return isDraftEditEntry.value ? '编辑草稿单据' : '召回后重新提交审批单'
   }
   if (pageMode.value === 'modify') {
     return '审批修改'
@@ -603,7 +555,9 @@ const showFloatingActionBar = computed(() => !showTemplateChooser.value && Boole
 
 const pageDescription = computed(() => {
   if (pageMode.value === 'resubmit') {
-    return '你正在基于原单据重新编辑并重提，提交后会从流程起点重新发起。'
+    return isDraftEditEntry.value
+      ? '你正在编辑当前草稿，确认后将提交到审批流程。'
+      : '你正在基于原单据重新编辑并重提，提交后会从流程起点重新发起。'
   }
   if (pageMode.value === 'modify') {
     return '当前修改会直接作用在原单据上，保存后审批流继续按当前单据流转。'
@@ -613,7 +567,9 @@ const pageDescription = computed(() => {
 
 const modeTag = computed(() => {
   if (pageMode.value === 'resubmit') {
-    return { label: '重提模式', type: 'warning' as const }
+    return isDraftEditEntry.value
+      ? { label: '草稿编辑', type: 'warning' as const }
+      : { label: '重提模式', type: 'warning' as const }
   }
   if (pageMode.value === 'modify') {
     return { label: '审批修改', type: 'success' as const }
@@ -623,7 +579,9 @@ const modeTag = computed(() => {
 
 const defaultTemplateDescription = computed(() => {
   if (pageMode.value === 'resubmit') {
-    return '召回后请确认本次重提内容，提交后系统会重新生成待办节点。'
+    return isDraftEditEntry.value
+      ? '草稿编辑完成后，提交会从流程起点重新发起审批。'
+      : '召回后请确认本次重提内容，提交后系统会重新生成待办节点。'
   }
   if (pageMode.value === 'modify') {
     return '审批人修改后会直接覆盖原单据数据，轨迹中会保留修改记录。'
@@ -699,7 +657,7 @@ const editorStats = computed(() => [
 
 const submitButtonLabel = computed(() => {
   if (pageMode.value === 'resubmit') {
-    return '重新提交审批单'
+    return isDraftEditEntry.value ? '提交审批单' : '重新提交审批单'
   }
   if (pageMode.value === 'modify') {
     return '保存修改'
@@ -1399,8 +1357,7 @@ async function submitDocument() {
     }
     const payload = {
       formData: nextFormData,
-      expenseDetails: expenseDetails.value.map(cloneDetail),
-      manualApproverSelections: normalizeManualApproverSelections()
+      expenseDetails: expenseDetails.value.map(cloneDetail)
     }
     if (pageMode.value === 'create') {
       const res = await expenseCreateApi.submit({
@@ -1412,7 +1369,7 @@ async function submitDocument() {
     }
     if (pageMode.value === 'resubmit') {
       const res = await expenseApi.resubmit(editingDocumentCode.value, payload)
-      await handleSubmitSuccess(res.data, '审批单已重新提交')
+      await handleSubmitSuccess(res.data, isDraftEditEntry.value ? '草稿已提交' : '审批单已重新提交')
       return
     }
     const res = await expenseApprovalApi.modify(modifyingTaskId.value, payload)
@@ -1434,7 +1391,7 @@ async function handleSubmitSuccess(result: ExpenseDocumentSubmitResult, message:
 
 function submitFailedMessage() {
   if (pageMode.value === 'resubmit') {
-    return '重新提交审批单失败'
+    return isDraftEditEntry.value ? '提交审批单失败' : '重新提交审批单失败'
   }
   if (pageMode.value === 'modify') {
     return '保存审批修改失败'

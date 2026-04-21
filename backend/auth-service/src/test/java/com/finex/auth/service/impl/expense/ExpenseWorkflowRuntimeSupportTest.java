@@ -228,6 +228,21 @@ class ExpenseWorkflowRuntimeSupportTest {
         assertEquals(201L, insertedTasks.get(0).getAssigneeUserId());
     }
 
+
+    @Test
+    void manualSelectApprovalNodePausesRuntimeUntilSubmitterSelectsApprover() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildManualSelectApprovalSnapshot());
+
+        support.initializeRuntime(instance, Map.of());
+
+        assertTrue(insertedTasks.isEmpty());
+        assertEquals("PENDING_APPROVAL", instance.getStatus());
+        assertEquals("approval-manual", instance.getCurrentNodeKey());
+        assertEquals("MANUAL_SELECT", instance.getCurrentTaskType());
+    }
     @Test
     void paymentExecutorSubmitterFallsBackToSubmitterContext() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();

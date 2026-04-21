@@ -3,8 +3,10 @@ package com.finex.auth.service.impl;
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
 import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
+import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.service.impl.expense.ExpenseRelationWriteOffService;
 import org.junit.jupiter.api.Test;
@@ -38,14 +40,7 @@ class ExpenseDocumentServiceImplTest {
     void listAvailableTemplatesDelegatesToSubmissionService() {
         ExpenseCreateTemplateSummaryVO summary = new ExpenseCreateTemplateSummaryVO();
         List<ExpenseCreateTemplateSummaryVO> expected = List.of(summary);
-        ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(
-                expenseDocumentSubmissionService,
-                expenseDocumentQueryService,
-                expenseApprovalWorkflowService,
-                expensePaymentWorkflowService,
-                expenseMaintenanceService,
-                expenseRelationWriteOffService
-        );
+        ExpenseDocumentServiceImpl service = newService();
         when(expenseDocumentSubmissionService.listAvailableTemplates()).thenReturn(expected);
 
         List<ExpenseCreateTemplateSummaryVO> actual = service.listAvailableTemplates();
@@ -57,14 +52,7 @@ class ExpenseDocumentServiceImplTest {
     @Test
     void getDocumentPickerDelegatesToRelationService() {
         ExpenseDocumentPickerVO expected = new ExpenseDocumentPickerVO();
-        ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(
-                expenseDocumentSubmissionService,
-                expenseDocumentQueryService,
-                expenseApprovalWorkflowService,
-                expensePaymentWorkflowService,
-                expenseMaintenanceService,
-                expenseRelationWriteOffService
-        );
+        ExpenseDocumentServiceImpl service = newService();
         when(expenseRelationWriteOffService.getDocumentPicker(1L, "RELATED", List.of("report"), "kw", 1, 10, "DOC-1", false))
                 .thenReturn(expected);
 
@@ -77,14 +65,7 @@ class ExpenseDocumentServiceImplTest {
     @Test
     void approveTaskDelegatesToApprovalWorkflowService() {
         ExpenseApprovalActionDTO dto = new ExpenseApprovalActionDTO();
-        ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(
-                expenseDocumentSubmissionService,
-                expenseDocumentQueryService,
-                expenseApprovalWorkflowService,
-                expensePaymentWorkflowService,
-                expenseMaintenanceService,
-                expenseRelationWriteOffService
-        );
+        ExpenseDocumentServiceImpl service = newService();
         when(expenseApprovalWorkflowService.approveTask(1L, "tester", 99L, dto)).thenReturn(null);
 
         service.approveTask(1L, "tester", 99L, dto);
@@ -96,14 +77,7 @@ class ExpenseDocumentServiceImplTest {
     void listPaymentOrdersDelegatesToPaymentWorkflowService() {
         ExpensePaymentOrderVO order = new ExpensePaymentOrderVO();
         List<ExpensePaymentOrderVO> expected = List.of(order);
-        ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(
-                expenseDocumentSubmissionService,
-                expenseDocumentQueryService,
-                expenseApprovalWorkflowService,
-                expensePaymentWorkflowService,
-                expenseMaintenanceService,
-                expenseRelationWriteOffService
-        );
+        ExpenseDocumentServiceImpl service = newService();
         when(expensePaymentWorkflowService.listPaymentOrders(1L, "PENDING")).thenReturn(expected);
 
         List<ExpensePaymentOrderVO> actual = service.listPaymentOrders(1L, "PENDING");
@@ -115,14 +89,7 @@ class ExpenseDocumentServiceImplTest {
     @Test
     void rejectPaymentTasksDelegatesToPaymentWorkflowService() {
         ExpenseApprovalActionDTO dto = new ExpenseApprovalActionDTO();
-        ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(
-                expenseDocumentSubmissionService,
-                expenseDocumentQueryService,
-                expenseApprovalWorkflowService,
-                expensePaymentWorkflowService,
-                expenseMaintenanceService,
-                expenseRelationWriteOffService
-        );
+        ExpenseDocumentServiceImpl service = newService();
         when(expensePaymentWorkflowService.rejectPaymentTasks(1L, "tester", List.of(20L, 21L), dto)).thenReturn(true);
 
         org.junit.jupiter.api.Assertions.assertTrue(service.rejectPaymentTasks(1L, "tester", List.of(20L, 21L), dto));
@@ -131,9 +98,44 @@ class ExpenseDocumentServiceImplTest {
     }
 
     @Test
+    void submitManualApproverSelectionDelegatesToQueryService() {
+        ExpenseManualApproverSelectionDTO dto = new ExpenseManualApproverSelectionDTO();
+        dto.setNodeKey("approval-manual");
+        dto.setUserIds(List.of(8L));
+        ExpenseDocumentDetailVO expected = new ExpenseDocumentDetailVO();
+        ExpenseDocumentServiceImpl service = newService();
+        when(expenseDocumentQueryService.submitManualApproverSelection(1L, "tester", "DOC-001", dto)).thenReturn(expected);
+
+        ExpenseDocumentDetailVO actual = service.submitManualApproverSelection(1L, "tester", "DOC-001", dto);
+
+        assertSame(expected, actual);
+        verify(expenseDocumentQueryService).submitManualApproverSelection(1L, "tester", "DOC-001", dto);
+    }
+
+    @Test
+    void deleteDraftDocumentDelegatesToQueryService() {
+        ExpenseDocumentServiceImpl service = newService();
+        when(expenseDocumentQueryService.deleteDraftDocument(1L, "DOC-001")).thenReturn(true);
+
+        org.junit.jupiter.api.Assertions.assertTrue(service.deleteDraftDocument(1L, "DOC-001"));
+
+        verify(expenseDocumentQueryService).deleteDraftDocument(1L, "DOC-001");
+    }
+
+    @Test
     void repairMisapprovedDocumentsDelegatesToMaintenanceService() {
         List<String> expected = List.of("DOC-001");
-        ExpenseDocumentServiceImpl service = new ExpenseDocumentServiceImpl(
+        ExpenseDocumentServiceImpl service = newService();
+        when(expenseMaintenanceService.repairMisapprovedDocumentsByRootContainerBug()).thenReturn(expected);
+
+        List<String> actual = service.repairMisapprovedDocumentsByRootContainerBug();
+
+        assertSame(expected, actual);
+        verify(expenseMaintenanceService).repairMisapprovedDocumentsByRootContainerBug();
+    }
+
+    private ExpenseDocumentServiceImpl newService() {
+        return new ExpenseDocumentServiceImpl(
                 expenseDocumentSubmissionService,
                 expenseDocumentQueryService,
                 expenseApprovalWorkflowService,
@@ -141,11 +143,5 @@ class ExpenseDocumentServiceImplTest {
                 expenseMaintenanceService,
                 expenseRelationWriteOffService
         );
-        when(expenseMaintenanceService.repairMisapprovedDocumentsByRootContainerBug()).thenReturn(expected);
-
-        List<String> actual = service.repairMisapprovedDocumentsByRootContainerBug();
-
-        assertSame(expected, actual);
-        verify(expenseMaintenanceService).repairMisapprovedDocumentsByRootContainerBug();
     }
 }

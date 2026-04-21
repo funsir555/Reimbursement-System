@@ -1,4 +1,5 @@
 ﻿export type ExpenseDetailActionKey =
+  | 'resubmit'
   | 'recall'
   | 'print'
   | 'comment'
@@ -26,6 +27,7 @@ export type ExpenseDetailStatusBucket = 'pending' | 'exception' | 'terminal' | '
 export type ResolveExpenseDetailActionsInput = {
   statusBucket: ExpenseDetailStatusBucket
   isSubmitter: boolean
+  canResubmitEdit: boolean
   isActiveApprover: boolean
   canModify: boolean
   isFlowParticipant: boolean
@@ -64,6 +66,9 @@ export function resolveExpenseDetailActions(input: ResolveExpenseDetailActionsIn
   ]
 
   if (input.isSubmitter) {
+    if (input.canResubmitEdit) {
+      return [primaryAction('resubmit', '重新提交'), ...viewerActions(input.canComment)]
+    }
     if (input.statusBucket === 'pending') {
       return [
         primaryAction('recall', '召回'),

@@ -1180,6 +1180,14 @@ class AbstractExpenseDocumentSupport {
         long approvalProjectionElapsedAt = elapsedMillis(approvalProjectionStartedAt);
         detail.setApprovalNodeStatuses(approvalNodeStatuses);
         detail.setApprovalTimeline(approvalTimeline);
+        boolean manualApproverSelectionPending = Objects.equals(trimToNull(instance.getCurrentTaskType()), APPROVER_TYPE_MANUAL_SELECT)
+                && trimToNull(instance.getCurrentNodeKey()) != null;
+        detail.setManualApproverSelectionPending(manualApproverSelectionPending);
+        if (manualApproverSelectionPending) {
+            detail.setManualApproverSelectionNodeKey(instance.getCurrentNodeKey());
+            detail.setManualApproverSelectionNodeName(instance.getCurrentNodeName());
+            detail.setManualApproverOptions(loadUserOptions(flowSnapshot));
+        }
 
         PmBankPaymentRecord bankPaymentRecord = findLatestBankPaymentRecord(documentCode);
         if (bankPaymentRecord != null) {

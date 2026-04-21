@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseDocumentPickerGroupVO;
 import com.finex.auth.dto.ExpenseDocumentPickerItemVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
+import com.finex.auth.dto.ExpenseDocumentRelationBindingVO;
+import com.finex.auth.dto.ExpenseDocumentWriteOffBindingVO;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentRelation;
@@ -53,6 +55,8 @@ public class ExpenseRelationWriteOffService {
     private static final String WRITEOFF_STATUS_PENDING = "PENDING_EFFECTIVE";
     private static final String WRITEOFF_STATUS_EFFECTIVE = "EFFECTIVE";
     private static final String WRITEOFF_STATUS_VOID = "VOID";
+    private static final String BINDING_DIRECTION_OUTBOUND = "OUTBOUND";
+    private static final String BINDING_DIRECTION_INBOUND = "INBOUND";
     private static final String WRITEOFF_SOURCE_LOAN = "LOAN";
     private static final String WRITEOFF_SOURCE_PREPAY_REPORT = "PREPAY_REPORT";
     private static final String DASHBOARD_WRITEOFF_SOURCE_FIELD_KEY = "dashboard-writeoff";
@@ -97,6 +101,112 @@ public class ExpenseRelationWriteOffService {
             }
         }
         return outstandingAmountMap;
+    }
+
+    public List<ExpenseDocumentRelationBindingVO> loadRelatedDocumentBindings(String documentCode) {
+        String normalizedDocumentCode = trimToNull(documentCode);
+        if (normalizedDocumentCode == null) {
+            return Collections.emptyList();
+        }
+        List<ProcessDocumentRelation> outboundRelations = processDocumentRelationMapper.selectList(
+                Wrappers.<ProcessDocumentRelation>lambdaQuery()
+                        .eq(ProcessDocumentRelation::getSourceDocumentCode, normalizedDocumentCode)
+                        .eq(ProcessDocumentRelation::getStatus, RELATION_STATUS_ACTIVE)
+                        .orderByAsc(ProcessDocumentRelation::getSortOrder, ProcessDocumentRelation::getId)
+        );
+        List<ProcessDocumentRelation> inboundRelations = processDocumentRelationMapper.selectList(
+                Wrappers.<ProcessDocumentRelation>lambdaQuery()
+                        .eq(ProcessDocumentRelation::getTargetDocumentCode, normalizedDocumentCode)
+                        .eq(ProcessDocumentRelation::getStatus, RELATION_STATUS_ACTIVE)
+                        .orderByAsc(ProcessDocumentRelation::getSortOrder, ProcessDocumentRelation::getId)
+        );
+        if (outboundRelations.isEmpty() && inboundRelations.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<String> documentCodes = new LinkedHashSet<>();
+        outboundRelations.stream()
+                .map(ProcessDocumentRelation::getTargetDocumentCode)
+                .filter(Objects::nonNull)
+                .forEach(documentCodes::add);
+        inboundRelations.stream()
+                .map(ProcessDocumentRelation::getSourceDocumentCode)
+                .filter(Objects::nonNull)
+                .forEach(documentCodes::add);
+        Map<String, ProcessDocumentInstance> documentMap = loadDocumentMap(documentCodes);
+
+        List<ExpenseDocumentRelationBindingVO> bindings = new ArrayList<>();
+        for (ProcessDocumentRelation relation : outboundRelations) {
+            bindings.add(toRelationBinding(
+                    relation,
+                    BINDING_DIRECTION_OUTBOUND,
+                    documentMap.get(relation.getTargetDocumentCode()),
+                    relation.getTargetTemplateType()
+            ));
+        }
+        for (ProcessDocumentRelation relation : inboundRelations) {
+            ProcessDocumentInstance source = documentMap.get(relation.getSourceDocumentCode());
+            bindings.add(toRelationBinding(
+                    relation,
+                    BINDING_DIRECTION_INBOUND,
+                    source,
+                    source == null ? null : source.getTemplateType()
+            ));
+        }
+        return bindings;
+    }
+
+    public List<ExpenseDocumentWriteOffBindingVO> loadWriteOffDocumentBindings(String documentCode) {
+        String normalizedDocumentCode = trimToNull(documentCode);
+        if (normalizedDocumentCode == null) {
+            return Collections.emptyList();
+        }
+        List<ProcessDocumentWriteOff> outboundWriteOffs = processDocumentWriteOffMapper.selectList(
+                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
+                        .eq(ProcessDocumentWriteOff::getSourceDocumentCode, normalizedDocumentCode)
+                        .in(ProcessDocumentWriteOff::getStatus, List.of(WRITEOFF_STATUS_PENDING, WRITEOFF_STATUS_EFFECTIVE, WRITEOFF_STATUS_VOID))
+                        .orderByAsc(ProcessDocumentWriteOff::getSortOrder, ProcessDocumentWriteOff::getId)
+        );
+        List<ProcessDocumentWriteOff> inboundWriteOffs = processDocumentWriteOffMapper.selectList(
+                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
+                        .eq(ProcessDocumentWriteOff::getTargetDocumentCode, normalizedDocumentCode)
+                        .in(ProcessDocumentWriteOff::getStatus, List.of(WRITEOFF_STATUS_PENDING, WRITEOFF_STATUS_EFFECTIVE, WRITEOFF_STATUS_VOID))
+                        .orderByAsc(ProcessDocumentWriteOff::getSortOrder, ProcessDocumentWriteOff::getId)
+        );
+        if (outboundWriteOffs.isEmpty() && inboundWriteOffs.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<String> documentCodes = new LinkedHashSet<>();
+        outboundWriteOffs.stream()
+                .map(ProcessDocumentWriteOff::getTargetDocumentCode)
+                .filter(Objects::nonNull)
+                .forEach(documentCodes::add);
+        inboundWriteOffs.stream()
+                .map(ProcessDocumentWriteOff::getSourceDocumentCode)
+                .filter(Objects::nonNull)
+                .forEach(documentCodes::add);
+        Map<String, ProcessDocumentInstance> documentMap = loadDocumentMap(documentCodes);
+
+        List<ExpenseDocumentWriteOffBindingVO> bindings = new ArrayList<>();
+        for (ProcessDocumentWriteOff writeOff : outboundWriteOffs) {
+            bindings.add(toWriteOffBinding(
+                    writeOff,
+                    BINDING_DIRECTION_OUTBOUND,
+                    documentMap.get(writeOff.getTargetDocumentCode()),
+                    writeOff.getTargetTemplateType()
+            ));
+        }
+        for (ProcessDocumentWriteOff writeOff : inboundWriteOffs) {
+            ProcessDocumentInstance source = documentMap.get(writeOff.getSourceDocumentCode());
+            bindings.add(toWriteOffBinding(
+                    writeOff,
+                    BINDING_DIRECTION_INBOUND,
+                    source,
+                    source == null ? null : source.getTemplateType()
+            ));
+        }
+        return bindings;
     }
 
 /**
@@ -1059,6 +1169,84 @@ private String resolveStatusLabel(String status) {
             case DOCUMENT_STATUS_EXCEPTION -> "\u6d41\u7a0b\u5f02\u5e38";
             default -> "\u5ba1\u6279\u4e2d";
         };
+    }
+
+    private String resolveWriteOffStatusLabel(String status) {
+        return switch (trimToNull(status) == null ? "" : status.trim()) {
+            case WRITEOFF_STATUS_PENDING -> "\u5f85\u751f\u6548";
+            case WRITEOFF_STATUS_EFFECTIVE -> "\u5df2\u751f\u6548";
+            case WRITEOFF_STATUS_VOID -> "\u5df2\u4f5c\u5e9f";
+            default -> "-";
+        };
+    }
+
+    private Map<String, ProcessDocumentInstance> loadDocumentMap(Set<String> documentCodes) {
+        if (documentCodes == null || documentCodes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return processDocumentInstanceMapper.selectList(
+                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                        .in(ProcessDocumentInstance::getDocumentCode, documentCodes)
+        ).stream().collect(Collectors.toMap(
+                ProcessDocumentInstance::getDocumentCode,
+                item -> item,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+    }
+
+    private ExpenseDocumentRelationBindingVO toRelationBinding(
+            ProcessDocumentRelation relation,
+            String direction,
+            ProcessDocumentInstance document,
+            String fallbackTemplateType
+    ) {
+        ExpenseDocumentRelationBindingVO binding = new ExpenseDocumentRelationBindingVO();
+        String documentCode = Objects.equals(direction, BINDING_DIRECTION_OUTBOUND)
+                ? relation.getTargetDocumentCode()
+                : relation.getSourceDocumentCode();
+        String templateType = normalizeTemplateType(document == null ? fallbackTemplateType : document.getTemplateType());
+        binding.setDirection(direction);
+        binding.setFieldKey(relation.getSourceFieldKey());
+        binding.setDocumentCode(documentCode);
+        binding.setDocumentTitle(document == null ? documentCode : document.getDocumentTitle());
+        binding.setTemplateType(templateType);
+        binding.setTemplateTypeLabel(resolveTemplateTypeLabel(templateType, null));
+        binding.setTemplateName(document == null ? null : document.getTemplateName());
+        binding.setStatus(document == null ? null : document.getStatus());
+        binding.setStatusLabel(document == null ? null : resolveStatusLabel(document.getStatus()));
+        binding.setSubmitterName(document == null ? null : document.getSubmitterName());
+        return binding;
+    }
+
+    private ExpenseDocumentWriteOffBindingVO toWriteOffBinding(
+            ProcessDocumentWriteOff writeOff,
+            String direction,
+            ProcessDocumentInstance document,
+            String fallbackTemplateType
+    ) {
+        ExpenseDocumentWriteOffBindingVO binding = new ExpenseDocumentWriteOffBindingVO();
+        String documentCode = Objects.equals(direction, BINDING_DIRECTION_OUTBOUND)
+                ? writeOff.getTargetDocumentCode()
+                : writeOff.getSourceDocumentCode();
+        String templateType = normalizeTemplateType(document == null ? fallbackTemplateType : document.getTemplateType());
+        binding.setDirection(direction);
+        binding.setFieldKey(writeOff.getSourceFieldKey());
+        binding.setDocumentCode(documentCode);
+        binding.setDocumentTitle(document == null ? documentCode : document.getDocumentTitle());
+        binding.setTemplateType(templateType);
+        binding.setTemplateTypeLabel(resolveTemplateTypeLabel(templateType, null));
+        binding.setTemplateName(document == null ? null : document.getTemplateName());
+        binding.setStatus(document == null ? null : document.getStatus());
+        binding.setStatusLabel(document == null ? null : resolveStatusLabel(document.getStatus()));
+        binding.setSubmitterName(document == null ? null : document.getSubmitterName());
+        binding.setWriteOffSourceKind(writeOff.getWriteoffSourceKind());
+        binding.setRequestedAmount(defaultDecimal(writeOff.getRequestedAmount()));
+        binding.setEffectiveAmount(defaultDecimal(writeOff.getEffectiveAmount()));
+        binding.setRemainingAmount(defaultDecimal(writeOff.getRemainingSnapshotAmount()));
+        binding.setEffectiveStatus(writeOff.getStatus());
+        binding.setEffectiveStatusLabel(resolveWriteOffStatusLabel(writeOff.getStatus()));
+        return binding;
     }
 
 private String asText(Object value) {

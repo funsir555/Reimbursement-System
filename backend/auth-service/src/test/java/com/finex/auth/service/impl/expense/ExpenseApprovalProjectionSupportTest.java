@@ -8,6 +8,7 @@ import com.finex.auth.entity.ProcessDocumentActionLog;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.User;
+import com.finex.auth.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,11 +32,14 @@ class ExpenseApprovalProjectionSupportTest {
     @Mock
     private ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
 
+    @Mock
+    private UserMapper userMapper;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void buildUsesRouteHitLogsAndIncludesAttachedSharedTail() throws Exception {
-        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper);
+        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper, userMapper);
         FlowRuntimeSnapshot snapshot = new FlowRuntimeSnapshot(
                 List.of(
                         node("approval-start", "APPROVAL", null, 1),
@@ -77,7 +81,7 @@ class ExpenseApprovalProjectionSupportTest {
 
     @Test
     void buildPredictsFutureRouteWhenRouteHitLogMissing() {
-        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper);
+        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper, userMapper);
         FlowRuntimeSnapshot snapshot = new FlowRuntimeSnapshot(
                 List.of(
                         node("branch-1", "BRANCH", null, 1),
@@ -110,6 +114,83 @@ class ExpenseApprovalProjectionSupportTest {
         verify(expenseWorkflowRuntimeSupport).previewMatchedRoute(anyList(), eq(Map.of("documentType", "B")));
     }
 
+    @Test
+    void buildMarksCurrentManualSelectNodeAsPendingSelection() {
+        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper, userMapper);
+        FlowRuntimeSnapshot snapshot = new FlowRuntimeSnapshot(
+                List.of(node("approval-manual", "APPROVAL", null, 1)),
+                List.of()
+        );
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setCurrentNodeKey("approval-manual");
+        instance.setCurrentTaskType("MANUAL_SELECT");
+
+        ExpenseApprovalProjectionSupport.ApprovalProjectionResult result = support.build(
+                instance,
+                snapshot,
+                Map.of(),
+                List.of(),
+                List.of()
+        );
+
+        assertEquals("MANUAL_SELECTION_PENDING", result.approvalNodeStatuses().get(0).getStatus());
+        assertEquals("待手动选择审批人", result.approvalNodeStatuses().get(0).getStatusLabel());
+        assertTrue(result.approvalTimeline().stream().anyMatch(item -> item.isPending() && "approval-manual".equals(item.getNodeKey())));
+    }
+
+    @Test
+    void buildPrefersRealNameForApprovedStatusAndTimeline() throws Exception {
+        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper, userMapper);
+        FlowRuntimeSnapshot snapshot = new FlowRuntimeSnapshot(
+                List.of(node("approval-node", "APPROVAL", null, 1)),
+                List.of()
+        );
+        when(userMapper.selectById(10L)).thenReturn(user(10L, "Real Name", "legacy-user"));
+
+        ProcessDocumentActionLog approveLog = actionLog(
+                1L,
+                "approval-node",
+                "Approval Node",
+                "APPROVE",
+                "legacy-user",
+                "ok",
+                null
+        );
+        approveLog.setActorUserId(10L);
+
+        ExpenseApprovalProjectionSupport.ApprovalProjectionResult result = support.build(
+                new ProcessDocumentInstance(),
+                snapshot,
+                Map.of(),
+                List.of(),
+                List.of(approveLog)
+        );
+
+        assertEquals(List.of("Real Name"), result.approvalNodeStatuses().get(0).getAssigneeNames());
+        assertTrue(result.approvalTimeline().stream().anyMatch(item -> item.getTitle() != null && item.getTitle().contains("Real Name")));
+        assertFalse(result.approvalTimeline().stream().anyMatch(item -> item.getTitle() != null && item.getTitle().contains("legacy-user")));
+    }
+
+    @Test
+    void buildFallsBackToUsernameWhenNameMissing() {
+        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper, userMapper);
+        FlowRuntimeSnapshot snapshot = new FlowRuntimeSnapshot(
+                List.of(node("approval-node", "APPROVAL", null, 1)),
+                List.of()
+        );
+        when(userMapper.selectById(20L)).thenReturn(user(20L, null, "legacy-user"));
+
+        ExpenseApprovalProjectionSupport.ApprovalProjectionResult result = support.build(
+                new ProcessDocumentInstance(),
+                snapshot,
+                Map.of(),
+                List.of(pendingTask("approval-node", "Approval Node", "masked-user", 20L)),
+                List.of()
+        );
+
+        assertEquals(List.of("legacy-user"), result.approvalNodeStatuses().get(0).getAssigneeNames());
+    }
+
     private ProcessFlowNodeDTO node(String nodeKey, String nodeType, String parentNodeKey, int displayOrder) {
         ProcessFlowNodeDTO node = new ProcessFlowNodeDTO();
         node.setNodeKey(nodeKey);
@@ -131,10 +212,15 @@ class ExpenseApprovalProjectionSupportTest {
     }
 
     private ProcessDocumentTask pendingTask(String nodeKey, String nodeName, String assigneeName) {
+        return pendingTask(nodeKey, nodeName, assigneeName, null);
+    }
+
+    private ProcessDocumentTask pendingTask(String nodeKey, String nodeName, String assigneeName, Long assigneeUserId) {
         ProcessDocumentTask task = new ProcessDocumentTask();
         task.setNodeKey(nodeKey);
         task.setNodeName(nodeName);
         task.setNodeType("APPROVAL");
+        task.setAssigneeUserId(assigneeUserId);
         task.setAssigneeName(assigneeName);
         task.setStatus("PENDING");
         task.setCreatedAt(LocalDateTime.of(2026, 4, 21, 10, 0));
@@ -163,10 +249,14 @@ class ExpenseApprovalProjectionSupportTest {
     }
 
     private User user(Long id, String name) {
+        return user(id, name, name);
+    }
+
+    private User user(Long id, String name, String username) {
         User user = new User();
         user.setId(id);
         user.setName(name);
-        user.setUsername(name);
+        user.setUsername(username);
         user.setStatus(1);
         return user;
     }

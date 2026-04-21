@@ -604,8 +604,7 @@ describe('ExpenseCreateView', () => {
       formData: {
         __totalAmount: '0.00'
       },
-      expenseDetails: [],
-      manualApproverSelections: {}
+      expenseDetails: []
     })
     expect(mocks.elMessage.success).toHaveBeenCalledWith('审批单已提交')
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
@@ -712,9 +711,88 @@ describe('ExpenseCreateView', () => {
         amountTwo: '0.20',
         __totalAmount: '100.30'
       },
-      expenseDetails: [],
-      manualApproverSelections: {}
+      expenseDetails: []
     })
+  })
+
+  it('preserves related and writeoff form values when submitting', async () => {
+    mocks.route.query = { templateCode: 'TPL-014', draftKey: 'draft-related-writeoff-submit' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-014&draftKey=draft-related-writeoff-submit'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: buildTemplateDetail('TPL-014', '业务关系模板', 'contract', '合同单', {
+        blocks: [
+          {
+            blockId: 'related-1',
+            fieldKey: 'relatedDocs',
+            label: '关联单据',
+            kind: 'BUSINESS_COMPONENT',
+            props: { componentCode: 'related-document' }
+          },
+          {
+            blockId: 'writeoff-1',
+            fieldKey: 'writeoffDocs',
+            label: '核销单据',
+            kind: 'BUSINESS_COMPONENT',
+            props: { componentCode: 'writeoff-document' }
+          }
+        ]
+      })
+    })
+    writeDraft('draft-related-writeoff-submit', 'TPL-014', {
+      formValues: {
+        relatedDocs: [
+          {
+            documentCode: 'DOC-REL-001',
+            documentTitle: '项目申请单',
+            templateType: 'application',
+            templateTypeLabel: '申请单',
+            statusLabel: '已完成'
+          }
+        ],
+        writeoffDocs: [
+          {
+            documentCode: 'DOC-WO-001',
+            documentTitle: '借款单',
+            templateType: 'loan',
+            templateTypeLabel: '借款单',
+            writeOffSourceKind: 'LOAN',
+            writeOffAmount: '120.00',
+            remainingAmount: '380.00'
+          }
+        ]
+      }
+    })
+
+    const wrapper = await mountView()
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+
+    expect(submitButton).toBeTruthy()
+
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).toHaveBeenCalledTimes(1)
+    const payload = mocks.expenseCreateApi.submit.mock.calls[0]?.[0] as {
+      templateCode: string
+      formData: Record<string, unknown>
+      expenseDetails: unknown[]
+    }
+    expect(payload.templateCode).toBe('TPL-014')
+    expect(payload.expenseDetails).toEqual([])
+    expect(payload.formData.__totalAmount).toBe('0.00')
+    expect(payload.formData.relatedDocs).toEqual([
+      expect.objectContaining({
+        documentCode: 'DOC-REL-001',
+        documentTitle: '项目申请单'
+      })
+    ])
+    expect(payload.formData.writeoffDocs).toEqual([
+      expect.objectContaining({
+        documentCode: 'DOC-WO-001',
+        writeOffAmount: '120.00',
+        writeOffSourceKind: 'LOAN'
+      })
+    ])
   })
 
   it('writes __totalAmount as an exact money string when resubmitting', async () => {
@@ -775,9 +853,30 @@ describe('ExpenseCreateView', () => {
         amountTwo: '20.20',
         __totalAmount: '100.30'
       },
-      expenseDetails: [],
-      manualApproverSelections: {}
+      expenseDetails: []
     })
+  })
+
+  it('uses draft-edit wording when a draft enters through the shared resubmit route', async () => {
+    mocks.route.name = 'expense-document-resubmit'
+    mocks.route.params = { documentCode: 'DOC-101' }
+    mocks.route.query = { entry: 'draft' }
+    mocks.route.fullPath = '/expense/documents/DOC-101/resubmit?entry=draft'
+    mocks.expenseApi.getEditContext.mockResolvedValue({
+      data: {
+        documentCode: 'DOC-101',
+        ...buildTemplateDetail('TPL-006', '办公费用模板', 'report', '报销单'),
+        formData: {},
+        expenseDetails: []
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('编辑草稿单据')
+    expect(wrapper.text()).toContain('草稿编辑')
+    expect(wrapper.text()).toContain('提交审批单')
+    expect(wrapper.text()).not.toContain('召回后重新提交审批单')
   })
 
   it('blocks submit when relation fieldKey exceeds 64 characters', async () => {
@@ -863,7 +962,7 @@ describe('ExpenseCreateView', () => {
     expect(wrapper.get('[data-testid="expense-runtime-form-editor"]').attributes('data-current-user-company-id')).toBe('COMPANY_CTX')
   })
 
-  it('renders manual approver selection and submits selected approvers in create mode', async () => {
+  it('does not render pre-submit manual approver selection even when the flow contains manual select nodes', async () => {
     mocks.route.query = { templateCode: 'TPL-007B', draftKey: 'draft-manual-approver' }
     mocks.route.fullPath = '/expense/create?templateCode=TPL-007B&draftKey=draft-manual-approver'
     mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
@@ -892,10 +991,8 @@ describe('ExpenseCreateView', () => {
 
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('手动选择审批人')
-    expect(wrapper.text()).toContain('财务复核')
-
-    await wrapper.get('[data-testid="expense-manual-approver-select"]').setValue(['2', '3'])
+    expect(wrapper.text()).not.toContain('手动选择审批人')
+    expect(wrapper.find('[data-testid="expense-manual-approver-card"]').exists()).toBe(false)
     const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
     await submitButton!.trigger('click')
     await flushPromises()
@@ -905,10 +1002,7 @@ describe('ExpenseCreateView', () => {
       formData: {
         __totalAmount: '0.00'
       },
-      expenseDetails: [],
-      manualApproverSelections: {
-        'manual-finance': [2, 3]
-      }
+      expenseDetails: []
     })
   })
 

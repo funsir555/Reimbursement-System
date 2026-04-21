@@ -211,7 +211,7 @@
             <el-option
               v-for="node in rejectTargetOptions"
               :key="node.nodeKey"
-              :label="node.nodeName || node.nodeKey"
+              :label="node.optionLabel || node.nodeName || node.nodeKey"
               :value="node.nodeKey"
             />
           </el-select>
@@ -245,8 +245,7 @@ import {
   expenseApi,
   expenseApprovalApi,
   type ExpenseApprovalPendingItem,
-  type ExpenseDocumentDetail,
-  type ProcessFlowNode
+  type ExpenseDocumentDetail
 } from '@/api'
 import {
   EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS,
@@ -275,6 +274,13 @@ import {
 } from './expenseWorkbenchListHelper'
 import { openDownloadCenter } from '@/utils/downloadCenter'
 
+type RejectTargetOption = {
+  nodeKey: string
+  nodeName: string
+  optionLabel: string
+  isSubmitter?: boolean
+}
+
 const router = useRouter()
 const loading = ref(false)
 const exporting = ref(false)
@@ -286,7 +292,7 @@ const showAdvancedFilters = ref(false)
 const rejectDialogVisible = ref(false)
 const rejectSubmitting = ref(false)
 const rejectTaskId = ref<number | null>(null)
-const rejectTargetOptions = ref<ProcessFlowNode[]>([])
+const rejectTargetOptions = ref<RejectTargetOption[]>([])
 const rejectForm = ref({
   comment: '',
   targetNodeKey: ''
@@ -502,7 +508,7 @@ async function handleAction(taskId: number, action: 'approve' | 'reject') {
       rejectTaskId.value = taskId
       rejectForm.value = {
         comment: '驳回',
-        targetNodeKey: ''
+        targetNodeKey: rejectTargetOptions.value.length ? '__SUBMITTER__' : ''
       }
       rejectDialogVisible.value = true
     } catch (error: unknown) {
@@ -551,7 +557,9 @@ async function submitRejectAction() {
   try {
     await expenseApprovalApi.reject(rejectTaskId.value, {
       comment: rejectForm.value.comment || '',
-      ...(rejectForm.value.targetNodeKey ? { targetNodeKey: rejectForm.value.targetNodeKey } : {})
+      ...(rejectForm.value.targetNodeKey && rejectForm.value.targetNodeKey !== '__SUBMITTER__'
+        ? { targetNodeKey: rejectForm.value.targetNodeKey }
+        : {})
     })
     closeRejectDialog()
     ElMessage.success('审批已驳回')
@@ -570,9 +578,40 @@ function resolveRejectTargetOptions(detail: ExpenseDocumentDetail | null | undef
     ? currentNode?.config?.specialSettings || []
     : []
   if (!specialSettings.includes('REJECT_TO_ANY_NODE')) {
-    return [] as ProcessFlowNode[]
+    return [] as RejectTargetOption[]
   }
-  return nodes.filter((node) => node.nodeType === 'APPROVAL' && node.nodeKey !== currentNodeKey)
+  const upstreamApprovalNodes = (detail?.approvalNodeStatuses || [])
+    .filter((item) =>
+      item.nodeType === 'APPROVAL'
+      && item.nodeKey !== currentNodeKey
+      && item.status !== 'NOT_REACHED'
+      && item.status !== 'PENDING'
+      && item.status !== 'MANUAL_SELECTION_PENDING'
+    )
+    .map((item) => ({
+      nodeKey: item.nodeKey,
+      nodeName: item.nodeName || item.nodeKey,
+      optionLabel: formatRejectTargetLabel(item.nodeName || item.nodeKey, item.assigneeNames)
+    }))
+  return [
+    {
+      nodeKey: '__SUBMITTER__',
+      nodeName: '驳回到提单人',
+      optionLabel: formatRejectTargetLabel('驳回到提单人', detail?.submitterName),
+      isSubmitter: true
+    },
+    ...upstreamApprovalNodes
+  ]
+}
+
+function formatRejectTargetLabel(nodeName: string, assigneeNames?: string[] | string) {
+  const names = Array.isArray(assigneeNames)
+    ? assigneeNames.filter((item) => Boolean(String(item || '').trim()))
+    : [String(assigneeNames || '').trim()].filter(Boolean)
+  if (!names.length) {
+    return nodeName
+  }
+  return `${nodeName}（${names.join('、')}）`
 }
 
 function resolveErrorMessage(error: unknown, fallback: string) {

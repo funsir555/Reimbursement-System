@@ -1,5 +1,5 @@
 ﻿import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h, ref } from 'vue'
+import { computed, defineComponent, h, inject, provide, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseRuntimeFormEditor from '@/views/expense/components/ExpenseRuntimeFormEditor.vue'
 
@@ -134,7 +134,51 @@ vi.mock('element-plus', async () => ({
   ElDialog: {
     name: 'ElDialog',
     template: '<div><slot /><slot name="footer" /></div>'
-  }
+  },
+  ElTabs: defineComponent({
+    name: 'ElTabs',
+    props: {
+      modelValue: {
+        type: [String, Number],
+        default: ''
+      }
+    },
+    emits: ['update:modelValue'],
+    setup(props, { emit, slots }) {
+      const activeName = computed(() => String(props.modelValue ?? ''))
+      provide('codex-el-tabs-active-name', activeName)
+      provide('codex-el-tabs-set-active-name', (name: string) => emit('update:modelValue', name))
+      return () => h('div', { class: 'el-tabs', 'data-testid': 'document-picker-tabs' }, slots.default?.())
+    }
+  }),
+  ElTabPane: defineComponent({
+    name: 'ElTabPane',
+    props: {
+      label: {
+        type: String,
+        default: ''
+      },
+      name: {
+        type: String,
+        default: ''
+      }
+    },
+    setup(props, { slots }) {
+      const activeName = inject<{ value: string }>('codex-el-tabs-active-name', computed(() => ''))
+      const setActiveName = inject<((name: string) => void) | undefined>('codex-el-tabs-set-active-name', undefined)
+      return () => h('div', { class: 'el-tab-pane' }, [
+        h('button', {
+          type: 'button',
+          'data-testid': `document-picker-tab-${props.name}`,
+          'data-active': String(activeName.value === props.name),
+          onClick: () => setActiveName?.(String(props.name))
+        }, props.label),
+        activeName.value === props.name
+          ? h('div', { 'data-testid': `document-picker-pane-${props.name}` }, slots.default?.())
+          : null
+      ])
+    }
+  })
 }))
 
 const MoneyInputStub = defineComponent({
@@ -224,6 +268,34 @@ function createControlBlock(fieldKey: string, label: string, controlType: string
       ...props
     },
     permission: createPermission()
+  }
+}
+
+function createDocumentPickerGroup(
+  templateType: string,
+  templateTypeLabel: string,
+  documentCode: string,
+  documentTitle = `${templateTypeLabel}示例单据`
+) {
+  return {
+    templateType,
+    templateTypeLabel,
+    total: 1,
+    page: 1,
+    pageSize: 10,
+    items: [
+      {
+        documentCode,
+        documentTitle,
+        templateType,
+        templateTypeLabel,
+        status: 'COMPLETED',
+        statusLabel: '已完成',
+        totalAmount: '88.00',
+        availableWriteOffAmount: '88.00',
+        writeOffSourceKind: templateType === 'loan' ? 'LOAN' : 'REPORT'
+      }
+    ]
   }
 }
 
@@ -598,8 +670,8 @@ describe('ExpenseRuntimeFormEditor', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('选择单据')
-    expect(wrapper.text()).toContain('支持按单据类型分组选择多张已审批通过的业务单据。')
-    expect(wrapper.text()).toContain('支持选择借款单或可核销报销单，选中后逐条填写本次核销金额。')
+    expect(wrapper.text()).toContain('支持点击页签切换报销单、申请单、合同单与借款单，并同时关联多张已审批通过的单据。')
+    expect(wrapper.text()).toContain('支持点击页签切换报销单与借款单，选中后逐条填写本次核销金额。')
     expect(wrapper.text()).toContain('类型：报销单 / 状态：已审批')
     expect(wrapper.text()).toContain('核销来源')
     expect(wrapper.text()).toContain('可核销余额')
@@ -638,6 +710,231 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
       relationType: 'WRITEOFF'
     }))
+  })
+
+  it('renders document picker tabs by relation type and switches visible panels', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    const writeoffBlock = createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document')
+    mocks.expenseApi.getDocumentPicker
+      .mockResolvedValueOnce({
+        data: {
+          relationType: 'RELATED',
+          groups: [
+            createDocumentPickerGroup('report', '报销单', 'DOC-REL-REPORT-001'),
+            createDocumentPickerGroup('application', '申请单', 'DOC-REL-APPLICATION-001'),
+            createDocumentPickerGroup('contract', '合同单', 'DOC-REL-CONTRACT-001'),
+            createDocumentPickerGroup('loan', '借款单', 'DOC-REL-LOAN-001')
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          relationType: 'WRITEOFF',
+          groups: [
+            createDocumentPickerGroup('report', '报销单', 'DOC-WO-REPORT-001'),
+            createDocumentPickerGroup('loan', '借款单', 'DOC-WO-LOAN-001')
+          ]
+        }
+      })
+
+    const { wrapper } = mountEditor({ relatedDocs: [], writeoffDocs: [] }, [
+      relatedBlock,
+      writeoffBlock
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      openDocumentPicker: (block: ReturnType<typeof createBusinessBlock>) => Promise<void> | void
+    }
+
+    await vm.openDocumentPicker(relatedBlock)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="document-picker-tab-report"]').text()).toContain('报销单（1）')
+    expect(wrapper.get('[data-testid="document-picker-tab-application"]').text()).toContain('申请单（1）')
+    expect(wrapper.get('[data-testid="document-picker-tab-contract"]').text()).toContain('合同单（1）')
+    expect(wrapper.get('[data-testid="document-picker-tab-loan"]').text()).toContain('借款单（1）')
+    expect(wrapper.find('[data-testid="document-picker-panel-report"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="document-picker-panel-loan"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="document-picker-tab-loan"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="document-picker-panel-report"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="document-picker-panel-loan"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('DOC-REL-LOAN-001')
+
+    await vm.openDocumentPicker(writeoffBlock)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="document-picker-tab-report"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="document-picker-tab-loan"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="document-picker-tab-application"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="document-picker-tab-contract"]').exists()).toBe(false)
+  })
+
+  it('keeps the active document type when available and falls back to the first tab when it disappears', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    mocks.expenseApi.getDocumentPicker
+      .mockResolvedValueOnce({
+        data: {
+          relationType: 'RELATED',
+          groups: [
+            createDocumentPickerGroup('report', '报销单', 'DOC-REL-REPORT-001'),
+            createDocumentPickerGroup('loan', '借款单', 'DOC-REL-LOAN-001')
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          relationType: 'RELATED',
+          groups: [
+            createDocumentPickerGroup('report', '报销单', 'DOC-REL-REPORT-001'),
+            createDocumentPickerGroup('loan', '借款单', 'DOC-REL-LOAN-001')
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          relationType: 'RELATED',
+          groups: [
+            createDocumentPickerGroup('report', '报销单', 'DOC-REL-REPORT-001')
+          ]
+        }
+      })
+
+    const { wrapper } = mountEditor({ relatedDocs: [] }, [relatedBlock])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      openDocumentPicker: (block: ReturnType<typeof createBusinessBlock>) => Promise<void> | void
+      loadDocumentPicker: () => Promise<void>
+      documentPickerDialog: {
+        activeTemplateType: string
+        selectedCodes: string[]
+      }
+    }
+
+    await vm.openDocumentPicker(relatedBlock)
+    await flushPromises()
+    await wrapper.get('[data-testid="document-picker-tab-loan"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="toggle-document-picker-DOC-REL-LOAN-001"]').trigger('click')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.activeTemplateType).toBe('loan')
+    expect(vm.documentPickerDialog.selectedCodes).toContain('DOC-REL-LOAN-001')
+
+    await vm.loadDocumentPicker()
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.activeTemplateType).toBe('loan')
+    expect(vm.documentPickerDialog.selectedCodes).toContain('DOC-REL-LOAN-001')
+
+    await vm.loadDocumentPicker()
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.activeTemplateType).toBe('report')
+    expect(vm.documentPickerDialog.selectedCodes).toContain('DOC-REL-LOAN-001')
+  })
+
+  it('round-trips related and writeoff picker selections into form data', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    const writeoffBlock = createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document')
+    mocks.expenseApi.getDocumentPicker
+      .mockResolvedValueOnce({
+        data: {
+          relationType: 'RELATED',
+          groups: [
+            {
+              templateType: 'report',
+              templateTypeLabel: '报销单',
+              total: 1,
+              page: 1,
+              pageSize: 10,
+              items: [
+                {
+                  documentCode: 'DOC-REL-001',
+                  documentTitle: '差旅报销单',
+                  templateType: 'report',
+                  templateTypeLabel: '报销单',
+                  status: 'COMPLETED',
+                  statusLabel: '已完成',
+                  totalAmount: '88.00'
+                }
+              ]
+            }
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          relationType: 'WRITEOFF',
+          groups: [
+            {
+              templateType: 'loan',
+              templateTypeLabel: '借款单',
+              total: 1,
+              page: 1,
+              pageSize: 10,
+              items: [
+                {
+                  documentCode: 'DOC-WO-001',
+                  documentTitle: '项目借款单',
+                  templateType: 'loan',
+                  templateTypeLabel: '借款单',
+                  status: 'COMPLETED',
+                  statusLabel: '已完成',
+                  totalAmount: '500.00',
+                  availableWriteOffAmount: '500.00',
+                  writeOffSourceKind: 'LOAN'
+                }
+              ]
+            }
+          ]
+        }
+      })
+
+    const { wrapper, model } = mountEditor({ relatedDocs: [], writeoffDocs: [] }, [
+      relatedBlock,
+      writeoffBlock
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      openDocumentPicker: (block: ReturnType<typeof createBusinessBlock>) => Promise<void> | void
+      updateWriteOffAmount: (block: ReturnType<typeof createBusinessBlock>, documentCode: string, value: string | number) => void
+    }
+
+    await vm.openDocumentPicker(relatedBlock)
+    await flushPromises()
+    await wrapper.get('[data-testid="toggle-document-picker-DOC-REL-001"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-document-picker"]').trigger('click')
+    await flushPromises()
+
+    expect(model.value.relatedDocs).toEqual([
+      expect.objectContaining({
+        documentCode: 'DOC-REL-001',
+        documentTitle: '差旅报销单',
+        templateTypeLabel: '报销单'
+      })
+    ])
+
+    await vm.openDocumentPicker(writeoffBlock)
+    await flushPromises()
+    await wrapper.get('[data-testid="toggle-document-picker-DOC-WO-001"]').trigger('click')
+    await wrapper.get('[data-testid="confirm-document-picker"]').trigger('click')
+    vm.updateWriteOffAmount(writeoffBlock, 'DOC-WO-001', '120')
+    await flushPromises()
+
+    const writeoffDocs = model.value.writeoffDocs as Array<Record<string, unknown>>
+    expect(writeoffDocs).toHaveLength(1)
+    expect(writeoffDocs[0]?.documentCode).toBe('DOC-WO-001')
+    expect(writeoffDocs[0]?.writeOffSourceKind).toBe('LOAN')
+    expect(writeoffDocs[0]?.writeOffAmount).toBe('120.00')
   })
 
   it('applies the unified runtime control class to representative fill controls', async () => {

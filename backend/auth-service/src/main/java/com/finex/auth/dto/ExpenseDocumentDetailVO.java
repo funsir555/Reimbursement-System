@@ -66,6 +66,18 @@ public class ExpenseDocumentDetailVO {
 
     private List<ExpenseApprovalTimelineItemVO> approvalTimeline = new ArrayList<>();
 
+    private List<ExpenseDocumentRelationBindingVO> relatedDocumentBindings = new ArrayList<>();
+
+    private List<ExpenseDocumentWriteOffBindingVO> writeOffDocumentBindings = new ArrayList<>();
+
+    private Boolean manualApproverSelectionPending;
+
+    private String manualApproverSelectionNodeKey;
+
+    private String manualApproverSelectionNodeName;
+
+    private List<ProcessFormOptionVO> manualApproverOptions = new ArrayList<>();
+
     private ExpenseDocumentBankPaymentVO bankPayment;
 
     private List<ExpenseDocumentBankReceiptVO> bankReceipts = new ArrayList<>();

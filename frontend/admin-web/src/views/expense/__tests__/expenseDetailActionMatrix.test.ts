@@ -9,6 +9,7 @@ describe('expenseDetailActionMatrix', () => {
     const actions = resolveExpenseDetailActions({
       statusBucket: 'pending',
       isSubmitter: true,
+      canResubmitEdit: false,
       isActiveApprover: false,
       canModify: false,
       isFlowParticipant: true,
@@ -25,6 +26,7 @@ describe('expenseDetailActionMatrix', () => {
     const actions = resolveExpenseDetailActions({
       statusBucket: 'pending',
       isSubmitter: false,
+      canResubmitEdit: false,
       isActiveApprover: true,
       canModify: true,
       isFlowParticipant: true,
@@ -56,6 +58,7 @@ describe('expenseDetailActionMatrix', () => {
     const actions = resolveExpenseDetailActions({
       statusBucket: 'exception',
       isSubmitter: false,
+      canResubmitEdit: false,
       isActiveApprover: false,
       canModify: false,
       isFlowParticipant: true,
@@ -93,6 +96,7 @@ describe('expenseDetailActionMatrix', () => {
     const actions = resolveExpenseDetailActions({
       statusBucket: 'terminal',
       isSubmitter: false,
+      canResubmitEdit: false,
       isActiveApprover: false,
       canModify: false,
       isFlowParticipant: false,
@@ -107,6 +111,7 @@ describe('expenseDetailActionMatrix', () => {
     const actions = resolveExpenseDetailActions({
       statusBucket: 'pending',
       isSubmitter: false,
+      canResubmitEdit: false,
       isActiveApprover: true,
       canModify: false,
       isFlowParticipant: true,
@@ -118,5 +123,21 @@ describe('expenseDetailActionMatrix', () => {
       disabled: true,
       reason: '当前审批节点未开启单据修改权限'
     })
+  })
+
+  it('returns a resubmit action for submitter-owned draft-like documents', () => {
+    const actions = resolveExpenseDetailActions({
+      statusBucket: 'other',
+      isSubmitter: true,
+      canResubmitEdit: true,
+      isActiveApprover: false,
+      canModify: false,
+      isFlowParticipant: true,
+      canComment: true,
+      canApprovalView: false
+    })
+
+    expect(actions.map((item) => item.key)).toEqual(['resubmit', 'print', 'comment', 'download'])
+    expect(actions[0]).toMatchObject({ key: 'resubmit', primary: true, label: '重新提交' })
   })
 })

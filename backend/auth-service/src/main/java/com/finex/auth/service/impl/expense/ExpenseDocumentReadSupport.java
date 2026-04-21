@@ -24,12 +24,17 @@ import java.util.Map;
 class ExpenseDocumentReadSupport {
 
     private final AbstractExpenseDocumentSupport support;
+    private final ExpenseRelationWriteOffService expenseRelationWriteOffService;
 
     /**
      * 初始化这个类所需的依赖组件。
      */
-    ExpenseDocumentReadSupport(AbstractExpenseDocumentSupport support) {
+    ExpenseDocumentReadSupport(
+            AbstractExpenseDocumentSupport support,
+            ExpenseRelationWriteOffService expenseRelationWriteOffService
+    ) {
         this.support = support;
+        this.expenseRelationWriteOffService = expenseRelationWriteOffService;
     }
 
     ProcessDocumentInstance requireDocument(String documentCode) {
@@ -71,6 +76,10 @@ class ExpenseDocumentReadSupport {
      * 组装单据明细。
      */
     ExpenseDocumentDetailVO buildDocumentDetail(ProcessDocumentInstance instance) {
-        return support.buildDocumentDetail(instance);
+        ExpenseDocumentDetailVO detail = support.buildDocumentDetail(instance);
+        String documentCode = instance == null ? null : instance.getDocumentCode();
+        detail.setRelatedDocumentBindings(expenseRelationWriteOffService.loadRelatedDocumentBindings(documentCode));
+        detail.setWriteOffDocumentBindings(expenseRelationWriteOffService.loadWriteOffDocumentBindings(documentCode));
+        return detail;
     }
 }

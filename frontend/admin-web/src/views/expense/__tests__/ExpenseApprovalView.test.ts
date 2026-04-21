@@ -369,7 +369,28 @@ describe('ExpenseApprovalView', () => {
               config: {}
             }
           ]
-        }
+        },
+        approvalNodeStatuses: [
+          {
+            nodeKey: 'leader',
+            nodeName: '部门负责人审批',
+            nodeType: 'APPROVAL',
+            status: 'APPROVED',
+            assigneeNames: ['李四']
+          },
+          {
+            nodeKey: 'finance',
+            nodeName: '财务审批',
+            nodeType: 'APPROVAL',
+            status: 'PENDING'
+          },
+          {
+            nodeKey: 'payment',
+            nodeName: '付款处理',
+            nodeType: 'PAYMENT',
+            status: 'NOT_REACHED'
+          }
+        ]
       }
     })
 
@@ -381,6 +402,8 @@ describe('ExpenseApprovalView', () => {
     await vm.handleAction(1, 'reject')
     await flushPromises()
 
+    expect(wrapper.text()).toContain('驳回到提单人')
+    expect(wrapper.text()).toContain('部门负责人审批（李四）')
     expect(wrapper.text()).toContain('驳回到节点')
 
     await wrapper.get('input[placeholder="请输入驳回原因"]').setValue('退回补充材料')

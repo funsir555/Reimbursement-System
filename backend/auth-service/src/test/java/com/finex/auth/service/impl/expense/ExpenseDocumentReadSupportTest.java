@@ -21,14 +21,19 @@ class ExpenseDocumentReadSupportTest {
 
     @Mock
     private AbstractExpenseDocumentSupport support;
+    @Mock
+    private ExpenseRelationWriteOffService expenseRelationWriteOffService;
 
     @Test
     void documentReadsDelegateToSharedSupport() {
-        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support);
+        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, expenseRelationWriteOffService);
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-1");
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         when(support.requireDocument("DOC-1")).thenReturn(instance);
         when(support.buildDocumentDetail(instance)).thenReturn(detail);
+        when(expenseRelationWriteOffService.loadRelatedDocumentBindings("DOC-1")).thenReturn(List.of());
+        when(expenseRelationWriteOffService.loadWriteOffDocumentBindings("DOC-1")).thenReturn(List.of());
 
         assertSame(instance, readSupport.requireDocument("DOC-1"));
         assertSame(detail, readSupport.buildDocumentDetail(instance));
@@ -41,7 +46,7 @@ class ExpenseDocumentReadSupportTest {
 
     @Test
     void detailAndFormReadsDelegateToSharedSupport() {
-        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support);
+        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, expenseRelationWriteOffService);
         ProcessDocumentExpenseDetail detail = new ProcessDocumentExpenseDetail();
         ExpenseDetailInstanceDTO runtimeDetail = new ExpenseDetailInstanceDTO();
         List<ProcessDocumentExpenseDetail> details = List.of(detail);
@@ -55,5 +60,24 @@ class ExpenseDocumentReadSupportTest {
         assertSame(details, readSupport.loadExpenseDetails("DOC-1"));
         assertSame(detail, readSupport.requireExpenseDetail("DOC-1", "D1"));
         assertSame(runtimeDetail, readSupport.toRuntimeExpenseDetailDTO(detail));
+    }
+
+    @Test
+    void buildDocumentDetailEnrichesBusinessBindings() {
+        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, expenseRelationWriteOffService);
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-88");
+        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+        var relatedBindings = List.of(new com.finex.auth.dto.ExpenseDocumentRelationBindingVO());
+        var writeOffBindings = List.of(new com.finex.auth.dto.ExpenseDocumentWriteOffBindingVO());
+        when(support.buildDocumentDetail(instance)).thenReturn(detail);
+        when(expenseRelationWriteOffService.loadRelatedDocumentBindings("DOC-88")).thenReturn(relatedBindings);
+        when(expenseRelationWriteOffService.loadWriteOffDocumentBindings("DOC-88")).thenReturn(writeOffBindings);
+
+        ExpenseDocumentDetailVO result = readSupport.buildDocumentDetail(instance);
+
+        assertSame(detail, result);
+        assertSame(relatedBindings, result.getRelatedDocumentBindings());
+        assertSame(writeOffBindings, result.getWriteOffDocumentBindings());
     }
 }

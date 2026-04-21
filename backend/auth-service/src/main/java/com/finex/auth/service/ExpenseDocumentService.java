@@ -26,6 +26,7 @@ import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
@@ -173,6 +174,8 @@ public interface ExpenseDocumentService {
 
     ExpenseDocumentDetailVO remindDocument(Long userId, String username, String documentCode, ExpenseDocumentReminderDTO dto);
 
+    ExpenseDocumentDetailVO submitManualApproverSelection(Long userId, String username, String documentCode, ExpenseManualApproverSelectionDTO dto);
+
     /**
      * 获取单据Navigation。
      */
@@ -187,6 +190,11 @@ public interface ExpenseDocumentService {
      * 重新提交单据。
      */
     ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto);
+
+    /**
+     * 删除草稿单据。
+     */
+    boolean deleteDraftDocument(Long userId, String documentCode);
 
     /**
      * 审批通过任务。

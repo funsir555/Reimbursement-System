@@ -8,6 +8,7 @@ import type {
   ExpenseDetailInstanceDetail,
   ExpenseDocumentCommentPayload,
   ExpenseDocumentDetail,
+  ExpenseManualApproverSelectionPayload,
   ExpenseDocumentNavigation,
   ExpenseDocumentPickerResult,
   ExpenseDocumentReminderPayload,
@@ -98,6 +99,11 @@ export const expenseApi = {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
+  submitManualApproverSelection: (documentCode: string, payload: ExpenseManualApproverSelectionPayload) =>
+    request<ExpenseDocumentDetail>(`/auth/expenses/${encodeURIComponent(documentCode)}/manual-approver-selections`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
   remind: (documentCode: string, payload: ExpenseDocumentReminderPayload = {}) =>
     request<ExpenseDocumentDetail>(`/auth/expenses/${encodeURIComponent(documentCode)}/reminders`, {
       method: 'POST',
@@ -110,6 +116,10 @@ export const expenseApi = {
     }),
   getEditContext: (documentCode: string) =>
     request<ExpenseDocumentEditContext>(`/auth/expenses/${encodeURIComponent(documentCode)}/edit-context`),
+  deleteDocument: (documentCode: string) =>
+    request<boolean>(`/auth/expenses/${encodeURIComponent(documentCode)}`, {
+      method: 'DELETE'
+    }),
   resubmit: (documentCode: string, payload: ExpenseDocumentUpdatePayload) =>
     request<ExpenseDocumentSubmitResult>(`/auth/expenses/${encodeURIComponent(documentCode)}/resubmit`, {
       method: 'PUT',

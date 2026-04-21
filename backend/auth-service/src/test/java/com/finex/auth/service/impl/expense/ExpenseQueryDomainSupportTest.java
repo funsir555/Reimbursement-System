@@ -1,15 +1,20 @@
 package com.finex.auth.service.impl.expense;
 
+import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
-import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
+import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
+import com.finex.auth.mapper.ProcessDocumentRelationMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
+import com.finex.auth.mapper.ProcessDocumentWriteOffMapper;
+import com.finex.auth.mapper.PmBankPaymentRecordMapper;
 import com.finex.auth.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +25,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.verify;
@@ -39,11 +46,21 @@ class ExpenseQueryDomainSupportTest {
     @Mock
     private ExpenseSummaryAssembler expenseSummaryAssembler;
     @Mock
+    private ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
+    @Mock
     private ProcessDocumentTaskMapper processDocumentTaskMapper;
     @Mock
     private ProcessDocumentActionLogMapper processDocumentActionLogMapper;
     @Mock
+    private ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
+    @Mock
     private ProcessDocumentInstanceMapper processDocumentInstanceMapper;
+    @Mock
+    private ProcessDocumentRelationMapper processDocumentRelationMapper;
+    @Mock
+    private ProcessDocumentWriteOffMapper processDocumentWriteOffMapper;
+    @Mock
+    private PmBankPaymentRecordMapper pmBankPaymentRecordMapper;
     @Mock
     private NotificationService notificationService;
 
@@ -54,17 +71,7 @@ class ExpenseQueryDomainSupportTest {
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-001");
         ExpenseDetailInstanceDetailVO expenseDetailVo = new ExpenseDetailInstanceDetailVO();
-        ExpenseQueryDomainSupport support = new ExpenseQueryDomainSupport(
-                expenseDocumentReadSupport,
-                expenseDocumentActionLogSupport,
-                expenseDocumentTemplateSupport,
-                expenseRelationWriteOffService,
-                expenseSummaryAssembler,
-                processDocumentTaskMapper,
-                processDocumentActionLogMapper,
-                processDocumentInstanceMapper,
-                notificationService
-        );
+        ExpenseQueryDomainSupport support = newSupport();
         when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
         when(expenseSummaryAssembler.toExpenseSummaries(List.of(instance))).thenReturn(summaries);
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
@@ -79,17 +86,7 @@ class ExpenseQueryDomainSupportTest {
     @Test
     void editContextUsesTemplateSupport() {
         ExpenseDocumentEditContextVO context = new ExpenseDocumentEditContextVO();
-        ExpenseQueryDomainSupport support = new ExpenseQueryDomainSupport(
-                expenseDocumentReadSupport,
-                expenseDocumentActionLogSupport,
-                expenseDocumentTemplateSupport,
-                expenseRelationWriteOffService,
-                expenseSummaryAssembler,
-                processDocumentTaskMapper,
-                processDocumentActionLogMapper,
-                processDocumentInstanceMapper,
-                notificationService
-        );
+        ExpenseQueryDomainSupport support = newSupport();
         when(expenseDocumentTemplateSupport.getDocumentEditContext(1L, "DOC-001")).thenReturn(context);
 
         ExpenseDocumentEditContextVO actual = support.getDocumentEditContext(1L, "DOC-001");
@@ -113,17 +110,7 @@ class ExpenseQueryDomainSupportTest {
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         ExpenseDocumentReminderDTO dto = new ExpenseDocumentReminderDTO();
         dto.setRemark("please review");
-        ExpenseQueryDomainSupport support = new ExpenseQueryDomainSupport(
-                expenseDocumentReadSupport,
-                expenseDocumentActionLogSupport,
-                expenseDocumentTemplateSupport,
-                expenseRelationWriteOffService,
-                expenseSummaryAssembler,
-                processDocumentTaskMapper,
-                processDocumentActionLogMapper,
-                processDocumentInstanceMapper,
-                notificationService
-        );
+        ExpenseQueryDomainSupport support = newSupport();
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance, instance);
         when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
         when(processDocumentActionLogMapper.selectOne(any())).thenReturn(null);
@@ -133,5 +120,81 @@ class ExpenseQueryDomainSupportTest {
 
         assertSame(detail, actual);
         verify(expenseDocumentActionLogSupport).appendLog(any(), any(), any(), any(), any(), any(), any(), anyMap());
+    }
+
+    @Test
+    void submitManualApproverSelectionUsesRuntimeSupportAndReturnsRefreshedDetail() {
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-001");
+        instance.setSubmitterUserId(1L);
+        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+        ExpenseManualApproverSelectionDTO dto = new ExpenseManualApproverSelectionDTO();
+        dto.setNodeKey("approval-manual");
+        dto.setUserIds(List.of(8L, 9L));
+        ExpenseQueryDomainSupport support = newSupport();
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance, instance);
+        when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
+
+        ExpenseDocumentDetailVO actual = support.submitManualApproverSelection(1L, "tester", "DOC-001", dto);
+
+        assertSame(detail, actual);
+        verify(expenseDocumentReadSupport).requireSubmitter(instance, 1L);
+        verify(expenseWorkflowRuntimeSupport).submitManualApproverSelection(instance, 1L, "tester", "approval-manual", List.of(8L, 9L));
+    }
+
+    @Test
+    void deleteDraftDocumentDeletesRuntimeDataForSubmitterOwnedDraft() {
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setId(10L);
+        instance.setDocumentCode("DOC-001");
+        instance.setSubmitterUserId(1L);
+        instance.setStatus("DRAFT");
+        ExpenseQueryDomainSupport support = newSupport();
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+
+        assertTrue(support.deleteDraftDocument(1L, "DOC-001"));
+
+        verify(expenseDocumentReadSupport).requireSubmitter(instance, 1L);
+        verify(pmBankPaymentRecordMapper).delete(any());
+        verify(processDocumentWriteOffMapper).delete(any());
+        verify(processDocumentRelationMapper).delete(any());
+        verify(processDocumentTaskMapper).delete(any());
+        verify(processDocumentActionLogMapper).delete(any());
+        verify(processDocumentExpenseDetailMapper).delete(any());
+        verify(processDocumentInstanceMapper).deleteById(10L);
+    }
+
+    @Test
+    void deleteDraftDocumentRejectsNonDraftStatus() {
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setId(10L);
+        instance.setDocumentCode("DOC-001");
+        instance.setSubmitterUserId(1L);
+        instance.setStatus("REJECTED");
+        ExpenseQueryDomainSupport support = newSupport();
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> support.deleteDraftDocument(1L, "DOC-001"));
+
+        assertTrue(error.getMessage().contains("仅草稿状态单据允许删除"));
+    }
+
+    private ExpenseQueryDomainSupport newSupport() {
+        return new ExpenseQueryDomainSupport(
+                expenseDocumentReadSupport,
+                expenseDocumentActionLogSupport,
+                expenseDocumentTemplateSupport,
+                expenseRelationWriteOffService,
+                expenseSummaryAssembler,
+                expenseWorkflowRuntimeSupport,
+                processDocumentTaskMapper,
+                processDocumentActionLogMapper,
+                processDocumentExpenseDetailMapper,
+                processDocumentInstanceMapper,
+                processDocumentRelationMapper,
+                processDocumentWriteOffMapper,
+                pmBankPaymentRecordMapper,
+                notificationService
+        );
     }
 }

@@ -27,6 +27,7 @@ import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -256,6 +257,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         return expenseDocumentQueryService.remindDocument(userId, username, documentCode, dto);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseDocumentDetailVO submitManualApproverSelection(Long userId, String username, String documentCode, ExpenseManualApproverSelectionDTO dto) {
+        return expenseDocumentQueryService.submitManualApproverSelection(userId, username, documentCode, dto);
+    }
+
     /**
      * 获取单据Navigation。
      */
@@ -279,6 +286,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     @Transactional(rollbackFor = Exception.class)
     public ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto) {
         return expenseDocumentSubmissionService.resubmitDocument(userId, username, documentCode, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean deleteDraftDocument(Long userId, String documentCode) {
+        return expenseDocumentQueryService.deleteDraftDocument(userId, documentCode);
     }
 
     /**

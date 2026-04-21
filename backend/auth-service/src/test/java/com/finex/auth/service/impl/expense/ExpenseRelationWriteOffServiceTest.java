@@ -236,6 +236,108 @@ class ExpenseRelationWriteOffServiceTest {
         verify(processDocumentWriteOffMapper).updateById(pending);
     }
 
+    @Test
+    void loadRelatedDocumentBindingsReturnsOutboundAndInboundRecords() {
+        ProcessDocumentRelation outbound = new ProcessDocumentRelation();
+        outbound.setSourceDocumentCode("DOC-CURRENT");
+        outbound.setSourceFieldKey("relatedDocs");
+        outbound.setTargetDocumentCode("DOC-TARGET");
+        outbound.setTargetTemplateType("application");
+        outbound.setStatus("ACTIVE");
+        outbound.setSortOrder(1);
+        ProcessDocumentRelation inbound = new ProcessDocumentRelation();
+        inbound.setSourceDocumentCode("DOC-SOURCE");
+        inbound.setSourceFieldKey("relatedDocs");
+        inbound.setTargetDocumentCode("DOC-CURRENT");
+        inbound.setStatus("ACTIVE");
+        inbound.setSortOrder(2);
+        ProcessDocumentInstance target = createApprovedDocument("DOC-TARGET", "application", "目标单据", BigDecimal.valueOf(300), 9L);
+        target.setSubmitterName("目标提单人");
+        ProcessDocumentInstance source = createApprovedDocument("DOC-SOURCE", "report", "来源单据", BigDecimal.valueOf(260), 10L);
+        source.setSubmitterName("来源提单人");
+
+        when(processDocumentRelationMapper.selectList(any())).thenReturn(List.of(outbound), List.of(inbound));
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(target, source));
+
+        var bindings = service.loadRelatedDocumentBindings("DOC-CURRENT");
+
+        assertEquals(2, bindings.size());
+        assertEquals("OUTBOUND", bindings.get(0).getDirection());
+        assertEquals("DOC-TARGET", bindings.get(0).getDocumentCode());
+        assertEquals("目标单据", bindings.get(0).getDocumentTitle());
+        assertEquals("申请单", bindings.get(0).getTemplateTypeLabel());
+        assertEquals("已完成", bindings.get(0).getStatusLabel());
+        assertEquals("目标提单人", bindings.get(0).getSubmitterName());
+        assertEquals("INBOUND", bindings.get(1).getDirection());
+        assertEquals("DOC-SOURCE", bindings.get(1).getDocumentCode());
+        assertEquals("来源单据", bindings.get(1).getDocumentTitle());
+        assertEquals("报销单", bindings.get(1).getTemplateTypeLabel());
+        assertEquals("来源提单人", bindings.get(1).getSubmitterName());
+    }
+
+    @Test
+    void loadWriteOffDocumentBindingsReturnsDirectionalAmountsAndStatuses() {
+        ProcessDocumentWriteOff outboundPending = new ProcessDocumentWriteOff();
+        outboundPending.setSourceDocumentCode("DOC-CURRENT");
+        outboundPending.setSourceFieldKey("writeoffDocs");
+        outboundPending.setTargetDocumentCode("DOC-LOAN");
+        outboundPending.setTargetTemplateType("loan");
+        outboundPending.setWriteoffSourceKind("LOAN");
+        outboundPending.setRequestedAmount(BigDecimal.valueOf(120));
+        outboundPending.setEffectiveAmount(null);
+        outboundPending.setRemainingSnapshotAmount(BigDecimal.valueOf(380));
+        outboundPending.setStatus("PENDING_EFFECTIVE");
+        outboundPending.setSortOrder(1);
+        ProcessDocumentWriteOff inboundEffective = new ProcessDocumentWriteOff();
+        inboundEffective.setSourceDocumentCode("DOC-REPORT");
+        inboundEffective.setSourceFieldKey("writeoffDocs");
+        inboundEffective.setTargetDocumentCode("DOC-CURRENT");
+        inboundEffective.setWriteoffSourceKind("PREPAY_REPORT");
+        inboundEffective.setRequestedAmount(BigDecimal.valueOf(66));
+        inboundEffective.setEffectiveAmount(BigDecimal.valueOf(66));
+        inboundEffective.setRemainingSnapshotAmount(BigDecimal.valueOf(134));
+        inboundEffective.setStatus("EFFECTIVE");
+        inboundEffective.setSortOrder(2);
+        ProcessDocumentWriteOff inboundVoid = new ProcessDocumentWriteOff();
+        inboundVoid.setSourceDocumentCode("DOC-VOID");
+        inboundVoid.setSourceFieldKey("writeoffDocs");
+        inboundVoid.setTargetDocumentCode("DOC-CURRENT");
+        inboundVoid.setWriteoffSourceKind("LOAN");
+        inboundVoid.setRequestedAmount(BigDecimal.valueOf(30));
+        inboundVoid.setEffectiveAmount(BigDecimal.ZERO);
+        inboundVoid.setRemainingSnapshotAmount(BigDecimal.valueOf(70));
+        inboundVoid.setStatus("VOID");
+        inboundVoid.setSortOrder(3);
+        ProcessDocumentInstance loan = createApprovedDocument("DOC-LOAN", "loan", "借款单据", BigDecimal.valueOf(500), 11L);
+        loan.setSubmitterName("借款人");
+        ProcessDocumentInstance report = createApprovedDocument("DOC-REPORT", "report", "报销来源", BigDecimal.valueOf(200), 12L);
+        report.setSubmitterName("报销人");
+        ProcessDocumentInstance voidSource = createApprovedDocument("DOC-VOID", "report", "作废来源", BigDecimal.valueOf(100), 13L);
+        voidSource.setSubmitterName("作废人");
+
+        when(processDocumentWriteOffMapper.selectList(any())).thenReturn(
+                List.of(outboundPending),
+                List.of(inboundEffective, inboundVoid)
+        );
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(loan, report, voidSource));
+
+        var bindings = service.loadWriteOffDocumentBindings("DOC-CURRENT");
+
+        assertEquals(3, bindings.size());
+        assertEquals("OUTBOUND", bindings.get(0).getDirection());
+        assertEquals("DOC-LOAN", bindings.get(0).getDocumentCode());
+        assertEquals(0, BigDecimal.valueOf(120).compareTo(bindings.get(0).getRequestedAmount()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(bindings.get(0).getEffectiveAmount()));
+        assertEquals("待生效", bindings.get(0).getEffectiveStatusLabel());
+        assertEquals("INBOUND", bindings.get(1).getDirection());
+        assertEquals("DOC-REPORT", bindings.get(1).getDocumentCode());
+        assertEquals(0, BigDecimal.valueOf(66).compareTo(bindings.get(1).getEffectiveAmount()));
+        assertEquals("已生效", bindings.get(1).getEffectiveStatusLabel());
+        assertEquals("INBOUND", bindings.get(2).getDirection());
+        assertEquals("DOC-VOID", bindings.get(2).getDocumentCode());
+        assertEquals("已作废", bindings.get(2).getEffectiveStatusLabel());
+    }
+
     private ProcessFormDesign createFormDesignWithBlocks(List<Map<String, Object>> blocks) throws Exception {
         ProcessFormDesign formDesign = new ProcessFormDesign();
         formDesign.setFormCode("FORM-001");

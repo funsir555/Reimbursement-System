@@ -3824,653 +3824,94 @@
 
 
     <el-dialog v-model="documentPickerDialog.visible" :title="documentPickerTitle" width="920px" destroy-on-close>
-
-
-
-
-
-
-
       <div class="space-y-4">
-
-
-
-
-
-
-
         <div class="flex flex-wrap items-center gap-3">
-
-
-
-
-
-
-
           <input
-
-
-
-
-
-
-
             v-model.trim="documentPickerDialog.keyword"
-
-
-
-
-
-
-
             class="min-w-[220px] flex-1 rounded-2xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-sky-400"
-
-
-
-
-
-
-
             placeholder="搜索单据编号、标题或模板名称"
-
-
-
-
-
-
-
           />
-
-
-
-
-
-
-
           <button
-
-
-
-
-
-
-
             type="button"
-
-
-
-
-
-
-
             class="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:bg-sky-50"
-
-
-
-
-
-
-
             data-testid="search-document-picker"
-
-
-
-
-
-
-
             @click="loadDocumentPicker"
-
-
-
-
-
-
-
           >
-
-
-
-
-
-
-
             搜索
-
-
-
-
-
-
-
           </button>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         <div v-if="documentPickerDialog.loading" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-
-
-
-
-
-
-
           正在加载可选单据...
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         <div v-else-if="documentPickerDialog.groups.length" class="space-y-4">
-
-
-
-
-
-
-
-          <div
-
-
-
-
-
-
-
-            v-for="group in documentPickerDialog.groups"
-
-
-
-
-
-
-
-            :key="`${documentPickerDialog.fieldKey}-${group.templateType}`"
-
-
-
-
-
-
-
-            class="rounded-[24px] border border-slate-200 bg-slate-50 p-4"
-
-
-
-
-
-
-
-          >
-
-
-
-
-
-
-
-            <div class="flex flex-wrap items-center justify-between gap-3">
-
-
-
-
-
-
-
-              <div>
-
-
-
-
-
-
-
-                <p class="text-sm font-semibold text-slate-800">{{ group.templateTypeLabel }}</p>
-
-
-
-
-
-
-
-                <p class="mt-1 text-xs text-slate-500">共 {{ group.total }} 条可选单据</p>
-
-
-
-
-
-
-
-              </div>
-
-
-
-
-
-
-
-              <p class="text-xs text-slate-400">
-
-
-
-
-
-
-
-                已选 {{ selectedGroupCount(group) }} / {{ group.items.length }}
-
-
-
-
-
-
-
-              </p>
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            <div class="mt-4 space-y-3">
-
-
-
-
-
-
-
-              <button
-
-
-
-
-
-
-
-                v-for="item in group.items"
-
-
-
-
-
-
-
-                :key="item.documentCode"
-
-
-
-
-
-
-
-                type="button"
-
-
-
-
-
-
-
-                class="w-full rounded-2xl border px-4 py-4 text-left transition"
-
-
-
-
-
-
-
-                :class="isDocumentSelected(item.documentCode) ? 'border-sky-300 bg-sky-50' : 'border-slate-200 bg-white hover:border-sky-200'"
-
-
-
-
-
-
-
-                :data-testid="`toggle-document-picker-${item.documentCode}`"
-
-
-
-
-
-
-
-                @click="toggleDocumentSelection(item)"
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                <div class="flex flex-wrap items-start justify-between gap-3">
-
-
-
-
-
-
-
-                  <div class="min-w-0">
-
-
-
-
-
-
-
-                    <p class="break-all text-sm font-semibold text-slate-800">
-
-
-
-
-
-
-
-                      {{ item.documentTitle || item.documentCode }}
-
-
-
-
-
-
-
-                    </p>
-
-
-
-
-
-
-
-                    <p class="mt-1 break-all text-xs text-slate-500">单据编号：{{ item.documentCode }}</p>
-
-
-
-
-
-
-
-                    <p class="mt-1 text-xs text-slate-500">
-
-
-
-
-
-
-
-                      模板：{{ item.templateName || group.templateTypeLabel }} / 状态：{{ item.statusLabel }}
-
-
-
-
-
-
-
-                    </p>
-
-
-
-
-
-
-
+          <el-tabs v-model="documentPickerDialog.activeTemplateType" class="document-picker-tabs">
+            <el-tab-pane
+              v-for="group in documentPickerDialog.groups"
+              :key="`${documentPickerDialog.fieldKey}-${group.templateType}`"
+              :label="`${group.templateTypeLabel}（${group.total}）`"
+              :name="group.templateType"
+            >
+              <div class="rounded-[24px] border border-slate-200 bg-slate-50 p-4" :data-testid="`document-picker-panel-${group.templateType}`">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p class="text-sm font-semibold text-slate-800">{{ group.templateTypeLabel }}</p>
+                    <p class="mt-1 text-xs text-slate-500">点击上方页签切换单据类型，当前共 {{ group.total }} 条可选单据</p>
                   </div>
-
-
-
-
-
-
-
-                  <div class="text-right text-xs text-slate-500">
-
-
-
-
-
-
-
-                    <p>金额：{{ formatAmount(item.totalAmount) }}</p>
-
-
-
-
-
-
-
-                    <p v-if="documentPickerDialog.relationType === 'WRITEOFF'" class="mt-1">
-
-
-
-
-
-
-
-                      可核销：{{ formatAmount(item.availableWriteOffAmount) }}
-
-
-
-
-
-
-
-                    </p>
-
-
-
-
-
-
-
-                  </div>
-
-
-
-
-
-
-
+                  <p class="text-xs text-slate-400">
+                    已选 {{ selectedGroupCount(group) }} / {{ group.items.length }}
+                  </p>
                 </div>
 
-
-
-
-
-
-
-              </button>
-
-
-
-
-
-
-
-            </div>
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
-
+                <div v-if="group.items.length" class="mt-4 space-y-3">
+                  <button
+                    v-for="item in group.items"
+                    :key="item.documentCode"
+                    type="button"
+                    class="w-full rounded-2xl border px-4 py-4 text-left transition"
+                    :class="isDocumentSelected(item.documentCode) ? 'border-sky-300 bg-sky-50' : 'border-slate-200 bg-white hover:border-sky-200'"
+                    :data-testid="`toggle-document-picker-${item.documentCode}`"
+                    @click="toggleDocumentSelection(item)"
+                  >
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <p class="break-all text-sm font-semibold text-slate-800">
+                          {{ item.documentTitle || item.documentCode }}
+                        </p>
+                        <p class="mt-1 break-all text-xs text-slate-500">单据编号：{{ item.documentCode }}</p>
+                        <p class="mt-1 text-xs text-slate-500">
+                          模板：{{ item.templateName || group.templateTypeLabel }} / 状态：{{ item.statusLabel }}
+                        </p>
+                      </div>
+                      <div class="text-right text-xs text-slate-500">
+                        <p>金额：{{ formatAmount(item.totalAmount) }}</p>
+                        <p v-if="documentPickerDialog.relationType === 'WRITEOFF'" class="mt-1">
+                          可核销：{{ formatAmount(item.availableWriteOffAmount) }}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+                <div v-else class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400" data-testid="document-picker-tab-empty">
+                  当前类型暂无可选单据
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
         </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         <div v-else class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
-
-
-
-
-
-
-
           暂无可选单据
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
       </div>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       <template #footer>
-
-
-
-
-
-
-
         <div class="flex justify-end gap-3">
-
-
-
-
-
-
-
           <el-button @click="closeDocumentPicker">取消</el-button>
-
-
-
-
-
-
-
           <el-button type="primary" data-testid="confirm-document-picker" @click="confirmDocumentPicker">确认选择</el-button>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
       </template>
-
-
-
-
-
-
-
     </el-dialog>
 
 
@@ -5438,164 +4879,26 @@ const payeeAccountOptionsLoading = ref(false)
 
 
 const documentPickerDialog = reactive<{
-
-
-
-
-
-
-
   visible: boolean
-
-
-
-
-
-
-
   fieldKey: string
-
-
-
-
-
-
-
   relationType: DocumentRelationType
-
-
-
-
-
-
-
   keyword: string
-
-
-
-
-
-
-
   loading: boolean
-
-
-
-
-
-
-
   groups: ExpenseDocumentPickerGroup[]
-
-
-
-
-
-
-
+  activeTemplateType: string
   selectedCodes: string[]
-
-
-
-
-
-
-
   itemsByCode: Record<string, RuntimeDocumentRecord>
-
-
-
-
-
-
-
 }>({
-
-
-
-
-
-
-
   visible: false,
-
-
-
-
-
-
-
   fieldKey: '',
-
-
-
-
-
-
-
   relationType: 'RELATED',
-
-
-
-
-
-
-
   keyword: '',
-
-
-
-
-
-
-
   loading: false,
-
-
-
-
-
-
-
   groups: [],
-
-
-
-
-
-
-
+  activeTemplateType: '',
   selectedCodes: [],
-
-
-
-
-
-
-
   itemsByCode: {}
-
-
-
-
-
-
-
 })
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 const vendorDialogVisible = ref(false)
 
@@ -7711,19 +7014,18 @@ function sharedArchiveItems(block: ProcessFormDesignBlock) {
 
 const documentPickerTitle = computed(() => documentPickerDialog.relationType === 'WRITEOFF' ? '选择核销单据' : '选择关联单据')
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+function resolveDocumentPickerActiveTemplateType(groups: ExpenseDocumentPickerGroup[]) {
+  if (!groups.length) {
+    return ''
+  }
+  if (groups.some((group) => group.templateType === documentPickerDialog.activeTemplateType)) {
+    return documentPickerDialog.activeTemplateType
+  }
+  const selectedGroup = groups.find((group) =>
+    group.items.some((item) => documentPickerDialog.selectedCodes.includes(item.documentCode))
+  )
+  return selectedGroup?.templateType || groups[0]?.templateType || ''
+}
 
 function isRelatedDocumentBlock(block: ProcessFormDesignBlock) {
 
@@ -7837,7 +7139,7 @@ function documentBlockHint(block: ProcessFormDesignBlock) {
 
 
 
-    ? '支持选择借款单或可核销报销单，选中后逐条填写本次核销金额。'
+    ? '支持点击页签切换报销单与借款单，选中后逐条填写本次核销金额。'
 
 
 
@@ -7845,7 +7147,7 @@ function documentBlockHint(block: ProcessFormDesignBlock) {
 
 
 
-    : '支持按单据类型分组选择多张已审批通过的业务单据。'
+    : '支持点击页签切换报销单、申请单、合同单与借款单，并同时关联多张已审批通过的单据。'
 
 
 
@@ -8014,484 +7316,67 @@ function documentRecords(block: ProcessFormDesignBlock) {
 
 
 function openDocumentPicker(block: ProcessFormDesignBlock) {
-
-
-
-
-
-
-
   documentPickerDialog.visible = true
-
-
-
-
-
-
-
   documentPickerDialog.fieldKey = block.fieldKey
-
-
-
-
-
-
-
   documentPickerDialog.relationType = documentRelationType(block)
-
-
-
-
-
-
-
   documentPickerDialog.keyword = ''
-
-
-
-
-
-
-
   documentPickerDialog.groups = []
-
-
-
-
-
-
-
+  documentPickerDialog.activeTemplateType = ''
   documentPickerDialog.selectedCodes = []
-
-
-
-
-
-
-
   documentPickerDialog.itemsByCode = {}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   documentRecords(block).forEach((item) => {
-
-
-
-
-
-
-
     if (!item.documentCode) {
-
-
-
-
-
-
-
       return
-
-
-
-
-
-
-
     }
-
-
-
-
-
-
-
     documentPickerDialog.selectedCodes.push(item.documentCode)
-
-
-
-
-
-
-
     documentPickerDialog.itemsByCode[item.documentCode] = cloneDocumentRecord(item)
-
-
-
-
-
-
-
   })
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   void loadDocumentPicker()
-
-
-
-
-
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 function closeDocumentPicker() {
-
-
-
-
-
-
-
   documentPickerDialog.visible = false
-
-
-
-
-
-
-
   documentPickerDialog.fieldKey = ''
-
-
-
-
-
-
-
   documentPickerDialog.keyword = ''
-
-
-
-
-
-
-
   documentPickerDialog.groups = []
-
-
-
-
-
-
-
+  documentPickerDialog.activeTemplateType = ''
   documentPickerDialog.selectedCodes = []
-
-
-
-
-
-
-
   documentPickerDialog.itemsByCode = {}
-
-
-
-
-
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 async function loadDocumentPicker() {
-
-
-
-
-
-
-
   if (!documentPickerDialog.fieldKey) {
-
-
-
-
-
-
-
     return
-
-
-
-
-
-
-
   }
-
-
-
-
-
-
-
   const block = blocks.value.find((item) => item.fieldKey === documentPickerDialog.fieldKey)
-
-
-
-
-
-
-
   if (!block) {
-
-
-
-
-
-
-
     return
-
-
-
-
-
-
-
   }
-
-
-
-
-
-
-
   documentPickerDialog.loading = true
-
-
-
-
-
-
-
   try {
-
-
-
-
-
-
-
     const res = await expenseApi.getDocumentPicker({
-
-
-
-
-
-
-
       relationType: documentPickerDialog.relationType,
-
-
-
-
-
-
-
       templateTypes: documentAllowedTemplateTypes(block),
-
-
-
-
-
-
-
       keyword: documentPickerDialog.keyword || undefined
-
-
-
-
-
-
-
     })
-
-
-
-
-
-
-
     documentPickerDialog.groups = res.data.groups || []
-
-
-
-
-
-
-
+    documentPickerDialog.activeTemplateType = resolveDocumentPickerActiveTemplateType(documentPickerDialog.groups)
     documentPickerDialog.groups.forEach((group) => {
-
-
-
-
-
-
-
       group.items.forEach((item) => {
-
-
-
-
-
-
-
         documentPickerDialog.itemsByCode[item.documentCode] = mergeDocumentRecord(
-
-
-
-
-
-
-
           documentPickerDialog.itemsByCode[item.documentCode],
-
-
-
-
-
-
-
           toDocumentRecord(item)
-
-
-
-
-
-
-
         )
-
-
-
-
-
-
-
       })
-
-
-
-
-
-
-
     })
-
-
-
-
-
-
-
   } catch (error: unknown) {
-
-
-
-
-
-
-
     ElMessage.error(resolveErrorMessage(error, '加载可选单据失败'))
-
-
-
-
-
-
-
   } finally {
-
-
-
-
-
-
-
     documentPickerDialog.loading = false
-
-
-
-
-
-
-
   }
-
-
-
-
-
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 function isDocumentSelected(documentCode: string) {
 
@@ -13421,12 +12306,28 @@ function toOptionalString(value: unknown) {
 
 
 <style scoped>
+:deep(.document-picker-tabs .el-tabs__header) {
+  margin-bottom: 16px;
+}
 
+:deep(.document-picker-tabs .el-tabs__nav-wrap::after) {
+  opacity: 0;
+}
 
+:deep(.document-picker-tabs .el-tabs__item) {
+  height: 40px;
+  border-radius: 999px;
+  padding: 0 16px;
+  color: #475569;
+}
 
+:deep(.document-picker-tabs .el-tabs__item.is-active) {
+  color: #0369a1;
+}
 
-
-
+:deep(.document-picker-tabs .el-tabs__active-bar) {
+  background-color: #0ea5e9;
+}
 
 :deep(.expense-runtime-control) {
 

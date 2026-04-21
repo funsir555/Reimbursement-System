@@ -12,13 +12,21 @@ import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.entity.ProcessDocumentActionLog;
+import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.entity.ProcessDocumentRelation;
 import com.finex.auth.entity.ProcessDocumentTask;
+import com.finex.auth.entity.ProcessDocumentWriteOff;
 import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
+import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
+import com.finex.auth.mapper.ProcessDocumentRelationMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
+import com.finex.auth.mapper.ProcessDocumentWriteOffMapper;
+import com.finex.auth.mapper.PmBankPaymentRecordMapper;
 import com.finex.auth.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -64,9 +72,14 @@ public class ExpenseQueryDomainSupport {
     private final ExpenseDocumentTemplateSupport expenseDocumentTemplateSupport;
     private final ExpenseRelationWriteOffService expenseRelationWriteOffService;
     private final ExpenseSummaryAssembler expenseSummaryAssembler;
+    private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     private final ProcessDocumentTaskMapper processDocumentTaskMapper;
     private final ProcessDocumentActionLogMapper processDocumentActionLogMapper;
+    private final ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
+    private final ProcessDocumentRelationMapper processDocumentRelationMapper;
+    private final ProcessDocumentWriteOffMapper processDocumentWriteOffMapper;
+    private final PmBankPaymentRecordMapper pmBankPaymentRecordMapper;
     private final NotificationService notificationService;
 
     /**
@@ -239,6 +252,21 @@ public class ExpenseQueryDomainSupport {
         return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
 
+    public ExpenseDocumentDetailVO submitManualApproverSelection(Long userId, String username, String documentCode, ExpenseManualApproverSelectionDTO dto) {
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.requireSubmitter(instance, userId);
+        expenseWorkflowRuntimeSupport.submitManualApproverSelection(
+                instance,
+                userId,
+                username,
+                dto == null ? null : dto.getNodeKey(),
+                dto == null ? Collections.emptyList() : dto.getUserIds()
+        );
+        return expenseDocumentReadSupport.buildDocumentDetail(
+                expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
+        );
+    }
+
     /**
      * 获取单据Navigation。
      */
@@ -267,6 +295,47 @@ public class ExpenseQueryDomainSupport {
      */
     public ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode) {
         return expenseDocumentTemplateSupport.getDocumentEditContext(userId, documentCode);
+    }
+
+    public boolean deleteDraftDocument(Long userId, String documentCode) {
+        ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
+        expenseDocumentReadSupport.requireSubmitter(instance, userId);
+        if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
+            throw new IllegalStateException("仅草稿状态单据允许删除");
+        }
+        String normalizedDocumentCode = instance.getDocumentCode();
+        pmBankPaymentRecordMapper.delete(
+                Wrappers.<com.finex.auth.entity.PmBankPaymentRecord>lambdaQuery()
+                        .eq(com.finex.auth.entity.PmBankPaymentRecord::getDocumentCode, normalizedDocumentCode)
+        );
+        processDocumentWriteOffMapper.delete(
+                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
+                        .and(wrapper -> wrapper
+                                .eq(ProcessDocumentWriteOff::getSourceDocumentCode, normalizedDocumentCode)
+                                .or()
+                                .eq(ProcessDocumentWriteOff::getTargetDocumentCode, normalizedDocumentCode))
+        );
+        processDocumentRelationMapper.delete(
+                Wrappers.<ProcessDocumentRelation>lambdaQuery()
+                        .and(wrapper -> wrapper
+                                .eq(ProcessDocumentRelation::getSourceDocumentCode, normalizedDocumentCode)
+                                .or()
+                                .eq(ProcessDocumentRelation::getTargetDocumentCode, normalizedDocumentCode))
+        );
+        processDocumentTaskMapper.delete(
+                Wrappers.<ProcessDocumentTask>lambdaQuery()
+                        .eq(ProcessDocumentTask::getDocumentCode, normalizedDocumentCode)
+        );
+        processDocumentActionLogMapper.delete(
+                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
+                        .eq(ProcessDocumentActionLog::getDocumentCode, normalizedDocumentCode)
+        );
+        processDocumentExpenseDetailMapper.delete(
+                Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
+                        .eq(ProcessDocumentExpenseDetail::getDocumentCode, normalizedDocumentCode)
+        );
+        processDocumentInstanceMapper.deleteById(instance.getId());
+        return true;
     }
 
     /**

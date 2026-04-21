@@ -199,13 +199,37 @@
         <el-table-column label="操作" width="220" fixed="right" :resizable="false">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click.stop="openDetail(row)" @dblclick.stop>查看</el-button>
-            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:edit')" link type="primary" size="small" @click.stop @dblclick.stop>
+            <el-button
+              v-if="isDraftDocument(row) && can('expense:list:edit')"
+              link
+              type="primary"
+              size="small"
+              :data-testid="`expense-edit-${row.documentCode || row.no}`"
+              @click.stop="openResubmitEditor(row)"
+              @dblclick.stop
+            >
               编辑
             </el-button>
-            <el-button v-if="resolveDocumentStatusLabel(row) === '草稿' && can('expense:list:delete')" link type="danger" size="small" @click.stop @dblclick.stop>
+            <el-button
+              v-if="isDraftDocument(row) && can('expense:list:delete')"
+              link
+              type="danger"
+              size="small"
+              :data-testid="`expense-delete-${row.documentCode || row.no}`"
+              @click.stop="handleDelete(row)"
+              @dblclick.stop
+            >
               删除
             </el-button>
-            <el-button v-if="resolveDocumentStatusLabel(row) === '已驳回' && can('expense:list:submit')" link type="warning" size="small" @click.stop @dblclick.stop>
+            <el-button
+              v-if="isRejectedDocument(row) && can('expense:list:submit')"
+              link
+              type="warning"
+              size="small"
+              :data-testid="`expense-resubmit-${row.documentCode || row.no}`"
+              @click.stop="openResubmitEditor(row)"
+              @dblclick.stop
+            >
               重新提交
             </el-button>
           </template>
@@ -228,7 +252,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleCheckFilled,
   Clock,
@@ -452,6 +476,48 @@ function goCreateExpense() {
   void router.push('/expense/create')
 }
 
+function resolveDocumentStatusCode(row: ExpenseSummary) {
+  const rawStatus = [row.documentStatus, row.status, row.documentStatusLabel]
+    .find((item) => typeof item === 'string' && item.trim())
+    ?.trim()
+
+  switch (rawStatus) {
+    case '草稿':
+      return 'DRAFT'
+    case '已驳回':
+      return 'REJECTED'
+    default:
+      return rawStatus || ''
+  }
+}
+
+function isDraftDocument(row: ExpenseSummary) {
+  return resolveDocumentStatusCode(row) === 'DRAFT'
+}
+
+function isRejectedDocument(row: ExpenseSummary) {
+  return resolveDocumentStatusCode(row) === 'REJECTED'
+}
+
+function isEditableDraftLike(row: ExpenseSummary) {
+  const statusCode = resolveDocumentStatusCode(row)
+  return statusCode === 'DRAFT' || statusCode === 'REJECTED'
+}
+
+function buildResubmitEditorPath(documentCode: string, draftEntry: boolean) {
+  const basePath = `/expense/documents/${encodeURIComponent(documentCode)}/resubmit`
+  return draftEntry ? `${basePath}?entry=draft` : basePath
+}
+
+function openResubmitEditor(row: ExpenseSummary) {
+  const documentCode = row.documentCode || row.no
+  if (!documentCode) {
+    ElMessage.warning('未找到单据编码')
+    return
+  }
+  void router.push(buildResubmitEditorPath(documentCode, isDraftDocument(row)))
+}
+
 function openDetail(row: ExpenseSummary) {
   const documentCode = row.documentCode || row.no
   if (!documentCode) {
@@ -462,7 +528,40 @@ function openDetail(row: ExpenseSummary) {
 }
 
 function handleRowDblClick(row: ExpenseSummary) {
+  if (isEditableDraftLike(row)) {
+    openResubmitEditor(row)
+    return
+  }
   openDetail(row)
+}
+
+async function handleDelete(row: ExpenseSummary) {
+  const documentCode = row.documentCode || row.no
+  if (!documentCode) {
+    ElMessage.warning('未找到单据编码')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认删除草稿单据 ${documentCode} 吗？删除后无法恢复。`,
+      '删除草稿',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+      }
+    )
+  } catch {
+    return
+  }
+
+  try {
+    await expenseApi.deleteDocument(documentCode)
+    ElMessage.success('草稿已删除')
+    await reloadList()
+  } catch (error: any) {
+    ElMessage.error(error.message || '删除草稿失败')
+  }
 }
 
 async function reloadList() {

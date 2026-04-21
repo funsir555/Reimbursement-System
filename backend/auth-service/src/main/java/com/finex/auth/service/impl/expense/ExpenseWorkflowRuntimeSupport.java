@@ -1,7 +1,7 @@
 // 业务域：报销单录入、流转与查询
 // 文件角色：通用支撑类
-// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
-// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+// 上下游关系：上游通常来自报销单页面、审批页面、付款页面对应的 Controller，下游继续协调报销单、流程节点、附件、付款与核销等数据。
+// 风险提醒：改坏后最容易影响单据状态、审批链、金额结果和重复提交。
 
 package com.finex.auth.service.impl.expense;
 
@@ -32,8 +32,8 @@ import java.util.Map;
 
 /**
  * ExpenseWorkflowRuntimeSupport：通用支撑类。
- * 封装 报销单这块可复用的业务能力。
- * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ * 封装报销单运行态可复用的业务能力。
+ * 修改这里时，要特别关注单据状态、审批链、金额结果和重复提交。
  */
 @Service
 public class ExpenseWorkflowRuntimeSupport {
@@ -43,7 +43,7 @@ public class ExpenseWorkflowRuntimeSupport {
     private final ExpenseWorkflowRepairSupport repairSupport;
 
     /**
-     * 初始化这个类所需的依赖组件。
+     * 鍒濆鍖栬繖涓被鎵€闇€鐨勪緷璧栫粍浠躲€?
      */
     public ExpenseWorkflowRuntimeSupport(
             ProcessDocumentInstanceMapper processDocumentInstanceMapper,
@@ -75,7 +75,7 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 组装运行时流程上下文。
+     * 缁勮杩愯鏃舵祦绋嬩笂涓嬫枃銆?
      */
     public Map<String, Object> buildRuntimeFlowContext(
             User currentUser,
@@ -89,21 +89,21 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 组装运行时上下文ForInstance。
+     * 缁勮杩愯鏃朵笂涓嬫枃ForInstance銆?
      */
     public Map<String, Object> buildRuntimeContextForInstance(ProcessDocumentInstance instance) {
         return contextSupport.buildRuntimeContextForInstance(instance);
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public void initializeRuntime(ProcessDocumentInstance instance, Map<String, Object> context) {
         executionSupport.initializeRuntime(instance, context);
     }
 
     /**
-     * 校验流程Snapshot。
+     * 鏍￠獙娴佺▼Snapshot銆?
      */
     public void validateFlowSnapshot(String snapshotJson) {
         contextSupport.validateFlowSnapshot(snapshotJson);
@@ -126,7 +126,7 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 审批通过Pending任务。
+     * 瀹℃壒閫氳繃Pending浠诲姟銆?
      */
     public void approvePendingTask(
             ProcessDocumentInstance instance,
@@ -139,7 +139,7 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 审批驳回Pending任务。
+     * 瀹℃壒椹冲洖Pending浠诲姟銆?
      */
     public void rejectPendingTask(
             ProcessDocumentInstance instance,
@@ -152,8 +152,18 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.rejectPendingTask(instance, task, userId, username, comment, targetNodeKey);
     }
 
+    public void submitManualApproverSelection(
+            ProcessDocumentInstance instance,
+            Long userId,
+            String username,
+            String nodeKey,
+            List<Long> userIds
+    ) {
+        executionSupport.submitManualApproverSelection(instance, userId, username, nodeKey, userIds);
+    }
+
     /**
-     * 创建AddSign任务。
+     * 鍒涘缓AddSign浠诲姟銆?
      */
     public void createAddSignTask(
             ProcessDocumentInstance instance,
@@ -167,7 +177,7 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 审批通过AddSign任务。
+     * 瀹℃壒閫氳繃AddSign浠诲姟銆?
      */
     public void approveAddSignTask(
             ProcessDocumentInstance instance,
@@ -180,21 +190,21 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public boolean paymentTaskAllowsRetry(ProcessDocumentTask task) {
         return executionSupport.paymentTaskAllowsRetry(task);
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public boolean paymentTaskAllowsRetry(ProcessDocumentInstance instance, ProcessDocumentTask task) {
         return executionSupport.paymentTaskAllowsRetry(instance, task);
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public void markPaymentStarted(
             ProcessDocumentInstance instance,
@@ -210,7 +220,7 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public void completePaymentRuntime(
             ProcessDocumentInstance instance,
@@ -225,7 +235,7 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public void markPaymentException(
             ProcessDocumentInstance instance,
@@ -239,14 +249,14 @@ public class ExpenseWorkflowRuntimeSupport {
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public RawFlowSnapshotSignature inspectRawFlowSnapshot(String snapshotJson) {
         return contextSupport.inspectRawFlowSnapshot(snapshotJson);
     }
 
     /**
-     * 判断Misapproved按BlankRootBug是否成立。
+     * 鍒ゆ柇Misapproved鎸塀lankRootBug鏄惁鎴愮珛銆?
      */
     boolean isMisapprovedByBlankRootBug(String documentCode) {
         return repairSupport.isMisapprovedByBlankRootBug(documentCode);
@@ -256,3 +266,4 @@ public class ExpenseWorkflowRuntimeSupport {
         repairSupport.rebuildMisapprovedRuntime(instance);
     }
 }
+

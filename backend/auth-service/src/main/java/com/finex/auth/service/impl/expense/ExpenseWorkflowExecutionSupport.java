@@ -10,6 +10,7 @@ import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.User;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -57,6 +58,16 @@ class ExpenseWorkflowExecutionSupport {
             String targetNodeKey
     ) {
         support.rejectPendingTask(instance, task, userId, username, comment, targetNodeKey);
+    }
+
+    void submitManualApproverSelection(
+            ProcessDocumentInstance instance,
+            Long userId,
+            String username,
+            String nodeKey,
+            List<Long> userIds
+    ) {
+        support.submitManualApproverSelection(instance, userId, username, nodeKey, userIds);
     }
 
     /**

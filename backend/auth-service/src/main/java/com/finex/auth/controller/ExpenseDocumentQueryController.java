@@ -11,6 +11,7 @@ import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -57,6 +59,7 @@ public class ExpenseDocumentQueryController {
     private static final String EXPENSE_DOCUMENTS_VIEW = "expense:documents:view";
     private static final String EXPENSE_CREATE_VIEW = "expense:create:view";
     private static final String EXPENSE_PAYMENT_ORDER_VIEW = "expense:payment:payment_order:view";
+    private static final String EXPENSE_LIST_DELETE = "expense:list:delete";
 
     private final ExpenseDocumentService expenseDocumentService;
     private final ExpenseDocumentPrintService expenseDocumentPrintService;
@@ -220,6 +223,20 @@ public class ExpenseDocumentQueryController {
         );
     }
 
+    @PostMapping("/{documentCode}/manual-approver-selections")
+    public Result<ExpenseDocumentDetailVO> submitManualApproverSelection(
+            @PathVariable String documentCode,
+            @Valid @RequestBody ExpenseManualApproverSelectionDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(
+                "手动选人已提交",
+                expenseDocumentService.submitManualApproverSelection(userId, getCurrentUsername(request), documentCode, dto)
+        );
+    }
+
     // 澶勭悊 navigation 璇锋眰銆?
     @GetMapping("/{documentCode}/navigation")
     public Result<ExpenseDocumentNavigationVO> navigation(@PathVariable String documentCode, HttpServletRequest request) {
@@ -250,6 +267,16 @@ public class ExpenseDocumentQueryController {
         return Result.success(
                 "审批单已重新提交",
                 expenseDocumentService.resubmitDocument(userId, getCurrentUsername(request), documentCode, dto)
+        );
+    }
+
+    @DeleteMapping("/{documentCode}")
+    public Result<Boolean> deleteDraft(@PathVariable String documentCode, HttpServletRequest request) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, EXPENSE_LIST_DELETE);
+        return Result.success(
+                "草稿已删除",
+                expenseDocumentService.deleteDraftDocument(userId, documentCode)
         );
     }
 

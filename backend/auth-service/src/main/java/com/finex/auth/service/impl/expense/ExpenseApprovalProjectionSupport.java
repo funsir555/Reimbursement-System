@@ -10,6 +10,7 @@ import com.finex.auth.entity.ProcessDocumentActionLog;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.User;
+import com.finex.auth.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -60,6 +62,7 @@ class ExpenseApprovalProjectionSupport {
 
     private static final String STATUS_NOT_REACHED = "NOT_REACHED";
     private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_MANUAL_SELECTION_PENDING = "MANUAL_SELECTION_PENDING";
     private static final String STATUS_APPROVED = "APPROVED";
     private static final String STATUS_REJECTED = "REJECTED";
     private static final String STATUS_AUTO_SKIPPED = "AUTO_SKIPPED";
@@ -72,6 +75,7 @@ class ExpenseApprovalProjectionSupport {
 
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     private final ObjectMapper objectMapper;
+    private final UserMapper userMapper;
 
     ApprovalProjectionResult build(
             ProcessDocumentInstance instance,
@@ -83,6 +87,7 @@ class ExpenseApprovalProjectionSupport {
         List<LogEntry> logEntries = actionLogs == null
                 ? Collections.emptyList()
                 : actionLogs.stream().map(this::toLogEntry).toList();
+        Map<Long, String> userDisplayNames = new HashMap<>();
         Map<String, String> routeHitsByBranchNode = buildRouteHitIndex(logEntries);
         List<ProcessFlowNodeDTO> matchedBusinessNodes = collectFromPosition(
                 instance,
@@ -102,9 +107,16 @@ class ExpenseApprovalProjectionSupport {
                 ));
 
         List<ExpenseApprovalNodeStatusVO> nodeStatuses = matchedBusinessNodes.stream()
-                .map(node -> buildNodeStatus(instance, node, runtimeContext, tasksByNode.get(node.getNodeKey()), logsByNode.get(node.getNodeKey())))
+                .map(node -> buildNodeStatus(
+                        instance,
+                        node,
+                        runtimeContext,
+                        tasksByNode.get(node.getNodeKey()),
+                        logsByNode.get(node.getNodeKey()),
+                        userDisplayNames
+                ))
                 .toList();
-        List<ExpenseApprovalTimelineItemVO> timeline = buildTimeline(instance, logEntries, nodeStatuses);
+        List<ExpenseApprovalTimelineItemVO> timeline = buildTimeline(instance, logEntries, nodeStatuses, userDisplayNames);
         return new ApprovalProjectionResult(nodeStatuses, timeline);
     }
 
@@ -211,7 +223,8 @@ class ExpenseApprovalProjectionSupport {
             ProcessFlowNodeDTO node,
             Map<String, Object> runtimeContext,
             List<ProcessDocumentTask> nodeTasks,
-            List<LogEntry> nodeLogs
+            List<LogEntry> nodeLogs,
+            Map<Long, String> userDisplayNames
     ) {
         List<ProcessDocumentTask> tasks = nodeTasks == null ? Collections.emptyList() : nodeTasks;
         List<LogEntry> logs = nodeLogs == null ? Collections.emptyList() : nodeLogs;
@@ -226,28 +239,39 @@ class ExpenseApprovalProjectionSupport {
 
         String nodeType = defaultText(node.getNodeType(), "");
         if (NODE_TYPE_PAYMENT.equals(nodeType)) {
-            applyPaymentStatus(status, node, runtimeContext, openTasks, logs);
+            applyPaymentStatus(status, node, runtimeContext, openTasks, logs, userDisplayNames);
         } else if (NODE_TYPE_CC.equals(nodeType)) {
-            applyCcStatus(instance, status, node, runtimeContext, logs);
+            applyCcStatus(instance, status, node, runtimeContext, logs, userDisplayNames);
         } else {
-            applyApprovalStatus(status, node, runtimeContext, openTasks, logs);
+            applyApprovalStatus(instance, status, node, runtimeContext, openTasks, logs, userDisplayNames);
         }
         return status;
     }
 
     private void applyApprovalStatus(
+            ProcessDocumentInstance instance,
             ExpenseApprovalNodeStatusVO status,
             ProcessFlowNodeDTO node,
             Map<String, Object> runtimeContext,
             List<ProcessDocumentTask> openTasks,
-            List<LogEntry> logs
+            List<LogEntry> logs,
+            Map<Long, String> userDisplayNames
     ) {
         if (!openTasks.isEmpty()) {
             status.setStatus(STATUS_PENDING);
             status.setStatusLabel("审批中");
-            status.setAssigneeNames(distinctNonBlank(openTasks.stream().map(ProcessDocumentTask::getAssigneeName).toList()));
+            status.setAssigneeNames(distinctNonBlank(openTasks.stream()
+                    .map(item -> resolveTaskAssigneeDisplayName(item, userDisplayNames))
+                    .toList()));
             status.setOccurredAt(formatTime(openTasks.get(0).getCreatedAt()));
             status.setDescription(joinNames("当前处理人", status.getAssigneeNames()));
+            return;
+        }
+        if (Objects.equals(trimToNull(instance.getCurrentTaskType()), "MANUAL_SELECT")
+                && Objects.equals(trimToNull(instance.getCurrentNodeKey()), trimToNull(node.getNodeKey()))) {
+            status.setStatus(STATUS_MANUAL_SELECTION_PENDING);
+            status.setStatusLabel("待手动选择审批人");
+            status.setDescription("等待提单人指定当前节点审批人");
             return;
         }
 
@@ -255,7 +279,7 @@ class ExpenseApprovalProjectionSupport {
         if (rejectLog != null) {
             status.setStatus(STATUS_REJECTED);
             status.setStatusLabel("已驳回");
-            status.setAssigneeNames(distinctNonBlank(List.of(rejectLog.log().getActorName())));
+            status.setAssigneeNames(distinctNonBlank(List.of(resolveActorDisplayName(rejectLog.log(), userDisplayNames))));
             status.setOccurredAt(formatTime(rejectLog.log().getCreatedAt()));
             status.setDescription(joinCommentOrNames(rejectLog.log().getActionComment(), "处理人", status.getAssigneeNames()));
             return;
@@ -275,7 +299,7 @@ class ExpenseApprovalProjectionSupport {
             status.setStatus(STATUS_APPROVED);
             status.setStatusLabel("已通过");
             status.setAssigneeNames(distinctNonBlank(logsOfType(logs, LOG_APPROVE).stream()
-                    .map(item -> item.log().getActorName())
+                    .map(item -> resolveActorDisplayName(item.log(), userDisplayNames))
                     .toList()));
             status.setOccurredAt(formatTime(approveLog.log().getCreatedAt()));
             status.setDescription(joinCommentOrNames(trimToNull(approveLog.log().getActionComment()), "处理人", status.getAssigneeNames()));
@@ -285,7 +309,7 @@ class ExpenseApprovalProjectionSupport {
         LogEntry exceptionLog = lastLog(logs, LOG_EXCEPTION);
         if (exceptionLog != null) {
             status.setStatus(STATUS_EXCEPTION);
-            status.setStatusLabel("异常");
+            status.setStatusLabel("寮傚父");
             status.setOccurredAt(formatTime(exceptionLog.log().getCreatedAt()));
             status.setDescription(trimToNull(exceptionLog.log().getActionComment()));
             return;
@@ -302,7 +326,8 @@ class ExpenseApprovalProjectionSupport {
             ExpenseApprovalNodeStatusVO status,
             ProcessFlowNodeDTO node,
             Map<String, Object> runtimeContext,
-            List<LogEntry> logs
+            List<LogEntry> logs,
+            Map<Long, String> userDisplayNames
     ) {
         LogEntry ccReachedLog = lastLog(logs, LOG_CC_REACHED);
         if (ccReachedLog != null) {
@@ -326,7 +351,7 @@ class ExpenseApprovalProjectionSupport {
         LogEntry exceptionLog = lastLog(logs, LOG_EXCEPTION);
         if (exceptionLog != null) {
             status.setStatus(STATUS_EXCEPTION);
-            status.setStatusLabel("异常");
+            status.setStatusLabel("寮傚父");
             status.setOccurredAt(formatTime(exceptionLog.log().getCreatedAt()));
             status.setDescription(trimToNull(exceptionLog.log().getActionComment()));
             return;
@@ -335,7 +360,7 @@ class ExpenseApprovalProjectionSupport {
         status.setStatus(STATUS_NOT_REACHED);
         status.setStatusLabel("未到达");
         status.setAssigneeNames(distinctNonBlank(expenseWorkflowRuntimeSupport.previewResolvedCcRecipients(instance, node, runtimeContext).stream()
-                .map(User::getName)
+                .map(this::normalizeUserDisplayName)
                 .toList()));
         status.setDescription(joinNames("预计抄送", status.getAssigneeNames()));
     }
@@ -345,12 +370,15 @@ class ExpenseApprovalProjectionSupport {
             ProcessFlowNodeDTO node,
             Map<String, Object> runtimeContext,
             List<ProcessDocumentTask> openTasks,
-            List<LogEntry> logs
+            List<LogEntry> logs,
+            Map<Long, String> userDisplayNames
     ) {
         if (!openTasks.isEmpty()) {
             status.setStatus(STATUS_PAYMENT_PENDING);
             status.setStatusLabel("待支付");
-            status.setAssigneeNames(distinctNonBlank(openTasks.stream().map(ProcessDocumentTask::getAssigneeName).toList()));
+            status.setAssigneeNames(distinctNonBlank(openTasks.stream()
+                    .map(item -> resolveTaskAssigneeDisplayName(item, userDisplayNames))
+                    .toList()));
             status.setOccurredAt(formatTime(openTasks.get(0).getCreatedAt()));
             status.setDescription(joinNames("当前处理人", status.getAssigneeNames()));
             return;
@@ -360,7 +388,7 @@ class ExpenseApprovalProjectionSupport {
         if (paymentExceptionLog != null) {
             status.setStatus(STATUS_PAYMENT_EXCEPTION);
             status.setStatusLabel("支付异常");
-            status.setAssigneeNames(distinctNonBlank(List.of(paymentExceptionLog.log().getActorName())));
+            status.setAssigneeNames(distinctNonBlank(List.of(resolveActorDisplayName(paymentExceptionLog.log(), userDisplayNames))));
             status.setOccurredAt(formatTime(paymentExceptionLog.log().getCreatedAt()));
             status.setDescription(joinCommentOrNames(paymentExceptionLog.log().getActionComment(), "处理人", status.getAssigneeNames()));
             return;
@@ -370,7 +398,7 @@ class ExpenseApprovalProjectionSupport {
         if (paymentCompleteLog != null) {
             status.setStatus(STATUS_PAYMENT_COMPLETED);
             status.setStatusLabel("已支付");
-            status.setAssigneeNames(distinctNonBlank(List.of(paymentCompleteLog.log().getActorName())));
+            status.setAssigneeNames(distinctNonBlank(List.of(resolveActorDisplayName(paymentCompleteLog.log(), userDisplayNames))));
             status.setOccurredAt(formatTime(paymentCompleteLog.log().getCreatedAt()));
             status.setDescription(joinCommentOrNames(paymentCompleteLog.log().getActionComment(), "处理人", status.getAssigneeNames()));
             return;
@@ -379,7 +407,7 @@ class ExpenseApprovalProjectionSupport {
         LogEntry exceptionLog = lastLog(logs, LOG_EXCEPTION);
         if (exceptionLog != null) {
             status.setStatus(STATUS_EXCEPTION);
-            status.setStatusLabel("异常");
+            status.setStatusLabel("寮傚父");
             status.setOccurredAt(formatTime(exceptionLog.log().getCreatedAt()));
             status.setDescription(trimToNull(exceptionLog.log().getActionComment()));
             return;
@@ -388,31 +416,34 @@ class ExpenseApprovalProjectionSupport {
         status.setStatus(STATUS_NOT_REACHED);
         status.setStatusLabel("未到达");
         status.setAssigneeNames(distinctNonBlank(expenseWorkflowRuntimeSupport.previewResolvedPaymentExecutors(node, runtimeContext).stream()
-                .map(User::getName)
+                .map(this::normalizeUserDisplayName)
                 .toList()));
         status.setDescription(joinNames("预计处理人", status.getAssigneeNames()));
     }
 
     private List<String> resolveFutureApprovers(ProcessFlowNodeDTO node, Map<String, Object> runtimeContext) {
         return distinctNonBlank(expenseWorkflowRuntimeSupport.previewResolvedApprovers(node, runtimeContext).stream()
-                .map(User::getName)
+                .map(this::normalizeUserDisplayName)
                 .toList());
     }
 
     private List<ExpenseApprovalTimelineItemVO> buildTimeline(
             ProcessDocumentInstance instance,
             List<LogEntry> logEntries,
-            List<ExpenseApprovalNodeStatusVO> nodeStatuses
+            List<ExpenseApprovalNodeStatusVO> nodeStatuses,
+            Map<Long, String> userDisplayNames
     ) {
         List<ExpenseApprovalTimelineItemVO> items = new ArrayList<>();
         for (LogEntry entry : logEntries) {
             if (!shouldDisplayTimelineLog(entry.log().getActionType())) {
                 continue;
             }
-            items.add(toTimelineItem(instance, entry));
+            items.add(toTimelineItem(instance, entry, userDisplayNames));
         }
         for (ExpenseApprovalNodeStatusVO nodeStatus : nodeStatuses) {
-            if (STATUS_PENDING.equals(nodeStatus.getStatus()) || STATUS_PAYMENT_PENDING.equals(nodeStatus.getStatus())) {
+            if (STATUS_PENDING.equals(nodeStatus.getStatus())
+                    || STATUS_PAYMENT_PENDING.equals(nodeStatus.getStatus())
+                    || STATUS_MANUAL_SELECTION_PENDING.equals(nodeStatus.getStatus())) {
                 items.add(buildPendingTimelineItem(nodeStatus));
             } else if (STATUS_NOT_REACHED.equals(nodeStatus.getStatus())) {
                 items.add(buildFutureTimelineItem(nodeStatus));
@@ -421,7 +452,11 @@ class ExpenseApprovalProjectionSupport {
         return items;
     }
 
-    private ExpenseApprovalTimelineItemVO toTimelineItem(ProcessDocumentInstance instance, LogEntry entry) {
+    private ExpenseApprovalTimelineItemVO toTimelineItem(
+            ProcessDocumentInstance instance,
+            LogEntry entry,
+            Map<Long, String> userDisplayNames
+    ) {
         ProcessDocumentActionLog log = entry.log();
         ExpenseApprovalTimelineItemVO item = new ExpenseApprovalTimelineItemVO();
         item.setKey("log-" + defaultText(String.valueOf(log.getId()), String.valueOf(item.hashCode())));
@@ -429,8 +464,8 @@ class ExpenseApprovalProjectionSupport {
         item.setNodeName(log.getNodeName());
         item.setStatus(resolveTimelineStatus(log.getActionType()));
         item.setStatusLabel(resolveTimelineStatusLabel(log.getActionType()));
-        item.setTitle(resolveTimelineTitle(instance, entry));
-        item.setDescription(resolveTimelineDescription(entry));
+        item.setTitle(resolveTimelineTitle(instance, entry, userDisplayNames));
+        item.setDescription(resolveTimelineDescription(entry, userDisplayNames));
         item.setTimestamp(formatTime(log.getCreatedAt()));
         item.setAttachmentNames(readStringList(entry.payload().get("attachmentFileNames")));
         return item;
@@ -444,10 +479,15 @@ class ExpenseApprovalProjectionSupport {
         item.setNodeType(nodeStatus.getNodeType());
         item.setStatus(nodeStatus.getStatus());
         item.setStatusLabel(nodeStatus.getStatusLabel());
-        item.setTitle(NODE_TYPE_PAYMENT.equals(nodeStatus.getNodeType())
-                ? defaultText(nodeStatus.getNodeName(), "支付节点") + " 待支付"
-                : defaultText(nodeStatus.getNodeName(), "审批节点") + " 审批中");
-        item.setDescription(joinNames("当前处理人", nodeStatus.getAssigneeNames()));
+        if (STATUS_MANUAL_SELECTION_PENDING.equals(nodeStatus.getStatus())) {
+            item.setTitle(defaultText(nodeStatus.getNodeName(), "审批节点") + " 待手动选择审批人");
+            item.setDescription(trimToNull(nodeStatus.getDescription()));
+        } else {
+            item.setTitle(NODE_TYPE_PAYMENT.equals(nodeStatus.getNodeType())
+                    ? defaultText(nodeStatus.getNodeName(), "支付节点") + " 待支付"
+                    : defaultText(nodeStatus.getNodeName(), "审批节点") + " 审批中");
+            item.setDescription(joinNames("当前处理人", nodeStatus.getAssigneeNames()));
+        }
         item.setTimestamp(defaultText(nodeStatus.getOccurredAt(), ""));
         item.setPending(true);
         return item;
@@ -490,9 +530,13 @@ class ExpenseApprovalProjectionSupport {
         ).contains(defaultText(actionType, ""));
     }
 
-    private String resolveTimelineTitle(ProcessDocumentInstance instance, LogEntry entry) {
+    private String resolveTimelineTitle(
+            ProcessDocumentInstance instance,
+            LogEntry entry,
+            Map<Long, String> userDisplayNames
+    ) {
         ProcessDocumentActionLog log = entry.log();
-        String actorName = defaultText(trimToNull(log.getActorName()), "系统");
+        String actorName = resolveActorDisplayName(log, userDisplayNames);
         String nodeName = defaultText(trimToNull(log.getNodeName()), "节点");
         return switch (defaultText(log.getActionType(), "")) {
             case LOG_SUBMIT -> defaultText(trimToNull(instance.getSubmitterName()), actorName) + " 提交单据";
@@ -516,17 +560,23 @@ class ExpenseApprovalProjectionSupport {
         };
     }
 
-    private String resolveTimelineDescription(LogEntry entry) {
+    private String resolveTimelineDescription(LogEntry entry, Map<Long, String> userDisplayNames) {
         ProcessDocumentActionLog log = entry.log();
         String actionType = defaultText(log.getActionType(), "");
         if (LOG_COMMENT.equals(actionType)) {
             return firstNonBlank(stringValue(entry.payload().get("comment")), trimToNull(log.getActionComment()));
         }
         if (LOG_TRANSFER.equals(actionType)) {
-            return joinParts(trimToNull(log.getActionComment()), valueLabel("转交给", stringValue(entry.payload().get("targetUserName"))));
+            return joinParts(
+                    trimToNull(log.getActionComment()),
+                    valueLabel("\u8f6c\u4ea4\u7ed9", resolvePayloadUserDisplayName(entry.payload(), "targetUserId", "targetUserName", userDisplayNames))
+            );
         }
         if (LOG_ADD_SIGN.equals(actionType)) {
-            return joinParts(trimToNull(log.getActionComment()), valueLabel("加签给", stringValue(entry.payload().get("targetUserName"))));
+            return joinParts(
+                    trimToNull(log.getActionComment()),
+                    valueLabel("\u52a0\u7b7e\u7ed9", resolvePayloadUserDisplayName(entry.payload(), "targetUserId", "targetUserName", userDisplayNames))
+            );
         }
         if (LOG_CC_REACHED.equals(actionType)) {
             return joinNames("抄送对象", readStringList(entry.payload().get("receiverNames")));
@@ -590,6 +640,45 @@ class ExpenseApprovalProjectionSupport {
 
     private LogEntry toLogEntry(ProcessDocumentActionLog log) {
         return new LogEntry(log, readMap(log.getPayloadJson()));
+    }
+
+    private String resolveActorDisplayName(ProcessDocumentActionLog log, Map<Long, String> userDisplayNames) {
+        return defaultText(resolveUserDisplayName(log.getActorUserId(), log.getActorName(), userDisplayNames), "系统");
+    }
+
+    private String resolveTaskAssigneeDisplayName(ProcessDocumentTask task, Map<Long, String> userDisplayNames) {
+        return resolveUserDisplayName(task.getAssigneeUserId(), task.getAssigneeName(), userDisplayNames);
+    }
+
+    private String resolvePayloadUserDisplayName(
+            Map<String, Object> payload,
+            String userIdKey,
+            String nameKey,
+            Map<Long, String> userDisplayNames
+    ) {
+        return resolveUserDisplayName(asLong(payload.get(userIdKey)), stringValue(payload.get(nameKey)), userDisplayNames);
+    }
+
+    private String resolveUserDisplayName(Long userId, String fallbackName, Map<Long, String> userDisplayNames) {
+        if (userId != null) {
+            if (userDisplayNames.containsKey(userId)) {
+                return trimToNull(userDisplayNames.get(userId));
+            }
+            User user = userMapper.selectById(userId);
+            String resolved = normalizeUserDisplayName(user);
+            userDisplayNames.put(userId, resolved);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+        return trimToNull(fallbackName);
+    }
+
+    private String normalizeUserDisplayName(User user) {
+        if (user == null) {
+            return null;
+        }
+        return trimToNull(firstNonBlank(user.getName(), user.getUsername()));
     }
 
     private Map<String, Object> readMap(String payloadJson) {
@@ -680,6 +769,20 @@ class ExpenseApprovalProjectionSupport {
 
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private Long asLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private String defaultText(String value, String fallback) {

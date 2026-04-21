@@ -1,7 +1,9 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
+import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.auth.service.impl.expense.ExpenseDocumentPrintOrientation;
@@ -11,19 +13,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
@@ -80,6 +87,37 @@ class ExpenseDocumentQueryControllerTest {
                 "expense:documents:view"
         );
         verify(expenseDocumentService).getDocumentNavigation(1L, "DOC-002", true);
+    }
+
+    @Test
+    void submitManualApproverSelectionDelegatesToService() throws Exception {
+        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+        detail.setDocumentCode("DOC-001");
+
+        doNothing().when(accessControlService).requireAnyPermission(
+                1L,
+                "expense:list:view",
+                "expense:create:create",
+                "expense:create:submit"
+        );
+        when(expenseDocumentService.submitManualApproverSelection(eq(1L), eq("tester"), eq("DOC-001"), any(ExpenseManualApproverSelectionDTO.class)))
+                .thenReturn(detail);
+
+        mockMvc.perform(post("/auth/expenses/DOC-001/manual-approver-selections")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "tester")
+                        .content("""
+                                {
+                                  "nodeKey": "approval-manual",
+                                  "userIds": [8, 9]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.documentCode").value("DOC-001"));
+
+        verify(expenseDocumentService).submitManualApproverSelection(eq(1L), eq("tester"), eq("DOC-001"), any(ExpenseManualApproverSelectionDTO.class));
     }
 
     @Test
@@ -173,5 +211,19 @@ class ExpenseDocumentQueryControllerTest {
                 true,
                 ExpenseDocumentPrintOrientation.PORTRAIT
         );
+    }
+
+    @Test
+    void deleteDraftDelegatesToService() throws Exception {
+        doNothing().when(accessControlService).requirePermission(1L, "expense:list:delete");
+        when(expenseDocumentService.deleteDraftDocument(1L, "DOC-001")).thenReturn(true);
+
+        mockMvc.perform(delete("/auth/expenses/DOC-001").requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(true));
+
+        verify(accessControlService).requirePermission(1L, "expense:list:delete");
+        verify(expenseDocumentService).deleteDraftDocument(1L, "DOC-001");
     }
 }

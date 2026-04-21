@@ -455,14 +455,14 @@
                       v-if="businessCode(selectedBlock) === 'related-document'"
                       class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs leading-6 text-emerald-700"
                     >
-                      提单页会按所选单据类型分组弹出选择窗口，支持同时关联多张已审批通过的单据。
+                      提单页会按页签切换报销单、申请单、合同单与借款单，支持同时关联多张已审批通过的单据。
                     </p>
 
                     <p
                       v-if="businessCode(selectedBlock) === 'writeoff-document'"
                       class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-700"
                     >
-                      核销单据固定只允许报销单与借款单，提单页选择后需逐条填写本次核销金额。
+                      核销单据固定只允许报销单与借款单，提单页会按页签切换报销单与借款单，选中后需逐条填写本次核销金额。
                     </p>
                   </div>
                 </template>

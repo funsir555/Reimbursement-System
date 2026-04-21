@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
     getNavigation: vi.fn(),
     recall: vi.fn(),
     comment: vi.fn(),
-    remind: vi.fn()
+    remind: vi.fn(),
+    submitManualApproverSelection: vi.fn()
   },
   expenseApprovalApi: {
     approve: vi.fn(),
@@ -148,12 +149,12 @@ const InputStub = defineComponent({
 const SelectStub = defineComponent({
   props: {
     modelValue: {
-      type: String,
+      type: [String, Number, Array],
       default: ''
     }
   },
   emits: ['update:modelValue'],
-  template: '<select v-bind="$attrs" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
+  template: '<select v-bind="$attrs" :value="Array.isArray(modelValue) ? modelValue[0] : modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
 })
 
 const OptionStub = defineComponent({
@@ -163,7 +164,7 @@ const OptionStub = defineComponent({
       default: ''
     },
     value: {
-      type: String,
+      type: [String, Number],
       default: ''
     }
   },
@@ -258,6 +259,8 @@ function buildDocumentDetail(
     actionLogs: [],
     approvalNodeStatuses: [],
     approvalTimeline: [],
+    relatedDocumentBindings: [],
+    writeOffDocumentBindings: [],
     ...overrides
   }
 }
@@ -337,6 +340,7 @@ describe('ExpenseDocumentDetailView', () => {
         detailNo === 'D001' ? 'application/pdf' : 'image/png'
       )
     }))
+    mocks.expenseApi.submitManualApproverSelection.mockResolvedValue({ data: buildDocumentDetail() })
     vi.stubGlobal('open', vi.fn(() => ({ opener: null })))
     vi.stubGlobal('print', vi.fn())
   })
@@ -377,6 +381,76 @@ describe('ExpenseDocumentDetailView', () => {
     expect(mocks.expenseApi.getExpenseDetail).toHaveBeenCalledTimes(2)
     expect(wrapper.get('[data-testid="expense-invoice-preview-file"]').text()).toContain('taxi.png')
     expect(wrapper.find('[data-testid="expense-invoice-preview-image"]').exists()).toBe(true)
+  })
+
+  it('renders related and writeoff truth sections and opens bound documents', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        relatedDocumentBindings: [
+          {
+            direction: 'OUTBOUND',
+            fieldKey: 'relatedDocs',
+            documentCode: 'DOC-REL-001',
+            documentTitle: '项目申请单',
+            templateTypeLabel: '申请单',
+            statusLabel: '已完成',
+            submitterName: '王五'
+          },
+          {
+            direction: 'INBOUND',
+            fieldKey: 'relatedDocs',
+            documentCode: 'DOC-REL-002',
+            documentTitle: '差旅报销单',
+            templateTypeLabel: '报销单',
+            statusLabel: '审批中',
+            submitterName: '赵六'
+          }
+        ],
+        writeOffDocumentBindings: [
+          {
+            direction: 'OUTBOUND',
+            fieldKey: 'writeoffDocs',
+            documentCode: 'DOC-WO-001',
+            documentTitle: '借款单',
+            templateTypeLabel: '借款单',
+            writeOffSourceKind: 'LOAN',
+            requestedAmount: '120.00',
+            effectiveAmount: '0.00',
+            remainingAmount: '380.00',
+            effectiveStatusLabel: '待生效'
+          },
+          {
+            direction: 'INBOUND',
+            fieldKey: 'writeoffDocs',
+            documentCode: 'DOC-WO-002',
+            documentTitle: '预付报销单',
+            templateTypeLabel: '报销单',
+            writeOffSourceKind: 'PREPAY_REPORT',
+            requestedAmount: '66.00',
+            effectiveAmount: '66.00',
+            remainingAmount: '134.00',
+            effectiveStatusLabel: '已生效'
+          }
+        ]
+      })
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="related-bindings-card"]').text()).toContain('关联单据')
+    expect(wrapper.get('[data-testid="related-bindings-card"]').text()).toContain('当前单据主动关联')
+    expect(wrapper.get('[data-testid="related-bindings-card"]').text()).toContain('被其它单据关联')
+    expect(wrapper.get('[data-testid="writeoff-bindings-card"]').text()).toContain('核销单据')
+    expect(wrapper.text()).toContain('项目申请单')
+    expect(wrapper.text()).toContain('差旅报销单')
+    expect(wrapper.text()).toContain('借款单')
+    expect(wrapper.text()).toContain('预付报销单')
+    expect(wrapper.text()).toContain('¥ 120.00')
+    expect(wrapper.text()).toContain('¥ 66.00')
+
+    await wrapper.get('[data-testid="open-bound-document-DOC-REL-001"]').trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-REL-001')
   })
 
   it('keeps the original detail navigation button', async () => {
@@ -1063,6 +1137,21 @@ describe('ExpenseDocumentDetailView', () => {
           ],
           routes: []
         },
+        approvalNodeStatuses: [
+          {
+            nodeKey: 'leader',
+            nodeName: '部门负责人审批',
+            nodeType: 'APPROVAL',
+            status: 'APPROVED',
+            assigneeNames: ['李四']
+          },
+          {
+            nodeKey: 'finance',
+            nodeName: '财务审批',
+            nodeType: 'APPROVAL',
+            status: 'PENDING'
+          }
+        ],
         currentTasks: [
           {
             id: 101,
@@ -1089,6 +1178,8 @@ describe('ExpenseDocumentDetailView', () => {
     await wrapper.get('.detail-floating-button').trigger('click')
     await flushPromises()
 
+    expect(wrapper.text()).toContain('驳回到提单人')
+    expect(wrapper.text()).toContain('部门负责人审批（李四）')
     await wrapper.get('input[placeholder="请输入驳回原因"]').setValue('退回补充说明')
     await wrapper.get('select[placeholder="请选择目标审批节点"]').setValue('leader')
     const rejectButtons = wrapper.findAll('button').filter((item) => item.text() === '驳回')
@@ -1099,6 +1190,64 @@ describe('ExpenseDocumentDetailView', () => {
       comment: '退回补充说明',
       targetNodeKey: 'leader'
     })
+  })
+
+  it('shows the current manual approver selection card for the submitter and submits the current node selection', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        currentTaskType: 'MANUAL_SELECT',
+        manualApproverSelectionPending: true,
+        manualApproverSelectionNodeKey: 'manual-finance',
+        manualApproverSelectionNodeName: '财务复核',
+        manualApproverOptions: [
+          { value: 2, label: '李四' },
+          { value: 3, label: '王五' }
+        ],
+        approvalNodeStatuses: [
+          {
+            nodeKey: 'manual-finance',
+            nodeName: '财务复核',
+            nodeType: 'APPROVAL',
+            status: 'MANUAL_SELECTION_PENDING'
+          }
+        ]
+      })
+    })
+    mocks.expenseApi.submitManualApproverSelection.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        approvalNodeStatuses: [
+          {
+            nodeKey: 'manual-finance',
+            nodeName: '财务复核',
+            nodeType: 'APPROVAL',
+            status: 'PENDING',
+            assigneeNames: ['李四']
+          }
+        ]
+      })
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="manual-approver-selection-card"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('当前节点手动选择审批人')
+    expect(wrapper.text()).toContain('财务复核')
+
+    ;(wrapper.vm as unknown as {
+      manualApproverForm: { userIds: number[] }
+      submitManualApproverSelection: () => Promise<void>
+    }).manualApproverForm.userIds = [2]
+
+    await (wrapper.vm as unknown as {
+      submitManualApproverSelection: () => Promise<void>
+    }).submitManualApproverSelection()
+    await flushPromises()
+
+    expect(mocks.expenseApi.submitManualApproverSelection).toHaveBeenCalledWith('DOC-001', {
+      nodeKey: 'manual-finance',
+      userIds: [2]
+    })
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('手动审批人已提交')
   })
 
   it('renders detail normally when totalAmount is a money string', async () => {
@@ -1232,6 +1381,27 @@ describe('ExpenseDocumentDetailView', () => {
       params: { documentCode: 'DOC-001' }
     })
     expect(window.open).toHaveBeenCalledWith('/expense/documents/DOC-001/print', '_blank', 'noopener,noreferrer')
+  })
+
+  it('shows and routes the resubmit action for submitter-owned draft documents', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        status: 'DRAFT',
+        statusLabel: '草稿'
+      })
+    })
+    mocks.resolveExpenseDetailActions.mockReturnValue([
+      { key: 'resubmit', label: '重新提交', primary: true, type: 'primary' }
+    ])
+
+    const wrapper = await mountView()
+    await wrapper.get('.detail-floating-button').trigger('click')
+
+    expect(mocks.resolveExpenseDetailActions).toHaveBeenCalledWith(expect.objectContaining({
+      isSubmitter: true,
+      canResubmitEdit: true
+    }))
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001/resubmit?entry=draft')
   })
 
   it('renders print mode without interactive chrome and auto prints after data is ready', async () => {

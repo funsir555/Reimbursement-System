@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
     push: vi.fn()
   },
   expenseApi: {
-    list: vi.fn()
+    list: vi.fn(),
+    deleteDocument: vi.fn()
   },
   asyncTaskApi: {
     exportExpenseScene: vi.fn()
@@ -17,6 +18,9 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn(),
     warning: vi.fn(),
     success: vi.fn()
+  },
+  elMessageBox: {
+    confirm: vi.fn()
   },
   downloadCenter: {
     openDownloadCenter: vi.fn()
@@ -32,9 +36,14 @@ vi.mock('@/api', () => ({
   asyncTaskApi: mocks.asyncTaskApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/downloadCenter', () => ({
   openDownloadCenter: mocks.downloadCenter.openDownloadCenter
@@ -119,7 +128,7 @@ const TableColumnStub = defineComponent({
   },
   template: `
     <div>
-      <template v-for="row in rows" :key="row.documentCode + prop">
+      <template v-for="(row, index) in rows" :key="row.documentCode + prop + index">
         <slot :row="row">
           <span>{{ prop ? row[prop] : '' }}</span>
         </slot>
@@ -176,7 +185,8 @@ describe('ExpenseListView', () => {
           currentNodeName: '财务审批',
           amount: 1880.5,
           date: '2026-04-01',
-          status: '审批中',
+          status: 'PENDING_APPROVAL',
+          documentStatus: 'PENDING_APPROVAL',
           documentStatusLabel: '审批中',
           submittedAt: '2026-04-01 10:00',
           paymentCompanyName: '华南公司',
@@ -196,7 +206,8 @@ describe('ExpenseListView', () => {
           currentNodeName: '直属主管',
           amount: 320,
           date: '2026-04-02',
-          status: '草稿',
+          status: 'DRAFT',
+          documentStatus: 'DRAFT',
           documentStatusLabel: '草稿',
           submittedAt: '2026-04-02 09:00',
           paymentCompanyName: '华北公司',
@@ -205,10 +216,33 @@ describe('ExpenseListView', () => {
           submitterDeptName: '行政部',
           undertakeDepartmentNames: ['行政部'],
           tagNames: ['日常']
+        },
+        {
+          documentCode: 'DOC-003',
+          no: 'DOC-003',
+          type: '市场费',
+          reason: '活动驳回',
+          documentTitle: '市场费用单',
+          templateName: '市场费用模板',
+          currentNodeName: '直属主管',
+          amount: 520,
+          date: '2026-04-03',
+          status: 'REJECTED',
+          documentStatus: 'REJECTED',
+          documentStatusLabel: '已驳回',
+          submittedAt: '2026-04-03 09:00',
+          paymentCompanyName: '华东公司',
+          payeeName: '赵六',
+          counterpartyName: '上海供应商',
+          submitterDeptName: '市场部',
+          undertakeDepartmentNames: ['市场部'],
+          tagNames: ['退回']
         }
       ]
     })
     mocks.asyncTaskApi.exportExpenseScene.mockResolvedValue({ code: 200 })
+    mocks.expenseApi.deleteDocument.mockResolvedValue({ data: true })
+    mocks.elMessageBox.confirm.mockResolvedValue('confirm')
   })
 
   it('renders advanced filter and visible column actions', async () => {
@@ -220,8 +254,8 @@ describe('ExpenseListView', () => {
     expect(wrapper.text()).toContain('新建报销')
     expect(wrapper.text()).toContain('下载')
     expect(wrapper.text()).not.toContain('刷新列表')
-    expect(wrapper.text()).toContain('总数 2')
-    expect(wrapper.text()).toContain('已过滤 2')
+    expect(wrapper.text()).toContain('总数 3')
+    expect(wrapper.text()).toContain('已过滤 3')
     expect(wrapper.text()).not.toContain('报销单据列表')
     expect(wrapper.text()).not.toContain('搜索单号或事由')
     expect(wrapper.find('[data-testid="expense-advanced-panel"]').exists()).toBe(false)
@@ -288,7 +322,7 @@ describe('ExpenseListView', () => {
     await flushPromises()
     expect(vm.filters.documentStatusLabel).toBe('')
     expect(vm.currentPage).toBe(1)
-    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001', 'DOC-002'])
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001', 'DOC-002', 'DOC-003'])
   })
 
   it('persists visible columns, column order, and shared column widths', async () => {
@@ -337,12 +371,44 @@ describe('ExpenseListView', () => {
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
   })
 
-  it('opens the document detail page on row double click', async () => {
+  it('opens the shared editor for draft-like rows and detail for normal rows on row double click', async () => {
     const wrapper = await mountView()
 
+    await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-002"]').trigger('dblclick')
+    await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-003"]').trigger('dblclick')
     await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-001"]').trigger('dblclick')
 
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-002/resubmit?entry=draft')
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-003/resubmit')
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+  })
+
+  it('routes draft edit and rejected resubmit buttons to the shared resubmit editor', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openResubmitEditor: (row: { documentCode: string; no: string; status?: string; documentStatus?: string; documentStatusLabel?: string }) => void
+    }
+
+    vm.openResubmitEditor({ documentCode: 'DOC-002', no: 'DOC-002', status: 'DRAFT', documentStatus: 'DRAFT', documentStatusLabel: '草稿' })
+    vm.openResubmitEditor({ documentCode: 'DOC-003', no: 'DOC-003', status: 'REJECTED', documentStatus: 'REJECTED', documentStatusLabel: '已驳回' })
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-002/resubmit?entry=draft')
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-003/resubmit')
+  })
+
+  it('confirms and deletes draft documents before refreshing the list', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      handleDelete: (row: { documentCode: string; no: string }) => Promise<void>
+    }
+
+    await vm.handleDelete({ documentCode: 'DOC-002', no: 'DOC-002' })
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalled()
+    expect(mocks.expenseApi.deleteDocument).toHaveBeenCalledWith('DOC-002')
+    expect(mocks.expenseApi.list).toHaveBeenCalledTimes(2)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('草稿已删除')
   })
 
   it('submits export task with filtered document codes', async () => {

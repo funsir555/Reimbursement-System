@@ -11,6 +11,7 @@ import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.service.impl.expense.ExpenseQueryDomainSupport;
 import lombok.RequiredArgsConstructor;
@@ -85,6 +86,10 @@ public class ExpenseDocumentQueryService {
         return expenseQueryDomainSupport.remindDocument(userId, username, documentCode, dto);
     }
 
+    public ExpenseDocumentDetailVO submitManualApproverSelection(Long userId, String username, String documentCode, ExpenseManualApproverSelectionDTO dto) {
+        return expenseQueryDomainSupport.submitManualApproverSelection(userId, username, documentCode, dto);
+    }
+
     /**
      * 获取单据Navigation。
      */
@@ -97,5 +102,9 @@ public class ExpenseDocumentQueryService {
      */
     public ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode) {
         return expenseQueryDomainSupport.getDocumentEditContext(userId, documentCode);
+    }
+
+    public boolean deleteDraftDocument(Long userId, String documentCode) {
+        return expenseQueryDomainSupport.deleteDraftDocument(userId, documentCode);
     }
 }
