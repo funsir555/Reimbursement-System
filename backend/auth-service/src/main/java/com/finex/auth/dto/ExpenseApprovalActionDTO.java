@@ -6,4 +6,6 @@ import lombok.Data;
 public class ExpenseApprovalActionDTO {
 
     private String comment;
+
+    private String targetNodeKey;
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import {
   resolveDisabledExpenseDetailActionHint,
   resolveExpenseDetailActions
@@ -10,6 +10,7 @@ describe('expenseDetailActionMatrix', () => {
       statusBucket: 'pending',
       isSubmitter: true,
       isActiveApprover: false,
+      canModify: false,
       isFlowParticipant: true,
       canComment: true,
       canApprovalView: false
@@ -25,6 +26,7 @@ describe('expenseDetailActionMatrix', () => {
       statusBucket: 'pending',
       isSubmitter: false,
       isActiveApprover: true,
+      canModify: true,
       isFlowParticipant: true,
       canComment: true,
       canApprovalView: true,
@@ -55,6 +57,7 @@ describe('expenseDetailActionMatrix', () => {
       statusBucket: 'exception',
       isSubmitter: false,
       isActiveApprover: false,
+      canModify: false,
       isFlowParticipant: true,
       canComment: true,
       canApprovalView: true
@@ -91,11 +94,29 @@ describe('expenseDetailActionMatrix', () => {
       statusBucket: 'terminal',
       isSubmitter: false,
       isActiveApprover: false,
+      canModify: false,
       isFlowParticipant: false,
       canComment: false,
       canApprovalView: true
     })
 
     expect(actions.map((item) => item.key)).toEqual(['print', 'download'])
+  })
+
+  it('disables the modify action for active approvers when the current node has no edit permission', () => {
+    const actions = resolveExpenseDetailActions({
+      statusBucket: 'pending',
+      isSubmitter: false,
+      isActiveApprover: true,
+      canModify: false,
+      isFlowParticipant: true,
+      canComment: true,
+      canApprovalView: true
+    })
+
+    expect(actions.find((item) => item.key === 'modify')).toMatchObject({
+      disabled: true,
+      reason: '当前审批节点未开启单据修改权限'
+    })
   })
 })

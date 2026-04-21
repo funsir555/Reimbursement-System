@@ -32,6 +32,7 @@ export interface ExpenseApprovalPendingItem {
 
 export interface ExpenseApprovalActionPayload {
   comment?: string
+  targetNodeKey?: string
 }
 
 export interface ExpenseTaskTransferPayload {

@@ -17,8 +17,10 @@ import com.finex.auth.dto.ExpenseBankLinkConfigVO;
 import com.finex.auth.dto.ExpenseBankLinkSaveDTO;
 import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseApprovalLogVO;
+import com.finex.auth.dto.ExpenseApprovalNodeStatusVO;
 import com.finex.auth.dto.ExpenseApprovalPendingItemVO;
 import com.finex.auth.dto.ExpenseApprovalTaskVO;
+import com.finex.auth.dto.ExpenseApprovalTimelineItemVO;
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
 import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDetailInstanceSummaryVO;
@@ -284,6 +286,7 @@ class AbstractExpenseDocumentSupport {
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
+    private final ExpenseApprovalProjectionSupport expenseApprovalProjectionSupport;
     private final ExpenseReadonlyPayeeAccountSnapshotEnhancer readonlyPayeeAccountSnapshotEnhancer;
     private final ExpenseTemplateCategorySupport expenseTemplateCategorySupport;
 
@@ -326,6 +329,7 @@ class AbstractExpenseDocumentSupport {
         detail.setFlowName(template.getFlowName());
         detail.setExpenseDetailDesignCode(template.getExpenseDetailDesignCode());
         detail.setExpenseDetailModeDefault(template.getExpenseDetailModeDefault());
+        detail.setFlowSnapshot(readMap(resolveFlowSnapshotJson(template)));
 
         ProcessFormDesign formDesign = loadFormDesign(template.getFormDesignCode());
         if (formDesign != null) {
@@ -352,6 +356,7 @@ class AbstractExpenseDocumentSupport {
         }
         detail.setCompanyOptions(loadCompanyOptions());
         detail.setDepartmentOptions(loadDepartmentOptions());
+        detail.setUserOptions(loadUserOptions(detail.getFlowSnapshot()));
         detail.setExpenseTypeOptions(expenseDetailSystemFieldSupport.loadExpenseTypeOptions());
         detail.setExpenseTypeInvoiceFreeModeMap(expenseDetailSystemFieldSupport.loadExpenseTypeInvoiceFreeModeMap());
         User currentUser = userId == null ? null : userMapper.selectById(userId);
@@ -689,6 +694,7 @@ class AbstractExpenseDocumentSupport {
                     expenseDetailDesign,
                     expenseDetails
             );
+            runtimeFlowContext.put("manualApproverSelections", normalizeManualApproverSelections(dto == null ? null : dto.getManualApproverSelections()));
             String submitterDisplayName = resolveUserDisplayName(currentUser, username);
             validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
             validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
@@ -1073,8 +1079,9 @@ class AbstractExpenseDocumentSupport {
     ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
         requireSubmitter(instance, userId);
-        if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u662f\u53ef\u91cd\u63d0\u8349\u7a3f\u72b6\u6001");
+        String status = trimToNull(instance.getStatus());
+        if (!Objects.equals(status, DOCUMENT_STATUS_DRAFT) && !Objects.equals(status, DOCUMENT_STATUS_REJECTED)) {
+            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u662f\u53ef\u91cd\u63d0\u72b6\u6001");
         }
         String submitterDisplayName = resolveUserDisplayName(userId, username);
         DocumentMutationContext mutation = buildMutationContext(instance, dto, true);
@@ -1152,9 +1159,27 @@ class AbstractExpenseDocumentSupport {
         detail.setCurrentTasks(currentTasks);
 
         long actionLogsStartedAt = System.nanoTime();
-        List<ExpenseApprovalLogVO> actionLogs = loadActionLogs(documentCode).stream().map(this::toLogVO).toList();
+        List<ProcessDocumentActionLog> actionLogEntities = loadActionLogs(documentCode);
+        List<ExpenseApprovalLogVO> actionLogs = actionLogEntities.stream().map(this::toLogVO).toList();
         long actionLogsElapsedAt = elapsedMillis(actionLogsStartedAt);
         detail.setActionLogs(actionLogs);
+
+        long approvalProjectionStartedAt = System.nanoTime();
+        List<ProcessDocumentTask> allTasks = loadAllTasks(documentCode);
+        FlowRuntimeSnapshot runtimeSnapshot = readFlowRuntimeSnapshot(instance.getFlowSnapshotJson());
+        Map<String, Object> runtimeContext = expenseWorkflowRuntimeSupport.buildRuntimeContextForInstance(instance);
+        ExpenseApprovalProjectionSupport.ApprovalProjectionResult approvalProjection = expenseApprovalProjectionSupport.build(
+                instance,
+                runtimeSnapshot,
+                runtimeContext,
+                allTasks,
+                actionLogEntities
+        );
+        List<ExpenseApprovalNodeStatusVO> approvalNodeStatuses = approvalProjection.approvalNodeStatuses();
+        List<ExpenseApprovalTimelineItemVO> approvalTimeline = approvalProjection.approvalTimeline();
+        long approvalProjectionElapsedAt = elapsedMillis(approvalProjectionStartedAt);
+        detail.setApprovalNodeStatuses(approvalNodeStatuses);
+        detail.setApprovalTimeline(approvalTimeline);
 
         PmBankPaymentRecord bankPaymentRecord = findLatestBankPaymentRecord(documentCode);
         if (bankPaymentRecord != null) {
@@ -1172,7 +1197,7 @@ class AbstractExpenseDocumentSupport {
         }
 
         log.info(
-                "Expense detail built documentCode={} templateType={} totalMs={} snapshotMs={} companyOptionsMs={} departmentOptionsMs={} expenseDetailsMs={} pendingTasksMs={} actionLogsMs={} expenseDetailCount={} pendingTaskCount={} actionLogCount={}",
+                "Expense detail built documentCode={} templateType={} totalMs={} snapshotMs={} companyOptionsMs={} departmentOptionsMs={} expenseDetailsMs={} pendingTasksMs={} actionLogsMs={} approvalProjectionMs={} expenseDetailCount={} pendingTaskCount={} actionLogCount={} approvalNodeStatusCount={} approvalTimelineCount={}",
                 documentCode,
                 defaultText(templateType, "-"),
                 elapsedMillis(totalStartedAt),
@@ -1182,9 +1207,12 @@ class AbstractExpenseDocumentSupport {
                 expenseDetailsElapsedAt,
                 currentTasksElapsedAt,
                 actionLogsElapsedAt,
+                approvalProjectionElapsedAt,
                 expenseDetails.size(),
                 currentTasks.size(),
-                actionLogs.size()
+                actionLogs.size(),
+                approvalNodeStatuses.size(),
+                approvalTimeline.size()
         );
         return detail;
     }
@@ -2178,6 +2206,10 @@ class AbstractExpenseDocumentSupport {
                         expenseDetails
                 )
                 : Collections.emptyMap();
+        if (resetRuntime) {
+            runtimeContext.put("manualApproverSelections", normalizeManualApproverSelections(dto == null ? null : dto.getManualApproverSelections()));
+            runtimeContext.putAll(resolveRejectRuntimeMetadata(instance));
+        }
         validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
         validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
         validatePmNameLength(instance.getSubmitterName(), "\u63d0\u4ea4\u4eba\u59d3\u540d");
@@ -3412,6 +3444,143 @@ class AbstractExpenseDocumentSupport {
         return version == null ? null : version.getSnapshotJson();
     }
 
+    private List<ProcessFormOptionVO> loadUserOptions(Map<String, Object> flowSnapshot) {
+        if (!hasManualSelectApprovalNode(flowSnapshot)) {
+            return Collections.emptyList();
+        }
+        Map<Long, String> departmentNameMap = systemDepartmentMapper.selectList(
+                Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getStatus, 1)
+        ).stream().collect(Collectors.toMap(
+                SystemDepartment::getId,
+                SystemDepartment::getDeptName,
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
+        return userMapper.selectList(
+                Wrappers.<User>lambdaQuery()
+                        .eq(User::getStatus, 1)
+                        .orderByAsc(User::getName, User::getId)
+        ).stream().map(user -> {
+            ProcessFormOptionVO option = new ProcessFormOptionVO();
+            String deptName = user.getDeptId() == null ? null : departmentNameMap.get(user.getDeptId());
+            String baseLabel = firstNonBlank(trimToNull(user.getName()), trimToNull(user.getUsername()), "Unnamed User");
+            option.setLabel(baseLabel + (deptName == null ? "" : " / " + deptName));
+            option.setValue(String.valueOf(user.getId()));
+            return option;
+        }).toList();
+    }
+
+    private boolean hasManualSelectApprovalNode(Map<String, Object> flowSnapshot) {
+        Object rawNodes = flowSnapshot == null ? null : flowSnapshot.get("nodes");
+        if (!(rawNodes instanceof Collection<?> nodes)) {
+            return false;
+        }
+        for (Object rawNode : nodes) {
+            if (!(rawNode instanceof Map<?, ?> nodeMap)) {
+                continue;
+            }
+            if (!Objects.equals(String.valueOf(nodeMap.get("nodeType")), "APPROVAL")) {
+                continue;
+            }
+            Object rawConfig = nodeMap.get("config");
+            if (!(rawConfig instanceof Map<?, ?> config)) {
+                continue;
+            }
+            if (Objects.equals(String.valueOf(config.get("approverType")), "MANUAL_SELECT")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Map<String, List<Long>> normalizeManualApproverSelections(Map<String, List<Long>> source) {
+        Map<String, List<Long>> result = new LinkedHashMap<>();
+        if (source == null || source.isEmpty()) {
+            return result;
+        }
+        source.forEach((nodeKey, userIds) -> {
+            String normalizedNodeKey = trimToNull(nodeKey);
+            if (normalizedNodeKey == null || userIds == null || userIds.isEmpty()) {
+                return;
+            }
+            List<Long> normalizedUserIds = userIds.stream()
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            if (!normalizedUserIds.isEmpty()) {
+                result.put(normalizedNodeKey, normalizedUserIds);
+            }
+        });
+        return result;
+    }
+
+    private Map<String, Object> resolveRejectRuntimeMetadata(ProcessDocumentInstance instance) {
+        if (instance == null || trimToNull(instance.getDocumentCode()) == null) {
+            return Collections.emptyMap();
+        }
+        ProcessDocumentActionLog rejectLog = loadActionLogs(instance.getDocumentCode()).stream()
+                .filter(item -> Objects.equals(trimToNull(item.getActionType()), "REJECT"))
+                .reduce((left, right) -> right)
+                .orElse(null);
+        if (rejectLog == null) {
+            return Collections.emptyMap();
+        }
+        Map<String, Object> payload = readMap(rejectLog.getPayloadJson());
+        String rejectedByNodeKey = trimToNull(firstNonBlank(
+                stringValue(payload.get("rejectedByNodeKey")),
+                rejectLog.getNodeKey()
+        ));
+        if (rejectedByNodeKey == null) {
+            return Collections.emptyMap();
+        }
+        FlowRuntimeSnapshot snapshot = readFlowRuntimeSnapshot(instance.getFlowSnapshotJson());
+        ProcessFlowNodeDTO rejectedByNode = snapshot.node(rejectedByNodeKey);
+        if (rejectedByNode == null) {
+            return Collections.emptyMap();
+        }
+        Set<String> specialSettings = toStringSet(rejectedByNode.getConfig() == null ? null : rejectedByNode.getConfig().get("specialSettings"));
+        String targetNodeKey = trimToNull(stringValue(payload.get("targetNodeKey")));
+        String resumeNodeKey = null;
+        if (targetNodeKey != null) {
+            if (snapshot.node(targetNodeKey) == null) {
+                targetNodeKey = null;
+            } else if (specialSettings.contains("DIRECT_REACH_AFTER_ANY_REJECT")) {
+                resumeNodeKey = rejectedByNodeKey;
+            } else {
+                resumeNodeKey = targetNodeKey;
+            }
+        } else if (specialSettings.contains("DIRECT_REACH_AFTER_RESUBMIT")) {
+            resumeNodeKey = rejectedByNodeKey;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("latestRejectNodeKey", rejectedByNodeKey);
+        metadata.put("latestRejectTargetNodeKey", targetNodeKey);
+        if (resumeNodeKey != null) {
+            metadata.put("resumeNodeKey", resumeNodeKey);
+        }
+        return metadata;
+    }
+
+    private FlowRuntimeSnapshot readFlowRuntimeSnapshot(String snapshotJson) {
+        if (trimToNull(snapshotJson) == null) {
+            return new FlowRuntimeSnapshot(Collections.emptyList(), Collections.emptyList());
+        }
+        try {
+            Map<String, Object> raw = objectMapper.readValue(snapshotJson, new TypeReference<LinkedHashMap<String, Object>>() {});
+            List<ProcessFlowNodeDTO> nodes = objectMapper.convertValue(
+                    raw.getOrDefault("nodes", Collections.emptyList()),
+                    new TypeReference<List<ProcessFlowNodeDTO>>() {}
+            );
+            List<ProcessFlowRouteDTO> routes = objectMapper.convertValue(
+                    raw.getOrDefault("routes", Collections.emptyList()),
+                    new TypeReference<List<ProcessFlowRouteDTO>>() {}
+            );
+            return new FlowRuntimeSnapshot(nodes, routes);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to parse flow runtime snapshot", ex);
+        }
+    }
+
     /**
      * 加载Department选项。
      */
@@ -3502,6 +3671,14 @@ class AbstractExpenseDocumentSupport {
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
                         .eq(ProcessDocumentTask::getDocumentCode, documentCode)
                         .eq(ProcessDocumentTask::getStatus, TASK_STATUS_PENDING)
+                        .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
+        );
+    }
+
+    private List<ProcessDocumentTask> loadAllTasks(String documentCode) {
+        return processDocumentTaskMapper.selectList(
+                Wrappers.<ProcessDocumentTask>lambdaQuery()
+                        .eq(ProcessDocumentTask::getDocumentCode, documentCode)
                         .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
         );
     }
@@ -3739,6 +3916,16 @@ class AbstractExpenseDocumentSupport {
             return new ArrayList<>();
         }
         return List.of(value);
+    }
+
+    private Set<String> toStringSet(Object value) {
+        if (!(value instanceof Collection<?> collection)) {
+            return Collections.emptySet();
+        }
+        return collection.stream()
+                .map(this::stringValue)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**

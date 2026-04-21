@@ -258,23 +258,68 @@
 
             <div class="space-y-3">
               <div class="flex items-center justify-between">
-                <p class="text-sm font-semibold text-slate-800">审批轨迹</p>
-                <el-tag size="small" effect="plain">{{ approvalTimelineItems.length }} 条</el-tag>
+                <p class="text-sm font-semibold text-slate-800">&#30495;&#23454;&#20219;&#21153;&#29366;&#24577;</p>
+                <el-tag size="small" effect="plain">{{ approvalNodeStatuses.length }} &#26465;</el-tag>
               </div>
 
-              <el-timeline v-if="approvalTimelineItems.length">
+              <div
+                v-if="approvalNodeStatuses.length"
+                class="approval-node-status-list"
+                data-testid="approval-node-status-list"
+              >
+                <div
+                  v-for="item in approvalNodeStatuses"
+                  :key="item.nodeKey"
+                  class="approval-node-status-card"
+                  :class="{
+                    'approval-node-status-card--pending': item.status === 'PENDING' || item.status === 'PAYMENT_PENDING',
+                    'approval-node-status-card--future': item.status === 'NOT_REACHED'
+                  }"
+                  data-testid="approval-node-status-item"
+                >
+                  <div class="approval-node-status-card__content">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p class="text-sm font-semibold text-slate-800">{{ item.nodeName || item.nodeKey }}</p>
+                      <el-tag size="small" effect="plain" :type="approvalStatusTagType(item.status)">
+                        {{ item.statusLabel || approvalStatusLabel(item.status) }}
+                      </el-tag>
+                    </div>
+                    <p v-if="item.description" class="text-xs leading-6 text-slate-500">{{ item.description }}</p>
+                    <p v-else-if="item.assigneeNames?.length" class="text-xs leading-6 text-slate-500">
+                      &#22788;&#29702;&#20154;&#65306;{{ item.assigneeNames.join('\u3001') }}
+                    </p>
+                  </div>
+                  <span v-if="item.occurredAt" class="approval-node-status-card__time">{{ item.occurredAt }}</span>
+                </div>
+              </div>
+              <el-empty v-else description="&#26242;&#26080;&#30495;&#23454;&#20219;&#21153;&#29366;&#24577;" :image-size="72" />
+            </div>
+
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <p class="text-sm font-semibold text-slate-800">&#23457;&#25209;&#36712;&#36857;</p>
+                <el-tag size="small" effect="plain">{{ approvalTimelineItems.length }} &#26465;</el-tag>
+              </div>
+
+              <el-timeline v-if="approvalTimelineItems.length" data-testid="approval-timeline-list">
                 <el-timeline-item
                   v-for="item in approvalTimelineItems"
                   :key="item.key"
                   :timestamp="item.timestamp"
                   placement="top"
+                  data-testid="approval-timeline-item"
                 >
                   <div class="space-y-2">
-                    <p class="text-sm font-semibold text-slate-800">{{ item.title }}</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p class="text-sm font-semibold text-slate-800">{{ item.title }}</p>
+                      <el-tag v-if="item.statusLabel" size="small" effect="plain" :type="approvalStatusTagType(item.status)">
+                        {{ item.statusLabel }}
+                      </el-tag>
+                    </div>
                     <p v-if="item.description" class="text-xs leading-6 text-slate-500">{{ item.description }}</p>
-                    <div v-if="item.attachmentNames.length" class="flex flex-wrap gap-2">
+                    <div v-if="item.attachmentNames?.length" class="flex flex-wrap gap-2">
                       <el-tag
-                        v-for="name in item.attachmentNames"
+                        v-for="name in item.attachmentNames || []"
                         :key="name"
                         size="small"
                         effect="plain"
@@ -286,7 +331,7 @@
                   </div>
                 </el-timeline-item>
               </el-timeline>
-              <el-empty v-else description="暂无审批轨迹" :image-size="72" />
+              <el-empty v-else description="&#26242;&#26080;&#23457;&#25209;&#36712;&#36857;" :image-size="72" />
             </div>
           </div>
         </el-card>
@@ -380,6 +425,35 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="taskActionDialogVisible" :title="taskActionDialogTitle" width="560px">
+      <div class="space-y-4">
+        <el-input
+          v-model="taskActionForm.comment"
+          type="textarea"
+          :rows="5"
+          maxlength="1000"
+          show-word-limit
+          :placeholder="taskActionDialogPlaceholder"
+        />
+        <el-form-item v-if="taskActionMode === 'reject' && rejectTargetOptions.length" label="驳回到节点" class="!mb-0">
+          <el-select v-model="taskActionForm.targetNodeKey" class="w-full" clearable placeholder="请选择目标审批节点">
+            <el-option
+              v-for="node in rejectTargetOptions"
+              :key="node.nodeKey"
+              :label="node.nodeName || node.nodeKey"
+              :value="node.nodeKey"
+            />
+          </el-select>
+        </el-form-item>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <el-button @click="closeTaskActionDialog">取消</el-button>
+          <el-button type="primary" :loading="taskActionSubmitting" @click="submitTaskAction">{{ taskActionDialogConfirm }}</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="userActionDialogVisible" :title="userActionDialogTitle" width="520px">
       <div class="space-y-4">
         <el-form-item :label="userActionDialogLabel" required>
@@ -443,11 +517,12 @@ import {
   expenseApi,
   expenseApprovalApi,
   type ExpenseActionUserOption,
-  type ExpenseApprovalLog,
-  type ExpenseApprovalTask,
+  type ExpenseApprovalNodeStatus,
+  type ExpenseApprovalTimelineItem,
   type ExpenseDetailInstanceDetail,
   type ExpenseDocumentDetail,
   type ExpenseDocumentNavigation,
+  type ProcessFlowNode,
   type ProcessFormDesignSchema
 } from '@/api'
 import ExpenseFormReadonlyRenderer from './components/ExpenseFormReadonlyRenderer.vue'
@@ -466,13 +541,7 @@ import { formatMoney } from '@/utils/money'
 import { buildExpenseDetailPrintHref, isExpenseDetailPrintMode, loadExpenseDocumentPrintBundle, openExpensePrintWindow } from './expensePrintSupport'
 
 type UserActionMode = 'transfer' | 'add-sign' | ''
-type ApprovalTimelineItem = {
-  key: string
-  timestamp: string
-  title: string
-  description: string
-  attachmentNames: string[]
-}
+type TaskActionMode = 'approve' | 'reject' | ''
 
 const route = useRoute()
 const router = useRouter()
@@ -496,6 +565,13 @@ const commentFileInput = ref<HTMLInputElement | null>(null)
 const commentForm = ref({
   comment: '',
   attachmentFileNames: [] as string[]
+})
+const taskActionDialogVisible = ref(false)
+const taskActionMode = ref<TaskActionMode>('')
+const taskActionSubmitting = ref(false)
+const taskActionForm = ref({
+  comment: '',
+  targetNodeKey: ''
 })
 const userActionDialogVisible = ref(false)
 const userActionMode = ref<UserActionMode>('')
@@ -527,6 +603,30 @@ const permissionCodes = computed(() => storedUser.permissionCodes || [])
 const approvableTasks = computed(() =>
   (detail.value?.currentTasks || []).filter((task) => task.assigneeUserId === currentUserId.value && task.nodeType === 'APPROVAL')
 )
+const currentApprovalNode = computed<ProcessFlowNode | null>(() => {
+  const taskNodeKey = approvableTasks.value[0]?.nodeKey || detail.value?.currentNodeKey || ''
+  if (!taskNodeKey) {
+    return null
+  }
+  const flowNodes = Array.isArray(detail.value?.flowSnapshot?.nodes) ? detail.value?.flowSnapshot?.nodes || [] : []
+  return flowNodes.find((node) => node.nodeKey === taskNodeKey) || null
+})
+const currentApprovalSpecialSettings = computed(() => new Set(
+  Array.isArray(currentApprovalNode.value?.config?.specialSettings)
+    ? currentApprovalNode.value?.config?.specialSettings || []
+    : []
+))
+const canModifyCurrentTask = computed(() => (
+  currentApprovalSpecialSettings.value.has('ALLOW_EDIT_FORM_MODULE')
+  || currentApprovalSpecialSettings.value.has('ALLOW_EDIT_PAY_ACCOUNT')
+))
+const rejectTargetOptions = computed(() => {
+  if (!currentApprovalSpecialSettings.value.has('REJECT_TO_ANY_NODE')) {
+    return [] as ProcessFlowNode[]
+  }
+  const nodes = Array.isArray(detail.value?.flowSnapshot?.nodes) ? detail.value?.flowSnapshot?.nodes || [] : []
+  return nodes.filter((node) => node.nodeType === 'APPROVAL' && node.nodeKey !== currentApprovalNode.value?.nodeKey)
+})
 const canApprovalView = computed(() =>
   hasPermission('expense:approval:view', permissionCodes.value)
   || hasPermission('expense:approval:approve', permissionCodes.value)
@@ -574,21 +674,8 @@ const statusBucket = computed<'pending' | 'exception' | 'terminal' | 'other'>(()
   return 'other'
 })
 
-const approvalTimelineItems = computed<ApprovalTimelineItem[]>(() => {
-  if (!detail.value) {
-    return []
-  }
-  const logItems = (detail.value.actionLogs || [])
-    .filter(shouldDisplayTimelineLog)
-    .map((log, index) => ({
-    key: `log-${log.id ?? index}`,
-    timestamp: log.createdAt || '',
-    title: timelineTitle(log, detail.value),
-    description: timelineDescription(log),
-    attachmentNames: commentAttachmentNames(log)
-    }))
-  return logItems.concat(buildPendingTimelineItems(detail.value.currentTasks || []))
-})
+const approvalNodeStatuses = computed<ExpenseApprovalNodeStatus[]>(() => detail.value?.approvalNodeStatuses || [])
+const approvalTimelineItems = computed<ExpenseApprovalTimelineItem[]>(() => detail.value?.approvalTimeline || [])
 const actionItems = computed<ActionItem[]>(() => {
   if (!detail.value) {
     return []
@@ -597,6 +684,7 @@ const actionItems = computed<ActionItem[]>(() => {
     statusBucket: statusBucket.value,
     isSubmitter: isSubmitter.value,
     isActiveApprover: isActiveApprover.value,
+    canModify: canModifyCurrentTask.value,
     isFlowParticipant: isFlowParticipant.value,
     canComment: canComment.value,
     canApprovalView: canApprovalView.value,
@@ -604,6 +692,9 @@ const actionItems = computed<ActionItem[]>(() => {
     nextDocumentCode: navigation.value.nextDocumentCode
   })
 })
+const taskActionDialogTitle = computed(() => taskActionMode.value === 'approve' ? '通过审批' : '驳回审批')
+const taskActionDialogConfirm = computed(() => taskActionMode.value === 'approve' ? '通过' : '驳回')
+const taskActionDialogPlaceholder = computed(() => taskActionMode.value === 'approve' ? '请输入审批意见（可空）' : '请输入驳回原因')
 const secondaryActionItems = computed(() => actionItems.value.filter((item) => !item.primary))
 const primaryActionItems = computed(() => actionItems.value.filter((item) => item.primary))
 const disabledActionHint = computed(() => resolveDisabledExpenseDetailActionHint(actionItems.value))
@@ -763,106 +854,56 @@ async function loadNavigation(documentCode: string, requestVersion: number) {
   }
 }
 
-function timelineTitle(log: ExpenseApprovalLog, documentDetail?: ExpenseDocumentDetail | null) {
-  const actorName = log.actorName || '\u5ba1\u6279\u4eba'
-  const nodeName = asString(log.nodeName) || '\u8282\u70b9'
-  const actionMap: Record<string, string> = {
-    SUBMIT: `${asString(documentDetail?.submitterName) || asString(log.actorName) || '\u63d0\u5355\u4eba'} \u63d0\u4ea4\u5355\u636e`,
-    RECALL: actorName + ' \u53ec\u56de\u5355\u636e',
-    RESUBMIT: actorName + ' \u91cd\u65b0\u63d0\u4ea4',
-    APPROVE: `${nodeName} ${actorName} \u5ba1\u6279\u901a\u8fc7`,
-    REJECT: `${nodeName} ${actorName} \u5ba1\u6279\u9a73\u56de`,
-    MODIFY: actorName + ' \u4fee\u6539\u5355\u636e',
-    COMMENT: actorName + ' \u53d1\u8868\u8bc4\u8bba',
-    REMIND: actorName + ' \u53d1\u8d77\u50ac\u529e',
-    TRANSFER: actorName + ' \u8f6c\u4ea4\u5ba1\u6279',
-    ADD_SIGN: actorName + ' \u53d1\u8d77\u52a0\u7b7e',
-    PAYMENT_START: actorName + ' \u53d1\u8d77\u652f\u4ed8',
-    PAYMENT_COMPLETE: actorName + ' \u786e\u8ba4\u5df2\u652f\u4ed8',
-    PAYMENT_EXCEPTION: actorName + ' \u6807\u8bb0\u652f\u4ed8\u5f02\u5e38',
-    FINISH: '\u5ba1\u6279\u5b8c\u6210',
-    EXCEPTION: '\u6d41\u7a0b\u5f02\u5e38'
+function approvalStatusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    NOT_REACHED: '未到达',
+    PENDING: '审批中',
+    APPROVED: '已通过',
+    REJECTED: '已驳回',
+    AUTO_SKIPPED: '已自动跳过',
+    EXCEPTION: '异常',
+    PAYMENT_PENDING: '待支付',
+    PAYMENT_COMPLETED: '已支付',
+    PAYMENT_EXCEPTION: '支付异常'
   }
-  return actionMap[log.actionType] || log.actionType
-}
-function timelineDescription(log: ExpenseApprovalLog) {
-  if (log.actionType === 'COMMENT') {
-    return String(log.payload?.comment || log.actionComment || '')
-  }
-  if (['SUBMIT', 'APPROVE', 'REJECT', 'PAYMENT_COMPLETE', 'PAYMENT_EXCEPTION'].includes(log.actionType)) {
-    const comment = asString(log.actionComment)
-    return isRedundantTimelineComment(log.actionType, comment) ? '' : comment
-  }
-  const parts = [asString(log.actionComment)]
-  if (log.nodeName && !['APPROVE', 'REJECT', 'RECALL', 'RESUBMIT', 'COMMENT'].includes(log.actionType)) {
-    parts.unshift(log.nodeName)
-  }
-  if (log.actionType === 'TRANSFER' && log.payload?.targetUserName) {
-    parts.push(`\u8f6c\u4ea4\u7ed9 ${String(log.payload.targetUserName)}`)
-  }
-  if (log.actionType === 'ADD_SIGN' && log.payload?.targetUserName) {
-    parts.push(`\u52a0\u7b7e\u7ed9 ${String(log.payload.targetUserName)}`)
-  }
-  return parts.filter(Boolean).join(' / ')
-}
-function commentAttachmentNames(log: ExpenseApprovalLog) {
-  const raw = log.payload?.attachmentFileNames
-  return Array.isArray(raw) ? raw.map((item) => String(item)) : []
+  return labels[status || ''] || '处理中'
 }
 
-function buildPendingTimelineItems(tasks: ExpenseApprovalTask[]): ApprovalTimelineItem[] {
-  const deduped = new Map<string, ApprovalTimelineItem>()
-  tasks.forEach((task, index) => {
-    const nodeName = asString(task.nodeName) || '\u8282\u70b9'
-    const assigneeName = asString(task.assigneeName) || '\u672a\u67e5\u8be2\u5230\u5904\u7406\u4eba'
-    const dedupeKey = `${asString(task.nodeKey) || 'pending'}::${assigneeName}`
-    if (deduped.has(dedupeKey)) {
-      return
-    }
-    deduped.set(dedupeKey, {
-      key: `pending-${task.id ?? index}-${dedupeKey}`,
-      timestamp: task.createdAt || '',
-      title: task.nodeType === 'PAYMENT'
-        ? `${assigneeName} \u5f85\u652f\u4ed8`
-        : `${nodeName} ${assigneeName} \u5ba1\u6279\u4e2d`,
-      description: '',
-      attachmentNames: []
-    })
-  })
-  return Array.from(deduped.values())
+function approvalStatusTagType(status?: string) {
+  switch (status) {
+    case 'PENDING':
+    case 'PAYMENT_PENDING':
+      return 'warning'
+    case 'APPROVED':
+    case 'PAYMENT_COMPLETED':
+      return 'success'
+    case 'REJECTED':
+    case 'EXCEPTION':
+    case 'PAYMENT_EXCEPTION':
+      return 'danger'
+    case 'AUTO_SKIPPED':
+      return 'info'
+    default:
+      return 'info'
+  }
 }
 
-function shouldDisplayTimelineLog(log: ExpenseApprovalLog) {
-  return [
-    'SUBMIT',
-    'RECALL',
-    'RESUBMIT',
-    'APPROVE',
-    'REJECT',
-    'MODIFY',
-    'COMMENT',
-    'TRANSFER',
-    'ADD_SIGN',
-    'PAYMENT_START',
-    'PAYMENT_COMPLETE',
-    'PAYMENT_EXCEPTION',
-    'FINISH',
-    'EXCEPTION'
-  ].includes(log.actionType)
+function openTaskActionDialog(action: 'approve' | 'reject') {
+  taskActionMode.value = action
+  taskActionForm.value = {
+    comment: action === 'approve' ? '通过' : '驳回',
+    targetNodeKey: ''
+  }
+  taskActionDialogVisible.value = true
 }
 
-function isRedundantTimelineComment(actionType: string, comment: string) {
-  if (!comment) {
-    return false
+function closeTaskActionDialog() {
+  taskActionDialogVisible.value = false
+  taskActionMode.value = ''
+  taskActionForm.value = {
+    comment: '',
+    targetNodeKey: ''
   }
-  const normalized = comment.replace(/\s+/g, '')
-  const redundantByAction: Record<string, string[]> = {
-    APPROVE: ['\u901a\u8fc7', '\u5ba1\u6279\u901a\u8fc7', '\u540c\u610f'],
-    REJECT: ['\u9a73\u56de', '\u5ba1\u6279\u9a73\u56de'],
-    PAYMENT_COMPLETE: ['\u5df2\u652f\u4ed8', '\u786e\u8ba4\u5df2\u652f\u4ed8'],
-    PAYMENT_EXCEPTION: ['\u652f\u4ed8\u5f02\u5e38', '\u6807\u8bb0\u652f\u4ed8\u5f02\u5e38']
-  }
-  return (redundantByAction[actionType] || []).includes(normalized)
 }
 
 async function handleTaskAction(action: 'approve' | 'reject') {
@@ -871,36 +912,38 @@ async function handleTaskAction(action: 'approve' | 'reject') {
   }
   const permissionCode = action === 'approve' ? 'expense:approval:approve' : 'expense:approval:reject'
   if (!hasPermission(permissionCode, permissionCodes.value)) {
-    ElMessage.warning('\u5f53\u524d\u8d26\u53f7\u6ca1\u6709\u5904\u7406\u8be5\u5ba1\u6279\u7684\u6743\u9650')
+    ElMessage.warning('当前账号没有处理该审批的权限')
     return
   }
+  openTaskActionDialog(action)
+}
+
+async function submitTaskAction() {
+  const action = taskActionMode.value
+  const task = approvableTasks.value[0]
+  if (!action || !task) {
+    return
+  }
+  taskActionSubmitting.value = true
   try {
-    const { value } = await ElMessageBox.prompt(
-      action === 'approve' ? '\u53ef\u9009\u586b\u5199\u5ba1\u6279\u610f\u89c1' : '\u8bf7\u586b\u5199\u9a73\u56de\u539f\u56e0',
-      action === 'approve' ? '\u901a\u8fc7\u5ba1\u6279' : '\u9a73\u56de\u5ba1\u6279',
-      {
-        inputType: 'textarea',
-        inputValue: action === 'approve' ? '\u901a\u8fc7' : '\u9a73\u56de',
-        inputPlaceholder: action === 'approve' ? '\u8bf7\u8f93\u5165\u5ba1\u6279\u610f\u89c1\uff08\u53ef\u7a7a\uff09' : '\u8bf7\u8f93\u5165\u9a73\u56de\u539f\u56e0',
-        confirmButtonText: action === 'approve' ? '\u901a\u8fc7' : '\u9a73\u56de',
-        cancelButtonText: '\u53d6\u6d88'
-      }
-    )
-    const task = approvableTasks.value[0]
-    if (!task) {
-      return
-    }
     const api = action === 'approve' ? expenseApprovalApi.approve : expenseApprovalApi.reject
-    const res = await api(task.id, { comment: value || '' })
-    await refreshAfterAction(res.data)
-    ElMessage.success(action === 'approve' ? '\u5ba1\u6279\u5df2\u901a\u8fc7' : '\u5ba1\u6279\u5df2\u9a73\u56de')
-  } catch (error: unknown) {
-    if (error === 'cancel' || String(error).includes('cancel')) {
-      return
+    const payload = {
+      comment: taskActionForm.value.comment || '',
+      ...(action === 'reject' && taskActionForm.value.targetNodeKey
+        ? { targetNodeKey: taskActionForm.value.targetNodeKey }
+        : {})
     }
-    ElMessage.error(resolveErrorMessage(error, action === 'approve' ? '\u5ba1\u6279\u901a\u8fc7\u5931\u8d25' : '\u5ba1\u6279\u9a73\u56de\u5931\u8d25'))
+    const res = await api(task.id, payload)
+    closeTaskActionDialog()
+    await refreshAfterAction(res.data)
+    ElMessage.success(action === 'approve' ? '审批已通过' : '审批已驳回')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, action === 'approve' ? '审批通过失败' : '审批驳回失败'))
+  } finally {
+    taskActionSubmitting.value = false
   }
 }
+
 async function handleActionClick(action: ActionItem) {
   if (action.disabled) {
     ElMessage.warning(action.reason || '\u5f53\u524d\u52a8\u4f5c\u6682\u4e0d\u53ef\u7528')
@@ -1309,6 +1352,44 @@ function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
 .approval-scroll::-webkit-scrollbar-track {
   background: rgba(226, 232, 240, 0.7);
   border-radius: 999px;
+}
+
+.approval-node-status-list {
+  display: grid;
+  gap: 12px;
+}
+
+.approval-node-status-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.approval-node-status-card--pending {
+  border-color: rgba(251, 191, 36, 0.6);
+  background: rgba(255, 251, 235, 0.96);
+}
+
+.approval-node-status-card--future {
+  border-style: dashed;
+}
+
+.approval-node-status-card__content {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.approval-node-status-card__time {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgb(100 116 139);
 }
 
 .detail-floating-bar {

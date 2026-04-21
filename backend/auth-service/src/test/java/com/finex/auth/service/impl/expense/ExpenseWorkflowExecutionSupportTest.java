@@ -31,13 +31,13 @@ class ExpenseWorkflowExecutionSupportTest {
 
         executionSupport.initializeRuntime(instance, context);
         executionSupport.approvePendingTask(instance, task, 1L, "tester", "ok");
-        executionSupport.rejectPendingTask(instance, task, 1L, "tester", "no");
+        executionSupport.rejectPendingTask(instance, task, 1L, "tester", "no", "NODE-2");
         executionSupport.createAddSignTask(instance, task, targetUser, 1L, "tester", "add");
         executionSupport.approveAddSignTask(instance, task, 1L, "tester", "done");
 
         verify(support).initializeRuntime(instance, context);
         verify(support).approvePendingTask(instance, task, 1L, "tester", "ok");
-        verify(support).rejectPendingTask(instance, task, 1L, "tester", "no");
+        verify(support).rejectPendingTask(instance, task, 1L, "tester", "no", "NODE-2");
         verify(support).createAddSignTask(instance, task, targetUser, 1L, "tester", "add");
         verify(support).approveAddSignTask(instance, task, 1L, "tester", "done");
     }

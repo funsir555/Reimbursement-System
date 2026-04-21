@@ -195,6 +195,35 @@
         />
       </div>
     </el-card>
+
+    <el-dialog v-model="rejectDialogVisible" title="驳回审批" width="560px">
+      <div class="space-y-4">
+        <el-input
+          v-model="rejectForm.comment"
+          type="textarea"
+          :rows="5"
+          maxlength="1000"
+          show-word-limit
+          placeholder="请输入驳回原因"
+        />
+        <el-form-item v-if="rejectTargetOptions.length" label="驳回到节点" class="!mb-0">
+          <el-select v-model="rejectForm.targetNodeKey" class="w-full" clearable placeholder="请选择目标审批节点">
+            <el-option
+              v-for="node in rejectTargetOptions"
+              :key="node.nodeKey"
+              :label="node.nodeName || node.nodeKey"
+              :value="node.nodeKey"
+            />
+          </el-select>
+        </el-form-item>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <el-button @click="closeRejectDialog">取消</el-button>
+          <el-button type="danger" :loading="rejectSubmitting" @click="submitRejectAction">驳回</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -211,7 +240,14 @@ import {
   Operation,
   User
 } from '@element-plus/icons-vue'
-import { asyncTaskApi, expenseApprovalApi, type ExpenseApprovalPendingItem } from '@/api'
+import {
+  asyncTaskApi,
+  expenseApi,
+  expenseApprovalApi,
+  type ExpenseApprovalPendingItem,
+  type ExpenseDocumentDetail,
+  type ProcessFlowNode
+} from '@/api'
 import {
   EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS,
   EXPENSE_WORKBENCH_DEFAULT_COLUMNS,
@@ -247,6 +283,14 @@ const pageSize = ref(10)
 const items = ref<ExpenseApprovalPendingItem[]>([])
 const filters = ref(createExpenseWorkbenchFilters())
 const showAdvancedFilters = ref(false)
+const rejectDialogVisible = ref(false)
+const rejectSubmitting = ref(false)
+const rejectTaskId = ref<number | null>(null)
+const rejectTargetOptions = ref<ProcessFlowNode[]>([])
+const rejectForm = ref({
+  comment: '',
+  targetNodeKey: ''
+})
 
 const allowedColumnKeys: ExpenseWorkbenchColumnKey[] = EXPENSE_WORKBENCH_COLUMNS.map((item) => item.key)
 const columnOrder = ref<ExpenseWorkbenchColumnKey[]>(
@@ -446,27 +490,89 @@ async function handleExport() {
 }
 
 async function handleAction(taskId: number, action: 'approve' | 'reject') {
+  if (action === 'reject') {
+    const item = items.value.find((entry) => entry.taskId === taskId)
+    if (!item?.documentCode) {
+      ElMessage.warning('未找到对应的审批任务')
+      return
+    }
+    try {
+      const detail = await expenseApi.getDetail(item.documentCode)
+      rejectTargetOptions.value = resolveRejectTargetOptions(detail.data, item.nodeKey)
+      rejectTaskId.value = taskId
+      rejectForm.value = {
+        comment: '驳回',
+        targetNodeKey: ''
+      }
+      rejectDialogVisible.value = true
+    } catch (error: unknown) {
+      ElMessage.error(resolveErrorMessage(error, '加载驳回配置失败，请稍后重试'))
+    }
+    return
+  }
+
   try {
     const { value } = await ElMessageBox.prompt(
-      action === 'approve' ? '可选填写审批意见' : '请填写驳回原因',
-      action === 'approve' ? '通过审批' : '驳回审批',
+      '可选填写审批意见',
+      '通过审批',
       {
         inputType: 'textarea',
-        inputPlaceholder: action === 'approve' ? '请输入审批意见（可空）' : '请输入驳回原因',
-        confirmButtonText: action === 'approve' ? '通过' : '驳回',
+        inputPlaceholder: '请输入审批意见（可空）',
+        confirmButtonText: '通过',
         cancelButtonText: '取消'
       }
     )
-    const api = action === 'approve' ? expenseApprovalApi.approve : expenseApprovalApi.reject
-    await api(taskId, { comment: value || '' })
-    ElMessage.success(action === 'approve' ? '审批已通过' : '审批已驳回')
+    await expenseApprovalApi.approve(taskId, { comment: value || '' })
+    ElMessage.success('审批已通过')
     await loadPending()
   } catch (error: unknown) {
     if (error === 'cancel' || String(error).includes('cancel')) {
       return
     }
-    ElMessage.error(resolveErrorMessage(error, action === 'approve' ? '审批通过失败' : '审批驳回失败'))
+    ElMessage.error(resolveErrorMessage(error, '审批通过失败'))
   }
+}
+
+function closeRejectDialog() {
+  rejectDialogVisible.value = false
+  rejectTaskId.value = null
+  rejectTargetOptions.value = []
+  rejectForm.value = {
+    comment: '',
+    targetNodeKey: ''
+  }
+}
+
+async function submitRejectAction() {
+  if (!rejectTaskId.value) {
+    return
+  }
+  rejectSubmitting.value = true
+  try {
+    await expenseApprovalApi.reject(rejectTaskId.value, {
+      comment: rejectForm.value.comment || '',
+      ...(rejectForm.value.targetNodeKey ? { targetNodeKey: rejectForm.value.targetNodeKey } : {})
+    })
+    closeRejectDialog()
+    ElMessage.success('审批已驳回')
+    await loadPending()
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '审批驳回失败'))
+  } finally {
+    rejectSubmitting.value = false
+  }
+}
+
+function resolveRejectTargetOptions(detail: ExpenseDocumentDetail | null | undefined, currentNodeKey: string) {
+  const nodes = Array.isArray(detail?.flowSnapshot?.nodes) ? detail?.flowSnapshot?.nodes || [] : []
+  const currentNode = nodes.find((node) => node.nodeKey === currentNodeKey)
+  const specialSettings = Array.isArray(currentNode?.config?.specialSettings)
+    ? currentNode?.config?.specialSettings || []
+    : []
+  if (!specialSettings.includes('REJECT_TO_ANY_NODE')) {
+    return [] as ProcessFlowNode[]
+  }
+  return nodes.filter((node) => node.nodeType === 'APPROVAL' && node.nodeKey !== currentNodeKey)
 }
 
 function resolveErrorMessage(error: unknown, fallback: string) {

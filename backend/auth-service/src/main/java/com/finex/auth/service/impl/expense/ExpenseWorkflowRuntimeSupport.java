@@ -7,6 +7,8 @@ package com.finex.auth.service.impl.expense;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
+import com.finex.auth.dto.ProcessFlowNodeDTO;
+import com.finex.auth.dto.ProcessFlowRouteDTO;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.ProcessDocumentTemplate;
@@ -107,6 +109,22 @@ public class ExpenseWorkflowRuntimeSupport {
         contextSupport.validateFlowSnapshot(snapshotJson);
     }
 
+    public ProcessFlowRouteDTO previewMatchedRoute(List<ProcessFlowRouteDTO> routes, Map<String, Object> context) {
+        return contextSupport.previewMatchedRoute(routes, context);
+    }
+
+    public List<User> previewResolvedApprovers(ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return contextSupport.previewResolvedApprovers(node, context);
+    }
+
+    public List<User> previewResolvedCcRecipients(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return contextSupport.previewResolvedCcRecipients(instance, node, context);
+    }
+
+    public List<User> previewResolvedPaymentExecutors(ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return contextSupport.previewResolvedPaymentExecutors(node, context);
+    }
+
     /**
      * 审批通过Pending任务。
      */
@@ -128,9 +146,10 @@ public class ExpenseWorkflowRuntimeSupport {
             ProcessDocumentTask task,
             Long userId,
             String username,
-            String comment
+            String comment,
+            String targetNodeKey
     ) {
-        executionSupport.rejectPendingTask(instance, task, userId, username, comment);
+        executionSupport.rejectPendingTask(instance, task, userId, username, comment, targetNodeKey);
     }
 
     /**

@@ -4,6 +4,7 @@
 
 import type { ExpenseDetailInstance } from './expense-types'
 import type { ProcessCustomArchiveDetail } from './process-archive-types'
+import type { ProcessFlowNode, ProcessFlowRoute } from './process-flow-types'
 import type { ProcessFormDesignSchema } from './process-form-types'
 import type { ProcessFormOption } from './process-template-types'
 
@@ -79,6 +80,13 @@ export interface ExpenseCreateTemplateDetail {
   flowName?: string
   formName?: string
   schema: ProcessFormDesignSchema
+  flowSnapshot: {
+    flowName?: string
+    flowDescription?: string
+    nodes?: ProcessFlowNode[]
+    routes?: ProcessFlowRoute[]
+    [key: string]: unknown
+  }
   sharedArchives: ProcessCustomArchiveDetail[]
   expenseDetailDesignCode?: string
   expenseDetailDesignName?: string
@@ -89,6 +97,7 @@ export interface ExpenseCreateTemplateDetail {
   expenseDetailSharedArchives: ProcessCustomArchiveDetail[]
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
+  userOptions: ProcessFormOption[]
   currentUserCompanyId?: string
   currentUserCompanyName?: string
   currentUserDeptId?: string
@@ -100,6 +109,9 @@ export interface ExpenseDocumentEditContext extends ExpenseCreateTemplateDetail 
   editMode: string
   documentCode: string
   taskId?: number
+  taskNodeKey?: string
+  allowEditFormModule?: boolean
+  allowEditPayAccount?: boolean
   formData: Record<string, unknown>
   expenseDetails: ExpenseDetailInstance[]
 }
@@ -108,6 +120,7 @@ export interface ExpenseDocumentSubmitPayload {
   templateCode: string
   formData: Record<string, unknown>
   expenseDetails?: ExpenseDetailInstance[]
+  manualApproverSelections?: Record<string, number[]>
 }
 
 export interface ExpenseDocumentSubmitResult {
@@ -120,6 +133,7 @@ export interface ExpenseDocumentSubmitResult {
 export interface ExpenseDocumentUpdatePayload {
   formData: Record<string, unknown>
   expenseDetails?: ExpenseDetailInstance[]
+  manualApproverSelections?: Record<string, number[]>
 }
 
 export interface ExpenseAttachmentMeta {

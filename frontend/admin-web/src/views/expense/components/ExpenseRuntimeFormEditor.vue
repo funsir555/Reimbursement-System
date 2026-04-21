@@ -5129,11 +5129,11 @@ const props = withDefaults(defineProps<{
 
   currentUserCompanyId?: string
 
+  approvalEditMode?: boolean
 
+  allowEditFormModule?: boolean
 
-
-
-
+  allowEditPayAccount?: boolean
 
   detailType?: string
 
@@ -5185,11 +5185,11 @@ const props = withDefaults(defineProps<{
 
   currentUserCompanyId: '',
 
+  approvalEditMode: false,
 
+  allowEditFormModule: false,
 
-
-
-
+  allowEditPayAccount: false,
 
   detailType: '',
 
@@ -6737,21 +6737,41 @@ function isVisible(block: ProcessFormDesignBlock) {
 
 
 
+function isApprovalEditableBlock(block: ProcessFormDesignBlock) {
+
+  if (!props.approvalEditMode) {
+
+    return false
+
+  }
+
+  if (block.kind === 'BUSINESS_COMPONENT' && businessCode(block) === 'payee-account') {
+
+    return Boolean(props.allowEditPayAccount)
+
+  }
+
+  return Boolean(props.allowEditFormModule)
+
+    && String(block.permission?.fixedStages?.IN_APPROVAL || 'READONLY') === 'EDITABLE'
+
+}
+
+
+
+
+
+
+
 function isReadOnly(block: ProcessFormDesignBlock) {
 
+  if (props.approvalEditMode) {
 
+    return !isApprovalEditableBlock(block)
 
-
-
-
+  }
 
   return isExpenseDetailBlockReadOnly(block)
-
-
-
-
-
-
 
 }
 

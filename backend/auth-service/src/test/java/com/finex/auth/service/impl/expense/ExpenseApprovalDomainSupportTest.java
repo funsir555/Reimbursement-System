@@ -17,10 +17,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -82,6 +85,7 @@ class ExpenseApprovalDomainSupportTest {
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-001");
         ExpenseDocumentEditContextVO expected = new ExpenseDocumentEditContextVO();
+        expected.setAllowEditFormModule(Boolean.TRUE);
         ExpenseApprovalDomainSupport support = newSupport();
         when(processDocumentTaskMapper.selectById(10L)).thenReturn(task);
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
@@ -103,16 +107,41 @@ class ExpenseApprovalDomainSupportTest {
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-001");
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+        ExpenseApprovalActionDTO dto = new ExpenseApprovalActionDTO();
+        dto.setTargetNodeKey("NODE-2");
         ExpenseApprovalDomainSupport support = newSupport();
         when(processDocumentTaskMapper.selectById(10L)).thenReturn(task);
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance, instance);
         when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
 
-        ExpenseDocumentDetailVO actual = support.rejectTask(1L, "tester", 10L, new ExpenseApprovalActionDTO());
+        ExpenseDocumentDetailVO actual = support.rejectTask(1L, "tester", 10L, dto);
 
         assertSame(detail, actual);
-        verify(expenseWorkflowRuntimeSupport).rejectPendingTask(any(), any(), any(), any(), any());
+        verify(expenseWorkflowRuntimeSupport).rejectPendingTask(any(), any(), any(), any(), any(), eq("NODE-2"));
         verify(expenseRelationWriteOffService).voidPendingWriteOffs("DOC-001");
+    }
+
+    @Test
+    void getTaskModifyContextRejectsWhenNodeHasNoEditPermission() {
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(10L);
+        task.setDocumentCode("DOC-001");
+        task.setAssigneeUserId(1L);
+        task.setNodeType("APPROVAL");
+        task.setStatus("PENDING");
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-001");
+        ExpenseDocumentEditContextVO context = new ExpenseDocumentEditContextVO();
+        context.setAllowEditFormModule(Boolean.FALSE);
+        context.setAllowEditPayAccount(Boolean.FALSE);
+        ExpenseApprovalDomainSupport support = newSupport();
+        when(processDocumentTaskMapper.selectById(10L)).thenReturn(task);
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+        when(expenseDocumentTemplateSupport.buildEditContext(1L, instance, 10L, "MODIFY")).thenReturn(context);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> support.getTaskModifyContext(1L, 10L));
+
+        assertEquals("当前审批节点未开启单据修改权限", error.getMessage());
     }
 
     private ExpenseApprovalDomainSupport newSupport() {

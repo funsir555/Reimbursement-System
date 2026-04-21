@@ -38,6 +38,8 @@ public class ExpenseDocumentEditContextVO {
 
     private Map<String, Object> schema = new LinkedHashMap<>();
 
+    private Map<String, Object> flowSnapshot = new LinkedHashMap<>();
+
     private String expenseDetailDesignCode;
 
     private String expenseDetailDesignName;
@@ -58,6 +60,8 @@ public class ExpenseDocumentEditContextVO {
 
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
 
+    private List<ProcessFormOptionVO> userOptions = new ArrayList<>();
+
     private List<ProcessFormOptionVO> expenseTypeOptions = new ArrayList<>();
 
     private Map<String, String> expenseTypeInvoiceFreeModeMap = new LinkedHashMap<>();
@@ -69,6 +73,12 @@ public class ExpenseDocumentEditContextVO {
     private String currentUserDeptId;
 
     private String currentUserDeptName;
+
+    private String taskNodeKey;
+
+    private Boolean allowEditFormModule = Boolean.FALSE;
+
+    private Boolean allowEditPayAccount = Boolean.FALSE;
 
     private Map<String, Object> formData = new LinkedHashMap<>();
 

@@ -19,6 +19,7 @@ import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
@@ -83,5 +84,27 @@ class ExpenseApprovalControllerTest {
 
         verify(accessControlService).requirePermission(1L, "expense:approval:approve");
         verify(expenseDocumentService).approveTask(eq(1L), eq("tester"), eq(99L), any(ExpenseApprovalActionDTO.class));
+    }
+
+    @Test
+    void rejectPassesTargetNodeKeyAndUsesCurrentUserIdentity() throws Exception {
+        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+        detail.setDocumentCode("DOC-2");
+        doNothing().when(accessControlService).requirePermission(1L, "expense:approval:reject");
+        when(expenseDocumentService.rejectTask(eq(1L), eq("tester"), eq(88L), any(ExpenseApprovalActionDTO.class))).thenReturn(detail);
+
+        mockMvc.perform(post("/auth/expense-approval/tasks/88/reject")
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "tester")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"comment\":\"退回补充说明\",\"targetNodeKey\":\"NODE-2\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.documentCode").value("DOC-2"));
+
+        verify(accessControlService).requirePermission(1L, "expense:approval:reject");
+        verify(expenseDocumentService).rejectTask(eq(1L), eq("tester"), eq(88L), argThat(dto ->
+                "退回补充说明".equals(dto.getComment()) && "NODE-2".equals(dto.getTargetNodeKey())
+        ));
     }
 }

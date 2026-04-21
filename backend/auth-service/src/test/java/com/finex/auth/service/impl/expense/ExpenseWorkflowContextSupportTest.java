@@ -1,6 +1,8 @@
 package com.finex.auth.service.impl.expense;
 
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
+import com.finex.auth.dto.ProcessFlowNodeDTO;
+import com.finex.auth.dto.ProcessFlowRouteDTO;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTemplate;
 import com.finex.auth.entity.ProcessExpenseDetailDesign;
@@ -67,5 +69,31 @@ class ExpenseWorkflowContextSupportTest {
         verify(support).buildRuntimeContextForInstance(instance);
         verify(support).inspectRawFlowSnapshot("{}");
         verify(support).validateFlowSnapshot("{}");
+    }
+
+    @Test
+    void previewDelegatesToSharedSupport() {
+        ExpenseWorkflowContextSupport contextSupport = new ExpenseWorkflowContextSupport(support);
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        ProcessFlowNodeDTO node = new ProcessFlowNodeDTO();
+        ProcessFlowRouteDTO route = new ProcessFlowRouteDTO();
+        User user = new User();
+        Map<String, Object> context = Map.of("amount", 12);
+        List<User> users = List.of(user);
+
+        when(support.previewMatchedRoute(List.of(route), context)).thenReturn(route);
+        when(support.previewResolvedApprovers(node, context)).thenReturn(users);
+        when(support.previewResolvedCcRecipients(instance, node, context)).thenReturn(users);
+        when(support.previewResolvedPaymentExecutors(node, context)).thenReturn(users);
+
+        assertSame(route, contextSupport.previewMatchedRoute(List.of(route), context));
+        assertSame(users, contextSupport.previewResolvedApprovers(node, context));
+        assertSame(users, contextSupport.previewResolvedCcRecipients(instance, node, context));
+        assertSame(users, contextSupport.previewResolvedPaymentExecutors(node, context));
+
+        verify(support).previewMatchedRoute(List.of(route), context);
+        verify(support).previewResolvedApprovers(node, context);
+        verify(support).previewResolvedCcRecipients(instance, node, context);
+        verify(support).previewResolvedPaymentExecutors(node, context);
     }
 }

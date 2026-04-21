@@ -1,11 +1,14 @@
 package com.finex.auth.service.impl.expense;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.entity.ProcessDocumentTask;
+import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -16,6 +19,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,10 +30,12 @@ class ExpenseDocumentTemplateDomainSupportTest {
     private AbstractExpenseDocumentSupport support;
     @Mock
     private ExpenseDocumentReadSupport readSupport;
+    @Mock
+    private ProcessDocumentTaskMapper processDocumentTaskMapper;
 
     @Test
     void listAvailableTemplatesDelegatesToSharedSupport() {
-        ExpenseDocumentTemplateDomainSupport domainSupport = new ExpenseDocumentTemplateDomainSupport(support, readSupport);
+        ExpenseDocumentTemplateDomainSupport domainSupport = newSupport();
         List<ExpenseCreateTemplateSummaryVO> expected = List.of(new ExpenseCreateTemplateSummaryVO());
         when(support.listAvailableTemplates()).thenReturn(expected);
 
@@ -41,7 +47,7 @@ class ExpenseDocumentTemplateDomainSupportTest {
 
     @Test
     void getDocumentEditContextBuildsFromTemplateAndReadSide() {
-        ExpenseDocumentTemplateDomainSupport domainSupport = new ExpenseDocumentTemplateDomainSupport(support, readSupport);
+        ExpenseDocumentTemplateDomainSupport domainSupport = newSupport();
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-1");
         instance.setTemplateCode("TPL-1");
@@ -73,5 +79,51 @@ class ExpenseDocumentTemplateDomainSupportTest {
         assertEquals(1, actual.getExpenseDetails().size());
         assertSame(runtimeDetail, actual.getExpenseDetails().get(0));
         verify(readSupport).requireSubmitter(instance, 1L);
+    }
+
+    @Test
+    void buildEditContextLoadsTaskLevelModifyCapabilitiesFromFlowSnapshot() throws Exception {
+        ExpenseDocumentTemplateDomainSupport domainSupport = newSupport();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-2");
+        instance.setTemplateCode("TPL-2");
+        instance.setFormDataJson("{}");
+        instance.setFlowSnapshotJson(new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "finance",
+                                "nodeType", "APPROVAL",
+                                "config", Map.of("specialSettings", List.of("ALLOW_EDIT_FORM_MODULE"))
+                        )
+                ),
+                "routes", List.of()
+        )));
+        ExpenseCreateTemplateDetailVO templateDetail = new ExpenseCreateTemplateDetailVO();
+        templateDetail.setTemplateCode("TPL-2");
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(10L);
+        task.setDocumentCode("DOC-2");
+        task.setNodeKey("finance");
+        task.setNodeType("APPROVAL");
+        task.setStatus("PENDING");
+        when(support.getTemplateDetail(1L, "TPL-2")).thenReturn(templateDetail);
+        when(readSupport.readFormData("{}")).thenReturn(Map.of());
+        when(readSupport.loadExpenseDetails("DOC-2")).thenReturn(List.of());
+        when(processDocumentTaskMapper.selectOne(any())).thenReturn(task);
+
+        ExpenseDocumentEditContextVO actual = domainSupport.buildEditContext(1L, instance, 10L, "MODIFY");
+
+        assertEquals("finance", actual.getTaskNodeKey());
+        assertEquals(Boolean.TRUE, actual.getAllowEditFormModule());
+        assertEquals(Boolean.FALSE, actual.getAllowEditPayAccount());
+    }
+
+    private ExpenseDocumentTemplateDomainSupport newSupport() {
+        return new ExpenseDocumentTemplateDomainSupport(
+                support,
+                readSupport,
+                processDocumentTaskMapper,
+                new ObjectMapper()
+        );
     }
 }

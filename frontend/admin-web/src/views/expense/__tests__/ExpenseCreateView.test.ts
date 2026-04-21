@@ -99,7 +99,43 @@ const InputStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+})
+
+const SelectStub = defineComponent({
+  props: {
+    modelValue: {
+      type: [String, Number, Array],
+      default: ''
+    }
+  },
+  emits: ['update:modelValue'],
+  setup(_props, { attrs, emit }) {
+    const onChange = (event: Event) => {
+      const target = event.target as HTMLSelectElement
+      if (attrs.multiple !== undefined) {
+        emit('update:modelValue', Array.from(target.selectedOptions).map((option) => option.value))
+        return
+      }
+      emit('update:modelValue', target.value)
+    }
+    return { onChange }
+  },
+  template: '<select v-bind="$attrs" :value="modelValue" @change="onChange"><slot /></select>'
+})
+
+const OptionStub = defineComponent({
+  props: {
+    label: {
+      type: String,
+      default: ''
+    },
+    value: {
+      type: [String, Number],
+      default: ''
+    }
+  },
+  template: '<option :value="value">{{ label }}</option>'
 })
 
 const TagStub = defineComponent({
@@ -125,6 +161,18 @@ const ExpenseRuntimeFormEditorStub = defineComponent({
     currentUserCompanyId: {
       type: String,
       default: ''
+    },
+    approvalEditMode: {
+      type: Boolean,
+      default: false
+    },
+    allowEditFormModule: {
+      type: Boolean,
+      default: false
+    },
+    allowEditPayAccount: {
+      type: Boolean,
+      default: false
     }
   },
   setup(props, { expose }) {
@@ -134,7 +182,10 @@ const ExpenseRuntimeFormEditorStub = defineComponent({
     return () => h('div', {
       'data-testid': 'expense-runtime-form-editor',
       'data-model-value': JSON.stringify(props.modelValue || {}),
-      'data-current-user-company-id': props.currentUserCompanyId || ''
+      'data-current-user-company-id': props.currentUserCompanyId || '',
+      'data-approval-edit-mode': String(props.approvalEditMode),
+      'data-allow-edit-form-module': String(props.allowEditFormModule),
+      'data-allow-edit-pay-account': String(props.allowEditPayAccount)
     })
   }
 })
@@ -145,6 +196,8 @@ const globalStubs = {
   'el-tag': TagStub,
   'el-button': ButtonStub,
   'el-input': InputStub,
+  'el-select': SelectStub,
+  'el-option': OptionStub,
   'el-empty': EmptyStub,
   'expense-runtime-form-editor': ExpenseRuntimeFormEditorStub
 }
@@ -193,6 +246,10 @@ function buildTemplateDetail(
       layoutMode: 'TWO_COLUMN',
       blocks: options.blocks || []
     },
+    flowSnapshot: {
+      nodes: [],
+      routes: []
+    },
     sharedArchives: [],
     expenseDetailDesignCode: options.expenseDetailDesignCode ?? (templateType === 'report' ? 'EDD-001' : ''),
     expenseDetailDesignName: templateType === 'report' ? '费用明细' : '',
@@ -206,6 +263,7 @@ function buildTemplateDetail(
     expenseDetailSharedArchives: [],
     companyOptions: [],
     departmentOptions: [],
+    userOptions: [],
     currentUserCompanyId: '',
     currentUserCompanyName: '',
     currentUserDeptId: 1,
@@ -270,6 +328,7 @@ function writeDraft(
   options: {
     formValues?: Record<string, unknown>
     expenseDetails?: Array<Record<string, unknown>>
+    manualApproverSelections?: Record<string, string[]>
   } = {}
 ) {
   window.sessionStorage.setItem(
@@ -277,7 +336,8 @@ function writeDraft(
     JSON.stringify({
       templateCode,
       formValues: options.formValues || {},
-      expenseDetails: options.expenseDetails || []
+      expenseDetails: options.expenseDetails || [],
+      manualApproverSelections: options.manualApproverSelections || {}
     })
   )
 }
@@ -544,7 +604,8 @@ describe('ExpenseCreateView', () => {
       formData: {
         __totalAmount: '0.00'
       },
-      expenseDetails: []
+      expenseDetails: [],
+      manualApproverSelections: {}
     })
     expect(mocks.elMessage.success).toHaveBeenCalledWith('审批单已提交')
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
@@ -651,7 +712,8 @@ describe('ExpenseCreateView', () => {
         amountTwo: '0.20',
         __totalAmount: '100.30'
       },
-      expenseDetails: []
+      expenseDetails: [],
+      manualApproverSelections: {}
     })
   })
 
@@ -713,7 +775,8 @@ describe('ExpenseCreateView', () => {
         amountTwo: '20.20',
         __totalAmount: '100.30'
       },
-      expenseDetails: []
+      expenseDetails: [],
+      manualApproverSelections: {}
     })
   })
 
@@ -798,6 +861,93 @@ describe('ExpenseCreateView', () => {
     const wrapper = await mountView()
 
     expect(wrapper.get('[data-testid="expense-runtime-form-editor"]').attributes('data-current-user-company-id')).toBe('COMPANY_CTX')
+  })
+
+  it('renders manual approver selection and submits selected approvers in create mode', async () => {
+    mocks.route.query = { templateCode: 'TPL-007B', draftKey: 'draft-manual-approver' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-007B&draftKey=draft-manual-approver'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-007B', '手选审批模板', 'contract', '合同单'),
+        flowSnapshot: {
+          nodes: [
+            {
+              nodeKey: 'manual-finance',
+              nodeName: '财务复核',
+              nodeType: 'APPROVAL',
+              displayOrder: 1,
+              config: {
+                approverType: 'MANUAL_SELECT'
+              }
+            }
+          ],
+          routes: []
+        },
+        userOptions: [
+          { value: 2, label: '李四' },
+          { value: 3, label: '王五' }
+        ]
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('手动选择审批人')
+    expect(wrapper.text()).toContain('财务复核')
+
+    await wrapper.get('[data-testid="expense-manual-approver-select"]').setValue(['2', '3'])
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).toHaveBeenCalledWith({
+      templateCode: 'TPL-007B',
+      formData: {
+        __totalAmount: '0.00'
+      },
+      expenseDetails: [],
+      manualApproverSelections: {
+        'manual-finance': [2, 3]
+      }
+    })
+  })
+
+  it('passes modify permission flags to the runtime editor and locks expense detail editing in approval modify mode', async () => {
+    mocks.route.name = 'expense-approval-task-modify'
+    mocks.route.params = { taskId: '55' }
+    mocks.route.fullPath = '/expense/approval/tasks/55/modify'
+    mocks.expenseApprovalApi.getModifyContext.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-007C', '审批改单模板', 'report', '报销单'),
+        editMode: 'MODIFY',
+        documentCode: 'DOC-003',
+        taskId: 55,
+        formData: {},
+        expenseDetails: [
+          {
+            detailNo: 'DETAIL-001',
+            detailTitle: '住宿费',
+            detailType: 'COMMON',
+            sortOrder: 1,
+            formData: {
+              actualPaymentAmount: '12.30'
+            }
+          }
+        ],
+        allowEditFormModule: true,
+        allowEditPayAccount: false
+      }
+    })
+
+    const wrapper = await mountView()
+    const editor = wrapper.get('[data-testid="expense-runtime-form-editor"]')
+
+    expect(editor.attributes('data-approval-edit-mode')).toBe('true')
+    expect(editor.attributes('data-allow-edit-form-module')).toBe('true')
+    expect(editor.attributes('data-allow-edit-pay-account')).toBe('false')
+    expect(wrapper.findAll('button').find((item) => item.text() === '新增费用明细')?.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('button').find((item) => item.text() === '编辑')?.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('button').find((item) => item.text() === '删除')?.attributes('disabled')).toBeDefined()
   })
 
   it('keeps the restored draft payment company instead of overriding it with a default', async () => {

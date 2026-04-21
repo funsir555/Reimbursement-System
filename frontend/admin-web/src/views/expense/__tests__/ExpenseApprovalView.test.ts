@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
   router: {
     push: vi.fn()
   },
+  expenseApi: {
+    getDetail: vi.fn()
+  },
   expenseApprovalApi: {
     listPending: vi.fn(),
     approve: vi.fn(),
@@ -33,14 +36,19 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/api', () => ({
+  expenseApi: mocks.expenseApi,
   expenseApprovalApi: mocks.expenseApprovalApi,
   asyncTaskApi: mocks.asyncTaskApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/downloadCenter', () => ({
   openDownloadCenter: mocks.downloadCenter.openDownloadCenter
@@ -63,7 +71,7 @@ const InputStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
 const SelectStub = defineComponent({
@@ -74,7 +82,41 @@ const SelectStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: '<div><slot /></div>'
+  template: '<select v-bind="$attrs" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
+})
+
+const OptionStub = defineComponent({
+  props: {
+    label: {
+      type: String,
+      default: ''
+    },
+    value: {
+      type: String,
+      default: ''
+    }
+  },
+  template: '<option :value="value">{{ label }}</option>'
+})
+
+const DialogStub = defineComponent({
+  props: {
+    modelValue: {
+      type: Boolean,
+      default: false
+    }
+  },
+  template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>'
+})
+
+const FormItemStub = defineComponent({
+  props: {
+    label: {
+      type: String,
+      default: ''
+    }
+  },
+  template: '<label><span>{{ label }}</span><slot /></label>'
 })
 
 const TableStub = defineComponent({
@@ -139,7 +181,7 @@ async function mountView() {
         'el-button': ButtonStub,
         'el-input': InputStub,
         'el-select': SelectStub,
-        'el-option': true,
+        'el-option': OptionStub,
         'el-date-picker': SimpleContainer,
         'el-table': TableStub,
         'el-table-column': TableColumnStub,
@@ -147,7 +189,9 @@ async function mountView() {
         'el-pagination': PaginationStub,
         'el-icon': SimpleContainer,
         'el-popover': SimpleContainer,
-        'el-checkbox': SimpleContainer
+        'el-checkbox': SimpleContainer,
+        'el-dialog': DialogStub,
+        'el-form-item': FormItemStub
       },
       directives: {
         loading: () => undefined
@@ -171,7 +215,9 @@ describe('ExpenseApprovalView', () => {
           documentTitle: '差旅审批单',
           documentReason: '上海出差',
           submitterName: '张三',
+          nodeKey: 'finance',
           nodeName: '财务审批',
+          status: 'PENDING',
           amount: 1880.5,
           submittedAt: '2026-04-01 10:00:00',
           taskCreatedAt: '2026-04-01 10:30:00',
@@ -179,6 +225,13 @@ describe('ExpenseApprovalView', () => {
           paymentCompanyName: '华南公司'
         }
       ]
+    })
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: {
+        flowSnapshot: {
+          nodes: []
+        }
+      }
     })
     mocks.elMessageBox.prompt.mockResolvedValue({ value: '同意' })
     mocks.expenseApprovalApi.approve.mockResolvedValue({})
@@ -288,5 +341,59 @@ describe('ExpenseApprovalView', () => {
     })
     expect(mocks.downloadCenter.openDownloadCenter).toHaveBeenCalledTimes(1)
     expect(mocks.elMessage.success).toHaveBeenCalledWith('导出任务已提交，请到下载中心查看进度')
+  })
+
+  it('opens the reject dialog with target node options and submits targetNodeKey when configured', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: {
+        flowSnapshot: {
+          nodes: [
+            {
+              nodeKey: 'finance',
+              nodeName: '财务审批',
+              nodeType: 'APPROVAL',
+              config: {
+                specialSettings: ['REJECT_TO_ANY_NODE']
+              }
+            },
+            {
+              nodeKey: 'leader',
+              nodeName: '部门负责人审批',
+              nodeType: 'APPROVAL',
+              config: {}
+            },
+            {
+              nodeKey: 'payment',
+              nodeName: '付款处理',
+              nodeType: 'PAYMENT',
+              config: {}
+            }
+          ]
+        }
+      }
+    })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      handleAction: (taskId: number, action: 'approve' | 'reject') => Promise<void>
+    }
+
+    await vm.handleAction(1, 'reject')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('驳回到节点')
+
+    await wrapper.get('input[placeholder="请输入驳回原因"]').setValue('退回补充材料')
+    const selects = wrapper.findAll('select')
+    await selects[selects.length - 1]!.setValue('leader')
+    const rejectButtons = wrapper.findAll('button').filter((item) => item.text() === '驳回')
+    await rejectButtons[rejectButtons.length - 1]!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseApprovalApi.reject).toHaveBeenCalledWith(1, {
+      comment: '退回补充材料',
+      targetNodeKey: 'leader'
+    })
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('审批已驳回')
   })
 })

@@ -142,7 +142,32 @@ const InputStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+})
+
+const SelectStub = defineComponent({
+  props: {
+    modelValue: {
+      type: String,
+      default: ''
+    }
+  },
+  emits: ['update:modelValue'],
+  template: '<select v-bind="$attrs" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
+})
+
+const OptionStub = defineComponent({
+  props: {
+    label: {
+      type: String,
+      default: ''
+    },
+    value: {
+      type: String,
+      default: ''
+    }
+  },
+  template: '<option :value="value">{{ label }}</option>'
 })
 
 const globalStubs = {
@@ -154,8 +179,8 @@ const globalStubs = {
   'el-timeline-item': SimpleContainer,
   'el-dialog': DialogStub,
   'el-input': InputStub,
-  'el-select': SimpleContainer,
-  'el-option': true,
+  'el-select': SelectStub,
+  'el-option': OptionStub,
   'el-form-item': SimpleContainer,
   'el-icon': SimpleContainer,
   ExpenseFormReadonlyRenderer: {
@@ -231,6 +256,8 @@ function buildDocumentDetail(
     ],
     currentTasks: [],
     actionLogs: [],
+    approvalNodeStatuses: [],
+    approvalTimeline: [],
     ...overrides
   }
 }
@@ -370,6 +397,95 @@ describe('ExpenseDocumentDetailView', () => {
     })
   })
 
+  it('renders backend-provided approval node statuses including not reached nodes', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        currentTasks: [],
+        actionLogs: [],
+        approvalNodeStatuses: [
+          {
+            nodeKey: 'leader',
+            nodeName: '直属上级审批',
+            status: 'APPROVED',
+            statusLabel: '已通过',
+            assigneeNames: ['李经理'],
+            occurredAt: '2026-04-01 10:30:00'
+          },
+          {
+            nodeKey: 'finance',
+            nodeName: '财务审批',
+            status: 'PENDING',
+            statusLabel: '审批中',
+            assigneeNames: ['财务A'],
+            description: '当前处理人：财务A'
+          },
+          {
+            nodeKey: 'payment',
+            nodeName: '出纳支付',
+            status: 'NOT_REACHED',
+            statusLabel: '未到达',
+            description: '预计处理人：出纳B'
+          }
+        ]
+      })
+    })
+
+    const wrapper = await mountView()
+    const statusItems = wrapper.findAll('[data-testid="approval-node-status-item"]')
+
+    expect(wrapper.get('[data-testid="approval-node-status-list"]').text()).toContain('直属上级审批')
+    expect(wrapper.get('[data-testid="approval-node-status-list"]').text()).toContain('财务审批')
+    expect(wrapper.get('[data-testid="approval-node-status-list"]').text()).toContain('出纳支付')
+    expect(wrapper.text()).toContain('预计处理人：出纳B')
+    expect(statusItems).toHaveLength(3)
+  })
+
+  it('renders backend-provided approval timeline without relying on local actionLogs or currentTasks assembly', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        currentTasks: [],
+        actionLogs: [],
+        approvalTimeline: [
+          {
+            key: 'timeline-1',
+            title: '张三 提交单据',
+            status: 'APPROVED',
+            statusLabel: '已完成',
+            timestamp: '2026-04-01 10:00:00',
+            description: ''
+          },
+          {
+            key: 'timeline-2',
+            nodeKey: 'finance',
+            title: '财务审批 审批中',
+            status: 'PENDING',
+            statusLabel: '审批中',
+            description: '当前处理人：财务A',
+            timestamp: '2026-04-01 10:30:00',
+            pending: true
+          },
+          {
+            key: 'timeline-3',
+            nodeKey: 'payment',
+            title: '出纳支付 未到达',
+            status: 'NOT_REACHED',
+            statusLabel: '未到达',
+            description: '预计处理人：出纳B',
+            future: true
+          }
+        ]
+      })
+    })
+
+    const wrapper = await mountView()
+    const timelineItems = wrapper.findAll('[data-testid="approval-timeline-item"]')
+
+    expect(wrapper.get('[data-testid="approval-timeline-list"]').text()).toContain('张三 提交单据')
+    expect(wrapper.get('[data-testid="approval-timeline-list"]').text()).toContain('财务审批 审批中')
+    expect(wrapper.get('[data-testid="approval-timeline-list"]').text()).toContain('出纳支付 未到达')
+    expect(timelineItems).toHaveLength(3)
+  })
+
   it('prefers detail submitterName over submit log actorName in the submit timeline item', async () => {
     mocks.expenseApi.getDetail.mockResolvedValue({
       data: {
@@ -385,6 +501,22 @@ describe('ExpenseDocumentDetailView', () => {
             actionComment: '',
             payload: {},
             createdAt: '2026-04-01 10:00:00'
+          }
+        ],
+        approvalTimeline: [
+          {
+            key: 'submit',
+            title: '李四 提交单据',
+            status: 'APPROVED',
+            statusLabel: '已完成',
+            timestamp: '2026-04-01 10:00:00'
+          },
+          {
+            key: 'pending-finance',
+            title: 'Finance LiSi 审批中',
+            status: 'PENDING',
+            statusLabel: '审批中',
+            timestamp: '2026-04-01 10:01:00'
           }
         ],
         currentTasks: [
@@ -429,7 +561,16 @@ describe('ExpenseDocumentDetailView', () => {
             createdAt: '2026-04-01 10:00:00'
           }
         ],
-        currentTasks: []
+        currentTasks: [],
+        approvalTimeline: [
+          {
+            key: 'submit',
+            title: 'Li Si 提交单据',
+            status: 'APPROVED',
+            statusLabel: '已完成',
+            timestamp: '2026-04-01 10:00:00'
+          }
+        ]
       }
     })
 
@@ -455,7 +596,16 @@ describe('ExpenseDocumentDetailView', () => {
             createdAt: '2026-04-01 10:00:00'
           }
         ],
-        currentTasks: []
+        currentTasks: [],
+        approvalTimeline: [
+          {
+            key: 'submit',
+            title: '提单人 提交单据',
+            status: 'APPROVED',
+            statusLabel: '已完成',
+            timestamp: '2026-04-01 10:00:00'
+          }
+        ]
       }
     })
 
@@ -509,6 +659,22 @@ describe('ExpenseDocumentDetailView', () => {
             payload: {},
             createdAt: '2026-04-01 12:10:00'
           }
+        ],
+        approvalTimeline: [
+          {
+            key: 'approved',
+            title: 'Finance WangWu 审批通过',
+            status: 'APPROVED',
+            statusLabel: '已通过',
+            timestamp: '2026-04-01 12:10:00'
+          },
+          {
+            key: 'pending',
+            title: 'Finance LiSi 审批中',
+            status: 'PENDING',
+            statusLabel: '审批中',
+            timestamp: '2026-04-01 12:20:00'
+          }
         ]
       }
     })
@@ -539,6 +705,15 @@ describe('ExpenseDocumentDetailView', () => {
             actionComment: '',
             payload: {},
             createdAt: '2026-04-01 12:00:00'
+          }
+        ],
+        approvalTimeline: [
+          {
+            key: 'approved',
+            title: 'Finance WangWu 审批通过',
+            status: 'APPROVED',
+            statusLabel: '已通过',
+            timestamp: '2026-04-01 12:00:00'
           }
         ]
       }
@@ -594,6 +769,15 @@ describe('ExpenseDocumentDetailView', () => {
             actionComment: '支付节点 4',
             payload: {},
             createdAt: '2026-04-07 19:22:01'
+          }
+        ],
+        approvalTimeline: [
+          {
+            key: 'payment-pending',
+            title: '王五 待支付',
+            status: 'PAYMENT_PENDING',
+            statusLabel: '待支付',
+            timestamp: '2026-04-07 19:22:00'
           }
         ]
       }
@@ -734,7 +918,47 @@ describe('ExpenseDocumentDetailView', () => {
     expect(primaryGroup.text()).toContain('驳回')
   })
 
-  it('prefills the approval prompt with the clicked action label', async () => {
+  it('passes canModify to the action matrix based on the current approval node special settings', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: {
+        ...buildDocumentDetail(),
+        flowSnapshot: {
+          nodes: [
+            {
+              nodeKey: 'finance',
+              nodeName: '财务审批',
+              nodeType: 'APPROVAL',
+              displayOrder: 1,
+              config: {
+                specialSettings: ['ALLOW_EDIT_FORM_MODULE']
+              }
+            }
+          ],
+          routes: []
+        },
+        currentTasks: [
+          {
+            id: 101,
+            nodeKey: 'finance',
+            nodeName: '财务审批',
+            nodeType: 'APPROVAL',
+            assigneeUserId: 1,
+            assigneeName: '张三',
+            createdAt: '2026-04-01 12:00:00'
+          }
+        ]
+      }
+    })
+
+    await mountView()
+
+    expect(mocks.resolveExpenseDetailActions).toHaveBeenCalledWith(expect.objectContaining({
+      isActiveApprover: true,
+      canModify: true
+    }))
+  })
+
+  it('opens the approval dialog with the clicked action default comment', async () => {
     const detailWithPendingTask = {
       ...buildDocumentDetail(),
       currentTasks: [
@@ -759,11 +983,6 @@ describe('ExpenseDocumentDetailView', () => {
       { key: 'approve', label: '通过', primary: true, type: 'primary' },
       { key: 'reject', label: '驳回', primary: true, type: 'danger' }
     ])
-    mocks.elMessageBox.prompt
-      .mockResolvedValueOnce({ value: '通过' })
-      .mockResolvedValueOnce({ value: '驳回' })
-    mocks.expenseApprovalApi.approve.mockResolvedValue({ data: detailWithPendingTask })
-    mocks.expenseApprovalApi.reject.mockResolvedValue({ data: detailWithPendingTask })
 
     const wrapper = await mountView()
     const findActionButton = (label: string) => wrapper.findAll('.detail-floating-button').find((item) => item.text() === label)
@@ -771,30 +990,14 @@ describe('ExpenseDocumentDetailView', () => {
     await findActionButton('通过')!.trigger('click')
     await flushPromises()
 
-    expect(mocks.elMessageBox.prompt).toHaveBeenNthCalledWith(
-      1,
-      '可选填写审批意见',
-      '通过审批',
-      expect.objectContaining({
-        inputType: 'textarea',
-        inputValue: '通过',
-        confirmButtonText: '通过'
-      })
-    )
+    expect(wrapper.get('input[placeholder="请输入审批意见（可空）"]').element).toHaveProperty('value', '通过')
+    await wrapper.findAll('button').find((item) => item.text() === '取消')!.trigger('click')
+    await flushPromises()
 
     await findActionButton('驳回')!.trigger('click')
     await flushPromises()
 
-    expect(mocks.elMessageBox.prompt).toHaveBeenNthCalledWith(
-      2,
-      '请填写驳回原因',
-      '驳回审批',
-      expect.objectContaining({
-        inputType: 'textarea',
-        inputValue: '驳回',
-        confirmButtonText: '驳回'
-      })
-    )
+    expect(wrapper.get('input[placeholder="请输入驳回原因"]').element).toHaveProperty('value', '驳回')
   })
 
   it('submits the user-edited approval comment instead of forcing the default value', async () => {
@@ -820,7 +1023,6 @@ describe('ExpenseDocumentDetailView', () => {
     mocks.resolveExpenseDetailActions.mockReturnValue([
       { key: 'approve', label: '通过', primary: true, type: 'primary' }
     ])
-    mocks.elMessageBox.prompt.mockResolvedValue({ value: '同意，请继续处理' })
     mocks.expenseApprovalApi.approve.mockResolvedValue({ data: buildDocumentDetail() })
 
     const wrapper = await mountView()
@@ -828,7 +1030,75 @@ describe('ExpenseDocumentDetailView', () => {
     await wrapper.get('.detail-floating-button').trigger('click')
     await flushPromises()
 
+    await wrapper.get('input[placeholder="请输入审批意见（可空）"]').setValue('同意，请继续处理')
+    const approveButtons = wrapper.findAll('button').filter((item) => item.text() === '通过')
+    await approveButtons[approveButtons.length - 1]!.trigger('click')
+    await flushPromises()
+
     expect(mocks.expenseApprovalApi.approve).toHaveBeenCalledWith(101, { comment: '同意，请继续处理' })
+  })
+
+  it('submits reject targetNodeKey when the current approval node allows rejecting to any node', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: {
+        ...buildDocumentDetail(),
+        flowSnapshot: {
+          nodes: [
+            {
+              nodeKey: 'finance',
+              nodeName: '财务审批',
+              nodeType: 'APPROVAL',
+              displayOrder: 1,
+              config: {
+                specialSettings: ['REJECT_TO_ANY_NODE']
+              }
+            },
+            {
+              nodeKey: 'leader',
+              nodeName: '部门负责人审批',
+              nodeType: 'APPROVAL',
+              displayOrder: 2,
+              config: {}
+            }
+          ],
+          routes: []
+        },
+        currentTasks: [
+          {
+            id: 101,
+            documentCode: 'DOC-001',
+            nodeKey: 'finance',
+            nodeName: '财务审批',
+            nodeType: 'APPROVAL',
+            assigneeUserId: 1,
+            assigneeName: '张三',
+            status: 'PENDING',
+            taskBatchNo: 'B-1',
+            createdAt: '2026-04-01 12:00:00'
+          }
+        ]
+      }
+    })
+    mocks.resolveExpenseDetailActions.mockReturnValue([
+      { key: 'reject', label: '驳回', primary: true, type: 'danger' }
+    ])
+    mocks.expenseApprovalApi.reject.mockResolvedValue({ data: buildDocumentDetail() })
+
+    const wrapper = await mountView()
+
+    await wrapper.get('.detail-floating-button').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('input[placeholder="请输入驳回原因"]').setValue('退回补充说明')
+    await wrapper.get('select[placeholder="请选择目标审批节点"]').setValue('leader')
+    const rejectButtons = wrapper.findAll('button').filter((item) => item.text() === '驳回')
+    await rejectButtons[rejectButtons.length - 1]!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseApprovalApi.reject).toHaveBeenCalledWith(101, {
+      comment: '退回补充说明',
+      targetNodeKey: 'leader'
+    })
   })
 
   it('renders detail normally when totalAmount is a money string', async () => {

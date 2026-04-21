@@ -255,7 +255,49 @@
               :company-options="templateDetail?.companyOptions || []"
               :department-options="templateDetail?.departmentOptions || []"
               :current-user-company-id="templateDetail?.currentUserCompanyId || ''"
+              :approval-edit-mode="isApprovalModifyMode"
+              :allow-edit-form-module="allowEditFormModule"
+              :allow-edit-pay-account="allowEditPayAccount"
             />
+          </div>
+        </el-card>
+
+        <el-card v-if="showManualApproverSection" class="expense-wb-panel" data-testid="expense-manual-approver-card">
+          <div class="space-y-6">
+            <div class="expense-wb-toolbar__heading">
+              <p class="expense-wb-toolbar__title">手动选择审批人</p>
+              <p class="expense-wb-toolbar__desc">以下节点配置为手动选人，请在提交前为每个节点选择至少一位审批人。</p>
+            </div>
+            <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div
+                v-for="node in manualApprovalNodes"
+                :key="node.nodeKey"
+                class="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
+              >
+                <div class="space-y-2">
+                  <p class="text-base font-semibold text-slate-800">{{ node.nodeName || '未命名审批节点' }}</p>
+                  <p class="text-sm text-slate-500">节点 Key：{{ node.nodeKey }}</p>
+                </div>
+                <el-select
+                  v-model="manualApproverSelections[node.nodeKey]"
+                  class="mt-4 w-full"
+                  multiple
+                  collapse-tags
+                  collapse-tags-tooltip
+                  filterable
+                  clearable
+                  placeholder="请选择审批人"
+                  data-testid="expense-manual-approver-select"
+                >
+                  <el-option
+                    v-for="item in manualApproverOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="String(item.value || '')"
+                  />
+                </el-select>
+              </div>
+            </div>
           </div>
         </el-card>
 
@@ -266,7 +308,7 @@
                 <p class="text-lg font-semibold text-slate-800">费用明细</p>
                 <p class="mt-1 text-sm text-slate-500">每张报销单最多 10 份费用明细，提交前至少需要 1 份。</p>
               </div>
-              <el-button type="primary" :disabled="expenseDetails.length >= 10" @click="addExpenseDetail">
+              <el-button type="primary" :disabled="expenseDetails.length >= 10 || !canEditExpenseDetails" @click="addExpenseDetail">
                 新增费用明细
               </el-button>
             </div>
@@ -290,8 +332,8 @@
                 </div>
 
                 <div class="expense-wb-compact-actions">
-                  <el-button plain @click="editExpenseDetail(detail.detailNo || '')">编辑</el-button>
-                  <el-button type="danger" text @click="removeExpenseDetail(detail.detailNo || '')">删除</el-button>
+                  <el-button plain :disabled="!canEditExpenseDetails" @click="editExpenseDetail(detail.detailNo || '')">编辑</el-button>
+                  <el-button type="danger" text :disabled="!canEditExpenseDetails" @click="removeExpenseDetail(detail.detailNo || '')">删除</el-button>
                 </div>
               </div>
             </div>
@@ -356,6 +398,7 @@ import {
   type ExpenseDetailInstance,
   type ExpenseDocumentEditContext,
   type ExpenseDocumentSubmitResult,
+  type ProcessFlowNode,
   type ProcessFormDesignBlock,
   type ProcessFormDesignSchema
 } from '@/api'
@@ -381,6 +424,7 @@ type ExpenseCreateDraft = {
   templateCode: string
   formValues: Record<string, unknown>
   expenseDetails: ExpenseDetailInstance[]
+  manualApproverSelections: Record<string, string[]>
   templateDetail?: ExpenseCreateTemplateDetail
 }
 
@@ -416,6 +460,9 @@ const pageRootRef = ref<HTMLElement | null>(null)
 const floatingBarStyle = ref<Record<string, string>>({})
 const formValues = reactive<Record<string, unknown>>({})
 const expenseDetails = ref<ExpenseDetailInstance[]>([])
+const manualApproverSelections = reactive<Record<string, string[]>>({})
+const allowEditFormModule = ref(false)
+const allowEditPayAccount = ref(false)
 
 let draftPersistTimer: ReturnType<typeof setTimeout> | undefined
 let pageSyncVersion = 0
@@ -458,6 +505,19 @@ const canSubmit = computed(() => {
   }
   return hasPermission('expense:create:submit', permissionCodes.value) || hasPermission('expense:create:create', permissionCodes.value)
 })
+
+const manualApprovalNodes = computed<ProcessFlowNode[]>(() => {
+  const nodes = Array.isArray(templateDetail.value?.flowSnapshot?.nodes) ? templateDetail.value?.flowSnapshot?.nodes || [] : []
+  return nodes.filter((node) => (
+    node?.nodeType === 'APPROVAL'
+    && String(node?.config?.approverType || '') === 'MANUAL_SELECT'
+  ))
+})
+
+const manualApproverOptions = computed(() => templateDetail.value?.userOptions || [])
+const showManualApproverSection = computed(() => pageMode.value !== 'modify' && manualApprovalNodes.value.length > 0)
+const canEditExpenseDetails = computed(() => pageMode.value !== 'modify')
+const isApprovalModifyMode = computed(() => pageMode.value === 'modify')
 
 const filteredTemplates = computed(() => {
   const keyword = templateKeyword.value.trim()
@@ -663,7 +723,7 @@ watch(
 )
 
 watch(
-  [formValues, expenseDetails],
+  [formValues, expenseDetails, manualApproverSelections],
   () => {
     schedulePersistDraft()
   },
@@ -753,9 +813,11 @@ async function syncEditPage(version: number) {
     selectedTemplateCode.value = context.templateCode
     currentDraftKey.value = buildEditDraftKey(context)
     applyTemplateDetail(extractTemplateDetail(context))
+    applyEditContextPermissions(context)
     resetFormValues()
     Object.assign(formValues, cloneRecord(context.formData))
     expenseDetails.value = Array.isArray(context.expenseDetails) ? context.expenseDetails.map(cloneDetail) : []
+    restoreManualApproverSelections(readDraft()?.manualApproverSelections)
     persistDraft({ includeTemplateDetail: true })
   } catch (error: unknown) {
     if (version !== pageSyncVersion) {
@@ -859,6 +921,7 @@ async function loadTemplateDetail(templateCode: string, useDraft: boolean, versi
     }
 
     applyTemplateDetail(res.data)
+    applyEditContextPermissions(null)
     resetFormValues()
     expenseDetails.value = []
 
@@ -867,6 +930,7 @@ async function loadTemplateDetail(templateCode: string, useDraft: boolean, versi
       if (draft && draft.templateCode === templateCode) {
         Object.assign(formValues, draft.formValues || {})
         expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
+        restoreManualApproverSelections(draft.manualApproverSelections)
         if (draft.templateDetail) {
           applyTemplateDetail(draft.templateDetail)
         }
@@ -896,9 +960,11 @@ async function loadEditContext() {
   selectedTemplateCode.value = context.templateCode
   currentDraftKey.value = buildEditDraftKey(context)
   applyTemplateDetail(extractTemplateDetail(context))
+  applyEditContextPermissions(context)
   resetFormValues()
   Object.assign(formValues, cloneRecord(context.formData))
   expenseDetails.value = Array.isArray(context.expenseDetails) ? context.expenseDetails.map(cloneDetail) : []
+  restoreManualApproverSelections(readDraft()?.manualApproverSelections)
   persistDraft()
 }
 
@@ -930,6 +996,7 @@ function extractTemplateDetail(context: ExpenseDocumentEditContext): ExpenseCrea
     flowName: context.flowName,
     formName: context.formName,
     schema: context.schema || emptySchema,
+    flowSnapshot: context.flowSnapshot || {},
     sharedArchives: context.sharedArchives || [],
     expenseDetailDesignCode: context.expenseDetailDesignCode,
     expenseDetailDesignName: context.expenseDetailDesignName,
@@ -940,6 +1007,7 @@ function extractTemplateDetail(context: ExpenseDocumentEditContext): ExpenseCrea
     expenseDetailSharedArchives: context.expenseDetailSharedArchives || [],
     companyOptions: context.companyOptions || [],
     departmentOptions: context.departmentOptions || [],
+    userOptions: context.userOptions || [],
     currentUserCompanyId: context.currentUserCompanyId,
     currentUserCompanyName: context.currentUserCompanyName,
     currentUserDeptId: context.currentUserDeptId,
@@ -1047,6 +1115,7 @@ function persistDraft(options: { includeTemplateDetail?: boolean } = {}) {
     templateCode: selectedTemplateCode.value,
     formValues: cloneRecord(formValues),
     expenseDetails: expenseDetails.value.map(cloneDetail),
+    manualApproverSelections: cloneManualApproverSelections(),
     templateDetail: options.includeTemplateDetail
       ? cloneValue(templateDetail.value)
       : currentDraft?.templateDetail
@@ -1066,6 +1135,7 @@ function resetFormValues() {
   Object.keys(formValues).forEach((key) => {
     delete formValues[key]
   })
+  clearManualApproverSelections()
   blocks.value.forEach((block) => {
     if (block.defaultValue !== undefined) {
       formValues[block.fieldKey] = Array.isArray(block.defaultValue) ? [...block.defaultValue] : block.defaultValue
@@ -1086,6 +1156,48 @@ function resetFormValues() {
     }
     formValues[block.fieldKey] = ''
   })
+}
+
+function clearManualApproverSelections() {
+  Object.keys(manualApproverSelections).forEach((key) => {
+    delete manualApproverSelections[key]
+  })
+}
+
+function restoreManualApproverSelections(source?: Record<string, string[]>) {
+  clearManualApproverSelections()
+  Object.entries(source || {}).forEach(([nodeKey, userIds]) => {
+    if (!nodeKey || !Array.isArray(userIds) || userIds.length === 0) {
+      return
+    }
+    manualApproverSelections[nodeKey] = userIds
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+  })
+}
+
+function cloneManualApproverSelections() {
+  return Object.fromEntries(
+    Object.entries(manualApproverSelections).map(([nodeKey, userIds]) => [nodeKey, [...userIds]])
+  )
+}
+
+function normalizeManualApproverSelections() {
+  return Object.fromEntries(
+    Object.entries(manualApproverSelections)
+      .map(([nodeKey, userIds]) => [
+        nodeKey,
+        userIds
+          .map((item) => Number(item))
+          .filter((item) => Number.isFinite(item) && item > 0)
+      ] as const)
+      .filter(([, userIds]) => userIds.length > 0)
+  )
+}
+
+function applyEditContextPermissions(context: ExpenseDocumentEditContext | null) {
+  allowEditFormModule.value = Boolean(context?.allowEditFormModule)
+  allowEditPayAccount.value = Boolean(context?.allowEditPayAccount)
 }
 
 function resolveBusinessComponentDefaultValue(block: ProcessFormDesignBlock) {
@@ -1287,7 +1399,8 @@ async function submitDocument() {
     }
     const payload = {
       formData: nextFormData,
-      expenseDetails: expenseDetails.value.map(cloneDetail)
+      expenseDetails: expenseDetails.value.map(cloneDetail),
+      manualApproverSelections: normalizeManualApproverSelections()
     }
     if (pageMode.value === 'create') {
       const res = await expenseCreateApi.submit({

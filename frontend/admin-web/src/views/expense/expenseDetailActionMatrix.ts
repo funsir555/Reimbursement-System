@@ -1,4 +1,4 @@
-export type ExpenseDetailActionKey =
+﻿export type ExpenseDetailActionKey =
   | 'recall'
   | 'print'
   | 'comment'
@@ -27,6 +27,7 @@ export type ResolveExpenseDetailActionsInput = {
   statusBucket: ExpenseDetailStatusBucket
   isSubmitter: boolean
   isActiveApprover: boolean
+  canModify: boolean
   isFlowParticipant: boolean
   canComment: boolean
   canApprovalView: boolean
@@ -84,7 +85,7 @@ export function resolveExpenseDetailActions(input: ResolveExpenseDetailActionsIn
       primaryAction('reject', '驳回', 'danger'),
       secondaryAction('prev', '上一单', !input.prevDocumentCode),
       secondaryAction('next', '下一单', !input.nextDocumentCode),
-      secondaryAction('modify', '修改'),
+      secondaryAction('modify', '修改', !input.canModify, input.canModify ? '' : '当前审批节点未开启单据修改权限'),
       secondaryAction('print', '打印'),
       secondaryAction('add-sign', '加签'),
       secondaryAction('transfer', '转交'),

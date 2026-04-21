@@ -14,4 +14,6 @@ public class ExpenseDocumentUpdateDTO {
     private Map<String, Object> formData = new LinkedHashMap<>();
 
     private List<ExpenseDetailInstanceDTO> expenseDetails;
+
+    private Map<String, List<Long>> manualApproverSelections = new LinkedHashMap<>();
 }

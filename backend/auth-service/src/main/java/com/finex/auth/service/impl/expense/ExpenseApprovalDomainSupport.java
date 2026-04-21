@@ -118,7 +118,8 @@ public class ExpenseApprovalDomainSupport {
                 task,
                 userId,
                 username,
-                dto == null ? null : dto.getComment()
+                dto == null ? null : dto.getComment(),
+                dto == null ? null : dto.getTargetNodeKey()
         );
         expenseRelationWriteOffService.voidPendingWriteOffs(instance.getDocumentCode());
         return expenseDocumentReadSupport.buildDocumentDetail(
@@ -132,7 +133,9 @@ public class ExpenseApprovalDomainSupport {
     public ExpenseDocumentEditContextVO getTaskModifyContext(Long userId, Long taskId) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
-        return expenseDocumentTemplateSupport.buildEditContext(userId, instance, task.getId(), "MODIFY");
+        ExpenseDocumentEditContextVO context = expenseDocumentTemplateSupport.buildEditContext(userId, instance, task.getId(), "MODIFY");
+        ensureTaskModifyAllowed(context);
+        return context;
     }
 
     /**
@@ -141,6 +144,7 @@ public class ExpenseApprovalDomainSupport {
     public ExpenseDocumentDetailVO modifyTaskDocument(Long userId, String username, Long taskId, ExpenseDocumentUpdateDTO dto) {
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
+        ensureTaskModifyAllowed(expenseDocumentTemplateSupport.buildEditContext(userId, instance, task.getId(), "MODIFY"));
         AbstractExpenseDocumentSupport.DocumentMutationContext mutation = expenseDocumentMutationDomainSupport.buildMutationContext(instance, dto, false);
         expenseDocumentMutationDomainSupport.applyDocumentMutation(instance, mutation, false);
         expenseRelationWriteOffService.syncDocumentBusinessRelations(
@@ -281,6 +285,14 @@ public class ExpenseApprovalDomainSupport {
                 || Objects.equals(normalized, "PENDING_PAYMENT")
                 || Objects.equals(normalized, "PAYMENT_COMPLETED")
                 || Objects.equals(normalized, "PAYMENT_FINISHED");
+    }
+
+    private void ensureTaskModifyAllowed(ExpenseDocumentEditContextVO context) {
+        boolean allowEditFormModule = Boolean.TRUE.equals(context.getAllowEditFormModule());
+        boolean allowEditPayAccount = Boolean.TRUE.equals(context.getAllowEditPayAccount());
+        if (!allowEditFormModule && !allowEditPayAccount) {
+            throw new IllegalStateException("当前审批节点未开启单据修改权限");
+        }
     }
 
     private boolean matchesKeyword(String keyword, String... candidates) {

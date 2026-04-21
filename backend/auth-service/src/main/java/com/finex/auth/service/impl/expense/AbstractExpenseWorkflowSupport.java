@@ -74,13 +74,30 @@ class AbstractExpenseWorkflowSupport {
     private static final String APPROVER_TYPE_MANUAL_SELECT = "MANUAL_SELECT";
     private static final String PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER = "DESIGNATED_MEMBER";
     private static final String PAYMENT_EXECUTOR_TYPE_FINANCE_ROLE = "FINANCE_ROLE";
+    private static final String PAYMENT_EXECUTOR_TYPE_SUBMITTER = "SUBMITTER";
+    private static final String CC_RECEIVER_TYPE_DESIGNATED_MEMBER = "DESIGNATED_MEMBER";
+    private static final String CC_RECEIVER_TYPE_SUBMITTER = "SUBMITTER";
+    private static final String CC_RECEIVER_TYPE_DEPT_MANAGER = "DEPT_MANAGER";
+    private static final String CC_TIMING_ON_ENTER = "ON_ENTER";
+    private static final String CC_TIMING_ON_APPROVED = "ON_APPROVED";
     private static final String DEPT_SOURCE_UNDERTAKE = "UNDERTAKE_DEPT";
     private static final String DEPT_SOURCE_SUBMITTER = "SUBMITTER_DEPT";
     private static final String MISSING_HANDLER_AUTO_SKIP = "AUTO_SKIP";
+    private static final String MISSING_HANDLER_EXCEPTION = "EXCEPTION";
+    private static final String MISSING_HANDLER_AUTO_TRANSFER = "AUTO_TRANSFER";
+    private static final String MISSING_HANDLER_BLOCK_SUBMIT = "BLOCK_SUBMIT";
     private static final String APPROVAL_MODE_OR_SIGN = "OR_SIGN";
     private static final String APPROVAL_MODE_AND_SIGN = "AND_SIGN";
+    private static final String APPROVAL_SPECIAL_AUTO_PASS_IF_APPROVER_IS_SUBMITTER = "AUTO_PASS_IF_APPOVER_IS_SUBMITTER";
+    private static final String APPROVAL_SPECIAL_AUTO_PASS_IF_APPROVED_BEFORE = "AUTO_PASS_IF_APPROVED_BEFORE";
+    private static final String APPROVAL_SPECIAL_DIRECT_REACH_AFTER_RESUBMIT = "DIRECT_REACH_AFTER_RESUBMIT";
+    private static final String APPROVAL_SPECIAL_REJECT_TO_ANY_NODE = "REJECT_TO_ANY_NODE";
+    private static final String APPROVAL_SPECIAL_DIRECT_REACH_AFTER_ANY_REJECT = "DIRECT_REACH_AFTER_ANY_REJECT";
     private static final String PAYMENT_SPECIAL_ALLOW_RETRY = "ALLOW_RETRY";
+    private static final String CC_SPECIAL_SEND_ONCE = "SEND_ONCE";
+    private static final String CC_SPECIAL_INCLUDE_SUBMITTER = "INCLUDE_SUBMITTER";
     private static final String PAYMENT_EXECUTE_PERMISSION = "expense:payment:payment_order:execute";
+    private static final String CONDITION_FIELD_SUBMITTER_DEPT_ID = "submitterDeptId";
 
     private static final String DOCUMENT_STATUS_PENDING = "PENDING_APPROVAL";
     private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
@@ -226,6 +243,18 @@ class AbstractExpenseWorkflowSupport {
                 appendLog(instance.getDocumentCode(), null, null, LOG_FINISH, null, "SYSTEM", "No approval nodes configured", Collections.emptyMap());
                 return;
             }
+            ProcessFlowNodeDTO resumeNode = resolveResumeNode(snapshot, context);
+            if (resumeNode != null) {
+                advanceFromPosition(
+                        instance,
+                        snapshot,
+                        context,
+                        resumeNode.getParentNodeKey(),
+                        snapshot.indexInContainer(resumeNode.getParentNodeKey(), resumeNode.getNodeKey()),
+                        DOCUMENT_STATUS_COMPLETED
+                );
+                return;
+            }
             advanceFromPosition(instance, snapshot, context, null, 0, DOCUMENT_STATUS_COMPLETED);
         } catch (RuntimeException ex) {
             log.error(
@@ -244,6 +273,22 @@ class AbstractExpenseWorkflowSupport {
      */
     public void validateFlowSnapshot(String snapshotJson) {
         readFlowSnapshot(snapshotJson);
+    }
+
+    ProcessFlowRouteDTO previewMatchedRoute(List<ProcessFlowRouteDTO> routes, Map<String, Object> context) {
+        return matchRoute(routes, context);
+    }
+
+    List<User> previewResolvedApprovers(ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return resolveApprovers(node, context);
+    }
+
+    List<User> previewResolvedCcRecipients(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return resolveCcRecipients(instance, node, context);
+    }
+
+    List<User> previewResolvedPaymentExecutors(ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return resolvePaymentExecutors(node, context);
     }
 
     /**
@@ -300,8 +345,12 @@ class AbstractExpenseWorkflowSupport {
             ProcessDocumentTask task,
             Long userId,
             String username,
-            String comment
+            String comment,
+            String targetNodeKey
     ) {
+        FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
+        ProcessFlowNodeDTO currentNode = snapshot.node(task.getNodeKey());
+        String normalizedTargetNodeKey = normalizeRejectTargetNodeKey(snapshot, currentNode, targetNodeKey);
         LocalDateTime now = LocalDateTime.now();
         task.setStatus(TASK_STATUS_REJECTED);
         task.setHandledAt(now);
@@ -318,7 +367,9 @@ class AbstractExpenseWorkflowSupport {
         processDocumentInstanceMapper.updateById(instance);
 
         appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_REJECT, userId, defaultUsername(username), task.getActionComment(), Map.of(
-                "taskId", task.getId()
+                "taskId", task.getId(),
+                "rejectedByNodeKey", task.getNodeKey(),
+                "targetNodeKey", defaultText(normalizedTargetNodeKey, "")
         ));
     }
 
@@ -622,31 +673,53 @@ class AbstractExpenseWorkflowSupport {
                     return advanceFromPosition(instance, snapshot, context, matchedRoute.getRouteKey(), 0, terminalStatus);
                 }
                 case NODE_TYPE_APPROVAL -> {
+                    String missingHandler = resolveMissingHandler(node.getConfig());
                     List<User> approvers = resolveApprovers(node, context);
                     if (approvers.isEmpty()) {
-                        String missingHandler = resolveMissingHandler(node.getConfig());
-                        if (MISSING_HANDLER_AUTO_SKIP.equals(missingHandler)) {
-                            appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_AUTO_SKIP, null, "SYSTEM", "No approver resolved, auto skipped", Collections.emptyMap());
+                        approvers = resolveAutoTransferApprovers(node, context, missingHandler);
+                    }
+                    if (approvers.isEmpty()) {
+                        FlowAdvanceState state = handleMissingUsers(
+                                instance,
+                                node,
+                                missingHandler,
+                                "审批人"
+                        );
+                        if (state == FlowAdvanceState.COMPLETED) {
                             continue;
                         }
-                        markDocumentException(instance, node, "No approver resolved");
-                        return FlowAdvanceState.PAUSED;
+                        return state;
                     }
-                    createApprovalTasks(instance, node, approvers);
+                    if (dispatchApprovalNode(instance, node, approvers, context, missingHandler)) {
+                        continue;
+                    }
                     return FlowAdvanceState.PAUSED;
                 }
-                case NODE_TYPE_CC -> appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_CC_REACHED, null, "SYSTEM", "CC node reached", Collections.emptyMap());
+                case NODE_TYPE_CC -> {
+                    FlowAdvanceState state = handleCcNode(instance, node, context);
+                    if (state == FlowAdvanceState.COMPLETED) {
+                        continue;
+                    }
+                    return state;
+                }
                 case NODE_TYPE_PAYMENT -> {
                     appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_PAYMENT_REACHED, null, "SYSTEM", "Payment node reached", Collections.emptyMap());
-                    List<User> executors = resolvePaymentExecutors(node);
+                    String missingHandler = resolveMissingHandler(node.getConfig());
+                    List<User> executors = resolvePaymentExecutors(node, context);
                     if (executors.isEmpty()) {
-                        String missingHandler = resolveMissingHandler(node.getConfig());
-                        if (MISSING_HANDLER_AUTO_SKIP.equals(missingHandler)) {
-                            appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_AUTO_SKIP, null, "SYSTEM", "No payment executor resolved, auto skipped", Collections.emptyMap());
+                        executors = resolveAutoTransferPaymentExecutors(context, missingHandler);
+                    }
+                    if (executors.isEmpty()) {
+                        FlowAdvanceState state = handleMissingUsers(
+                                instance,
+                                node,
+                                missingHandler,
+                                "支付执行人"
+                        );
+                        if (state == FlowAdvanceState.COMPLETED) {
                             continue;
                         }
-                        markDocumentException(instance, node, "No payment executor resolved");
-                        return FlowAdvanceState.PAUSED;
+                        return state;
                     }
                     createPaymentTasks(instance, node, executors);
                     return FlowAdvanceState.PAUSED;
@@ -742,6 +815,262 @@ class AbstractExpenseWorkflowSupport {
         ));
     }
 
+    private boolean dispatchApprovalNode(
+            ProcessDocumentInstance instance,
+            ProcessFlowNodeDTO node,
+            List<User> approvers,
+            Map<String, Object> context,
+            String missingHandler
+    ) {
+        Map<Long, String> autoApprovedReasons = resolveAutoApprovedApproverReasons(instance.getDocumentCode(), node, approvers, context);
+        autoApprovedReasons.forEach((userId, reason) -> {
+            User approver = approvers.stream()
+                    .filter(item -> Objects.equals(item.getId(), userId))
+                    .findFirst()
+                    .orElse(null);
+            if (approver == null) {
+                return;
+            }
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("autoPass", true);
+            payload.put("reason", reason);
+            appendLog(
+                    instance.getDocumentCode(),
+                    node.getNodeKey(),
+                    node.getNodeName(),
+                    LOG_APPROVE,
+                    approver.getId(),
+                    normalizeUserName(approver),
+                    reason,
+                    payload
+            );
+        });
+        String approvalMode = defaultText(asText(node.getConfig().get("approvalMode")), APPROVAL_MODE_OR_SIGN);
+        if (APPROVAL_MODE_OR_SIGN.equals(approvalMode) && !autoApprovedReasons.isEmpty()) {
+            return true;
+        }
+        List<User> pendingApprovers = approvers.stream()
+                .filter(item -> !autoApprovedReasons.containsKey(item.getId()))
+                .toList();
+        if (pendingApprovers.isEmpty()) {
+            return true;
+        }
+        createApprovalTasks(instance, node, pendingApprovers);
+        return false;
+    }
+
+    private Map<Long, String> resolveAutoApprovedApproverReasons(
+            String documentCode,
+            ProcessFlowNodeDTO node,
+            List<User> approvers,
+            Map<String, Object> context
+    ) {
+        Set<String> specialSettings = approvalSpecialSettings(node);
+        if (specialSettings.isEmpty() || approvers == null || approvers.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Long submitterUserId = asLong(context == null ? null : context.get("submitterUserId"));
+        Set<Long> approvedBeforeUserIds = specialSettings.contains(APPROVAL_SPECIAL_AUTO_PASS_IF_APPROVED_BEFORE)
+                ? loadApprovedUserIds(documentCode)
+                : Collections.emptySet();
+        Map<Long, String> result = new LinkedHashMap<>();
+        for (User approver : approvers) {
+            if (approver == null || approver.getId() == null) {
+                continue;
+            }
+            if (specialSettings.contains(APPROVAL_SPECIAL_AUTO_PASS_IF_APPROVER_IS_SUBMITTER)
+                    && submitterUserId != null
+                    && Objects.equals(approver.getId(), submitterUserId)) {
+                result.put(approver.getId(), "审批人与提单人重复，系统自动通过");
+                continue;
+            }
+            if (specialSettings.contains(APPROVAL_SPECIAL_AUTO_PASS_IF_APPROVED_BEFORE)
+                    && approvedBeforeUserIds.contains(approver.getId())) {
+                result.put(approver.getId(), "审批人已在前序节点审批，系统自动通过");
+            }
+        }
+        return result;
+    }
+
+    private FlowAdvanceState handleCcNode(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, Map<String, Object> context) {
+        String missingHandler = resolveMissingHandler(node.getConfig());
+        List<User> receivers = resolveCcRecipients(instance, node, context);
+        if (receivers.isEmpty()) {
+            receivers = resolveAutoTransferCcRecipients(context, missingHandler);
+        }
+        if (receivers.isEmpty()) {
+            return handleMissingUsers(instance, node, missingHandler, "\u6284\u9001\u63a5\u6536\u4eba");
+        }
+        String timing = defaultText(asText(node.getConfig() == null ? null : node.getConfig().get("timing")), CC_TIMING_ON_ENTER);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("receiverUserIds", receivers.stream().map(User::getId).toList());
+        payload.put("receiverNames", receivers.stream().map(this::normalizeUserName).toList());
+        payload.put("timing", timing);
+        appendLog(
+                instance.getDocumentCode(),
+                node.getNodeKey(),
+                node.getNodeName(),
+                LOG_CC_REACHED,
+                null,
+                "SYSTEM",
+                CC_TIMING_ON_APPROVED.equals(timing) ? "CC sent after approval" : "CC sent on enter",
+                payload
+        );
+        return FlowAdvanceState.COMPLETED;
+    }
+
+    private List<User> resolveCcRecipients(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, Map<String, Object> context) {
+        Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
+        String receiverType = defaultText(asText(config.get("receiverType")), CC_RECEIVER_TYPE_DESIGNATED_MEMBER);
+        List<User> receivers;
+        if (CC_RECEIVER_TYPE_SUBMITTER.equals(receiverType)) {
+            receivers = resolveSubmitterUser(context);
+        } else if (CC_RECEIVER_TYPE_DEPT_MANAGER.equals(receiverType)) {
+            Map<String, Object> managerConfig = new LinkedHashMap<>();
+            managerConfig.put("managerConfig", Map.of(
+                    "deptSource", DEPT_SOURCE_SUBMITTER,
+                    "managerLevel", 1,
+                    "orgTreeLookupEnabled", true,
+                    "orgTreeLookupLevel", 1
+            ));
+            receivers = resolveManagerMembers(managerConfig, context);
+        } else {
+            receivers = loadActiveUsers(toLongList(config.get("receiverUserIds")));
+        }
+        if (ccSpecialSettings(node).contains(CC_SPECIAL_INCLUDE_SUBMITTER)) {
+            receivers = new ArrayList<>(receivers);
+            receivers.addAll(resolveSubmitterUser(context));
+        }
+        List<User> distinctReceivers = receivers.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
+                        item -> new ArrayList<>(item.values())
+                ));
+        if (!ccSpecialSettings(node).contains(CC_SPECIAL_SEND_ONCE)) {
+            return distinctReceivers;
+        }
+        Set<Long> alreadySentUserIds = loadCcUserIds(instance.getDocumentCode());
+        return distinctReceivers.stream()
+                .filter(item -> !alreadySentUserIds.contains(item.getId()))
+                .toList();
+    }
+
+    private FlowAdvanceState handleMissingUsers(
+            ProcessDocumentInstance instance,
+            ProcessFlowNodeDTO node,
+            String missingHandler,
+            String subjectLabel
+    ) {
+        if (MISSING_HANDLER_AUTO_SKIP.equals(missingHandler)) {
+            appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_AUTO_SKIP, null, "SYSTEM", "No " + subjectLabel + " resolved, auto skipped", Collections.emptyMap());
+            return FlowAdvanceState.COMPLETED;
+        }
+        if (MISSING_HANDLER_BLOCK_SUBMIT.equals(missingHandler)) {
+            throw new IllegalStateException("节点【" + defaultText(node == null ? null : node.getNodeName(), "未命名节点") + "】找不到" + subjectLabel + "，当前配置不允许提交");
+        }
+        markDocumentException(instance, node, "No " + subjectLabel + " resolved");
+        return FlowAdvanceState.PAUSED;
+    }
+
+    private List<User> resolveAutoTransferApprovers(ProcessFlowNodeDTO node, Map<String, Object> context, String missingHandler) {
+        if (!MISSING_HANDLER_AUTO_TRANSFER.equals(missingHandler)) {
+            return Collections.emptyList();
+        }
+        return resolveManagerMembers(new LinkedHashMap<>(), context);
+    }
+
+    private List<User> resolveAutoTransferCcRecipients(Map<String, Object> context, String missingHandler) {
+        if (!MISSING_HANDLER_AUTO_TRANSFER.equals(missingHandler)) {
+            return Collections.emptyList();
+        }
+        return resolveSubmitterUser(context);
+    }
+
+    private List<User> resolveAutoTransferPaymentExecutors(Map<String, Object> context, String missingHandler) {
+        if (!MISSING_HANDLER_AUTO_TRANSFER.equals(missingHandler)) {
+            return Collections.emptyList();
+        }
+        List<User> financeRoleUsers = resolvePaymentFinanceRoleMembers();
+        if (!financeRoleUsers.isEmpty()) {
+            return financeRoleUsers;
+        }
+        return resolveSubmitterUser(context);
+    }
+
+    private Set<Long> loadApprovedUserIds(String documentCode) {
+        return loadActionLogs(documentCode).stream()
+                .filter(item -> Objects.equals(item.getActionType(), LOG_APPROVE))
+                .map(ProcessDocumentActionLog::getActorUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Set<Long> loadCcUserIds(String documentCode) {
+        Set<Long> result = new LinkedHashSet<>();
+        loadActionLogs(documentCode).stream()
+                .filter(item -> Objects.equals(item.getActionType(), LOG_CC_REACHED))
+                .forEach(item -> result.addAll(toLongList(readMap(item.getPayloadJson()).get("receiverUserIds"))));
+        return result;
+    }
+
+    private ProcessFlowNodeDTO resolveResumeNode(FlowRuntimeSnapshot snapshot, Map<String, Object> context) {
+        String resumeNodeKey = trimToNull(asText(context == null ? null : context.get("resumeNodeKey")));
+        return resumeNodeKey == null ? null : snapshot.node(resumeNodeKey);
+    }
+
+    private String normalizeRejectTargetNodeKey(FlowRuntimeSnapshot snapshot, ProcessFlowNodeDTO currentNode, String targetNodeKey) {
+        String normalizedTargetNodeKey = trimToNull(targetNodeKey);
+        if (normalizedTargetNodeKey == null) {
+            return null;
+        }
+        if (currentNode == null || !approvalSpecialSettings(currentNode).contains(APPROVAL_SPECIAL_REJECT_TO_ANY_NODE)) {
+            throw new IllegalStateException("当前审批节点未开启驳回至任意节点");
+        }
+        ProcessFlowNodeDTO targetNode = snapshot.node(normalizedTargetNodeKey);
+        if (targetNode == null || !NODE_TYPE_APPROVAL.equals(targetNode.getNodeType())) {
+            throw new IllegalStateException("驳回目标节点不存在或不是审批节点");
+        }
+        if (Objects.equals(targetNode.getNodeKey(), currentNode.getNodeKey())) {
+            throw new IllegalStateException("驳回目标节点不能是当前审批节点");
+        }
+        return targetNode.getNodeKey();
+    }
+
+    private Set<String> approvalSpecialSettings(ProcessFlowNodeDTO node) {
+        if (node == null || node.getConfig() == null) {
+            return Collections.emptySet();
+        }
+        Object raw = node.getConfig().get("specialSettings");
+        if (!(raw instanceof Collection<?> collection)) {
+            return Collections.emptySet();
+        }
+        return collection.stream()
+                .map(this::asText)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Set<String> ccSpecialSettings(ProcessFlowNodeDTO node) {
+        if (node == null || node.getConfig() == null) {
+            return Collections.emptySet();
+        }
+        Object raw = node.getConfig().get("specialSettings");
+        if (!(raw instanceof Collection<?> collection)) {
+            return Collections.emptySet();
+        }
+        return collection.stream()
+                .map(this::asText)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private List<User> resolveSubmitterUser(Map<String, Object> context) {
+        Long submitterUserId = asLong(context == null ? null : context.get("submitterUserId"));
+        User submitter = loadActiveUser(submitterUserId);
+        return submitter == null ? Collections.emptyList() : List.of(submitter);
+    }
+
     private ProcessFlowRouteDTO matchRoute(List<ProcessFlowRouteDTO> routes, Map<String, Object> context) {
         if (routes == null || routes.isEmpty()) {
             return null;
@@ -768,7 +1097,7 @@ class AbstractExpenseWorkflowSupport {
     }
 
     private boolean conditionMatches(ProcessFlowConditionDTO condition, Map<String, Object> context) {
-        Object actual = context.get(condition.getFieldKey());
+        Object actual = resolveConditionActualValue(condition, context);
         Object compare = condition.getCompareValue();
         String operator = defaultText(condition.getOperator(), "EQ");
         return switch (operator) {
@@ -785,6 +1114,35 @@ class AbstractExpenseWorkflowSupport {
         };
     }
 
+    private Object resolveConditionActualValue(ProcessFlowConditionDTO condition, Map<String, Object> context) {
+        if (condition == null || context == null) {
+            return null;
+        }
+        String fieldKey = trimToNull(condition.getFieldKey());
+        if (!CONDITION_FIELD_SUBMITTER_DEPT_ID.equals(fieldKey)) {
+            return context.get(fieldKey);
+        }
+        Long submitterDeptId = asLong(context.get(fieldKey));
+        if (submitterDeptId == null) {
+            return Collections.emptyList();
+        }
+        return resolveDepartmentLineageIds(submitterDeptId);
+    }
+
+    private List<Long> resolveDepartmentLineageIds(Long deptId) {
+        if (deptId == null) {
+            return Collections.emptyList();
+        }
+        Map<Long, SystemDepartment> departmentMap = loadAllDepartmentMap();
+        LinkedHashSet<Long> result = new LinkedHashSet<>();
+        Long currentDeptId = deptId;
+        while (currentDeptId != null && result.add(currentDeptId)) {
+            SystemDepartment current = departmentMap.get(currentDeptId);
+            currentDeptId = current == null ? null : current.getParentId();
+        }
+        return new ArrayList<>(result);
+    }
+
     /**
      * 解析Approvers。
      */
@@ -795,7 +1153,7 @@ class AbstractExpenseWorkflowSupport {
         if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
             users = resolveDesignatedMembers(config);
         } else if (APPROVER_TYPE_MANUAL_SELECT.equals(approverType)) {
-            users = resolveManualMembers(context);
+            users = resolveManualMembers(node, context);
         } else {
             users = resolveManagerMembers(config, context);
         }
@@ -850,19 +1208,26 @@ class AbstractExpenseWorkflowSupport {
     /**
      * 解析ManualMembers。
      */
-    private List<User> resolveManualMembers(Map<String, Object> context) {
-        return loadActiveUsers(toLongList(context.get("manualSelectedUserIds")));
+    private List<User> resolveManualMembers(ProcessFlowNodeDTO node, Map<String, Object> context) {
+        Map<String, Object> selections = toObjectMap(context == null ? null : context.get("manualApproverSelections"));
+        List<Long> userIds = toLongList(selections.get(node == null ? null : node.getNodeKey()));
+        if (userIds.isEmpty()) {
+            userIds = toLongList(context == null ? null : context.get("manualSelectedUserIds"));
+        }
+        return loadActiveUsers(userIds);
     }
 
     /**
      * 解析付款Executors。
      */
-    private List<User> resolvePaymentExecutors(ProcessFlowNodeDTO node) {
+    private List<User> resolvePaymentExecutors(ProcessFlowNodeDTO node, Map<String, Object> context) {
         Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
         String executorType = defaultText(asText(config.get("executorType")), PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER);
         List<User> users;
         if (PAYMENT_EXECUTOR_TYPE_FINANCE_ROLE.equals(executorType)) {
             users = resolvePaymentFinanceRoleMembers();
+        } else if (PAYMENT_EXECUTOR_TYPE_SUBMITTER.equals(executorType)) {
+            users = resolveSubmitterUser(context);
         } else {
             users = resolvePaymentDesignatedMembers(config);
         }

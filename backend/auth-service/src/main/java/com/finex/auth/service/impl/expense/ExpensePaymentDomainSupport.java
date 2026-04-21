@@ -396,7 +396,7 @@ public class ExpensePaymentDomainSupport {
             if (!DOCUMENT_STATUS_PENDING_PAYMENT.equals(trimToNull(instance.getStatus()))) {
                 throw new IllegalStateException("\u5f53\u524d\u4ed8\u6b3e\u4efb\u52a1\u4e0d\u5728\u53ef\u9a73\u56de\u72b6\u6001");
             }
-            expenseWorkflowRuntimeSupport.rejectPendingTask(instance, task, userId, username, comment);
+            expenseWorkflowRuntimeSupport.rejectPendingTask(instance, task, userId, username, comment, null);
             expenseRelationWriteOffService.voidPendingWriteOffs(instance.getDocumentCode());
             PmBankPaymentRecord record = findLatestBankPaymentRecord(instance.getDocumentCode());
             if (record != null) {

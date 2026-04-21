@@ -67,6 +67,32 @@ export interface ExpenseApprovalLog {
   createdAt?: string
 }
 
+export interface ExpenseApprovalNodeStatus {
+  nodeKey: string
+  nodeName?: string
+  nodeType?: string
+  status: string
+  statusLabel?: string
+  assigneeNames?: string[]
+  occurredAt?: string
+  description?: string
+}
+
+export interface ExpenseApprovalTimelineItem {
+  key: string
+  nodeKey?: string
+  nodeName?: string
+  nodeType?: string
+  status?: string
+  statusLabel?: string
+  title: string
+  description?: string
+  timestamp?: string
+  pending?: boolean
+  future?: boolean
+  attachmentNames?: string[]
+}
+
 export interface ExpenseDocumentCommentPayload {
   comment?: string
   attachmentFileNames?: string[]
@@ -113,6 +139,8 @@ export interface ExpenseDocumentDetail {
   expenseDetails: ExpenseDetailInstanceSummary[]
   currentTasks: ExpenseApprovalTask[]
   actionLogs: ExpenseApprovalLog[]
+  approvalNodeStatuses?: ExpenseApprovalNodeStatus[]
+  approvalTimeline?: ExpenseApprovalTimelineItem[]
   bankPayment?: ExpenseDocumentBankPayment
   bankReceipts?: ExpenseDocumentBankReceipt[]
 }

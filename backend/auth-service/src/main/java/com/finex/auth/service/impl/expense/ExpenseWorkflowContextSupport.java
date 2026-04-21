@@ -6,6 +6,8 @@
 package com.finex.auth.service.impl.expense;
 
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
+import com.finex.auth.dto.ProcessFlowNodeDTO;
+import com.finex.auth.dto.ProcessFlowRouteDTO;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTemplate;
 import com.finex.auth.entity.ProcessExpenseDetailDesign;
@@ -57,6 +59,22 @@ class ExpenseWorkflowContextSupport {
      */
     void validateFlowSnapshot(String snapshotJson) {
         support.validateFlowSnapshot(snapshotJson);
+    }
+
+    ProcessFlowRouteDTO previewMatchedRoute(List<ProcessFlowRouteDTO> routes, Map<String, Object> context) {
+        return support.previewMatchedRoute(routes, context);
+    }
+
+    List<User> previewResolvedApprovers(ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return support.previewResolvedApprovers(node, context);
+    }
+
+    List<User> previewResolvedCcRecipients(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return support.previewResolvedCcRecipients(instance, node, context);
+    }
+
+    List<User> previewResolvedPaymentExecutors(ProcessFlowNodeDTO node, Map<String, Object> context) {
+        return support.previewResolvedPaymentExecutors(node, context);
     }
 
     RawFlowSnapshotSignature inspectRawFlowSnapshot(String snapshotJson) {

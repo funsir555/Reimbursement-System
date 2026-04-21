@@ -5,16 +5,29 @@
 
 package com.finex.auth.service.impl.expense;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseCreatePayeeAccountOptionVO;
 import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
 import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
+import com.finex.auth.dto.ProcessFlowNodeDTO;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.entity.ProcessDocumentTask;
+import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * ExpenseDocumentTemplateDomainSupport：领域规则支撑类。
@@ -24,18 +37,29 @@ import java.util.List;
 @Service
 class ExpenseDocumentTemplateDomainSupport {
 
+    private static final String NODE_TYPE_APPROVAL = "APPROVAL";
+    private static final String TASK_STATUS_PENDING = "PENDING";
+    private static final String SPECIAL_ALLOW_EDIT_FORM_MODULE = "ALLOW_EDIT_FORM_MODULE";
+    private static final String SPECIAL_ALLOW_EDIT_PAY_ACCOUNT = "ALLOW_EDIT_PAY_ACCOUNT";
+
     private final AbstractExpenseDocumentSupport support;
     private final ExpenseDocumentReadSupport readSupport;
+    private final ProcessDocumentTaskMapper processDocumentTaskMapper;
+    private final ObjectMapper objectMapper;
 
     /**
      * 初始化这个类所需的依赖组件。
      */
     ExpenseDocumentTemplateDomainSupport(
             AbstractExpenseDocumentSupport support,
-            ExpenseDocumentReadSupport readSupport
+            ExpenseDocumentReadSupport readSupport,
+            ProcessDocumentTaskMapper processDocumentTaskMapper,
+            ObjectMapper objectMapper
     ) {
         this.support = support;
         this.readSupport = readSupport;
+        this.processDocumentTaskMapper = processDocumentTaskMapper;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -115,6 +139,7 @@ class ExpenseDocumentTemplateDomainSupport {
         context.setExpenseDetails(readSupport.loadExpenseDetails(instance.getDocumentCode()).stream()
                 .map(readSupport::toRuntimeExpenseDetailDTO)
                 .toList());
+        applyTaskEditCapability(context, taskId, instance);
         return context;
     }
 
@@ -133,6 +158,7 @@ class ExpenseDocumentTemplateDomainSupport {
         target.setFlowName(source.getFlowName());
         target.setFormName(source.getFormName());
         target.setSchema(source.getSchema());
+        target.setFlowSnapshot(source.getFlowSnapshot());
         target.setExpenseDetailDesignCode(source.getExpenseDetailDesignCode());
         target.setExpenseDetailDesignName(source.getExpenseDetailDesignName());
         target.setExpenseDetailType(source.getExpenseDetailType());
@@ -143,11 +169,75 @@ class ExpenseDocumentTemplateDomainSupport {
         target.setExpenseDetailSharedArchives(source.getExpenseDetailSharedArchives());
         target.setCompanyOptions(source.getCompanyOptions());
         target.setDepartmentOptions(source.getDepartmentOptions());
+        target.setUserOptions(source.getUserOptions());
         target.setExpenseTypeOptions(source.getExpenseTypeOptions());
         target.setExpenseTypeInvoiceFreeModeMap(source.getExpenseTypeInvoiceFreeModeMap());
         target.setCurrentUserCompanyId(source.getCurrentUserCompanyId());
         target.setCurrentUserCompanyName(source.getCurrentUserCompanyName());
         target.setCurrentUserDeptId(source.getCurrentUserDeptId());
         target.setCurrentUserDeptName(source.getCurrentUserDeptName());
+    }
+
+    private void applyTaskEditCapability(ExpenseDocumentEditContextVO context, Long taskId, ProcessDocumentInstance instance) {
+        context.setTaskNodeKey(null);
+        context.setAllowEditFormModule(Boolean.FALSE);
+        context.setAllowEditPayAccount(Boolean.FALSE);
+        if (taskId == null || instance == null) {
+            return;
+        }
+        ProcessDocumentTask task = processDocumentTaskMapper.selectOne(
+                Wrappers.<ProcessDocumentTask>lambdaQuery()
+                        .eq(ProcessDocumentTask::getId, taskId)
+                        .eq(ProcessDocumentTask::getDocumentCode, instance.getDocumentCode())
+                        .last("limit 1")
+        );
+        if (task == null
+                || !Objects.equals(TASK_STATUS_PENDING, task.getStatus())
+                || !Objects.equals(NODE_TYPE_APPROVAL, task.getNodeType())) {
+            return;
+        }
+        context.setTaskNodeKey(task.getNodeKey());
+        ProcessFlowNodeDTO taskNode = readFlowNode(instance.getFlowSnapshotJson(), task.getNodeKey());
+        if (taskNode == null) {
+            return;
+        }
+        Set<String> specialSettings = toStringSet(taskNode.getConfig() == null ? null : taskNode.getConfig().get("specialSettings"));
+        context.setAllowEditFormModule(specialSettings.contains(SPECIAL_ALLOW_EDIT_FORM_MODULE));
+        context.setAllowEditPayAccount(specialSettings.contains(SPECIAL_ALLOW_EDIT_PAY_ACCOUNT));
+    }
+
+    private ProcessFlowNodeDTO readFlowNode(String snapshotJson, String nodeKey) {
+        if (isBlank(snapshotJson) || isBlank(nodeKey)) {
+            return null;
+        }
+        try {
+            Map<String, Object> raw = objectMapper.readValue(snapshotJson, new TypeReference<LinkedHashMap<String, Object>>() {});
+            List<ProcessFlowNodeDTO> nodes = objectMapper.convertValue(
+                    raw.getOrDefault("nodes", Collections.emptyList()),
+                    new TypeReference<List<ProcessFlowNodeDTO>>() {}
+            );
+            return nodes.stream()
+                    .filter(item -> Objects.equals(item.getNodeKey(), nodeKey))
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private Set<String> toStringSet(Object value) {
+        if (!(value instanceof Collection<?> collection)) {
+            return Collections.emptySet();
+        }
+        return collection.stream()
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .collect(Collectors.toSet());
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

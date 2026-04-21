@@ -53,9 +53,10 @@ class ExpenseWorkflowExecutionSupport {
             ProcessDocumentTask task,
             Long userId,
             String username,
-            String comment
+            String comment,
+            String targetNodeKey
     ) {
-        support.rejectPendingTask(instance, task, userId, username, comment);
+        support.rejectPendingTask(instance, task, userId, username, comment, targetNodeKey);
     }
 
     /**
