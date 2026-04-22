@@ -240,6 +240,27 @@ describe('ExpenseDetailEditView', () => {
     expect(invalidWrapper.get('[data-testid="expense-detail-edit-floating-amount"]').text()).toContain('金额：¥ 0.00')
   })
 
+  it('falls back to detail amount when actual payment amount is empty in prepay mode', async () => {
+    window.sessionStorage.setItem('expense-create-draft:draft-001', JSON.stringify(buildDraft({
+      businessScenario: 'PREPAY_UNBILLED',
+      amount: '66.80',
+      actualPaymentAmount: ''
+    })))
+
+    const wrapper = mount(ExpenseDetailEditView, {
+      global: {
+        stubs: globalStubs,
+        directives: {
+          loading: () => undefined
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="expense-detail-edit-floating-amount"]').text()).toContain('金额：¥ 66.80')
+  })
+
   it('keeps save behavior unchanged and normalizes actualPaymentAmount before saving', async () => {
     const wrapper = await mountView({
       actualPaymentAmount: '120.5',

@@ -8,7 +8,7 @@ import type {
   ProcessFormOption,
   ProcessTemplateFormOptions
 } from '@/api'
-import { getBusinessComponentDefinition } from '@/views/process/formDesignerHelper'
+import { getBusinessComponentDefinition, getControlType } from '@/views/process/formDesignerHelper'
 
 export const PM_NAME_MAX_LENGTH = 64
 export const PM_TITLE_MAX_LENGTH = 128
@@ -176,9 +176,18 @@ export function validateFlowPayload(
   return issues
 }
 
-export function validateSchemaFieldKeys(schema: ProcessFormDesignSchema, subjectLabel: string) {
+export function validateSchemaFieldKeys(
+  schema: ProcessFormDesignSchema,
+  subjectLabel: string,
+  options: { isExpenseDetail?: boolean } = {}
+) {
   const issues: string[] = []
   const seen = new Set<string>()
+  const isExpenseDetail = Boolean(options.isExpenseDetail)
+  let mainFormAmountCount = 0
+  let detailAmountCount = 0
+  let invoiceAmountCount = 0
+  let actualPaymentAmountCount = 0
   schema.blocks.forEach((block, index) => {
     const fieldKey = trimValue(block.fieldKey)
     if (!fieldKey) {
@@ -194,7 +203,43 @@ export function validateSchemaFieldKeys(schema: ProcessFormDesignSchema, subject
       return
     }
     seen.add(fieldKey)
+
+    const controlType = getControlType(block)
+    const systemFieldCode = trimValue(block.props?.systemFieldCode)
+    if (isExpenseDetail) {
+      const isGenericAmountControl = controlType === 'AMOUNT' && !systemFieldCode
+      if (fieldKey === 'amount' || systemFieldCode === 'DETAIL_AMOUNT' || isGenericAmountControl) {
+        detailAmountCount += 1
+      }
+      if (fieldKey === 'invoiceAmount' || systemFieldCode === 'INVOICE_AMOUNT') {
+        invoiceAmountCount += 1
+      }
+      if (fieldKey === 'actualPaymentAmount' || systemFieldCode === 'ACTUAL_PAYMENT_AMOUNT') {
+        actualPaymentAmountCount += 1
+      }
+      return
+    }
+
+    if (fieldKey === 'invoiceAmount' || fieldKey === 'actualPaymentAmount') {
+      issues.push(`${subjectLabel}不允许使用字段标识 ${fieldKey}`)
+    }
+    if (controlType === 'AMOUNT') {
+      mainFormAmountCount += 1
+    }
   })
+  if (isExpenseDetail) {
+    if (detailAmountCount > 1) {
+      issues.push('费用明细表单只允许保留一个金额组件')
+    }
+    if (invoiceAmountCount > 1) {
+      issues.push('费用明细表单只允许保留一个发票金额组件')
+    }
+    if (actualPaymentAmountCount > 1) {
+      issues.push('费用明细表单只允许保留一个实际支付金额组件')
+    }
+  } else if (mainFormAmountCount > 1) {
+    issues.push(`${subjectLabel}只允许保留一个金额控件`)
+  }
   return issues
 }
 

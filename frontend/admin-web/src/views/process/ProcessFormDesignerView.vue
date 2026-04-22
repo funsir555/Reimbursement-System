@@ -185,15 +185,20 @@
               >
                 <div
                   class="form-block-shell"
-                  :class="selectedBlockId === block.blockId ? 'is-selected' : ''"
+                  :class="[
+                    selectedBlockId === block.blockId ? 'is-selected' : '',
+                    isRequiredExpenseDetailBusinessBlock(block) ? 'is-required-business-block' : ''
+                  ]"
                 >
                   <div
                     class="form-block"
                     :class="[
                       selectedBlockId === block.blockId ? 'is-selected' : '',
+                      isRequiredExpenseDetailBusinessBlock(block) ? 'is-required-business-block' : '',
                       dragHover?.blockId === block.blockId && dragHover?.position === 'before' ? 'drop-before' : '',
                       dragHover?.blockId === block.blockId && dragHover?.position === 'after' ? 'drop-after' : ''
                     ]"
+                    :data-testid="isRequiredExpenseDetailBusinessBlock(block) ? `required-expense-detail-block-${block.blockId}` : undefined"
                     draggable="true"
                     role="button"
                     tabindex="0"
@@ -315,6 +320,7 @@
                   <el-input
                     v-model="selectedBlock.fieldKey"
                     :maxlength="PM_FIELD_KEY_MAX_LENGTH"
+                    :disabled="selectedBlockLocked"
                     show-word-limit
                     placeholder="请输入字段标识"
                   />
@@ -629,6 +635,23 @@ type DesignerDetailState = {
   detailTypeLabel: string
 }
 
+const REQUIRED_EXPENSE_DETAIL_SYSTEM_FIELD_CODES = new Set([
+  'EXPENSE_TYPE',
+  'BUSINESS_SCENARIO',
+  'DETAIL_AMOUNT',
+  'INVOICE_AMOUNT',
+  'ACTUAL_PAYMENT_AMOUNT',
+  'INVOICE_ATTACHMENTS'
+])
+const REQUIRED_EXPENSE_DETAIL_FIELD_KEYS = new Set([
+  'expenseTypeCode',
+  'businessScenario',
+  'amount',
+  'invoiceAmount',
+  'actualPaymentAmount',
+  'invoiceAttachments'
+])
+
 const route = useRoute()
 const router = useRouter()
 const initialFormId = Number(route.params.id)
@@ -701,6 +724,7 @@ const controlPaletteGroups = computed(() =>
 )
 const selectedBlock = computed(() => working.schema.blocks.find((item) => item.blockId === selectedBlockId.value) || null)
 const selectedBlockIndex = computed(() => working.schema.blocks.findIndex((item) => item.blockId === selectedBlockId.value))
+const selectedBlockLocked = computed(() => Boolean(selectedBlock.value?.props?.locked))
 const blockQuickActionStates = computed(() => getBlockQuickActionStates(working.schema))
 const permissionStages = FORM_PERMISSION_STAGE_OPTIONS
 const permissionValueOptions = FORM_PERMISSION_VALUE_OPTIONS
@@ -1072,9 +1096,28 @@ function resolveDropPosition(event: DragEvent) {
   return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
 }
 
+function isRequiredExpenseDetailBusinessBlock(block: ProcessFormDesignBlock | null | undefined) {
+  if (!block || !isExpenseDetailDesigner.value || !block.props?.locked) {
+    return false
+  }
+  const systemFieldCode = String(block.props.systemFieldCode || '')
+  if (REQUIRED_EXPENSE_DETAIL_SYSTEM_FIELD_CODES.has(systemFieldCode)) {
+    return true
+  }
+  return REQUIRED_EXPENSE_DETAIL_FIELD_KEYS.has(String(block.fieldKey || ''))
+}
+
 async function confirmRemoveBlock(blockId: string) {
   const block = working.schema.blocks.find((item) => item.blockId === blockId)
   if (!block) {
+    return false
+  }
+  if (isRequiredExpenseDetailBusinessBlock(block)) {
+    ElMessage.warning('不可以删除必要的业务组件')
+    return false
+  }
+  if (block.props?.locked) {
+    ElMessage.warning('固定系统字段不支持删除，只能调整配置')
     return false
   }
   try {
@@ -1403,7 +1446,8 @@ async function saveFormDesign(mode: 'draft' | 'final' = 'final') {
   const schema = normalizeFormSchema(working.schema)
   const schemaIssues = validateSchemaFieldKeys(
     schema,
-    isExpenseDetailDesigner.value ? '费用明细表单' : '表单设计'
+    isExpenseDetailDesigner.value ? '费用明细表单' : '表单设计',
+    { isExpenseDetail: isExpenseDetailDesigner.value }
   )
   if (schemaIssues.length) {
     ElMessage.warning(schemaIssues[0])
@@ -1520,6 +1564,17 @@ function goBack() {
 .form-block { position: relative; min-width: 0; border-radius: 24px; border: 1px solid #dbe2eb; background: #fff; padding: 20px; text-align: left; transition: all .2s ease; box-shadow: 0 10px 30px rgba(15,23,42,.04); }
 .form-block:hover { border-color: #93c5fd; box-shadow: 0 14px 32px rgba(37,99,235,.08); }
 .form-block.is-selected, .form-block-shell.is-selected .form-block { border-color: #2563eb; box-shadow: 0 16px 36px rgba(37,99,235,.12); }
+.form-block.is-required-business-block,
+.form-block-shell.is-required-business-block .form-block {
+  border-style: dashed;
+  border-width: 1.5px;
+  border-color: #60a5fa;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+.form-block.is-required-business-block:hover,
+.form-block-shell.is-required-business-block .form-block:hover {
+  border-color: #3b82f6;
+}
 .form-block.drop-before::before, .form-block.drop-after::after { content: ''; position: absolute; left: 18px; right: 18px; height: 3px; border-radius: 999px; background: #2563eb; }
 .form-block.drop-before::before { top: -2px; }
 .form-block.drop-after::after { bottom: -2px; }

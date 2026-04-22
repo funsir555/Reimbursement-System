@@ -165,7 +165,11 @@ class AbstractExpenseWorkflowSupport {
         if (currentUser != null && currentUser.getDeptId() != null) {
             context.put("submitterDeptId", currentUser.getDeptId());
         }
-        BigDecimal amount = resolveTotalAmount(formData == null ? Collections.emptyMap() : formData);
+        BigDecimal amount = resolveTotalAmount(
+                formData == null ? Collections.emptyMap() : formData,
+                expenseDetails,
+                template == null ? null : template.getExpenseDetailModeDefault()
+        );
         if (amount != null) {
             context.put("amount", amount);
         }
@@ -1676,21 +1680,12 @@ class AbstractExpenseWorkflowSupport {
     /**
      * 瑙ｆ瀽TotalAmount銆?
      */
-    private BigDecimal resolveTotalAmount(Map<String, Object> formData) {
-        BigDecimal directAmount = toBigDecimal(formData.get("__totalAmount"));
-        if (directAmount != null) {
-            return directAmount;
-        }
-        for (Map.Entry<String, Object> entry : formData.entrySet()) {
-            String key = entry.getKey() == null ? "" : entry.getKey().toLowerCase();
-            if (key.contains("amount") || key.contains("money")) {
-                BigDecimal amount = toBigDecimal(entry.getValue());
-                if (amount != null) {
-                    return amount;
-                }
-            }
-        }
-        return null;
+    private BigDecimal resolveTotalAmount(
+            Map<String, Object> formData,
+            List<ExpenseDetailInstanceDTO> expenseDetails,
+            String defaultBusinessSceneMode
+    ) {
+        return ExpenseAmountResolver.resolveDocumentTotalAmount(formData, expenseDetails, defaultBusinessSceneMode);
     }
 
     private void collectUndertakeDeptIdsFromSchema(Set<String> result, Map<String, Object> schema, Map<String, Object> formData) {

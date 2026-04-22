@@ -312,13 +312,13 @@ function buildUndertakeDepartmentBlock(overrides: Record<string, unknown> = {}) 
   }
 }
 
-function buildExpenseDetail(detailNo: string, actualPaymentAmount: string) {
+function buildExpenseDetail(detailNo: string, formData: string | Record<string, unknown>) {
   return {
     detailNo,
     detailType: 'COMMON',
-    formData: {
-      actualPaymentAmount
-    }
+    formData: typeof formData === 'string'
+      ? { actualPaymentAmount: formData }
+      : formData
   }
 }
 
@@ -713,6 +713,43 @@ describe('ExpenseCreateView', () => {
       },
       expenseDetails: []
     })
+  })
+
+  it('falls back from actual payment amount to detail amount when submitting expense details', async () => {
+    mocks.route.query = { templateCode: 'TPL-004A', draftKey: 'draft-detail-amount-fallback' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-004A&draftKey=draft-detail-amount-fallback'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-004A', '对公模板', 'report', '报销单'),
+        expenseDetailType: 'ENTERPRISE_TRANSACTION',
+        expenseDetailModeDefault: 'PREPAY_UNBILLED'
+      }
+    })
+    writeDraft('draft-detail-amount-fallback', 'TPL-004A', {
+      expenseDetails: [
+        {
+          detailNo: 'D-001',
+          detailType: 'ENTERPRISE_TRANSACTION',
+          businessSceneMode: 'PREPAY_UNBILLED',
+          formData: {
+            amount: '88.50',
+            actualPaymentAmount: ''
+          }
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).toHaveBeenCalledWith(expect.objectContaining({
+      formData: expect.objectContaining({
+        __totalAmount: '88.50'
+      })
+    }))
   })
 
   it('preserves related and writeoff form values when submitting', async () => {

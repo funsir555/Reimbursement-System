@@ -367,12 +367,12 @@ import {
   readStoredUser,
   resolveFirstAccessiblePath
 } from '@/utils/permissions'
-import { addMoney, formatMoney, normalizeMoneyValue } from '@/utils/money'
+import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 import { getControlType } from '@/views/process/formDesignerHelper'
 import {
   buildExpenseDetailFormData,
   enrichExpenseDetailInstance,
-  FIELD_ACTUAL_PAYMENT_AMOUNT
+  resolveDocumentTotalAmount
 } from './expenseDetailRuntime'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
 import { validateExpenseRuntimeSchema } from '@/views/process/pmValidation'
@@ -498,24 +498,14 @@ const groupedTemplates = computed<TemplateGroup[]>(() => {
   return groups
 })
 
-const formTotalAmount = computed(() =>
-  addMoney(
-    ...blocks.value
-      .filter((block) => block.kind === 'CONTROL' && getControlType(block) === 'AMOUNT')
-      .map((block) => safeMoneyValue(formValues[block.fieldKey]))
+const totalAmount = computed(() =>
+  resolveDocumentTotalAmount(
+    blocks.value,
+    formValues,
+    hasExpenseDetailSection.value ? expenseDetails.value : [],
+    templateDetail.value?.expenseDetailModeDefault
   )
 )
-
-const expenseDetailTotalAmount = computed(() =>
-  addMoney(
-    ...expenseDetails.value.map((detail) => {
-      const detailFormData = isRecord(detail.formData) ? detail.formData : {}
-      return safeMoneyValue(detailFormData[FIELD_ACTUAL_PAYMENT_AMOUNT])
-    })
-  )
-)
-
-const totalAmount = computed(() => (hasExpenseDetailSection.value ? expenseDetailTotalAmount.value : formTotalAmount.value))
 
 const totalAmountText = computed(() => `¥ ${formatMoney(totalAmount.value)}`)
 

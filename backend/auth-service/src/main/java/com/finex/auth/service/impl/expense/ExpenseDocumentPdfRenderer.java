@@ -35,7 +35,6 @@ public class ExpenseDocumentPdfRenderer {
     private static final String FONT_RESOURCE_PATH = "fonts/NotoSansSC-VF.ttf";
     private static final DecimalFormat MONEY_FORMAT = new DecimalFormat("#,##0.00");
     private static final DecimalFormat FILE_SIZE_FORMAT = new DecimalFormat("0.0");
-    private static final List<String> DETAIL_AMOUNT_FIELD_KEYS = List.of("invoiceAmount", "actualPaymentAmount", "amount", "detailAmount");
     private static final List<String> DETAIL_VERIFY_FIELD_KEYS = List.of("invoiceVerifyStatus", "verifyStatus", "invoiceVerificationResult", "invoiceCheckResult");
     private static final List<String> DETAIL_EXCEPTION_FIELD_KEYS = List.of("abnormalDisplay", "exceptionDisplay", "invoiceExceptionDisplay", "exceptionReason");
     private static final Set<String> TIMELINE_ACTION_TYPES = Set.of("SUBMIT", "RECALL", "RESUBMIT", "APPROVE", "REJECT", "MODIFY", "TRANSFER", "ADD_SIGN", "PAYMENT_START", "PAYMENT_COMPLETE", "PAYMENT_EXCEPTION", "FINISH", "EXCEPTION");
@@ -513,13 +512,12 @@ public class ExpenseDocumentPdfRenderer {
     }
 
     private String resolveDetailAmount(ExpenseDetailInstanceDetailVO detail) {
-        for (String fieldKey : DETAIL_AMOUNT_FIELD_KEYS) {
-            String amount = formatMoneyValue(detail.getFormData() == null ? null : detail.getFormData().get(fieldKey));
-            if (notBlank(amount)) {
-                return amount;
-            }
-        }
-        return "-";
+        BigDecimal amount = ExpenseAmountResolver.resolveExpenseDetailAmount(
+                detail.getFormData(),
+                detail.getDetailType(),
+                firstNonBlank(detail.getBusinessSceneMode(), detail.getEnterpriseMode())
+        );
+        return amount == null ? "-" : formatMoneyValue(amount);
     }
 
     private String resolveFirstText(Map<String, Object> formData, List<String> keys, String fallback) {

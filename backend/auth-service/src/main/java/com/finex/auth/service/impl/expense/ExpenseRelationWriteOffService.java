@@ -741,7 +741,10 @@ public Map<String, BigDecimal> loadPrepayReportAmountMap(List<String> documentCo
                 LinkedHashMap::new,
                 Collectors.reducing(
                         BigDecimal.ZERO,
-                        detail -> defaultDecimal(detail.getPendingWriteOffAmount()),
+                  detail -> defaultDecimal(ExpenseAmountResolver.resolvePrepayWriteOffAmount(
+                          null,
+                          detail.getActualPaymentAmount()
+                  )),
                         BigDecimal::add
                 )
         ));

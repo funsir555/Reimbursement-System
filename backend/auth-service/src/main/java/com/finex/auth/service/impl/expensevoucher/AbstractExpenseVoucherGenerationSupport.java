@@ -38,6 +38,7 @@ import com.finex.auth.mapper.ExpVoucherPushEntryMapper;
 import com.finex.auth.mapper.ExpVoucherSubjectMappingMapper;
 import com.finex.auth.mapper.ExpVoucherTemplatePolicyMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
+import com.finex.auth.service.impl.expense.ExpenseAmountResolver;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
@@ -273,11 +274,13 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
      * 解析明细Amount。
      */
     protected BigDecimal resolveDetailAmount(ProcessDocumentExpenseDetail detail) {
-        BigDecimal actualPaymentAmount = zero(detail.getActualPaymentAmount());
-        if (actualPaymentAmount.compareTo(ZERO) > 0) {
-            return actualPaymentAmount;
-        }
-        return zero(detail.getInvoiceAmount());
+        return zero(ExpenseAmountResolver.resolveStoredExpenseDetailAmount(
+                readMap(detail.getFormDataJson()),
+                detail.getDetailType(),
+                detail.getBusinessSceneMode(),
+                detail.getInvoiceAmount(),
+                detail.getActualPaymentAmount()
+        ));
     }
 
     /**

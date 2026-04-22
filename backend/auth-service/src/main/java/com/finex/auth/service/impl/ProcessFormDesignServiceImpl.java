@@ -34,6 +34,8 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final int PM_NAME_MAX_LENGTH = 64;
     private static final int PM_FIELD_KEY_MAX_LENGTH = 64;
+    private static final String CONTROL_TYPE_AMOUNT = "AMOUNT";
+    private static final Set<String> DISALLOWED_MAIN_FORM_FIELD_KEYS = Set.of("invoiceAmount", "actualPaymentAmount");
 
     private final ProcessFormDesignMapper processFormDesignMapper;
     private final ProcessDocumentTemplateMapper processDocumentTemplateMapper;
@@ -157,7 +159,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         target.setTemplateType(normalizeTemplateType(dto.getTemplateType()));
         target.setFormName(dto.getFormName().trim());
         target.setFormDescription(trimToNull(dto.getFormDescription()));
-        target.setSchemaJson(writeSchema(dto.getSchema()));
+        target.setSchemaJson(writeSchema(normalizeSchema(dto.getSchema())));
     }
 
     private void validateSave(ProcessFormDesignSaveDTO dto, ProcessFormDesign existing) {
@@ -168,7 +170,7 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         if (trimToNull(dto.getTemplateType()) == null) {
             throw new IllegalArgumentException("\u8868\u5355\u7c7b\u578b\u4e0d\u80fd\u4e3a\u7a7a");
         }
-        validateSchemaFieldKeys(dto.getSchema(), "\u8868\u5355");
+        validateSchemaFieldKeys(normalizeSchema(dto.getSchema()), "\u8868\u5355");
         if (existing != null && isFormDesignReferenced(existing.getFormCode())
                 && !Objects.equals(normalizeTemplateType(existing.getTemplateType()), normalizeTemplateType(dto.getTemplateType()))) {
             throw new IllegalStateException("\u5f53\u524d\u8868\u5355\u8bbe\u8ba1\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u4fee\u6539\u6a21\u677f\u7c7b\u578b");
@@ -238,7 +240,10 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
             return defaultSchema();
         }
         try {
-            return objectMapper.readValue(schemaJson, objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class));
+            return normalizeSchema(objectMapper.readValue(
+                    schemaJson,
+                    objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class)
+            ));
         } catch (Exception ex) {
             throw new IllegalStateException("\u8bfb\u53d6\u8868\u5355\u8bbe\u8ba1\u5931\u8d25", ex);
         }
@@ -246,10 +251,41 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
 
     private String writeSchema(Map<String, Object> schema) {
         try {
-            return objectMapper.writeValueAsString(schema == null || schema.isEmpty() ? defaultSchema() : schema);
+            return objectMapper.writeValueAsString(normalizeSchema(schema));
         } catch (Exception ex) {
             throw new IllegalStateException("\u5e8f\u5217\u5316\u8868\u5355\u8bbe\u8ba1\u5931\u8d25", ex);
         }
+    }
+
+    private Map<String, Object> normalizeSchema(Map<String, Object> schema) {
+        Map<String, Object> source = schema == null || schema.isEmpty() ? defaultSchema() : schema;
+        Map<String, Object> normalized = new LinkedHashMap<>(source);
+        Object rawBlocks = source.get("blocks");
+        if (!(rawBlocks instanceof Collection<?> blocks)) {
+            normalized.put("blocks", Collections.emptyList());
+            return normalized;
+        }
+        List<Map<String, Object>> nextBlocks = new java.util.ArrayList<>();
+        boolean amountKept = false;
+        for (Object rawBlock : blocks) {
+            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
+                continue;
+            }
+            Map<String, Object> block = toStringObjectMap(blockMap);
+            String fieldKey = trimToNull(stringValue(block.get("fieldKey")));
+            if (DISALLOWED_MAIN_FORM_FIELD_KEYS.contains(fieldKey)) {
+                continue;
+            }
+            if (isAmountControl(block)) {
+                if (amountKept) {
+                    continue;
+                }
+                amountKept = true;
+            }
+            nextBlocks.add(block);
+        }
+        normalized.put("blocks", nextBlocks);
+        return normalized;
     }
 
     private Map<String, Object> defaultSchema() {
@@ -257,6 +293,20 @@ public class ProcessFormDesignServiceImpl implements ProcessFormDesignService {
         schema.put("layoutMode", "TWO_COLUMN");
         schema.put("blocks", Collections.emptyList());
         return schema;
+    }
+
+    private boolean isAmountControl(Map<String, Object> block) {
+        Object rawProps = block.get("props");
+        if (!(rawProps instanceof Map<?, ?> props)) {
+            return false;
+        }
+        return Objects.equals(trimToNull(stringValue(props.get("controlType"))), CONTROL_TYPE_AMOUNT);
+    }
+
+    private Map<String, Object> toStringObjectMap(Map<?, ?> rawMap) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        rawMap.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
     }
 
     private String normalizeTemplateType(String templateType) {

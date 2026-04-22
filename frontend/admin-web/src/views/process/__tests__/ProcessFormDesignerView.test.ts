@@ -541,4 +541,105 @@ describe('ProcessFormDesignerView', () => {
     expect(optionLabels).toContain('\u5e7f\u5dde\u516c\u53f8')
   })
 
+  it('renders required expense detail business blocks with the protected dashed state and blocks delete button removal', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+
+    const wrapper = await mountView({
+      expenseDetailDesignDetail: {
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-expense-type',
+              fieldKey: 'expenseTypeCode',
+              label: '\u8d39\u7528\u7c7b\u578b',
+              kind: 'CONTROL',
+              span: 1,
+              required: true,
+              defaultValue: '',
+              helpText: '',
+              props: {
+                controlType: 'SELECT',
+                locked: true,
+                systemFieldCode: 'EXPENSE_TYPE'
+              },
+              permission: { visible: true, editable: true, required: true, sceneOverrides: [] }
+            },
+            {
+              blockId: 'block-remark',
+              fieldKey: 'remark',
+              label: '\u5907\u6ce8',
+              kind: 'CONTROL',
+              span: 1,
+              required: false,
+              defaultValue: '',
+              helpText: '',
+              props: { controlType: 'TEXT' },
+              permission: { visible: true, editable: true, required: false, sceneOverrides: [] }
+            }
+          ]
+        }
+      }
+    })
+
+    const protectedBlock = wrapper.get('[data-testid="required-expense-detail-block-block-expense-type"]')
+    expect(protectedBlock.classes()).toContain('is-required-business-block')
+
+    await wrapper.findAll('button').find((item) => item.text().includes('\u5220\u9664'))!.trigger('click')
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('\u4e0d\u53ef\u4ee5\u5220\u9664\u5fc5\u8981\u7684\u4e1a\u52a1\u7ec4\u4ef6')
+    expect(mocks.elMessageBox.confirm).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="required-expense-detail-block-block-expense-type"]').exists()).toBe(true)
+  })
+
+  it('blocks Delete shortcut for required expense detail business blocks without removing them', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+
+    const wrapper = await mountView({
+      expenseDetailDesignDetail: {
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-invoice-attachments',
+              fieldKey: 'invoiceAttachments',
+              label: '\u53d1\u7968\u9644\u4ef6',
+              kind: 'CONTROL',
+              span: 1,
+              required: false,
+              defaultValue: [],
+              helpText: '',
+              props: {
+                controlType: 'ATTACHMENT',
+                locked: true,
+                systemFieldCode: 'INVOICE_ATTACHMENTS'
+              },
+              permission: { visible: true, editable: true, required: false, sceneOverrides: [] }
+            },
+            {
+              blockId: 'block-remark',
+              fieldKey: 'remark',
+              label: '\u5907\u6ce8',
+              kind: 'CONTROL',
+              span: 1,
+              required: false,
+              defaultValue: '',
+              helpText: '',
+              props: { controlType: 'TEXT' },
+              permission: { visible: true, editable: true, required: false, sceneOverrides: [] }
+            }
+          ]
+        }
+      }
+    })
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('\u4e0d\u53ef\u4ee5\u5220\u9664\u5fc5\u8981\u7684\u4e1a\u52a1\u7ec4\u4ef6')
+    expect(mocks.elMessageBox.confirm).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="required-expense-detail-block-block-invoice-attachments"]').exists()).toBe(true)
+    expect(wrapper.findAll('.form-block')).toHaveLength(2)
+  })
+
 })

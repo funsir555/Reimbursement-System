@@ -67,7 +67,8 @@ class ExpenseRelationWriteOffServiceTest {
         ProcessDocumentExpenseDetail prepayDetail = new ProcessDocumentExpenseDetail();
         prepayDetail.setDocumentCode("DOC-REPORT-001");
         prepayDetail.setBusinessSceneMode("PREPAY_UNBILLED");
-        prepayDetail.setPendingWriteOffAmount(BigDecimal.valueOf(300));
+        prepayDetail.setActualPaymentAmount(BigDecimal.valueOf(300));
+        prepayDetail.setFormDataJson("{\"actualPaymentAmount\":300}");
 
         when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(report, application, contract, loan));
         when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of(prepayDetail));

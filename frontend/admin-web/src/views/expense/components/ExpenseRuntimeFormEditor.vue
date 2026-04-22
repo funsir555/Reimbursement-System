@@ -4193,45 +4193,12 @@ import {
 
 
 import {
-
-
-
-
-
-
-
   ensureExpenseDetailFormDefaults,
-
-
-
-
-
-
-
   FIELD_INVOICE_ATTACHMENTS,
-
-
-
-
-
-
-
   isExpenseDetailBlockReadOnly,
-
-
-
-
-
-
-
-  isExpenseDetailBlockVisible
-
-
-
-
-
-
-
+  isExpenseDetailBlockVisible,
+  resolveInvoiceOcrTotal,
+  syncInvoiceAmountWithOcr
 } from '@/views/expense/expenseDetailRuntime'
 
 
@@ -9826,7 +9793,9 @@ async function handleFileChange(block: ProcessFormDesignBlock, uploadFile: Uploa
         : undefined
     )
     const current = normalizeAttachments(formData.value[block.fieldKey])
-    formData.value[block.fieldKey] = [...current, uploadedAttachment]
+    const nextAttachments = [...current, uploadedAttachment]
+    formData.value[block.fieldKey] = nextAttachments
+    syncInvoiceAmountFromAttachments(block, current, nextAttachments)
 
 
 
@@ -9907,101 +9876,34 @@ function attachResolvedOcr(
   }
 }
 
-function handleFileRemove(block: ProcessFormDesignBlock, uploadFile: UploadFile) {
-
-
-
-
-
-
-
-  const current = normalizeAttachments(formData.value[block.fieldKey])
-
-
-
-
-
-
-
-  formData.value[block.fieldKey] = current.filter((item, index) => {
-
-
-
-
-
-
-
-    const fallbackUid = `legacy-${block.fieldKey}-${index}-${item.fileName}`
-
-
-
-
-
-
-
-    const currentUid = item.attachmentId || fallbackUid
-
-
-
-
-
-
-
-    if (uploadFile.uid !== undefined && String(uploadFile.uid) === currentUid) {
-
-
-
-
-
-
-
-      return false
-
-
-
-
-
-
-
-    }
-
-
-
-
-
-
-
-    return item.fileName !== uploadFile.name
-
-
-
-
-
-
-
-  })
-
-
-
-
-
-
-
+function syncInvoiceAmountFromAttachments(
+  block: ProcessFormDesignBlock,
+  previousAttachments: ExpenseAttachmentMeta[],
+  nextAttachments: ExpenseAttachmentMeta[]
+) {
+  if (!isInvoiceAttachmentBlock(block) || block.fieldKey !== FIELD_INVOICE_ATTACHMENTS) {
+    return
+  }
+  syncInvoiceAmountWithOcr(
+    formData.value,
+    resolveInvoiceOcrTotal(previousAttachments),
+    resolveInvoiceOcrTotal(nextAttachments)
+  )
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+function handleFileRemove(block: ProcessFormDesignBlock, uploadFile: UploadFile) {
+  const current = normalizeAttachments(formData.value[block.fieldKey])
+  const nextAttachments = current.filter((item, index) => {
+    const fallbackUid = `legacy-${block.fieldKey}-${index}-${item.fileName}`
+    const currentUid = item.attachmentId || fallbackUid
+    if (uploadFile.uid !== undefined && String(uploadFile.uid) === currentUid) {
+      return false
+    }
+    return item.fileName !== uploadFile.name
+  })
+  formData.value[block.fieldKey] = nextAttachments
+  syncInvoiceAmountFromAttachments(block, current, nextAttachments)
+}
 
 function isInvoiceAttachmentBlock(block: ProcessFormDesignBlock) {
 

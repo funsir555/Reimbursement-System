@@ -103,7 +103,8 @@ import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 import {
   FIELD_ACTUAL_PAYMENT_AMOUNT,
   buildExpenseDetailFormData,
-  enrichExpenseDetailInstance
+  enrichExpenseDetailInstance,
+  resolveExpenseDetailAmount
 } from './expenseDetailRuntime'
 import ExpenseInvoiceWorkbench from './components/ExpenseInvoiceWorkbench.vue'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
@@ -135,7 +136,7 @@ const detailNo = computed(() => String(route.params.detailNo || ''))
 const draftKey = computed(() => String(route.query.draftKey || ''))
 const returnTo = computed(() => String(route.query.returnTo || ''))
 const emptySchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
-const paymentAmountValue = computed(() => safeMoneyValue(detailFormData[FIELD_ACTUAL_PAYMENT_AMOUNT]))
+const paymentAmountValue = computed(() => resolveExpenseDetailAmount(detailFormData, templateDetail.value?.expenseDetailType, templateDetail.value?.expenseDetailModeDefault) || '0.00')
 const paymentAmountText = computed(() => `¥ ${formatMoney(paymentAmountValue.value)}`)
 const detailFormDataModel = computed<Record<string, unknown>>({
   get: () => detailFormData,
@@ -276,7 +277,9 @@ function saveDetail() {
   try {
     const current = draft.expenseDetails[detailIndex]
     const nextFormData = cloneRecord(detailFormData)
-    nextFormData[FIELD_ACTUAL_PAYMENT_AMOUNT] = paymentAmountValue.value
+    if (FIELD_ACTUAL_PAYMENT_AMOUNT in nextFormData) {
+      nextFormData[FIELD_ACTUAL_PAYMENT_AMOUNT] = normalizeOptionalMoneyValue(nextFormData[FIELD_ACTUAL_PAYMENT_AMOUNT])
+    }
     draft.expenseDetails[detailIndex] = enrichExpenseDetailInstance(
       {
         ...current,
@@ -301,14 +304,15 @@ function cloneRecord(value: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(value || {})) as Record<string, unknown>
 }
 
-function safeMoneyValue(value: unknown) {
+function normalizeOptionalMoneyValue(value: unknown) {
+  const text = String(value ?? '').trim()
+  if (!text) {
+    return ''
+  }
   try {
-    return normalizeMoneyValue(value as string | number | null | undefined, {
-      allowNegative: true,
-      fallback: '0.00'
-    })
+    return normalizeMoneyValue(text, { fallback: '' })
   } catch {
-    return '0.00'
+    return text
   }
 }
 

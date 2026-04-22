@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ProcessFormOptionVO;
 import com.finex.auth.entity.ProcessExpenseType;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
+import com.finex.auth.service.impl.expense.ExpenseAmountResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -45,9 +46,11 @@ public class ExpenseDetailSystemFieldSupport {
     public static final String FIELD_ACTUAL_PAYMENT_AMOUNT = "actualPaymentAmount";
     public static final String FIELD_INVOICE_ATTACHMENTS = "invoiceAttachments";
     public static final String FIELD_PENDING_WRITE_OFF_AMOUNT = "pendingWriteOffAmount";
+    public static final String FIELD_DETAIL_AMOUNT = ExpenseAmountResolver.FIELD_DETAIL_AMOUNT;
 
     public static final String SYSTEM_EXPENSE_TYPE = "EXPENSE_TYPE";
     public static final String SYSTEM_BUSINESS_SCENARIO = "BUSINESS_SCENARIO";
+    public static final String SYSTEM_DETAIL_AMOUNT = "DETAIL_AMOUNT";
     public static final String SYSTEM_INVOICE_AMOUNT = "INVOICE_AMOUNT";
     public static final String SYSTEM_ACTUAL_PAYMENT_AMOUNT = "ACTUAL_PAYMENT_AMOUNT";
     public static final String SYSTEM_INVOICE_ATTACHMENTS = "INVOICE_ATTACHMENTS";
@@ -67,6 +70,7 @@ public class ExpenseDetailSystemFieldSupport {
     private static final Map<String, String> SYSTEM_FIELD_KEYS = Map.of(
             SYSTEM_EXPENSE_TYPE, FIELD_EXPENSE_TYPE_CODE,
             SYSTEM_BUSINESS_SCENARIO, FIELD_BUSINESS_SCENARIO,
+            SYSTEM_DETAIL_AMOUNT, FIELD_DETAIL_AMOUNT,
             SYSTEM_INVOICE_AMOUNT, FIELD_INVOICE_AMOUNT,
             SYSTEM_ACTUAL_PAYMENT_AMOUNT, FIELD_ACTUAL_PAYMENT_AMOUNT,
             SYSTEM_INVOICE_ATTACHMENTS, FIELD_INVOICE_ATTACHMENTS,
@@ -75,6 +79,7 @@ public class ExpenseDetailSystemFieldSupport {
     private static final List<String> NORMAL_SYSTEM_FIELD_ORDER = List.of(
             SYSTEM_EXPENSE_TYPE,
             SYSTEM_BUSINESS_SCENARIO,
+            SYSTEM_DETAIL_AMOUNT,
             SYSTEM_INVOICE_AMOUNT,
             SYSTEM_ACTUAL_PAYMENT_AMOUNT,
             SYSTEM_INVOICE_ATTACHMENTS
@@ -82,10 +87,10 @@ public class ExpenseDetailSystemFieldSupport {
     private static final List<String> ENTERPRISE_SYSTEM_FIELD_ORDER = List.of(
             SYSTEM_EXPENSE_TYPE,
             SYSTEM_BUSINESS_SCENARIO,
+            SYSTEM_DETAIL_AMOUNT,
             SYSTEM_INVOICE_AMOUNT,
             SYSTEM_ACTUAL_PAYMENT_AMOUNT,
-            SYSTEM_INVOICE_ATTACHMENTS,
-            SYSTEM_PENDING_WRITE_OFF_AMOUNT
+            SYSTEM_INVOICE_ATTACHMENTS
     );
 
     private final ObjectMapper objectMapper;
@@ -130,30 +135,73 @@ public class ExpenseDetailSystemFieldSupport {
         Set<String> expectedSystemFields = new LinkedHashSet<>(expectedSystemFieldOrder);
 
         Map<String, Map<String, Object>> normalizedSystemBlocks = new LinkedHashMap<>();
+        Set<String> existingSystemFields = new LinkedHashSet<>();
         List<Map<String, Object>> nextBlocks = new ArrayList<>();
 
         for (Map<String, Object> rawBlock : rawBlocks) {
-            String systemFieldCode = readSystemFieldCode(rawBlock);
+            String systemFieldCode = resolveSystemFieldCode(rawBlock);
             if (expectedSystemFields.contains(systemFieldCode)) {
                 Map<String, Object> systemBlock = normalizeSystemBlock(rawBlock, systemFieldCode, normalizedDetailType);
                 if (!normalizedSystemBlocks.containsKey(systemFieldCode)) {
                     normalizedSystemBlocks.put(systemFieldCode, systemBlock);
+                    existingSystemFields.add(systemFieldCode);
                     nextBlocks.add(systemBlock);
                 }
+                continue;
+            }
+            if (shouldDropLegacyAmountBlock(rawBlock)) {
                 continue;
             }
             nextBlocks.add(normalizeGenericBlock(rawBlock));
         }
 
         for (String systemFieldCode : expectedSystemFieldOrder) {
-            if (normalizedSystemBlocks.containsKey(systemFieldCode)) {
+            if (existingSystemFields.contains(systemFieldCode)) {
                 continue;
             }
-            nextBlocks.add(createSystemBlock(systemFieldCode, normalizedDetailType));
+            Map<String, Object> systemBlock = createSystemBlock(systemFieldCode, normalizedDetailType);
+            normalizedSystemBlocks.put(systemFieldCode, systemBlock);
+            int insertIndex = resolveMissingSystemBlockInsertIndex(nextBlocks, expectedSystemFieldOrder, systemFieldCode);
+            nextBlocks.add(insertIndex, systemBlock);
         }
 
         normalized.put("blocks", nextBlocks);
         return normalized;
+    }
+
+    private int resolveMissingSystemBlockInsertIndex(
+            List<Map<String, Object>> blocks,
+            List<String> expectedSystemFieldOrder,
+            String systemFieldCode
+    ) {
+        int currentOrderIndex = expectedSystemFieldOrder.indexOf(systemFieldCode);
+        if (currentOrderIndex < 0) {
+            return blocks.size();
+        }
+
+        for (int index = currentOrderIndex + 1; index < expectedSystemFieldOrder.size(); index++) {
+            int existingIndex = indexOfSystemBlock(blocks, expectedSystemFieldOrder.get(index));
+            if (existingIndex >= 0) {
+                return existingIndex;
+            }
+        }
+
+        for (int index = currentOrderIndex - 1; index >= 0; index--) {
+            int existingIndex = indexOfSystemBlock(blocks, expectedSystemFieldOrder.get(index));
+            if (existingIndex >= 0) {
+                return existingIndex + 1;
+            }
+        }
+        return 0;
+    }
+
+    private int indexOfSystemBlock(List<Map<String, Object>> blocks, String systemFieldCode) {
+        for (int index = 0; index < blocks.size(); index++) {
+            if (Objects.equals(resolveSystemFieldCode(blocks.get(index)), systemFieldCode)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -237,8 +285,13 @@ public class ExpenseDetailSystemFieldSupport {
     private Map<String, Object> normalizeSystemBlock(Map<String, Object> rawBlock, String systemFieldCode, String detailType) {
         Map<String, Object> block = createSystemBlock(systemFieldCode, detailType);
         block.put("blockId", firstNonBlank(stringValue(rawBlock.get("blockId")), stringValue(block.get("blockId"))));
+        block.put("label", firstNonBlank(trimToNull(stringValue(rawBlock.get("label"))), stringValue(block.get("label"))));
         block.put("span", normalizeSpan(rawBlock.get("span")));
         block.put("helpText", stringValue(rawBlock.get("helpText")));
+        Object defaultValue = rawBlock.get("defaultValue");
+        if (defaultValue != null) {
+            block.put("defaultValue", defaultValue);
+        }
         block.put("permission", readPermission(rawBlock.get("permission")));
         return block;
     }
@@ -284,14 +337,17 @@ public class ExpenseDetailSystemFieldSupport {
                     : List.of(option(LABEL_FULL_PAYMENT, MODE_INVOICE_FULL_PAYMENT)));
             return props;
         }
-        if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)
+        if (Objects.equals(systemFieldCode, SYSTEM_DETAIL_AMOUNT)
+                || Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)
                 || Objects.equals(systemFieldCode, SYSTEM_ACTUAL_PAYMENT_AMOUNT)
                 || Objects.equals(systemFieldCode, SYSTEM_PENDING_WRITE_OFF_AMOUNT)) {
             props.put("controlType", CONTROL_TYPE_AMOUNT);
             props.put("placeholder", PLACEHOLDER_AMOUNT);
             props.put("precision", 2);
             if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
-                if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)) {
+                if (Objects.equals(systemFieldCode, SYSTEM_DETAIL_AMOUNT)) {
+                    props.put("visibleSceneModes", List.of(MODE_PREPAY_UNBILLED));
+                } else if (Objects.equals(systemFieldCode, SYSTEM_INVOICE_AMOUNT)) {
                     props.put("visibleSceneModes", List.of(MODE_INVOICE_FULL_PAYMENT));
                 } else if (Objects.equals(systemFieldCode, SYSTEM_PENDING_WRITE_OFF_AMOUNT)) {
                     props.put("visibleSceneModes", List.of(MODE_PREPAY_UNBILLED));
@@ -355,6 +411,7 @@ public class ExpenseDetailSystemFieldSupport {
         return switch (systemFieldCode) {
             case SYSTEM_EXPENSE_TYPE -> "\u8d39\u7528\u7c7b\u578b";
             case SYSTEM_BUSINESS_SCENARIO -> "\u4e1a\u52a1\u573a\u666f";
+            case SYSTEM_DETAIL_AMOUNT -> "\u91d1\u989d";
             case SYSTEM_INVOICE_AMOUNT -> "\u53d1\u7968\u91d1\u989d";
             case SYSTEM_ACTUAL_PAYMENT_AMOUNT -> "\u5b9e\u9645\u652f\u4ed8\u91d1\u989d";
             case SYSTEM_INVOICE_ATTACHMENTS -> "\u53d1\u7968\u9644\u4ef6";
@@ -373,6 +430,58 @@ public class ExpenseDetailSystemFieldSupport {
             return null;
         }
         return trimToNull(String.valueOf(props.get("systemFieldCode")));
+    }
+
+    private String resolveSystemFieldCode(Map<String, Object> block) {
+        String systemFieldCode = readSystemFieldCode(block);
+        if (SYSTEM_FIELD_KEYS.containsKey(systemFieldCode)) {
+            if (Objects.equals(systemFieldCode, SYSTEM_PENDING_WRITE_OFF_AMOUNT)) {
+                return null;
+            }
+            return systemFieldCode;
+        }
+        String fieldKey = trimToNull(stringValue(block.get("fieldKey")));
+        if (Objects.equals(fieldKey, FIELD_EXPENSE_TYPE_CODE)) {
+            return SYSTEM_EXPENSE_TYPE;
+        }
+        if (Objects.equals(fieldKey, FIELD_BUSINESS_SCENARIO)) {
+            return SYSTEM_BUSINESS_SCENARIO;
+        }
+        if (Objects.equals(fieldKey, FIELD_DETAIL_AMOUNT)) {
+            return SYSTEM_DETAIL_AMOUNT;
+        }
+        if (Objects.equals(fieldKey, FIELD_INVOICE_AMOUNT)) {
+            return SYSTEM_INVOICE_AMOUNT;
+        }
+        if (Objects.equals(fieldKey, FIELD_ACTUAL_PAYMENT_AMOUNT)) {
+            return SYSTEM_ACTUAL_PAYMENT_AMOUNT;
+        }
+        if (Objects.equals(fieldKey, FIELD_INVOICE_ATTACHMENTS)) {
+            return SYSTEM_INVOICE_ATTACHMENTS;
+        }
+        if (Objects.equals(fieldKey, FIELD_PENDING_WRITE_OFF_AMOUNT)) {
+            return null;
+        }
+        if (isAmountControl(block)) {
+            return SYSTEM_DETAIL_AMOUNT;
+        }
+        return null;
+    }
+
+    private boolean shouldDropLegacyAmountBlock(Map<String, Object> block) {
+        String fieldKey = trimToNull(stringValue(block.get("fieldKey")));
+        if (Objects.equals(fieldKey, FIELD_PENDING_WRITE_OFF_AMOUNT)) {
+            return true;
+        }
+        return isAmountControl(block);
+    }
+
+    private boolean isAmountControl(Map<String, Object> block) {
+        Object rawProps = block.get("props");
+        if (!(rawProps instanceof Map<?, ?> props)) {
+            return false;
+        }
+        return Objects.equals(trimToNull(String.valueOf(props.get("controlType"))), CONTROL_TYPE_AMOUNT);
     }
 
     private Map<String, Object> readPermission(Object value) {

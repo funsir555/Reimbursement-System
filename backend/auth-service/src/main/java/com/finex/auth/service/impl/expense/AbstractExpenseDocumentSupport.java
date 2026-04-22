@@ -166,6 +166,7 @@ class AbstractExpenseDocumentSupport {
     private static final String INVOICE_FREE_MODE_REQUIRED = "NOT_FREE";
     private static final String FIELD_EXPENSE_TYPE_CODE = ExpenseDetailSystemFieldSupport.FIELD_EXPENSE_TYPE_CODE;
     private static final String FIELD_BUSINESS_SCENARIO = ExpenseDetailSystemFieldSupport.FIELD_BUSINESS_SCENARIO;
+    private static final String FIELD_DETAIL_AMOUNT = ExpenseAmountResolver.FIELD_DETAIL_AMOUNT;
     private static final String FIELD_INVOICE_AMOUNT = ExpenseDetailSystemFieldSupport.FIELD_INVOICE_AMOUNT;
     private static final String FIELD_ACTUAL_PAYMENT_AMOUNT = ExpenseDetailSystemFieldSupport.FIELD_ACTUAL_PAYMENT_AMOUNT;
     private static final String FIELD_INVOICE_ATTACHMENTS = ExpenseDetailSystemFieldSupport.FIELD_INVOICE_ATTACHMENTS;
@@ -716,7 +717,7 @@ class AbstractExpenseDocumentSupport {
             instance.setSubmitterName(submitterDisplayName);
             instance.setDocumentTitle(documentTitle);
             instance.setDocumentReason(resolveDocumentReason(template, formData));
-            instance.setTotalAmount(resolveTotalAmount(formData));
+            instance.setTotalAmount(resolveTotalAmount(formData, expenseDetails, template.getExpenseDetailModeDefault()));
             instance.setStatus(DOCUMENT_STATUS_PENDING);
             instance.setFormDataJson(writeJson(formData));
             instance.setTemplateSnapshotJson(writeJson(toTemplateSnapshot(template)));
@@ -1345,7 +1346,10 @@ class AbstractExpenseDocumentSupport {
                 LinkedHashMap::new,
                 Collectors.reducing(
                         BigDecimal.ZERO,
-                        detail -> defaultDecimal(detail.getPendingWriteOffAmount()),
+                        detail -> defaultDecimal(ExpenseAmountResolver.resolvePrepayWriteOffAmount(
+                           readMap(detail.getFormDataJson()),
+                           detail.getActualPaymentAmount()
+                   )),
                         BigDecimal::add
                 )
         ));
@@ -2022,9 +2026,11 @@ class AbstractExpenseDocumentSupport {
                 detail.setBusinessSceneMode(businessSceneMode);
                 detail.setDetailTitle(firstNonBlank(expenseDetail.getDetailTitle(), "\u8d39\u7528\u660e\u7ec6 " + (index + 1)));
                 detail.setSortOrder(expenseDetail.getSortOrder() == null ? index + 1 : expenseDetail.getSortOrder());
-                detail.setInvoiceAmount(readInvoiceAmountForStorage(detailType, businessSceneMode, detailFormData));
-                detail.setActualPaymentAmount(toBigDecimal(detailFormData.get(FIELD_ACTUAL_PAYMENT_AMOUNT)));
-                detail.setPendingWriteOffAmount(readPendingWriteOffAmountForStorage(detailType, businessSceneMode, detailFormData));
+                BigDecimal invoiceAmount = readInvoiceAmountForStorage(detailType, businessSceneMode, detailFormData);
+                BigDecimal actualPaymentAmount = toBigDecimal(detailFormData.get(FIELD_ACTUAL_PAYMENT_AMOUNT));
+                detail.setInvoiceAmount(invoiceAmount);
+                detail.setActualPaymentAmount(actualPaymentAmount);
+                detail.setPendingWriteOffAmount(readPendingWriteOffAmountForStorage(detailType, businessSceneMode, detailFormData, actualPaymentAmount));
                 detail.setSchemaSnapshotJson(expenseDetailDesign.getSchemaJson() == null ? writeJson(defaultSchema()) : expenseDetailDesign.getSchemaJson());
                 detail.setFormDataJson(writeJson(detailFormData));
                 detail.setCreatedAt(LocalDateTime.now());
@@ -2231,7 +2237,7 @@ class AbstractExpenseDocumentSupport {
                 runtimeContext,
                 documentTitle,
                 resolveDocumentReason(template, formData),
-                resolveTotalAmount(formData)
+                resolveTotalAmount(formData, expenseDetails, template.getExpenseDetailModeDefault())
         );
     }
 
@@ -3173,7 +3179,7 @@ class AbstractExpenseDocumentSupport {
         if (currentUser != null && currentUser.getDeptId() != null) {
             context.put("submitterDeptId", currentUser.getDeptId());
         }
-        BigDecimal amount = resolveTotalAmount(formData);
+        BigDecimal amount = resolveTotalAmount(formData, expenseDetails, template.getExpenseDetailModeDefault());
         if (amount != null) {
             context.put("amount", amount);
         }
@@ -3785,21 +3791,12 @@ class AbstractExpenseDocumentSupport {
     /**
      * 解析TotalAmount。
      */
-    private BigDecimal resolveTotalAmount(Map<String, Object> formData) {
-        BigDecimal directAmount = toBigDecimal(formData.get("__totalAmount"));
-        if (directAmount != null) {
-            return directAmount;
-        }
-        for (Map.Entry<String, Object> entry : formData.entrySet()) {
-            String key = entry.getKey() == null ? "" : entry.getKey().toLowerCase();
-            if (key.contains("amount") || key.contains("money") || key.contains("閲戦")) {
-                BigDecimal amount = toBigDecimal(entry.getValue());
-                if (amount != null) {
-                    return amount;
-                }
-            }
-        }
-        return null;
+    private BigDecimal resolveTotalAmount(
+            Map<String, Object> formData,
+            List<ExpenseDetailInstanceDTO> expenseDetails,
+            String defaultBusinessSceneMode
+    ) {
+        return ExpenseAmountResolver.resolveDocumentTotalAmount(formData, expenseDetails, defaultBusinessSceneMode);
     }
 
     private String writeJson(Object value) {
@@ -4378,14 +4375,7 @@ class AbstractExpenseDocumentSupport {
         if (businessSceneMode != null) {
             normalized.put(FIELD_BUSINESS_SCENARIO, businessSceneMode);
         }
-        if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
-            if (Objects.equals(businessSceneMode, ENTERPRISE_MODE_PREPAY_UNBILLED)) {
-                normalized.remove(FIELD_INVOICE_AMOUNT);
-                normalized.remove(FIELD_INVOICE_ATTACHMENTS);
-            } else if (Objects.equals(businessSceneMode, ENTERPRISE_MODE_INVOICE_FULL_PAYMENT)) {
-                normalized.remove(FIELD_PENDING_WRITE_OFF_AMOUNT);
-            }
-        }
+        normalized.remove(FIELD_PENDING_WRITE_OFF_AMOUNT);
         return normalized;
     }
 
@@ -4439,12 +4429,17 @@ class AbstractExpenseDocumentSupport {
         return toBigDecimal(formData.get(FIELD_INVOICE_AMOUNT));
     }
 
-    private BigDecimal readPendingWriteOffAmountForStorage(String detailType, String businessSceneMode, Map<String, Object> formData) {
+    private BigDecimal readPendingWriteOffAmountForStorage(
+            String detailType,
+            String businessSceneMode,
+            Map<String, Object> formData,
+            BigDecimal actualPaymentAmount
+    ) {
         if (!Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)
                 || !Objects.equals(businessSceneMode, ENTERPRISE_MODE_PREPAY_UNBILLED)) {
             return null;
         }
-        return toBigDecimal(formData.get(FIELD_PENDING_WRITE_OFF_AMOUNT));
+        return ExpenseAmountResolver.resolvePrepayWriteOffAmount(formData, actualPaymentAmount);
     }
 
     /**

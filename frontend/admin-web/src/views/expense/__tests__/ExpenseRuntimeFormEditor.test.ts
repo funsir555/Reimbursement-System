@@ -1060,6 +1060,55 @@ describe('ExpenseRuntimeFormEditor', () => {
     })
   })
 
+  it('syncs invoiceAmount from OCR total but keeps manual overrides on later attachment changes', async () => {
+    mocks.expenseCreateApi.recognizeAttachmentOcr
+      .mockResolvedValueOnce({
+        data: {
+          status: 'SUCCESS',
+          totalAmount: '88.80'
+        }
+      })
+      .mockResolvedValueOnce({
+        data: {
+          status: 'SUCCESS',
+          totalAmount: '12.00'
+        }
+      })
+
+    const { wrapper, model, setModelValue } = mountEditor({ invoiceAttachments: [], invoiceAmount: '' }, [
+      createControlBlock('invoiceAmount', '发票金额', 'AMOUNT', {
+        systemFieldCode: 'INVOICE_AMOUNT'
+      }),
+      createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', {
+        maxCount: 30,
+        maxSizeMb: 10,
+        accept: '.pdf,.png,.jpg,.jpeg'
+      })
+    ])
+
+    await flushPromises()
+
+    wrapper.findComponent('[data-testid="upload"]').vm.$emit('change', {
+      raw: new File(['ok'], 'invoice-a.jpeg', { type: 'image/jpeg' })
+    })
+    await flushPromises()
+
+    expect(model.value.invoiceAmount).toBe('88.80')
+
+    setModelValue({
+      ...model.value,
+      invoiceAmount: '66.00'
+    })
+    await flushPromises()
+
+    wrapper.findComponent('[data-testid="upload"]').vm.$emit('change', {
+      raw: new File(['ok'], 'invoice-b.jpeg', { type: 'image/jpeg' })
+    })
+    await flushPromises()
+
+    expect(model.value.invoiceAmount).toBe('66.00')
+  })
+
   it('uses the unified account and outlet wording when validating vendor drafts', async () => {
     const { wrapper } = mountEditor({ paymentCompany: 'COMPANY-001', counterparty: '', payeeAccount: '' }, [
       createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
