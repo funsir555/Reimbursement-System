@@ -56,6 +56,8 @@ const PENDING_STATUS_VIEW: OcrStatusView = {
   fallbackMessage: '上传成功后会自动触发 OCR 识别'
 }
 
+const FAILED_STATUS_VIEW: OcrStatusView = OCR_STATUS_VIEW_MAP.FAILED!
+
 export function buildExpenseInvoicePreviewItems(
   options: BuildExpenseInvoicePreviewOptions
 ): ExpenseInvoicePreviewItem[] {
@@ -142,8 +144,8 @@ function buildExpenseInvoicePreviewItem(attachment: ExpenseAttachmentMeta, index
   const previewKind = resolvePreviewKind(attachment)
   const snapshot = normalizeOcrSnapshot(attachment.ocr)
   const statusView = resolveStatusView(snapshot?.status)
-  const totalAmount = toOptionalNumber(snapshot?.totalAmount)
-  const taxAmount = toOptionalNumber(snapshot?.taxAmount)
+  const totalAmount = toOptionalNumber(snapshot?.totalAmount) ?? null
+  const taxAmount = toOptionalNumber(snapshot?.taxAmount) ?? null
 
   return {
     id: attachment.attachmentId || `${attachment.fileName}-${index}`,
@@ -170,11 +172,11 @@ function buildExpenseInvoicePreviewItem(attachment: ExpenseAttachmentMeta, index
   }
 }
 
-function resolveStatusView(status?: string) {
+function resolveStatusView(status?: string): OcrStatusView {
   if (!status) {
     return PENDING_STATUS_VIEW
   }
-  return OCR_STATUS_VIEW_MAP[String(status).trim().toUpperCase()] || OCR_STATUS_VIEW_MAP.FAILED
+  return OCR_STATUS_VIEW_MAP[String(status).trim().toUpperCase()] ?? FAILED_STATUS_VIEW
 }
 
 function normalizeOcrSnapshot(value: unknown): ExpenseAttachmentMeta['ocr'] {
@@ -254,7 +256,7 @@ function firstNonBlank(...values: unknown[]) {
   return ''
 }
 
-function toOptionalNumber(...values: unknown[]) {
+function toOptionalNumber(...values: unknown[]): number | undefined {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return value
@@ -270,7 +272,7 @@ function toOptionalNumber(...values: unknown[]) {
       }
     }
   }
-  return null
+  return undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

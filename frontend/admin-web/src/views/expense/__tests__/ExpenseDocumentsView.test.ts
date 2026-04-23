@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseDocumentsView from '@/views/expense/ExpenseDocumentsView.vue'
 
 const mocks = vi.hoisted(() => ({
+  route: {
+    fullPath: '/expense/documents/query'
+  },
   router: {
     push: vi.fn()
   },
@@ -24,6 +27,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('vue-router', () => ({
+  useRoute: () => mocks.route,
   useRouter: () => mocks.router
 }))
 
@@ -32,9 +36,13 @@ vi.mock('@/api', () => ({
   asyncTaskApi: mocks.asyncTaskApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 vi.mock('@/utils/downloadCenter', () => ({
   openDownloadCenter: mocks.downloadCenter.openDownloadCenter
@@ -156,6 +164,7 @@ describe('ExpenseDocumentsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.clear()
+    mocks.route.fullPath = '/expense/documents/query'
     mocks.router.push.mockResolvedValue(undefined)
     mocks.expenseApi.queryDocuments.mockResolvedValue({
       data: [
@@ -372,7 +381,10 @@ describe('ExpenseDocumentsView', () => {
 
     vm.openDetail({ documentCode: 'DOC-001', no: 'DOC-001' })
 
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-001',
+      query: { returnTo: '/expense/documents/query' }
+    })
   })
 
   it('opens the existing document detail page on row double click', async () => {
@@ -380,7 +392,10 @@ describe('ExpenseDocumentsView', () => {
 
     await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-001"]').trigger('dblclick')
 
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-001',
+      query: { returnTo: '/expense/documents/query' }
+    })
   })
 
   it('submits export task with current filtered document codes', async () => {

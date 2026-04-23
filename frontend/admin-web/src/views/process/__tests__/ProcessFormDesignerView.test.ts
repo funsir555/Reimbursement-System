@@ -119,6 +119,28 @@ const InputStub = defineComponent({
   template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
+const SelectStub = defineComponent({
+  props: {
+    modelValue: {
+      type: [String, Number, Array],
+      default: ''
+    }
+  },
+  emits: ['update:modelValue'],
+  template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
+})
+
+const SwitchStub = defineComponent({
+  props: {
+    modelValue: {
+      type: Boolean,
+      default: false
+    }
+  },
+  emits: ['update:modelValue'],
+  template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />'
+})
+
 const FormItemStub = defineComponent({
   props: {
     label: {
@@ -223,8 +245,8 @@ async function mountView(options?: {
         'el-tooltip': TooltipStub,
         'el-tabs': SimpleContainer,
         'el-tab-pane': SimpleContainer,
-        'el-switch': true,
-        'el-select': SimpleContainer,
+        'el-switch': SwitchStub,
+        'el-select': SelectStub,
         'el-option': true,
         'el-input-number': true,
         'el-checkbox': true,
@@ -640,6 +662,138 @@ describe('ProcessFormDesignerView', () => {
     expect(mocks.elMessageBox.confirm).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="required-expense-detail-block-block-invoice-attachments"]').exists()).toBe(true)
     expect(wrapper.findAll('.form-block')).toHaveLength(2)
+  })
+
+  it('renders fixed business-scenario toggles instead of the generic option editor for enterprise details', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+
+    const wrapper = await mountView({
+      expenseDetailDesignDetail: {
+        detailType: 'ENTERPRISE_TRANSACTION',
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-business-scenario',
+              fieldKey: 'businessScenario',
+              label: '业务场景',
+              kind: 'CONTROL',
+              span: 1,
+              required: true,
+              defaultValue: '',
+              helpText: '',
+              props: {
+                controlType: 'SELECT',
+                locked: true,
+                systemFieldCode: 'BUSINESS_SCENARIO',
+                enabledSceneModes: ['INVOICE_FULL_PAYMENT', 'PREPAY_UNBILLED'],
+                options: [
+                  { label: '全额付款', value: 'INVOICE_FULL_PAYMENT' },
+                  { label: '预付未到票', value: 'PREPAY_UNBILLED' }
+                ]
+              },
+              permission: { fixedStages: {}, sceneOverrides: [] }
+            }
+          ]
+        }
+      }
+    })
+
+    expect(wrapper.find('[data-testid="business-scenario-config"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('全额付款')
+    expect(wrapper.text()).toContain('预付未到票')
+    expect(wrapper.text()).not.toContain('新增选项')
+    expect(wrapper.text()).not.toContain('静态选项会直接保存到 schema')
+  })
+
+  it('blocks disabling the last enabled business scenario', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+
+    const wrapper = await mountView({
+      expenseDetailDesignDetail: {
+        detailType: 'ENTERPRISE_TRANSACTION',
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-business-scenario',
+              fieldKey: 'businessScenario',
+              label: '业务场景',
+              kind: 'CONTROL',
+              span: 1,
+              required: true,
+              defaultValue: 'INVOICE_FULL_PAYMENT',
+              helpText: '',
+              props: {
+                controlType: 'SELECT',
+                locked: true,
+                systemFieldCode: 'BUSINESS_SCENARIO',
+                enabledSceneModes: ['INVOICE_FULL_PAYMENT'],
+                options: [
+                  { label: '全额付款', value: 'INVOICE_FULL_PAYMENT' }
+                ]
+              },
+              permission: { fixedStages: {}, sceneOverrides: [] }
+            }
+          ]
+        }
+      }
+    })
+
+    const switches = wrapper.findAll('[data-testid="business-scenario-config"] input[type="checkbox"]')
+    expect(switches).toHaveLength(2)
+
+    await switches[0]!.setValue(false)
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('至少保留一个业务场景')
+    expect(wrapper.findAll('el-option-stub')
+      .map((item) => item.attributes('value'))
+      .filter((value) => value?.includes('PAYMENT') || value?.includes('PREPAY'))).toEqual(['INVOICE_FULL_PAYMENT'])
+  })
+
+  it('keeps default-value options aligned with enabled business scenarios', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+
+    const wrapper = await mountView({
+      expenseDetailDesignDetail: {
+        detailType: 'ENTERPRISE_TRANSACTION',
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-business-scenario',
+              fieldKey: 'businessScenario',
+              label: '业务场景',
+              kind: 'CONTROL',
+              span: 1,
+              required: true,
+              defaultValue: 'PREPAY_UNBILLED',
+              helpText: '',
+              props: {
+                controlType: 'SELECT',
+                locked: true,
+                systemFieldCode: 'BUSINESS_SCENARIO',
+                enabledSceneModes: ['INVOICE_FULL_PAYMENT', 'PREPAY_UNBILLED'],
+                options: [
+                  { label: '全额付款', value: 'INVOICE_FULL_PAYMENT' },
+                  { label: '预付未到票', value: 'PREPAY_UNBILLED' }
+                ]
+              },
+              permission: { fixedStages: {}, sceneOverrides: [] }
+            }
+          ]
+        }
+      }
+    })
+
+    const switches = wrapper.findAll('[data-testid="business-scenario-config"] input[type="checkbox"]')
+    await switches[0]!.setValue(false)
+    await flushPromises()
+
+    expect(wrapper.findAll('el-option-stub')
+      .map((item) => item.attributes('value'))
+      .filter((value) => value?.includes('PAYMENT') || value?.includes('PREPAY'))).toEqual(['PREPAY_UNBILLED'])
   })
 
 })

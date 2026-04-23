@@ -6,6 +6,7 @@ import ExpensePaymentOrdersView from '@/views/expense/ExpensePaymentOrdersView.v
 const mocks = vi.hoisted(() => ({
   route: {
     path: '/expense/payment/orders',
+    fullPath: '/expense/payment/orders?tab=pending',
     query: { tab: 'pending' as string }
   },
   router: {
@@ -35,6 +36,7 @@ const mocks = vi.hoisted(() => ({
 
 mocks.route = reactive({
   path: '/expense/payment/orders',
+  fullPath: '/expense/payment/orders?tab=pending',
   query: { tab: 'pending' }
 })
 
@@ -47,10 +49,14 @@ vi.mock('@/api', () => ({
   expensePaymentApi: mocks.expensePaymentApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/money', () => ({
   formatMoney: (value: unknown) => Number(value || 0).toFixed(2)
@@ -198,6 +204,7 @@ describe('ExpensePaymentOrdersView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.route.path = '/expense/payment/orders'
+    mocks.route.fullPath = '/expense/payment/orders?tab=pending'
     mocks.route.query.tab = 'pending'
     mocks.router.resolve.mockImplementation(({ query }: { query?: Record<string, string> }) => ({
       href: `/expense/documents/print?documentCodes=${query?.documentCodes || ''}&source=${query?.source || ''}`
@@ -368,5 +375,19 @@ describe('ExpensePaymentOrdersView', () => {
     expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('查看')
     expect(wrapper.find('[data-testid="expense-payment-select-row-1"]').exists()).toBe(false)
+  })
+  it('opens document detail with the current workbench route as returnTo', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      openDetail: (row: { documentCode: string }) => void
+    }
+
+    vm.openDetail({ documentCode: 'DOC-PAY-001' })
+
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-document-detail',
+      params: { documentCode: 'DOC-PAY-001' },
+      query: { returnTo: '/expense/payment/orders?tab=pending' }
+    })
   })
 })

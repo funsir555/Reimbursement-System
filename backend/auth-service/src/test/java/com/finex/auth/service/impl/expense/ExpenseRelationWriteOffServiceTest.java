@@ -60,17 +60,28 @@ class ExpenseRelationWriteOffServiceTest {
 
     @Test
     void getDocumentPickerGroupsRelatedAndWriteoffDocumentsByAllowedTypes() {
-        ProcessDocumentInstance report = createApprovedDocument("DOC-REPORT-001", "report", "report-doc", BigDecimal.valueOf(1200), 1L);
-        ProcessDocumentInstance application = createApprovedDocument("DOC-APP-001", "application", "application-doc", BigDecimal.valueOf(300), 1L);
-        ProcessDocumentInstance contract = createApprovedDocument("DOC-CON-001", "contract", "contract-doc", BigDecimal.valueOf(5000), 1L);
-        ProcessDocumentInstance loan = createApprovedDocument("DOC-LOAN-001", "loan", "loan-doc", BigDecimal.valueOf(800), 1L);
+        ProcessDocumentInstance report = createDocument("DOC-REPORT-001", "report", "report-doc", BigDecimal.valueOf(1200), 1L, "PENDING_PAYMENT");
+        ProcessDocumentInstance application = createDocument("DOC-APP-001", "application", "application-doc", BigDecimal.valueOf(300), 1L, "PAYING");
+        ProcessDocumentInstance contract = createDocument("DOC-CON-001", "contract", "contract-doc", BigDecimal.valueOf(5000), 1L, "PAYMENT_COMPLETED");
+        ProcessDocumentInstance loan = createDocument("DOC-LOAN-001", "loan", "loan-doc", BigDecimal.valueOf(800), 1L, "PAYMENT_FINISHED");
+        ProcessDocumentInstance approvedReport = createDocument("DOC-REPORT-002", "report", "approved-report", BigDecimal.valueOf(520), 1L, "APPROVED");
+        ProcessDocumentInstance completedLoan = createDocument("DOC-LOAN-002", "loan", "completed-loan", BigDecimal.valueOf(900), 1L, "COMPLETED");
+        ProcessDocumentInstance otherUserReport = createDocument("DOC-REPORT-003", "report", "other-user-report", BigDecimal.valueOf(260), 2L, "PAYMENT_FINISHED");
         ProcessDocumentExpenseDetail prepayDetail = new ProcessDocumentExpenseDetail();
         prepayDetail.setDocumentCode("DOC-REPORT-001");
         prepayDetail.setBusinessSceneMode("PREPAY_UNBILLED");
         prepayDetail.setActualPaymentAmount(BigDecimal.valueOf(300));
         prepayDetail.setFormDataJson("{\"actualPaymentAmount\":300}");
 
-        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(report, application, contract, loan));
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(
+                report,
+                application,
+                contract,
+                loan,
+                approvedReport,
+                completedLoan,
+                otherUserReport
+        ));
         when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of(prepayDetail));
         when(processDocumentWriteOffMapper.selectList(any())).thenReturn(List.of());
 
@@ -81,6 +92,15 @@ class ExpenseRelationWriteOffServiceTest {
                 related.getGroups().stream().map(item -> item.getTemplateType()).toList());
         assertEquals(List.of("report", "loan"),
                 writeoff.getGroups().stream().map(item -> item.getTemplateType()).toList());
+        assertEquals(List.of(1, 1, 1, 1),
+                related.getGroups().stream().map(item -> item.getTotal()).toList());
+        assertEquals(List.of(1, 1),
+                writeoff.getGroups().stream().map(item -> item.getTotal()).toList());
+        assertEquals(List.of("DOC-REPORT-001", "DOC-APP-001", "DOC-CON-001", "DOC-LOAN-001"),
+                related.getGroups().stream()
+                        .flatMap(group -> group.getItems().stream())
+                        .map(item -> item.getDocumentCode())
+                        .toList());
         assertEquals(0, BigDecimal.valueOf(300).compareTo(writeoff.getGroups().get(0).getItems().get(0).getAvailableWriteOffAmount()));
         assertEquals(0, BigDecimal.valueOf(800).compareTo(writeoff.getGroups().get(1).getItems().get(0).getAvailableWriteOffAmount()));
     }
@@ -145,9 +165,11 @@ class ExpenseRelationWriteOffServiceTest {
                 "documentTitle", "loan-doc",
                 "writeOffAmount", 120
         )));
-        ProcessDocumentInstance relatedTarget = createApprovedDocument("DOC-APP-001", "application", "application-doc", BigDecimal.valueOf(300), 2L);
-        ProcessDocumentInstance writeoffTarget = createApprovedDocument("DOC-LOAN-001", "loan", "loan-doc", BigDecimal.valueOf(500), 2L);
+        ProcessDocumentInstance source = createApprovedDocument("DOC-SOURCE-001", "report", "source-doc", BigDecimal.valueOf(600), 2L);
+        ProcessDocumentInstance relatedTarget = createDocument("DOC-APP-001", "application", "application-doc", BigDecimal.valueOf(300), 2L, "PENDING_PAYMENT");
+        ProcessDocumentInstance writeoffTarget = createDocument("DOC-LOAN-001", "loan", "loan-doc", BigDecimal.valueOf(500), 2L, "PAYMENT_FINISHED");
 
+        when(processDocumentInstanceMapper.selectOne(any())).thenReturn(source);
         when(processDocumentRelationMapper.selectList(any())).thenReturn(List.of());
         when(processDocumentWriteOffMapper.selectList(any())).thenReturn(List.of(), List.of());
         when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(relatedTarget, writeoffTarget));
@@ -183,8 +205,10 @@ class ExpenseRelationWriteOffServiceTest {
                 "documentCode", "DOC-REPORT-001",
                 "writeOffAmount", 88
         )));
-        ProcessDocumentInstance reportTarget = createApprovedDocument("DOC-REPORT-001", "report", "report-doc", BigDecimal.valueOf(200), 2L);
+        ProcessDocumentInstance source = createApprovedDocument("DOC-SOURCE-001", "report", "source-doc", BigDecimal.valueOf(260), 2L);
+        ProcessDocumentInstance reportTarget = createDocument("DOC-REPORT-001", "report", "report-doc", BigDecimal.valueOf(200), 2L, "PAYMENT_COMPLETED");
 
+        when(processDocumentInstanceMapper.selectOne(any())).thenReturn(source);
         when(processDocumentRelationMapper.selectList(any())).thenReturn(List.of());
         when(processDocumentWriteOffMapper.selectList(any())).thenReturn(List.of(), List.of());
         when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(reportTarget));
@@ -196,6 +220,61 @@ class ExpenseRelationWriteOffServiceTest {
         );
 
         assertEquals("\u6838\u9500\u5355\u636e\u7c7b\u578b\u4e0d\u5728\u5f53\u524d\u7ec4\u4ef6\u5141\u8bb8\u8303\u56f4\u5185", exception.getMessage());
+        verify(processDocumentWriteOffMapper, never()).insert(any(ProcessDocumentWriteOff.class));
+    }
+
+    @Test
+    void syncDocumentBusinessRelationsRejectsRelatedTargetSubmittedByAnotherUser() throws Exception {
+        ProcessFormDesign formDesign = createFormDesignWithBlocks(List.of(
+                createBusinessComponentBlock("relatedDocs", "related-document", List.of("report", "application", "contract", "loan"))
+        ));
+        Map<String, Object> formData = new LinkedHashMap<>();
+        formData.put("relatedDocs", List.of(Map.of(
+                "documentCode", "DOC-APP-001",
+                "documentTitle", "application-doc"
+        )));
+        ProcessDocumentInstance source = createApprovedDocument("DOC-SOURCE-001", "report", "source-doc", BigDecimal.valueOf(300), 1L);
+        ProcessDocumentInstance relatedTarget = createDocument("DOC-APP-001", "application", "application-doc", BigDecimal.valueOf(200), 2L, "PAYMENT_FINISHED");
+
+        when(processDocumentInstanceMapper.selectOne(any())).thenReturn(source);
+        when(processDocumentRelationMapper.selectList(any())).thenReturn(List.of());
+        when(processDocumentWriteOffMapper.selectList(any())).thenReturn(List.of());
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(relatedTarget));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> service.syncDocumentBusinessRelations("DOC-SOURCE-001", formDesign, formData)
+        );
+
+        assertEquals("\u4ec5\u53ef\u5173\u8054\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e", exception.getMessage());
+        verify(processDocumentRelationMapper, never()).insert(any(ProcessDocumentRelation.class));
+    }
+
+    @Test
+    void syncDocumentBusinessRelationsRejectsWriteoffTargetOutsidePayableStatuses() throws Exception {
+        ProcessFormDesign formDesign = createFormDesignWithBlocks(List.of(
+                createBusinessComponentBlock("writeoffDocs", "writeoff-document", List.of("loan"))
+        ));
+        Map<String, Object> formData = new LinkedHashMap<>();
+        formData.put("writeoffDocs", List.of(Map.of(
+                "documentCode", "DOC-LOAN-001",
+                "writeOffAmount", 88
+        )));
+        ProcessDocumentInstance source = createApprovedDocument("DOC-SOURCE-001", "report", "source-doc", BigDecimal.valueOf(260), 2L);
+        ProcessDocumentInstance writeoffTarget = createDocument("DOC-LOAN-001", "loan", "loan-doc", BigDecimal.valueOf(200), 2L, "APPROVED");
+
+        when(processDocumentInstanceMapper.selectOne(any())).thenReturn(source);
+        when(processDocumentRelationMapper.selectList(any())).thenReturn(List.of());
+        when(processDocumentWriteOffMapper.selectList(any())).thenReturn(List.of(), List.of());
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(writeoffTarget));
+        when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of());
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> service.syncDocumentBusinessRelations("DOC-SOURCE-001", formDesign, formData)
+        );
+
+        assertEquals("\u4ec5\u53ef\u9009\u62e9\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e\u8fdb\u884c\u6838\u9500", exception.getMessage());
         verify(processDocumentWriteOffMapper, never()).insert(any(ProcessDocumentWriteOff.class));
     }
 
@@ -375,12 +454,23 @@ class ExpenseRelationWriteOffServiceTest {
             BigDecimal totalAmount,
             Long submitterUserId
     ) {
+        return createDocument(documentCode, templateType, documentTitle, totalAmount, submitterUserId, "COMPLETED");
+    }
+
+    private ProcessDocumentInstance createDocument(
+            String documentCode,
+            String templateType,
+            String documentTitle,
+            BigDecimal totalAmount,
+            Long submitterUserId,
+            String status
+    ) {
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode(documentCode);
         instance.setTemplateType(templateType);
         instance.setDocumentTitle(documentTitle);
         instance.setTemplateName(documentTitle + "-template");
-        instance.setStatus("COMPLETED");
+        instance.setStatus(status);
         instance.setSubmitterUserId(submitterUserId);
         instance.setTotalAmount(totalAmount);
         instance.setFinishedAt(LocalDateTime.of(2026, 4, 8, 18, 0));

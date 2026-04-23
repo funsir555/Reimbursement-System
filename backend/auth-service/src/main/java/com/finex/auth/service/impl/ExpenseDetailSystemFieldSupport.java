@@ -66,6 +66,7 @@ public class ExpenseDetailSystemFieldSupport {
     private static final String PLACEHOLDER_AMOUNT = "\u8bf7\u8f93\u5165\u91d1\u989d";
     private static final String LABEL_FULL_PAYMENT = "\u5168\u989d\u4ed8\u6b3e";
     private static final String LABEL_PREPAY_UNBILLED = "\u9884\u4ed8\u672a\u5230\u7968";
+    private static final String PROP_ENABLED_SCENE_MODES = "enabledSceneModes";
 
     private static final Map<String, String> SYSTEM_FIELD_KEYS = Map.of(
             SYSTEM_EXPENSE_TYPE, FIELD_EXPENSE_TYPE_CODE,
@@ -293,6 +294,9 @@ public class ExpenseDetailSystemFieldSupport {
             block.put("defaultValue", defaultValue);
         }
         block.put("permission", readPermission(rawBlock.get("permission")));
+        if (Objects.equals(systemFieldCode, SYSTEM_BUSINESS_SCENARIO)) {
+            normalizeBusinessScenarioBlock(block, rawBlock, detailType);
+        }
         return block;
     }
 
@@ -332,9 +336,9 @@ public class ExpenseDetailSystemFieldSupport {
         if (Objects.equals(systemFieldCode, SYSTEM_BUSINESS_SCENARIO)) {
             props.put("controlType", CONTROL_TYPE_SELECT);
             props.put("placeholder", PLACEHOLDER_BUSINESS_SCENARIO);
-            props.put("options", Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)
-                    ? List.of(option(LABEL_FULL_PAYMENT, MODE_INVOICE_FULL_PAYMENT), option(LABEL_PREPAY_UNBILLED, MODE_PREPAY_UNBILLED))
-                    : List.of(option(LABEL_FULL_PAYMENT, MODE_INVOICE_FULL_PAYMENT)));
+            List<String> enabledSceneModes = normalizeEnabledSceneModes(null, detailType, null);
+            props.put(PROP_ENABLED_SCENE_MODES, enabledSceneModes);
+            props.put("options", buildBusinessScenarioOptions(enabledSceneModes));
             return props;
         }
         if (Objects.equals(systemFieldCode, SYSTEM_DETAIL_AMOUNT)
@@ -466,6 +470,84 @@ public class ExpenseDetailSystemFieldSupport {
             return SYSTEM_DETAIL_AMOUNT;
         }
         return null;
+    }
+
+    private void normalizeBusinessScenarioBlock(Map<String, Object> block, Map<String, Object> rawBlock, String detailType) {
+        Map<String, Object> props = copyMap(block.get("props"));
+        Map<String, Object> rawProps = copyMap(rawBlock.get("props"));
+        List<String> enabledSceneModes = normalizeEnabledSceneModes(
+                rawProps.get(PROP_ENABLED_SCENE_MODES),
+                detailType,
+                rawProps.get("options")
+        );
+        props.put(PROP_ENABLED_SCENE_MODES, enabledSceneModes);
+        props.put("options", buildBusinessScenarioOptions(enabledSceneModes));
+        block.put("props", props);
+
+        Object defaultValue = sanitizeBusinessScenarioDefaultValue(block.get("defaultValue"), enabledSceneModes, detailType);
+        if (defaultValue == null) {
+            block.put("defaultValue", null);
+        } else {
+            block.put("defaultValue", defaultValue);
+        }
+    }
+
+    private List<String> normalizeEnabledSceneModes(Object rawValue, String detailType, Object legacyOptions) {
+        if (!Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
+            return List.of(MODE_INVOICE_FULL_PAYMENT);
+        }
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        appendSceneModes(result, rawValue);
+        if (result.isEmpty() && legacyOptions instanceof Collection<?> options) {
+            for (Object option : options) {
+                if (option instanceof Map<?, ?> map) {
+                    appendSceneModes(result, map.get("value"));
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            return List.of(MODE_INVOICE_FULL_PAYMENT, MODE_PREPAY_UNBILLED);
+        }
+        List<String> ordered = new ArrayList<>();
+        if (result.contains(MODE_INVOICE_FULL_PAYMENT)) {
+            ordered.add(MODE_INVOICE_FULL_PAYMENT);
+        }
+        if (result.contains(MODE_PREPAY_UNBILLED)) {
+            ordered.add(MODE_PREPAY_UNBILLED);
+        }
+        return ordered.isEmpty() ? List.of(MODE_INVOICE_FULL_PAYMENT, MODE_PREPAY_UNBILLED) : ordered;
+    }
+
+    private void appendSceneModes(Set<String> result, Object rawValue) {
+        if (rawValue instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                appendSceneModes(result, item);
+            }
+            return;
+        }
+        String normalized = trimToNull(rawValue == null ? null : String.valueOf(rawValue));
+        if (Objects.equals(normalized, MODE_INVOICE_FULL_PAYMENT) || Objects.equals(normalized, MODE_PREPAY_UNBILLED)) {
+            result.add(normalized);
+        }
+    }
+
+    private List<Map<String, Object>> buildBusinessScenarioOptions(List<String> enabledSceneModes) {
+        List<Map<String, Object>> options = new ArrayList<>();
+        if (enabledSceneModes.contains(MODE_INVOICE_FULL_PAYMENT)) {
+            options.add(option(LABEL_FULL_PAYMENT, MODE_INVOICE_FULL_PAYMENT));
+        }
+        if (enabledSceneModes.contains(MODE_PREPAY_UNBILLED)) {
+            options.add(option(LABEL_PREPAY_UNBILLED, MODE_PREPAY_UNBILLED));
+        }
+        return options;
+    }
+
+    private Object sanitizeBusinessScenarioDefaultValue(Object rawValue, List<String> enabledSceneModes, String detailType) {
+        if (!Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
+            return MODE_INVOICE_FULL_PAYMENT;
+        }
+        String normalized = trimToNull(rawValue == null ? null : String.valueOf(rawValue));
+        return normalized != null && enabledSceneModes.contains(normalized) ? normalized : null;
     }
 
     private boolean shouldDropLegacyAmountBlock(Map<String, Object> block) {

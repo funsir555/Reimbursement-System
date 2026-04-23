@@ -4,17 +4,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseApprovalActionDTO;
 import com.finex.auth.dto.ExpenseBankCallbackDTO;
 import com.finex.auth.dto.ExpenseBankLinkConfigVO;
+import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.entity.FinanceVendor;
 import com.finex.auth.entity.PmBankPaymentRecord;
+import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
+import com.finex.auth.entity.SystemBankBranchCatalog;
 import com.finex.auth.entity.SystemCompanyBankAccount;
+import com.finex.auth.entity.UserBankAccount;
 import com.finex.auth.mapper.FinanceVendorMapper;
 import com.finex.auth.mapper.PmBankPaymentRecordMapper;
+import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
+import com.finex.auth.mapper.SystemBankBranchCatalogMapper;
 import com.finex.auth.mapper.SystemCompanyBankAccountMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
@@ -24,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,7 +49,9 @@ class ExpensePaymentDomainSupportTest {
     @Mock private ExpenseRelationWriteOffService expenseRelationWriteOffService;
     @Mock private PmBankPaymentRecordMapper pmBankPaymentRecordMapper;
     @Mock private ProcessDocumentTaskMapper processDocumentTaskMapper;
+    @Mock private ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     @Mock private ProcessDocumentInstanceMapper processDocumentInstanceMapper;
+    @Mock private SystemBankBranchCatalogMapper systemBankBranchCatalogMapper;
     @Mock private SystemCompanyBankAccountMapper systemCompanyBankAccountMapper;
     @Mock private SystemCompanyMapper systemCompanyMapper;
     @Mock private FinanceVendorMapper financeVendorMapper;
@@ -55,29 +64,14 @@ class ExpensePaymentDomainSupportTest {
     @Test
     void listPaymentOrdersBuildsItemsLocally() {
         ExpensePaymentDomainSupport support = newSupport();
-        ProcessDocumentTask task = new ProcessDocumentTask();
-        task.setId(20L);
-        task.setDocumentCode("DOC-001");
-        task.setNodeType("PAYMENT");
-        task.setNodeName("Pay");
-        task.setAssigneeUserId(1L);
+        ProcessDocumentTask task = paymentTask(20L, "DOC-001");
+        ProcessDocumentInstance instance = paymentInstance("DOC-001", "Taxi", "PENDING_PAYMENT");
 
-        ProcessDocumentInstance instance = new ProcessDocumentInstance();
-        instance.setDocumentCode("DOC-001");
-        instance.setDocumentTitle("Taxi");
-        instance.setTemplateName("Expense");
-        instance.setStatus("PENDING_PAYMENT");
-
-        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
-        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
-        when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
-        when(enrichmentData.metadata("DOC-001")).thenReturn(metadata);
+        stubListPaymentOrdersBase(task, instance);
         when(metadata.submitterDeptName()).thenReturn("Finance");
         when(metadata.paymentDate()).thenReturn("2026-04-10");
         when(metadata.paymentCompanyName()).thenReturn("HQ");
         when(metadata.counterpartyName()).thenReturn("供应商A");
-        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of());
-        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
 
         List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PENDING_PAYMENT");
 
@@ -86,51 +80,102 @@ class ExpensePaymentDomainSupportTest {
         assertEquals("HQ", actual.get(0).getPaymentCompanyName());
         assertEquals("供应商A", actual.get(0).getPayeeOrCounterpartyName());
         assertEquals("待回单", actual.get(0).getReceiptStatusLabel());
+        assertEquals(BigDecimal.ZERO, actual.get(0).getActualPaymentAmount());
     }
 
     @Test
-    void listPaymentOrdersResolvesVendorReceiverInfo() {
+    void listPaymentOrdersResolvesVendorReceiverInfoAndExportFields() {
         ExpensePaymentDomainSupport support = newSupport();
-        ProcessDocumentTask task = new ProcessDocumentTask();
-        task.setId(21L);
-        task.setDocumentCode("DOC-002");
-        task.setNodeType("PAYMENT");
-        task.setNodeName("Pay");
-        task.setAssigneeUserId(1L);
-
-        ProcessDocumentInstance instance = new ProcessDocumentInstance();
-        instance.setDocumentCode("DOC-002");
-        instance.setDocumentTitle("Hotel");
-        instance.setTemplateName("Expense");
-        instance.setStatus("PENDING_PAYMENT");
+        ProcessDocumentTask task = paymentTask(21L, "DOC-002");
+        ProcessDocumentInstance instance = paymentInstance("DOC-002", "Hotel", "PENDING_PAYMENT");
         instance.setFormSchemaSnapshotJson("""
-                {"layoutMode":"TWO_COLUMN","blocks":[{"kind":"BUSINESS_COMPONENT","fieldKey":"payeeAccountField","props":{"componentCode":"payee-account"}}]}
+                {"layoutMode":"TWO_COLUMN","blocks":[
+                  {"kind":"BUSINESS_COMPONENT","fieldKey":"payeeAccountField","props":{"componentCode":"payee-account"}},
+                  {"kind":"BUSINESS_COMPONENT","fieldKey":"bankSummaryField","props":{"componentCode":"bank-push-summary"}}
+                ]}
                 """);
         instance.setFormDataJson("""
-                {"payeeAccountField":{"sourceType":"VENDOR","value":"VENDOR-001"}}
+                {"payeeAccountField":{"sourceType":"VENDOR","value":"VENDOR-001"},"bankSummaryField":"差旅付款摘要"}
                 """);
 
         FinanceVendor vendor = new FinanceVendor();
         vendor.setCVenCode("VENDOR-001");
+        vendor.setCompanyId("C1");
         vendor.setCVenName("上海供应商");
         vendor.setCVenAccount("6222000012345678");
         vendor.setCVenBank("招商银行");
+        vendor.setReceiptBranchCode("BR-001");
         vendor.setReceiptBranchName("招商银行上海分行");
         vendor.setReceiptAccountName("上海供应商");
+        vendor.setReceiptBankProvince("错误省份");
+        vendor.setReceiptBankCity("错误城市");
 
-        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
-        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
-        when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
-        when(enrichmentData.metadata("DOC-002")).thenReturn(metadata);
-        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of());
-        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
+        SystemBankBranchCatalog branch = new SystemBankBranchCatalog();
+        branch.setBranchCode("BR-001");
+        branch.setProvince("上海");
+        branch.setCity("上海市");
+
+        ProcessDocumentExpenseDetail detail1 = new ProcessDocumentExpenseDetail();
+        detail1.setDocumentCode("DOC-002");
+        detail1.setActualPaymentAmount(new BigDecimal("30.50"));
+        ProcessDocumentExpenseDetail detail2 = new ProcessDocumentExpenseDetail();
+        detail2.setDocumentCode("DOC-002");
+        detail2.setActualPaymentAmount(new BigDecimal("19.50"));
+
+        stubListPaymentOrdersBase(task, instance);
+        when(metadata.paymentCompanyId()).thenReturn("C1");
         when(financeVendorMapper.selectOne(any())).thenReturn(vendor);
+        when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of(detail1, detail2));
+        when(systemBankBranchCatalogMapper.selectList(any())).thenReturn(List.of(branch));
 
         List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PENDING_PAYMENT");
 
-        assertEquals("上海供应商", actual.get(0).getPayeeOrCounterpartyName());
-        assertEquals("6222000012345678", actual.get(0).getPayeeAccountNo());
-        assertEquals("招商银行上海分行", actual.get(0).getPayeeBankName());
+        assertEquals(1, actual.size());
+        ExpensePaymentOrderVO item = actual.get(0);
+        assertEquals("上海供应商", item.getPayeeOrCounterpartyName());
+        assertEquals("6222000012345678", item.getPayeeAccountNo());
+        assertEquals("招商银行上海分行", item.getPayeeBankName());
+        assertEquals("上海", item.getPayeeBankProvince());
+        assertEquals("上海市", item.getPayeeBankCity());
+        assertEquals("差旅付款摘要", item.getBankPushSummary());
+        assertEquals(new BigDecimal("50.00"), item.getActualPaymentAmount());
+    }
+
+    @Test
+    void listPaymentOrdersFallsBackToPersonalAccountInfo() {
+        ExpensePaymentDomainSupport support = newSupport();
+        ProcessDocumentTask task = paymentTask(22L, "DOC-USER");
+        ProcessDocumentInstance instance = paymentInstance("DOC-USER", "Travel", "PENDING_PAYMENT");
+        instance.setFormSchemaSnapshotJson("""
+                {"layoutMode":"TWO_COLUMN","blocks":[
+                  {"kind":"BUSINESS_COMPONENT","fieldKey":"payeeAccountField","props":{"componentCode":"payee-account"}}
+                ]}
+                """);
+        instance.setFormDataJson("""
+                {"payeeAccountField":{"sourceType":"USER","value":"USER_ACCOUNT:88"}}
+                """);
+
+        UserBankAccount account = new UserBankAccount();
+        account.setId(88L);
+        account.setAccountName("李四");
+        account.setAccountNo("621700008888");
+        account.setBranchName("中国银行北京东城支行");
+        account.setBankName("中国银行");
+        account.setBranchCode("NO-CATALOG");
+        account.setProvince("北京");
+        account.setCity("北京市");
+
+        stubListPaymentOrdersBase(task, instance);
+        when(userBankAccountMapper.selectById(88L)).thenReturn(account);
+
+        List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PENDING_PAYMENT");
+
+        ExpensePaymentOrderVO item = actual.get(0);
+        assertEquals("李四", item.getPayeeOrCounterpartyName());
+        assertEquals("621700008888", item.getPayeeAccountNo());
+        assertEquals("中国银行北京东城支行", item.getPayeeBankName());
+        assertEquals("北京", item.getPayeeBankProvince());
+        assertEquals("北京市", item.getPayeeBankCity());
     }
 
     @Test
@@ -159,29 +204,15 @@ class ExpensePaymentDomainSupportTest {
     @Test
     void listPaymentOrdersResolvesReceiptStatusLabelsToChinese() {
         ExpensePaymentDomainSupport support = newSupport();
-        ProcessDocumentTask task = new ProcessDocumentTask();
-        task.setId(22L);
-        task.setDocumentCode("DOC-RECEIPT");
-        task.setNodeType("PAYMENT");
-        task.setNodeName("Pay");
-        task.setAssigneeUserId(1L);
-
-        ProcessDocumentInstance instance = new ProcessDocumentInstance();
-        instance.setDocumentCode("DOC-RECEIPT");
-        instance.setDocumentTitle("Receipt");
-        instance.setTemplateName("Expense");
-        instance.setStatus("PENDING_PAYMENT");
+        ProcessDocumentTask task = paymentTask(23L, "DOC-RECEIPT");
+        ProcessDocumentInstance instance = paymentInstance("DOC-RECEIPT", "Receipt", "PENDING_PAYMENT");
 
         PmBankPaymentRecord record = new PmBankPaymentRecord();
         record.setDocumentCode("DOC-RECEIPT");
         record.setReceiptStatus("FAILED");
 
-        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
-        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
-        when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
-        when(enrichmentData.metadata("DOC-RECEIPT")).thenReturn(metadata);
+        stubListPaymentOrdersBase(task, instance);
         when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(record));
-        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
 
         List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PENDING_PAYMENT");
 
@@ -191,18 +222,8 @@ class ExpensePaymentDomainSupportTest {
     @Test
     void listPaymentOrdersTreatsManualPaidWithoutReceiptAsPendingReceipt() {
         ExpensePaymentDomainSupport support = newSupport();
-        ProcessDocumentTask task = new ProcessDocumentTask();
-        task.setId(23L);
-        task.setDocumentCode("DOC-MANUAL");
-        task.setNodeType("PAYMENT");
-        task.setNodeName("Pay");
-        task.setAssigneeUserId(1L);
-
-        ProcessDocumentInstance instance = new ProcessDocumentInstance();
-        instance.setDocumentCode("DOC-MANUAL");
-        instance.setDocumentTitle("Manual");
-        instance.setTemplateName("Expense");
-        instance.setStatus("PAYMENT_COMPLETED");
+        ProcessDocumentTask task = paymentTask(24L, "DOC-MANUAL");
+        ProcessDocumentInstance instance = paymentInstance("DOC-MANUAL", "Manual", "PAYMENT_COMPLETED");
 
         PmBankPaymentRecord record = new PmBankPaymentRecord();
         record.setDocumentCode("DOC-MANUAL");
@@ -210,12 +231,8 @@ class ExpensePaymentDomainSupportTest {
         record.setReceiptStatus("RECEIVED");
         record.setReceiptAttachmentId(null);
 
-        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
-        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
-        when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
-        when(enrichmentData.metadata("DOC-MANUAL")).thenReturn(metadata);
+        stubListPaymentOrdersBase(task, instance);
         when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(record));
-        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
 
         List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PAYMENT_COMPLETED");
 
@@ -245,7 +262,7 @@ class ExpensePaymentDomainSupportTest {
         when(systemCompanyMapper.selectList(any())).thenReturn(List.of());
         when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of(latestRecord));
 
-        List<com.finex.auth.dto.ExpenseBankLinkSummaryVO> actual = support.listBankLinks();
+        List<ExpenseBankLinkSummaryVO> actual = support.listBankLinks();
 
         assertEquals(1, actual.size());
         assertEquals("已启用", actual.get(0).getDirectConnectStatusLabel());
@@ -315,7 +332,7 @@ class ExpensePaymentDomainSupportTest {
         instance.setStatus("PAYMENT_COMPLETED");
 
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
-        com.finex.auth.entity.PmBankPaymentRecord record = new com.finex.auth.entity.PmBankPaymentRecord();
+        PmBankPaymentRecord record = new PmBankPaymentRecord();
         record.setId(1L);
         record.setTaskId(40L);
         record.setDocumentCode("DOC-004");
@@ -338,6 +355,35 @@ class ExpensePaymentDomainSupportTest {
         verify(pmBankPaymentRecordMapper).updateById(record);
     }
 
+    private void stubListPaymentOrdersBase(ProcessDocumentTask task, ProcessDocumentInstance instance) {
+        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(instance));
+        when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of());
+        when(expenseSummaryAssembler.buildSummaryEnrichmentData(any())).thenReturn(enrichmentData);
+        when(enrichmentData.metadata(task.getDocumentCode())).thenReturn(metadata);
+        when(pmBankPaymentRecordMapper.selectList(any())).thenReturn(List.of());
+        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
+    }
+
+    private ProcessDocumentTask paymentTask(Long id, String documentCode) {
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(id);
+        task.setDocumentCode(documentCode);
+        task.setNodeType("PAYMENT");
+        task.setNodeName("Pay");
+        task.setAssigneeUserId(1L);
+        return task;
+    }
+
+    private ProcessDocumentInstance paymentInstance(String documentCode, String title, String status) {
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode(documentCode);
+        instance.setDocumentTitle(title);
+        instance.setTemplateName("Expense");
+        instance.setStatus(status);
+        return instance;
+    }
+
     private ExpensePaymentDomainSupport newSupport() {
         return new ExpensePaymentDomainSupport(
                 expenseDocumentReadSupport,
@@ -346,7 +392,9 @@ class ExpensePaymentDomainSupportTest {
                 expenseRelationWriteOffService,
                 pmBankPaymentRecordMapper,
                 processDocumentTaskMapper,
+                processDocumentExpenseDetailMapper,
                 processDocumentInstanceMapper,
+                systemBankBranchCatalogMapper,
                 systemCompanyBankAccountMapper,
                 systemCompanyMapper,
                 financeVendorMapper,

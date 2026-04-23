@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ProcessCustomArchiveSummary } from '@/api'
 import {
+  BUSINESS_SCENARIO_MODE_FULL,
+  BUSINESS_SCENARIO_MODE_PREPAY,
   BUSINESS_COMPONENT_DEFINITIONS,
   CONTROL_PALETTE_ITEMS,
   buildBusinessComponentPaletteItems,
@@ -11,8 +13,10 @@ import {
   getBlockQuickActionStates,
   insertBlockAt,
   moveBlock,
+  normalizeBusinessScenarioEnabledModes,
   normalizeFormSchema,
   removeBlock,
+  resolveBusinessScenarioOptionItems,
   updateBlock
 } from '@/views/process/formDesignerHelper'
 
@@ -225,5 +229,81 @@ describe('formDesignerHelper', () => {
       'paired-right': 'hidden',
       'tail-left': 'expandable'
     })
+  })
+
+  it('normalizes enterprise business-scenario blocks to fixed enabled modes and drops invalid defaults', () => {
+    const normalized = normalizeFormSchema({
+      layoutMode: 'TWO_COLUMN',
+      blocks: [
+        {
+          blockId: 'scenario-block',
+          fieldKey: 'businessScenario',
+          kind: 'CONTROL',
+          label: '业务场景',
+          span: 1,
+          required: true,
+          defaultValue: 'INVALID_MODE',
+          helpText: '',
+          props: {
+            controlType: 'SELECT',
+            systemFieldCode: 'BUSINESS_SCENARIO',
+            enabledSceneModes: ['PREPAY_UNBILLED']
+          },
+          permission: createDefaultFieldPermission()
+        }
+      ]
+    }, {
+      detailType: 'ENTERPRISE_TRANSACTION'
+    })
+
+    expect(normalized.blocks[0].props.enabledSceneModes).toEqual([BUSINESS_SCENARIO_MODE_PREPAY])
+    expect(normalized.blocks[0].props.options).toEqual([
+      { label: '预付未到票', value: BUSINESS_SCENARIO_MODE_PREPAY }
+    ])
+    expect(normalized.blocks[0].defaultValue).toBeUndefined()
+  })
+
+  it('forces normal reimbursement business-scenario blocks back to full-payment only', () => {
+    const normalized = normalizeFormSchema({
+      layoutMode: 'TWO_COLUMN',
+      blocks: [
+        {
+          blockId: 'scenario-block',
+          fieldKey: 'businessScenario',
+          kind: 'CONTROL',
+          label: '业务场景',
+          span: 1,
+          required: true,
+          defaultValue: BUSINESS_SCENARIO_MODE_PREPAY,
+          helpText: '',
+          props: {
+            controlType: 'SELECT',
+            systemFieldCode: 'BUSINESS_SCENARIO',
+            enabledSceneModes: [BUSINESS_SCENARIO_MODE_PREPAY]
+          },
+          permission: createDefaultFieldPermission()
+        }
+      ]
+    }, {
+      detailType: 'NORMAL_REIMBURSEMENT'
+    })
+
+    expect(normalized.blocks[0].props.enabledSceneModes).toEqual([BUSINESS_SCENARIO_MODE_FULL])
+    expect(normalized.blocks[0].props.options).toEqual([
+      { label: '全额付款', value: BUSINESS_SCENARIO_MODE_FULL }
+    ])
+    expect(normalized.blocks[0].defaultValue).toBe(BUSINESS_SCENARIO_MODE_FULL)
+  })
+
+  it('derives business-scenario options from enabled modes and legacy options fallback', () => {
+    expect(normalizeBusinessScenarioEnabledModes(undefined, 'ENTERPRISE_TRANSACTION', [
+      { label: '预付未到票', value: BUSINESS_SCENARIO_MODE_PREPAY }
+    ])).toEqual([BUSINESS_SCENARIO_MODE_PREPAY])
+
+    expect(resolveBusinessScenarioOptionItems(undefined, 'ENTERPRISE_TRANSACTION', [
+      { label: '全额付款', value: BUSINESS_SCENARIO_MODE_FULL }
+    ])).toEqual([
+      { label: '全额付款', value: BUSINESS_SCENARIO_MODE_FULL }
+    ])
   })
 })

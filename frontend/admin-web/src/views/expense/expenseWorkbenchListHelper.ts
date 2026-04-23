@@ -47,6 +47,7 @@ export interface ExpenseWorkbenchFilters {
 export type ExpenseWorkbenchPageKey = 'list' | 'approval' | 'documents' | 'paymentOrders'
 
 export type ExpenseWorkbenchColumnWidthMap = Partial<Record<ExpenseWorkbenchColumnKey, number>>
+export type ExpenseWorkbenchStatFilterKey = '' | 'all' | 'pending' | 'pending-payment' | 'draft'
 
 export const EXPENSE_WORKBENCH_COLUMNS: ExpenseWorkbenchColumnDefinition[] = [
   { key: 'documentCode', label: '单据编号', width: 180 },
@@ -369,6 +370,52 @@ export function resolveCurrentNodeName(row: ExpenseWorkbenchRow) {
 
 export function resolveDocumentStatusLabel(row: ExpenseWorkbenchRow) {
   return row.documentStatusLabel || getOptionalStringField(row, 'status') || ''
+}
+
+export function resolveExpenseWorkbenchStatusCode(row: ExpenseWorkbenchRow) {
+  const rawStatus = [row.documentStatus, getOptionalStringField(row, 'status'), row.documentStatusLabel]
+    .find((item) => typeof item === 'string' && item.trim())
+    ?.trim()
+
+  switch (rawStatus) {
+    case '草稿':
+      return 'DRAFT'
+    case '已驳回':
+      return 'REJECTED'
+    case '审批中':
+      return 'PENDING_APPROVAL'
+    case '待支付':
+      return 'PENDING_PAYMENT'
+    case '支付中':
+      return 'PAYING'
+    case '已支付':
+      return 'PAYMENT_COMPLETED'
+    case '已完成':
+      return 'PAYMENT_FINISHED'
+    case '流程异常':
+      return 'EXCEPTION'
+    case '支付异常':
+      return 'PAYMENT_EXCEPTION'
+    default:
+      return rawStatus || ''
+  }
+}
+
+export function matchesExpenseWorkbenchStatFilter(row: ExpenseWorkbenchRow, filterKey: ExpenseWorkbenchStatFilterKey) {
+  const statusCode = resolveExpenseWorkbenchStatusCode(row)
+  switch (filterKey) {
+    case '':
+    case 'all':
+      return true
+    case 'pending':
+      return statusCode === 'PENDING_APPROVAL'
+    case 'pending-payment':
+      return statusCode === 'PENDING_PAYMENT'
+    case 'draft':
+      return statusCode === 'DRAFT' || statusCode === 'REJECTED'
+    default:
+      return true
+  }
 }
 
 export function getExpenseWorkbenchStatusType(status: string) {

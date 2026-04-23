@@ -64,4 +64,13 @@ public class ExpensePaymentOrderVO {
     private String payeeAccountNo;
 
     private String payeeBankName;
+
+    @MoneyValue
+    private BigDecimal actualPaymentAmount;
+
+    private String bankPushSummary;
+
+    private String payeeBankProvince;
+
+    private String payeeBankCity;
 }

@@ -39,6 +39,8 @@ class ExpenseDocumentTemplateDomainSupport {
 
     private static final String NODE_TYPE_APPROVAL = "APPROVAL";
     private static final String TASK_STATUS_PENDING = "PENDING";
+    private static final String DOCUMENT_STATUS_DRAFT = "DRAFT";
+    private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String SPECIAL_ALLOW_EDIT_FORM_MODULE = "ALLOW_EDIT_FORM_MODULE";
     private static final String SPECIAL_ALLOW_EDIT_PAY_ACCOUNT = "ALLOW_EDIT_PAY_ACCOUNT";
 
@@ -122,7 +124,23 @@ class ExpenseDocumentTemplateDomainSupport {
     ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode) {
         ProcessDocumentInstance instance = readSupport.requireDocument(documentCode);
         readSupport.requireSubmitter(instance, userId);
+        ensureEditableDocumentStatus(instance);
         return buildEditContext(userId, instance, null, "RESUBMIT");
+    }
+
+    private void ensureEditableDocumentStatus(ProcessDocumentInstance instance) {
+        String status = trimToNull(instance == null ? null : instance.getStatus());
+        if (!Objects.equals(status, DOCUMENT_STATUS_DRAFT) && !Objects.equals(status, DOCUMENT_STATUS_REJECTED)) {
+            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u662f\u53ef\u7f16\u8f91\u72b6\u6001");
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     /**

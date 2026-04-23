@@ -1368,6 +1368,7 @@
 
 
             v-model="formData[block.fieldKey]"
+            :ref="(instance) => setCounterpartySelectRef(block.fieldKey, instance)"
 
 
 
@@ -1395,12 +1396,11 @@
 
 
 
+            
 
 
 
-
-            reserve-keyword
-
+            
 
 
 
@@ -1408,6 +1408,8 @@
 
 
             clearable
+            :persistent="false"
+            :teleported="false"
 
 
 
@@ -1448,6 +1450,7 @@
 
 
             :disabled="isCounterpartyDisabled(block)"
+            @change="handleCounterpartySelection(block.fieldKey, $event)"
 
 
 
@@ -1471,7 +1474,7 @@
 
 
 
-              v-for="item in vendorOptions"
+              v-for="item in visibleVendorOptions"
 
 
 
@@ -1699,7 +1702,7 @@
 
 
 
-
+            
 
 
 
@@ -1904,6 +1907,7 @@
 
 
             v-model="formData[block.fieldKey]"
+            :ref="(instance) => setPayeeAccountSelectRef(block.fieldKey, instance)"
 
 
 
@@ -1943,8 +1947,7 @@
 
 
 
-            reserve-keyword
-
+            
 
 
 
@@ -1952,6 +1955,8 @@
 
 
             clearable
+            :persistent="false"
+            :teleported="false"
 
 
 
@@ -2023,7 +2028,7 @@
 
 
 
-              v-for="item in payeeAccountOptions"
+              v-for="item in visiblePayeeAccountOptions"
 
 
 
@@ -2695,7 +2700,8 @@
 
 
 
-                @click="openDocumentPicker(block)"
+                @mousedown.capture="prepareDocumentPickerOpen"
+                @click.stop.prevent="openDocumentPicker(block)"
 
 
 
@@ -2951,7 +2957,7 @@
 
 
 
-                    绉婚櫎
+                    删除
 
 
 
@@ -3952,7 +3958,7 @@
 
 
 
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 
 
 
@@ -4248,6 +4254,19 @@ type DocumentRelationType = 'RELATED' | 'WRITEOFF'
 
 
 type RuntimeDocumentRecord = ExpenseRelatedDocumentValue & Partial<ExpenseWriteOffDocumentValue>
+
+type FocusManagedSelectInstance = {
+  blur?: () => void
+  handleClose?: () => void
+  handleQueryChange?: (value: string) => void
+  toggleMenu?: () => void
+  expanded?: boolean
+  query?: string
+  previousQuery?: string
+  states?: { inputValue?: string }
+  inputRef?: { blur?: () => void; input?: HTMLInputElement | null } | null
+  $el?: Element | null
+}
 
 
 
@@ -4838,6 +4857,10 @@ const payeeAccountOptions = ref<ExpenseCreatePayeeAccountOption[]>([])
 
 
 const payeeAccountOptionsLoading = ref(false)
+const counterpartySelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
+const payeeAccountSelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
+const suppressLinkedFieldReset = ref(false)
+let linkedFieldResetSyncToken = 0
 
 
 
@@ -5233,6 +5256,22 @@ const payeeAccountLinkageMode = computed<PayeeAccountLinkageMode>(() => resolveP
 
 
 
+const visibleVendorOptions = computed(() => mergeCurrentVendorOption(vendorOptions.value))
+
+
+
+
+
+
+
+const visiblePayeeAccountOptions = computed(() => mergeCurrentPayeeAccountOption(payeeAccountOptions.value))
+
+
+
+
+
+
+
 const counterpartyPlaceholder = computed(() => (
 
 
@@ -5481,6 +5520,15 @@ watch(
 
 )
 
+watch(
+  () => formData.value,
+  () => {
+    syncLinkedLookupsFromExternalState()
+  },
+  { immediate: true }
+)
+
+
 
 
 
@@ -5543,6 +5591,11 @@ watch(
 
 
 
+    if (suppressLinkedFieldReset.value) {
+      void loadVendorOptions('')
+      void loadPayeeAccountOptions('', { settleAfterLoad: true })
+      return
+    }
     clearCounterpartySelections()
 
 
@@ -5839,15 +5892,17 @@ watch(
 
 
 
+    if (suppressLinkedFieldReset.value) {
+      void loadPayeeAccountOptions('', { settleAfterLoad: true })
+      return
+    }
+    settleLinkedSelectInteractions()
+
     clearPayeeAccountSelections()
 
+    void nextTick(() => settleLinkedSelectInteractions())
 
-
-
-
-
-
-    void loadPayeeAccountOptions('')
+    void loadPayeeAccountOptions('', { settleAfterLoad: true })
 
 
 
@@ -5983,7 +6038,7 @@ function isVisible(block: ProcessFormDesignBlock) {
 
 
 
-  return isExpenseDetailBlockVisible(block, formData.value, props.detailType, props.defaultBusinessScenario)
+  return isExpenseDetailBlockVisible(block, formData.value, props.detailType, props.defaultBusinessScenario, props.schema)
 
 
 
@@ -6410,6 +6465,119 @@ function resolveSelectedCounterpartyCode() {
 
 
 
+
+
+function syncLinkedLookupsFromExternalState() {
+  const syncToken = ++linkedFieldResetSyncToken
+  suppressLinkedFieldReset.value = true
+  void nextTick(() => {
+    if (syncToken !== linkedFieldResetSyncToken) {
+      return
+    }
+    if (effectivePaymentCompanyId.value) {
+      void loadVendorOptions('')
+    } else {
+      vendorOptions.value = []
+    }
+    void loadPayeeAccountOptions('', { settleAfterLoad: true })
+    void nextTick(() => {
+      if (syncToken === linkedFieldResetSyncToken) {
+        suppressLinkedFieldReset.value = false
+      }
+    })
+  })
+}
+
+function resolveCurrentCounterpartyOption() {
+  const selectedCode = selectedCounterpartyCode.value
+  if (!selectedCode) {
+    return null
+  }
+  const existing = vendorOptions.value.find((item) => item.value === selectedCode)
+  if (existing) {
+    return existing
+  }
+  for (const fieldKey of counterpartyFieldKeys.value) {
+    const rawValue = formData.value[fieldKey]
+    const value = resolveLookupValue(rawValue)
+    if (!value || value !== selectedCode) {
+      continue
+    }
+    const label = isRecord(rawValue)
+      ? firstNonEmptyString(rawValue.label, rawValue.name, rawValue.cVenName, rawValue.cVenAbbName, rawValue.value, rawValue.code)
+      : value
+    return {
+      value: selectedCode,
+      label: label || selectedCode,
+      cVenCode: selectedCode,
+      cVenName: label || selectedCode,
+      cVenAbbName: label || selectedCode
+    }
+  }
+  return {
+    value: selectedCode,
+    label: selectedCode,
+    cVenCode: selectedCode,
+    cVenName: selectedCode,
+    cVenAbbName: selectedCode
+  }
+}
+
+function mergeCurrentVendorOption(options: ExpenseCreateVendorOption[]) {
+  const current = resolveCurrentCounterpartyOption()
+  if (!current || options.some((item) => item.value === current.value)) {
+    return options
+  }
+  return [current, ...options]
+}
+
+function resolveCurrentPayeeAccountSnapshot(): RuntimePayeeAccountSnapshot | null {
+  for (const fieldKey of payeeAccountFieldKeys.value) {
+    const rawValue = formData.value[fieldKey]
+    const value = resolveLookupValue(rawValue)
+    if (!value) {
+      continue
+    }
+    if (isRecord(rawValue)) {
+      return {
+        value,
+        label: firstNonEmptyString(rawValue.label, rawValue.accountName, rawValue.ownerName, rawValue.value) || value,
+        sourceType: firstNonEmptyString(rawValue.sourceType) || '',
+        ownerCode: firstNonEmptyString(rawValue.ownerCode) || undefined,
+        ownerName: firstNonEmptyString(rawValue.ownerName) || undefined,
+        accountName: firstNonEmptyString(rawValue.accountName) || undefined,
+        accountNoMasked: firstNonEmptyString(rawValue.accountNoMasked) || undefined
+      }
+    }
+    return {
+      value,
+      label: value,
+      sourceType: ''
+    }
+  }
+  return null
+}
+
+function buildPayeeAccountOptionFromSnapshot(snapshot: RuntimePayeeAccountSnapshot): ExpenseCreatePayeeAccountOption {
+  return {
+    value: snapshot.value,
+    label: snapshot.label || snapshot.value,
+    sourceType: snapshot.sourceType || '',
+    ownerCode: snapshot.ownerCode || '',
+    ownerName: snapshot.ownerName || snapshot.label || snapshot.value,
+    accountName: snapshot.accountName,
+    accountNoMasked: snapshot.accountNoMasked,
+    secondaryLabel: firstNonEmptyString(snapshot.accountName, snapshot.accountNoMasked) || undefined
+  }
+}
+
+function mergeCurrentPayeeAccountOption(options: ExpenseCreatePayeeAccountOption[]) {
+  const current = resolveCurrentPayeeAccountSnapshot()
+  if (!current || options.some((item) => item.value === current.value)) {
+    return options
+  }
+  return [buildPayeeAccountOptionFromSnapshot(current), ...options]
+}
 
 function resolvePayeeAccountLinkageMode(): PayeeAccountLinkageMode {
 
@@ -6851,6 +7019,109 @@ function buildPayeeAccountSnapshot(option: ExpenseCreatePayeeAccountOption): Run
 
 
 
+function clearActiveFieldInteraction() {
+  if (typeof document === 'undefined') {
+    return
+  }
+  const activeElement = document.activeElement
+  if (activeElement instanceof HTMLElement) {
+    activeElement.blur()
+  }
+}
+
+function setCounterpartySelectRef(fieldKey: string, instance: unknown) {
+  counterpartySelectRefs.value[fieldKey] = instance && typeof instance === 'object'
+    ? instance as FocusManagedSelectInstance
+    : null
+}
+
+function setPayeeAccountSelectRef(fieldKey: string, instance: unknown) {
+  payeeAccountSelectRefs.value[fieldKey] = instance && typeof instance === 'object'
+    ? instance as FocusManagedSelectInstance
+    : null
+}
+
+function clearManagedSelectQuery(instance: FocusManagedSelectInstance | null | undefined) {
+  if (!instance) {
+    return
+  }
+  if (typeof instance.handleQueryChange === 'function') {
+    instance.handleQueryChange('')
+  }
+  if (typeof instance.query === 'string') {
+    instance.query = ''
+  }
+  if (typeof instance.previousQuery === 'string') {
+    instance.previousQuery = ''
+  }
+  if (instance.states && typeof instance.states === 'object' && 'inputValue' in instance.states) {
+    instance.states.inputValue = ''
+  }
+  const inputElement = resolveManagedSelectInputElement(instance)
+  if (inputElement) {
+    inputElement.value = ''
+  }
+}
+
+function resolveManagedSelectInputElement(instance: FocusManagedSelectInstance | null | undefined) {
+  if (!instance) {
+    return null
+  }
+  if (instance.inputRef?.input instanceof HTMLInputElement) {
+    return instance.inputRef.input
+  }
+  if (instance.$el instanceof HTMLElement) {
+    const inputElement = instance.$el.querySelector('input')
+    if (inputElement instanceof HTMLInputElement) {
+      return inputElement
+    }
+  }
+  return null
+}
+
+function closeManagedSelect(instance: FocusManagedSelectInstance | null | undefined) {
+  if (!instance) {
+    return
+  }
+  clearManagedSelectQuery(instance)
+  if (typeof instance.handleClose === 'function') {
+    instance.handleClose()
+  } else if (instance.expanded && typeof instance.toggleMenu === 'function') {
+    instance.toggleMenu()
+  }
+  const inputElement = resolveManagedSelectInputElement(instance)
+  if (inputElement) {
+    inputElement.blur()
+    inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  }
+  if (instance.inputRef && typeof instance.inputRef.blur === 'function') {
+    instance.inputRef.blur()
+  }
+  if (typeof instance.blur === 'function') {
+    instance.blur()
+  }
+}
+
+function settleLinkedSelectInteractions() {
+  Object.values(counterpartySelectRefs.value).forEach((instance) => closeManagedSelect(instance))
+  Object.values(payeeAccountSelectRefs.value).forEach((instance) => closeManagedSelect(instance))
+  clearActiveFieldInteraction()
+}
+
+function prepareDocumentPickerOpen() {
+    if (suppressLinkedFieldReset.value) {
+      void loadPayeeAccountOptions('', { settleAfterLoad: true })
+      return
+    }
+  settleLinkedSelectInteractions()
+}
+
+function handleCounterpartySelection(fieldKey: string, value: string | '' | null | undefined) {
+  formData.value[fieldKey] = value || ''
+  settleLinkedSelectInteractions()
+  void nextTick(() => settleLinkedSelectInteractions())
+}
+
 function handlePayeeSelection(fieldKey: string, value: RuntimePayeeSnapshot | '' | null | undefined) {
 
 
@@ -7283,6 +7554,7 @@ function documentRecords(block: ProcessFormDesignBlock) {
 
 
 function openDocumentPicker(block: ProcessFormDesignBlock) {
+  prepareDocumentPickerOpen()
   documentPickerDialog.visible = true
   documentPickerDialog.fieldKey = block.fieldKey
   documentPickerDialog.relationType = documentRelationType(block)
@@ -7300,7 +7572,7 @@ function openDocumentPicker(block: ProcessFormDesignBlock) {
     documentPickerDialog.itemsByCode[item.documentCode] = cloneDocumentRecord(item)
   })
 
-  void loadDocumentPicker()
+  void nextTick(() => loadDocumentPicker())
 }
 
 function closeDocumentPicker() {
@@ -9161,7 +9433,7 @@ async function loadPayeeOptions(keyword: string) {
 
 
 
-async function loadPayeeAccountOptions(keyword: string) {
+async function loadPayeeAccountOptions(keyword: string, options?: { settleAfterLoad?: boolean }) {
 
 
 
@@ -9186,6 +9458,9 @@ async function loadPayeeAccountOptions(keyword: string) {
 
 
       payeeAccountOptions.value = []
+      if (options?.settleAfterLoad) {
+        settleLinkedSelectInteractions()
+      }
 
 
 
@@ -9322,6 +9597,10 @@ async function loadPayeeAccountOptions(keyword: string) {
 
 
     payeeAccountOptionsLoading.value = false
+    if (options?.settleAfterLoad) {
+      settleLinkedSelectInteractions()
+      void nextTick(() => settleLinkedSelectInteractions())
+    }
 
 
 

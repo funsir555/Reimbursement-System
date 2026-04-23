@@ -229,7 +229,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Clock,
@@ -281,6 +281,7 @@ type RejectTargetOption = {
   isSubmitter?: boolean
 }
 
+const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const exporting = ref(false)
@@ -460,7 +461,10 @@ function handleHeaderDragEnd(
 }
 
 function openDetail(documentCode: string) {
-  void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+  void router.push({
+    path: `/expense/documents/${encodeURIComponent(documentCode)}`,
+    query: route.fullPath ? { returnTo: route.fullPath } : {}
+  })
 }
 
 function handleRowDblClick(row: ExpenseApprovalPendingItem) {

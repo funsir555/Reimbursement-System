@@ -19,6 +19,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,6 +52,7 @@ class ExpenseDocumentTemplateDomainSupportTest {
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-1");
         instance.setTemplateCode("TPL-1");
+        instance.setStatus("DRAFT");
         instance.setFormDataJson("{}");
         ExpenseCreateTemplateDetailVO templateDetail = new ExpenseCreateTemplateDetailVO();
         templateDetail.setTemplateCode("TPL-1");
@@ -78,6 +80,24 @@ class ExpenseDocumentTemplateDomainSupportTest {
         assertEquals("trip", actual.getFormData().get("reason"));
         assertEquals(1, actual.getExpenseDetails().size());
         assertSame(runtimeDetail, actual.getExpenseDetails().get(0));
+        verify(readSupport).requireSubmitter(instance, 1L);
+    }
+
+    @Test
+    void getDocumentEditContextRejectsNonEditableStatuses() {
+        ExpenseDocumentTemplateDomainSupport domainSupport = newSupport();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-9");
+        instance.setTemplateCode("TPL-9");
+        instance.setStatus("PENDING_APPROVAL");
+        when(readSupport.requireDocument("DOC-9")).thenReturn(instance);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> domainSupport.getDocumentEditContext(1L, "DOC-9")
+        );
+
+        assertEquals("当前单据不是可编辑状态", error.getMessage());
         verify(readSupport).requireSubmitter(instance, 1L);
     }
 

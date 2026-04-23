@@ -214,6 +214,84 @@ class ExpenseDetailSystemFieldSupportTest {
         assertEquals(ExpenseDetailSystemFieldSupport.SYSTEM_INVOICE_ATTACHMENTS, props.get("systemFieldCode"));
     }
 
+    @Test
+    void normalizeSchemaUsesFixedEnabledSceneModesAndClearsInvalidEnterpriseDefault() {
+        Map<String, Object> schema = Map.of(
+                "layoutMode", "TWO_COLUMN",
+                "blocks", List.of(
+                        Map.of(
+                                "blockId", "scenario-block",
+                                "fieldKey", ExpenseDetailSystemFieldSupport.FIELD_BUSINESS_SCENARIO,
+                                "kind", "CONTROL",
+                                "label", "业务场景",
+                                "defaultValue", "INVALID_MODE",
+                                "props", Map.of(
+                                        "systemFieldCode", ExpenseDetailSystemFieldSupport.SYSTEM_BUSINESS_SCENARIO,
+                                        "enabledSceneModes", List.of(ExpenseDetailSystemFieldSupport.MODE_PREPAY_UNBILLED)
+                                )
+                        )
+                )
+        );
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> blocks = (List<Map<String, Object>>) support.normalizeSchema(
+                schema,
+                ExpenseDetailSystemFieldSupport.DETAIL_TYPE_ENTERPRISE
+        ).get("blocks");
+
+        Map<String, Object> scenarioBlock = blocks.stream()
+                .filter(block -> ExpenseDetailSystemFieldSupport.FIELD_BUSINESS_SCENARIO.equals(block.get("fieldKey")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> props = (Map<String, Object>) scenarioBlock.get("props");
+        assertEquals(List.of(ExpenseDetailSystemFieldSupport.MODE_PREPAY_UNBILLED), props.get("enabledSceneModes"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> options = (List<Map<String, Object>>) props.get("options");
+        assertEquals(List.of(ExpenseDetailSystemFieldSupport.MODE_PREPAY_UNBILLED),
+                options.stream().map(item -> String.valueOf(item.get("value"))).collect(Collectors.toList()));
+        assertEquals(null, scenarioBlock.get("defaultValue"));
+    }
+
+    @Test
+    void normalizeSchemaForcesNormalReimbursementToFullPaymentOnly() {
+        Map<String, Object> schema = Map.of(
+                "layoutMode", "TWO_COLUMN",
+                "blocks", List.of(
+                        Map.of(
+                                "blockId", "scenario-block",
+                                "fieldKey", ExpenseDetailSystemFieldSupport.FIELD_BUSINESS_SCENARIO,
+                                "kind", "CONTROL",
+                                "label", "业务场景",
+                                "defaultValue", ExpenseDetailSystemFieldSupport.MODE_PREPAY_UNBILLED,
+                                "props", Map.of(
+                                        "systemFieldCode", ExpenseDetailSystemFieldSupport.SYSTEM_BUSINESS_SCENARIO,
+                                        "enabledSceneModes", List.of(ExpenseDetailSystemFieldSupport.MODE_PREPAY_UNBILLED)
+                                )
+                        )
+                )
+        );
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> blocks = (List<Map<String, Object>>) support.normalizeSchema(
+                schema,
+                ExpenseDetailSystemFieldSupport.DETAIL_TYPE_NORMAL
+        ).get("blocks");
+
+        Map<String, Object> scenarioBlock = blocks.stream()
+                .filter(block -> ExpenseDetailSystemFieldSupport.FIELD_BUSINESS_SCENARIO.equals(block.get("fieldKey")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> props = (Map<String, Object>) scenarioBlock.get("props");
+        assertEquals(List.of(ExpenseDetailSystemFieldSupport.MODE_INVOICE_FULL_PAYMENT), props.get("enabledSceneModes"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> options = (List<Map<String, Object>>) props.get("options");
+        assertEquals(List.of(ExpenseDetailSystemFieldSupport.MODE_INVOICE_FULL_PAYMENT),
+                options.stream().map(item -> String.valueOf(item.get("value"))).collect(Collectors.toList()));
+        assertEquals(ExpenseDetailSystemFieldSupport.MODE_INVOICE_FULL_PAYMENT, scenarioBlock.get("defaultValue"));
+    }
+
     private Map<String, Object> systemBlock(String blockId, String fieldKey) {
         return Map.of(
                 "blockId", blockId,

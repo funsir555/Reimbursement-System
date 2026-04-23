@@ -67,15 +67,18 @@ public final class ExpenseAmountResolver {
             String defaultBusinessScenario
     ) {
         Map<String, Object> safeFormData = detailFormData == null ? Collections.emptyMap() : detailFormData;
-        BigDecimal actualPaymentAmount = toBigDecimal(safeFormData.get(FIELD_ACTUAL_PAYMENT_AMOUNT));
-        if (actualPaymentAmount != null) {
-            return actualPaymentAmount;
-        }
         String businessScenario = resolveBusinessScenario(
                 detailType,
                 safeFormData.get(FIELD_BUSINESS_SCENARIO),
                 defaultBusinessScenario
         );
+        if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE) && businessScenario == null) {
+            return null;
+        }
+        BigDecimal actualPaymentAmount = toBigDecimal(safeFormData.get(FIELD_ACTUAL_PAYMENT_AMOUNT));
+        if (actualPaymentAmount != null) {
+            return actualPaymentAmount;
+        }
         BigDecimal detailAmount = toBigDecimal(safeFormData.get(FIELD_DETAIL_AMOUNT));
         BigDecimal invoiceAmount = toBigDecimal(safeFormData.get(FIELD_INVOICE_AMOUNT));
         if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
@@ -142,14 +145,16 @@ public final class ExpenseAmountResolver {
             return MODE_INVOICE_FULL_PAYMENT;
         }
         String normalizedMode = trimToNull(rawMode == null ? null : String.valueOf(rawMode));
-        if (normalizedMode == null) {
-            normalizedMode = trimToNull(defaultBusinessScenario);
+        if (Objects.equals(normalizedMode, MODE_PREPAY_UNBILLED)
+                || Objects.equals(normalizedMode, MODE_INVOICE_FULL_PAYMENT)) {
+            return normalizedMode;
         }
-        if (!Objects.equals(normalizedMode, MODE_PREPAY_UNBILLED)
-                && !Objects.equals(normalizedMode, MODE_INVOICE_FULL_PAYMENT)) {
-            return MODE_PREPAY_UNBILLED;
+        normalizedMode = trimToNull(defaultBusinessScenario);
+        if (Objects.equals(normalizedMode, MODE_PREPAY_UNBILLED)
+                || Objects.equals(normalizedMode, MODE_INVOICE_FULL_PAYMENT)) {
+            return normalizedMode;
         }
-        return normalizedMode;
+        return null;
     }
 
     private static BigDecimal toBigDecimal(Object value) {

@@ -183,6 +183,8 @@ class AbstractExpenseDocumentSupport {
     private static final String WRITEOFF_SOURCE_LOAN = "LOAN";
     private static final String WRITEOFF_SOURCE_PREPAY_REPORT = "PREPAY_REPORT";
     private static final String DASHBOARD_WRITEOFF_SOURCE_FIELD_KEY = "dashboard-writeoff";
+    private static final String MESSAGE_RELATED_DOCUMENT_SCOPE_RESTRICTED = "\u4ec5\u53ef\u5173\u8054\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e";
+    private static final String MESSAGE_WRITEOFF_DOCUMENT_SCOPE_RESTRICTED = "\u4ec5\u53ef\u9009\u62e9\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e\u8fdb\u884c\u6838\u9500";
 
     private static final String NODE_TYPE_APPROVAL = "APPROVAL";
     private static final String NODE_TYPE_CC = "CC";
@@ -214,6 +216,7 @@ class AbstractExpenseDocumentSupport {
     private static final String DOCUMENT_STATUS_PAYMENT_COMPLETED = "PAYMENT_COMPLETED";
     private static final String DOCUMENT_STATUS_PAYMENT_FINISHED = "PAYMENT_FINISHED";
     private static final String DOCUMENT_STATUS_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
+    private static final String MESSAGE_DOCUMENT_VIEW_FORBIDDEN = "\u4f60\u65e0\u6743\u67e5\u770b\u8be5\u5355\u636e";
 
     private static final String BANK_PROVIDER_CMB = "CMB";
     private static final String BANK_CHANNEL_CMB_CLOUD = "CMB_CLOUD";
@@ -846,9 +849,7 @@ class AbstractExpenseDocumentSupport {
     @Transactional(rollbackFor = Exception.class)
     ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
-        if (!allowCrossView && !Objects.equals(instance.getSubmitterUserId(), userId)) {
-            throw new IllegalStateException("Current user cannot view this document");
-        }
+        assertCanViewDocument(instance, userId, allowCrossView);
         return buildDocumentDetail(instance);
     }
 
@@ -857,9 +858,7 @@ class AbstractExpenseDocumentSupport {
      */
     ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
-        if (!allowCrossView && !Objects.equals(instance.getSubmitterUserId(), userId)) {
-            throw new IllegalStateException("Current user cannot view this expense detail");
-        }
+        assertCanViewDocument(instance, userId, allowCrossView);
         ProcessDocumentExpenseDetail detail = requireExpenseDetail(documentCode, detailNo);
         Map<String, Object> parentSchema = readMap(instance.getFormSchemaSnapshotJson());
         Map<String, Object> parentFormData = readFormData(instance.getFormDataJson());
@@ -1125,7 +1124,7 @@ class AbstractExpenseDocumentSupport {
         detail.setCurrentNodeKey(instance.getCurrentNodeKey());
         detail.setCurrentNodeName(instance.getCurrentNodeName());
         detail.setCurrentTaskType(instance.getCurrentTaskType());
-        detail.setSubmittedAt(formatTime(instance.getCreatedAt()));
+        detail.setSubmittedAt(formatTime(resolveDisplaySubmittedAt(instance)));
         detail.setFinishedAt(formatTime(instance.getFinishedAt()));
         long snapshotStartedAt = System.nanoTime();
         Map<String, Object> templateSnapshot = readMap(instance.getTemplateSnapshotJson());
@@ -1580,6 +1579,8 @@ class AbstractExpenseDocumentSupport {
         if (trimToNull(documentCode) == null || formDesign == null) {
             return;
         }
+        ProcessDocumentInstance source = requireDocument(documentCode);
+        Long sourceSubmitterUserId = source.getSubmitterUserId();
         voidActiveRelations(documentCode);
         voidPendingWriteOffs(documentCode);
 
@@ -1623,7 +1624,12 @@ class AbstractExpenseDocumentSupport {
         LocalDateTime now = LocalDateTime.now();
 
         for (RelatedDocumentSelection selection : relatedSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "\u5173\u8054\u5355\u636e");
+            ProcessDocumentInstance target = requireRelationSelectableTargetDocument(
+                    targetDocumentMap,
+                    selection.documentCode(),
+                    sourceSubmitterUserId,
+                    MESSAGE_RELATED_DOCUMENT_SCOPE_RESTRICTED
+            );
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
                 throw new IllegalStateException("\u5173\u8054\u5355\u636e\u7c7b\u578b\u4e0e\u5f53\u524d\u7ec4\u4ef6\u914d\u7f6e\u4e0d\u5339\u914d\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9");
@@ -1642,7 +1648,12 @@ class AbstractExpenseDocumentSupport {
         }
 
         for (WriteOffSelection selection : writeOffSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "\u6838\u9500\u5355\u636e");
+            ProcessDocumentInstance target = requireRelationSelectableTargetDocument(
+                    targetDocumentMap,
+                    selection.documentCode(),
+                    sourceSubmitterUserId,
+                    MESSAGE_WRITEOFF_DOCUMENT_SCOPE_RESTRICTED
+            );
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
                 throw new IllegalStateException("\u6838\u9500\u5355\u636e\u7c7b\u578b\u4e0e\u5f53\u524d\u7ec4\u4ef6\u914d\u7f6e\u4e0d\u5339\u914d\uff0c\u8bf7\u91cd\u65b0\u9009\u62e9");
@@ -1896,6 +1907,21 @@ class AbstractExpenseDocumentSupport {
         return result;
     }
 
+    private ProcessDocumentInstance requireRelationSelectableTargetDocument(
+            Map<String, ProcessDocumentInstance> targetDocumentMap,
+            String documentCode,
+            Long submitterUserId,
+            String invalidMessage
+    ) {
+        ProcessDocumentInstance target = targetDocumentMap.get(documentCode);
+        if (target == null
+                || !Objects.equals(target.getSubmitterUserId(), submitterUserId)
+                || !isRelationSelectableStatus(target.getStatus())) {
+            throw new IllegalStateException(invalidMessage);
+        }
+        return target;
+    }
+
     private ProcessDocumentInstance requireApprovedTargetDocument(
             Map<String, ProcessDocumentInstance> targetDocumentMap,
             String documentCode,
@@ -2016,6 +2042,10 @@ class AbstractExpenseDocumentSupport {
                         template.getExpenseDetailModeDefault()
                 );
                 String businessSceneMode = resolveBusinessSceneModeForInstance(detailType, template, expenseDetail, detailFormData);
+                if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE) && businessSceneMode == null) {
+                    String detailName = firstNonBlank(expenseDetail.getDetailTitle(), expenseDetail.getDetailNo(), "\u8d39\u7528\u660e\u7ec6 " + (index + 1));
+                    throw new IllegalArgumentException(detailName + "\u672a\u9009\u62e9\u4e1a\u52a1\u573a\u666f\uff0c\u8bf7\u5148\u8865\u5145\u540e\u518d\u63d0\u4ea4");
+                }
                 ProcessDocumentExpenseDetail detail = new ProcessDocumentExpenseDetail();
                 detail.setDocumentCode(documentCode);
                 detail.setDetailNo(firstNonBlank(expenseDetail.getDetailNo(), buildExpenseDetailNo(documentCode, index + 1)));
@@ -2322,9 +2352,10 @@ class AbstractExpenseDocumentSupport {
         summary.setDocumentStatus(instance.getStatus());
         summary.setDocumentStatusLabel(statusLabel);
         summary.setAmount(defaultDecimal(instance.getTotalAmount()));
-        summary.setDate(instance.getCreatedAt() == null ? "" : instance.getCreatedAt().format(DATE_FORMATTER));
+        LocalDateTime displaySubmittedAt = resolveDisplaySubmittedAt(instance);
+        summary.setDate(displaySubmittedAt == null ? "" : displaySubmittedAt.format(DATE_FORMATTER));
         summary.setStatus(statusLabel);
-        summary.setSubmittedAt(formatTime(instance.getCreatedAt()));
+        summary.setSubmittedAt(formatTime(displaySubmittedAt));
         summary.setPaymentDate(metadata.paymentDate());
         summary.setPaymentCompanyName(metadata.paymentCompanyName());
         summary.setPayeeName(metadata.payeeName());
@@ -2358,7 +2389,7 @@ class AbstractExpenseDocumentSupport {
         item.setStatus(task.getStatus());
         item.setDocumentStatus(instance == null ? null : instance.getStatus());
         item.setDocumentStatusLabel(instance == null ? null : resolveStatusLabel(instance.getStatus()));
-        item.setSubmittedAt(instance == null ? null : formatTime(instance.getCreatedAt()));
+        item.setSubmittedAt(instance == null ? null : formatTime(resolveDisplaySubmittedAt(instance)));
         item.setPaymentDate(metadata.paymentDate());
         item.setPaymentCompanyName(metadata.paymentCompanyName());
         item.setPayeeName(metadata.payeeName());
@@ -3027,9 +3058,31 @@ class AbstractExpenseDocumentSupport {
     }
 
     void assertCanViewDocument(ProcessDocumentInstance instance, Long userId, boolean allowCrossView) {
-        if (!allowCrossView && !Objects.equals(instance.getSubmitterUserId(), userId)) {
-            throw new IllegalStateException("Current user cannot view this document");
+        if (Objects.equals(instance.getSubmitterUserId(), userId)) {
+            return;
         }
+        if (Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT) || !allowCrossView) {
+            throw new IllegalStateException(MESSAGE_DOCUMENT_VIEW_FORBIDDEN);
+        }
+    }
+
+    private LocalDateTime resolveDisplaySubmittedAt(ProcessDocumentInstance instance) {
+        if (instance == null) {
+            return null;
+        }
+        if (Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
+            return instance.getUpdatedAt() == null ? instance.getCreatedAt() : instance.getUpdatedAt();
+        }
+        ProcessDocumentActionLog latestSubmitLog = processDocumentActionLogMapper.selectOne(
+                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
+                        .eq(ProcessDocumentActionLog::getDocumentCode, instance.getDocumentCode())
+                        .in(ProcessDocumentActionLog::getActionType, List.of(LOG_SUBMIT, LOG_RESUBMIT))
+                        .orderByDesc(ProcessDocumentActionLog::getCreatedAt, ProcessDocumentActionLog::getId)
+                        .last("LIMIT 1")
+        );
+        return latestSubmitLog == null || latestSubmitLog.getCreatedAt() == null
+                ? instance.getCreatedAt()
+                : latestSubmitLog.getCreatedAt();
     }
 
     void requireSubmitter(ProcessDocumentInstance instance, Long userId) {
@@ -3560,8 +3613,6 @@ class AbstractExpenseDocumentSupport {
                 targetNodeKey = null;
             } else if (specialSettings.contains("DIRECT_REACH_AFTER_ANY_REJECT")) {
                 resumeNodeKey = rejectedByNodeKey;
-            } else {
-                resumeNodeKey = targetNodeKey;
             }
         } else if (specialSettings.contains("DIRECT_REACH_AFTER_RESUBMIT")) {
             resumeNodeKey = rejectedByNodeKey;
@@ -4297,6 +4348,14 @@ class AbstractExpenseDocumentSupport {
                 || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
     }
 
+    private boolean isRelationSelectableStatus(String status) {
+        String normalized = trimToNull(status);
+        return DOCUMENT_STATUS_PENDING_PAYMENT.equals(normalized)
+                || DOCUMENT_STATUS_PAYING.equals(normalized)
+                || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
+                || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
+    }
+
     /**
      * 解析StatusLabel。
      */
@@ -4347,7 +4406,7 @@ class AbstractExpenseDocumentSupport {
         }
         if (!Objects.equals(normalizedMode, ENTERPRISE_MODE_PREPAY_UNBILLED)
                 && !Objects.equals(normalizedMode, ENTERPRISE_MODE_INVOICE_FULL_PAYMENT)) {
-            return ENTERPRISE_MODE_PREPAY_UNBILLED;
+            return null;
         }
         return normalizedMode;
     }
@@ -4374,6 +4433,8 @@ class AbstractExpenseDocumentSupport {
         String businessSceneMode = resolveBusinessSceneMode(detailType, normalized.get(FIELD_BUSINESS_SCENARIO), defaultBusinessSceneMode);
         if (businessSceneMode != null) {
             normalized.put(FIELD_BUSINESS_SCENARIO, businessSceneMode);
+        } else if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
+            normalized.put(FIELD_BUSINESS_SCENARIO, "");
         }
         normalized.remove(FIELD_PENDING_WRITE_OFF_AMOUNT);
         return normalized;
@@ -4399,6 +4460,8 @@ class AbstractExpenseDocumentSupport {
         );
         if (businessSceneMode != null) {
             detailFormData.put(FIELD_BUSINESS_SCENARIO, businessSceneMode);
+        } else if (Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
+            detailFormData.put(FIELD_BUSINESS_SCENARIO, "");
         }
         return businessSceneMode;
     }
@@ -4411,14 +4474,16 @@ class AbstractExpenseDocumentSupport {
             return ENTERPRISE_MODE_INVOICE_FULL_PAYMENT;
         }
         String normalizedMode = trimToNull(rawMode == null ? null : String.valueOf(rawMode));
-        if (normalizedMode == null) {
-            normalizedMode = trimToNull(defaultBusinessSceneMode);
+        if (Objects.equals(normalizedMode, ENTERPRISE_MODE_PREPAY_UNBILLED)
+                || Objects.equals(normalizedMode, ENTERPRISE_MODE_INVOICE_FULL_PAYMENT)) {
+            return normalizedMode;
         }
-        if (!Objects.equals(normalizedMode, ENTERPRISE_MODE_PREPAY_UNBILLED)
-                && !Objects.equals(normalizedMode, ENTERPRISE_MODE_INVOICE_FULL_PAYMENT)) {
-            return ENTERPRISE_MODE_PREPAY_UNBILLED;
+        normalizedMode = trimToNull(defaultBusinessSceneMode);
+        if (Objects.equals(normalizedMode, ENTERPRISE_MODE_PREPAY_UNBILLED)
+                || Objects.equals(normalizedMode, ENTERPRISE_MODE_INVOICE_FULL_PAYMENT)) {
+            return normalizedMode;
         }
-        return normalizedMode;
+        return null;
     }
 
     private BigDecimal readInvoiceAmountForStorage(String detailType, String businessSceneMode, Map<String, Object> formData) {

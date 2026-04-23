@@ -131,21 +131,6 @@
                 </button>
               </el-form-item>
 
-              <el-form-item
-                v-if="isReportTemplate && selectedExpenseDetailType === 'ENTERPRISE_TRANSACTION'"
-                label="企业往来默认模式"
-                required
-              >
-                <el-select v-model="form.expenseDetailModeDefault" placeholder="请选择企业往来默认模式">
-                  <el-option
-                    v-for="item in options?.expenseDetailModeOptions || []"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </el-select>
-              </el-form-item>
-
               <el-form-item label="表单打印">
                 <button type="button" class="selection-trigger" @click="openOptionDialog('printMode')">
                   {{ singleOptionLabel('printMode') || '请选择表单打印' }}
@@ -471,7 +456,6 @@ type ExpenseTypeTreeInstance = {
 }
 
 const TEMPLATE_DRAFT_PREFIX = 'process-template-create-draft:'
-const DEFAULT_ENTERPRISE_TRANSACTION_MODE = 'PREPAY_UNBILLED'
 
 const route = useRoute()
 const router = useRouter()
@@ -588,7 +572,6 @@ const formDesignSummaryMap = computed(() => {
   })
   return map
 })
-const selectedExpenseDetailType = computed(() => expenseDetailSummaryMap.value.get(form.expenseDetailDesign || '')?.detailType || '')
 const templateBindingIssues = computed(() => collectTemplateBindingIssues(form, options.value, isReportTemplate.value))
 const saveBlockers = computed(() => {
   const blockers: string[] = []
@@ -637,9 +620,6 @@ function clearInvalidTemplateBindings(showMessage = false) {
       return
     }
     form[field] = '' as never
-    if (field === 'expenseDetailDesign') {
-      form.expenseDetailModeDefault = ''
-    }
     clearedLabels.push(label)
   }
 
@@ -695,17 +675,6 @@ watch(
   }
 )
 
-watch(selectedExpenseDetailType, (value) => {
-  if (value === 'ENTERPRISE_TRANSACTION') {
-    if (!form.expenseDetailModeDefault) {
-      form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
-    }
-    return
-  }
-  if (form.expenseDetailModeDefault) {
-    form.expenseDetailModeDefault = ''
-  }
-})
 
 onMounted(async () => {
   await loadPage()
@@ -858,8 +827,6 @@ function initializeForm(optionData: ProcessTemplateFormOptions, detail: ProcessT
   if (optionData.templateType !== 'report') {
     form.expenseDetailDesign = ''
     form.expenseDetailModeDefault = ''
-  } else if (selectedExpenseDetailType.value === 'ENTERPRISE_TRANSACTION' && !form.expenseDetailModeDefault) {
-    form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
   }
 }
 
@@ -896,9 +863,6 @@ function applyCreatedExpenseDetailCodeFromRoute() {
   }
 
   form.expenseDetailDesign = createdExpenseDetailCode
-  if (expenseDetailSummaryMap.value.get(createdExpenseDetailCode)?.detailType === 'ENTERPRISE_TRANSACTION' && !form.expenseDetailModeDefault) {
-    form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
-  }
   const nextQuery = { ...route.query }
   delete nextQuery.createdExpenseDetailCode
   router.replace({ query: nextQuery })
@@ -1211,14 +1175,10 @@ const saveTemplate = async () => {
 
   saving.value = true
   try {
-    if (isReportTemplate.value) {
-      if (selectedExpenseDetailType.value === 'ENTERPRISE_TRANSACTION' && !form.expenseDetailModeDefault) {
-        form.expenseDetailModeDefault = DEFAULT_ENTERPRISE_TRANSACTION_MODE
-      }
-    } else {
+    if (!isReportTemplate.value) {
       form.expenseDetailDesign = ''
-      form.expenseDetailModeDefault = ''
     }
+    form.expenseDetailModeDefault = ''
     const payload = clonePayload(form)
     const res = templateId.value !== null
       ? await processApi.updateTemplate(templateId.value, payload)

@@ -189,7 +189,7 @@ const blocks = computed(() => props.schema?.blocks || [])
 const visibleBlocks = computed(() => (
   props.detailType
     ? blocks.value.filter((block) => (
-      isExpenseDetailBlockVisible(block, props.formData || {}, props.detailType, props.defaultBusinessScenario)
+      isExpenseDetailBlockVisible(block, props.formData || {}, props.detailType, props.defaultBusinessScenario, props.schema)
     ))
     : blocks.value
 ))

@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseApprovalView from '@/views/expense/ExpenseApprovalView.vue'
 
 const mocks = vi.hoisted(() => ({
+  route: {
+    fullPath: '/expense/approval'
+  },
   router: {
     push: vi.fn()
   },
@@ -32,6 +35,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('vue-router', () => ({
+  useRoute: () => mocks.route,
   useRouter: () => mocks.router
 }))
 
@@ -206,6 +210,7 @@ describe('ExpenseApprovalView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.clear()
+    mocks.route.fullPath = '/expense/approval'
     mocks.router.push.mockResolvedValue(undefined)
     mocks.expenseApprovalApi.listPending.mockResolvedValue({
       data: [
@@ -285,7 +290,10 @@ describe('ExpenseApprovalView', () => {
     vm.openDetail('DOC-001')
     await vm.handleAction(1, 'approve')
 
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-001',
+      query: { returnTo: '/expense/approval' }
+    })
     expect(mocks.expenseApprovalApi.approve).toHaveBeenCalledWith(1, { comment: '同意' })
   })
 
@@ -296,7 +304,10 @@ describe('ExpenseApprovalView', () => {
     }
 
     await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-001"]').trigger('dblclick')
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-001',
+      query: { returnTo: '/expense/approval' }
+    })
 
     mocks.router.push.mockClear()
     await vm.handleAction(1, 'approve')

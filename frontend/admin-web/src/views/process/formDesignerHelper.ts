@@ -33,6 +33,19 @@ export type DocumentTemplateTypeOption = {
 
 export type FormBlockQuickActionState = 'expandable' | 'collapsible' | 'hidden'
 
+export const BUSINESS_SCENARIO_FIELD_KEY = 'businessScenario'
+export const BUSINESS_SCENARIO_SYSTEM_FIELD_CODE = 'BUSINESS_SCENARIO'
+export const BUSINESS_SCENARIO_MODE_FULL = 'INVOICE_FULL_PAYMENT'
+export const BUSINESS_SCENARIO_MODE_PREPAY = 'PREPAY_UNBILLED'
+export const BUSINESS_SCENARIO_MODE_ORDER = [
+  BUSINESS_SCENARIO_MODE_FULL,
+  BUSINESS_SCENARIO_MODE_PREPAY
+] as const
+export const BUSINESS_SCENARIO_MODE_OPTIONS = [
+  { value: BUSINESS_SCENARIO_MODE_FULL, label: '全额付款' },
+  { value: BUSINESS_SCENARIO_MODE_PREPAY, label: '预付未到票' }
+] as const
+
 export const FORM_PERMISSION_STAGE_OPTIONS: Array<{ key: ProcessFormPermissionStage; label: string }> = [
   { key: 'DRAFT_BEFORE_SUBMIT', label: '发起人提交前' },
   { key: 'RESUBMIT_AFTER_RETURN', label: '驳回/召回后重填' },
@@ -243,11 +256,14 @@ export function createDefaultNewFormSchema(): ProcessFormDesignSchema {
   }
 }
 
-export function normalizeFormSchema(schema?: Partial<ProcessFormDesignSchema> | null): ProcessFormDesignSchema {
+export function normalizeFormSchema(
+  schema?: Partial<ProcessFormDesignSchema> | null,
+  options: { detailType?: string } = {}
+): ProcessFormDesignSchema {
   const blocks = Array.isArray(schema?.blocks) ? schema.blocks : []
   return {
     layoutMode: typeof schema?.layoutMode === 'string' && schema.layoutMode ? schema.layoutMode : 'TWO_COLUMN',
-    blocks: blocks.map((item, index) => normalizeBlock(item as ProcessFormDesignBlock, index))
+    blocks: blocks.map((item, index) => normalizeBlock(item as ProcessFormDesignBlock, index, options))
   }
 }
 
@@ -378,18 +394,108 @@ export function getControlType(block: ProcessFormDesignBlock) {
   return String(block.props.controlType || '')
 }
 
+export function isBusinessScenarioBlock(block: ProcessFormDesignBlock | null | undefined) {
+  if (!block) {
+    return false
+  }
+  return String(block.fieldKey || '') === BUSINESS_SCENARIO_FIELD_KEY
+    || String(block.props.systemFieldCode || '') === BUSINESS_SCENARIO_SYSTEM_FIELD_CODE
+}
+
 export function getSharedArchiveCode(block: ProcessFormDesignBlock) {
   return String(block.props.archiveCode || '')
 }
 
 export function getOptionItems(block: ProcessFormDesignBlock): Array<{ label: string; value: string }> {
+  if (isBusinessScenarioBlock(block)) {
+    return resolveBusinessScenarioOptionItems(
+      block.props.enabledSceneModes,
+      undefined,
+      block.props.options
+    )
+  }
   return Array.isArray(block.props.options) ? (block.props.options as Array<{ label: string; value: string }>) : []
 }
 
-function normalizeBlock(block: ProcessFormDesignBlock, index: number): ProcessFormDesignBlock {
+export function normalizeBusinessScenarioEnabledModes(
+  rawValue: unknown,
+  detailType?: string,
+  legacyOptions?: unknown
+) {
+  if (detailType && detailType !== 'ENTERPRISE_TRANSACTION') {
+    return [BUSINESS_SCENARIO_MODE_FULL]
+  }
+
+  const seen = new Set<string>()
+  const collected: string[] = []
+  const append = (value: unknown) => {
+    const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+    if (!BUSINESS_SCENARIO_MODE_ORDER.includes(normalized as typeof BUSINESS_SCENARIO_MODE_ORDER[number]) || seen.has(normalized)) {
+      return
+    }
+    seen.add(normalized)
+    collected.push(normalized)
+  }
+
+  if (Array.isArray(rawValue)) {
+    rawValue.forEach((item) => append(item))
+  }
+
+  if (!collected.length && Array.isArray(legacyOptions)) {
+    legacyOptions.forEach((item) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        append((item as { value?: unknown }).value)
+      }
+    })
+  }
+
+  const ordered = BUSINESS_SCENARIO_MODE_ORDER.filter((item) => collected.includes(item))
+  if (ordered.length) {
+    return [...ordered]
+  }
+  return [BUSINESS_SCENARIO_MODE_FULL, BUSINESS_SCENARIO_MODE_PREPAY]
+}
+
+export function resolveBusinessScenarioOptionItems(
+  rawValue: unknown,
+  detailType?: string,
+  legacyOptions?: unknown
+) {
+  const enabledModes = normalizeBusinessScenarioEnabledModes(rawValue, detailType, legacyOptions)
+  return BUSINESS_SCENARIO_MODE_OPTIONS.filter((item) => enabledModes.includes(item.value))
+}
+
+function sanitizeBusinessScenarioDefaultValue(
+  value: unknown,
+  enabledModes: string[],
+  detailType?: string
+) {
+  if (detailType && detailType !== 'ENTERPRISE_TRANSACTION') {
+    return BUSINESS_SCENARIO_MODE_FULL
+  }
+  const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+  return enabledModes.includes(normalized) ? normalized : undefined
+}
+
+function normalizeBlock(
+  block: ProcessFormDesignBlock,
+  index: number,
+  options: { detailType?: string } = {}
+): ProcessFormDesignBlock {
   const props = isRecord(block?.props) ? cloneValue(block.props) : {}
   if (block?.kind === 'BUSINESS_COMPONENT' && props.componentCode === 'payee-info') {
     props.componentCode = 'payee-account'
+  }
+  let defaultValue = block?.defaultValue
+  if (isBusinessScenarioBlock(block)) {
+    const enabledSceneModes = normalizeBusinessScenarioEnabledModes(
+      props.enabledSceneModes,
+      options.detailType,
+      props.options
+    )
+    props.enabledSceneModes = enabledSceneModes
+    props.options = resolveBusinessScenarioOptionItems(enabledSceneModes, options.detailType)
+    defaultValue = sanitizeBusinessScenarioDefaultValue(defaultValue, enabledSceneModes, options.detailType)
   }
   return {
     blockId: block?.blockId || createUniqueId(`block-${index + 1}`),
@@ -399,7 +505,7 @@ function normalizeBlock(block: ProcessFormDesignBlock, index: number): ProcessFo
     span: block?.span === 2 ? 2 : 1,
     helpText: typeof block?.helpText === 'string' ? block.helpText : '',
     required: Boolean(block?.required),
-    defaultValue: block?.defaultValue,
+    defaultValue,
     props,
     permission: normalizePermission(block?.permission)
   }

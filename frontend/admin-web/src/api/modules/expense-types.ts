@@ -28,6 +28,7 @@ export interface ExpenseSummary {
   date: string
   status: string
   submittedAt?: string
+  draftDeletable?: boolean
   paymentDate?: string
   paymentCompanyName?: string
   payeeName?: string

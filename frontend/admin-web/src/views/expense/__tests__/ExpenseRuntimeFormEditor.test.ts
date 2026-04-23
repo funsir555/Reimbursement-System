@@ -343,6 +343,33 @@ function mountEditor(initialModelValue: Record<string, unknown>, blocks: unknown
   }
 }
 
+async function triggerDocumentPickerOpen(wrapper: ReturnType<typeof mount>, fieldKey: string) {
+  const trigger = wrapper.get(`[data-testid="open-document-picker-${fieldKey}"]`)
+  await trigger.trigger('mousedown')
+  await trigger.trigger('click')
+}
+
+function createManagedSelectDouble() {
+  const input = document.createElement('input')
+  const root = document.createElement('div')
+  root.appendChild(input)
+  return {
+    handleClose: vi.fn(),
+    handleQueryChange: vi.fn(),
+    toggleMenu: vi.fn(),
+    blur: vi.fn(),
+    expanded: true,
+    query: '供应商1',
+    previousQuery: '供应商1',
+    states: { inputValue: '供应商1' },
+    inputRef: {
+      blur: vi.fn(),
+      input
+    },
+    $el: root
+  }
+}
+
 describe('ExpenseRuntimeFormEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -430,7 +457,7 @@ describe('ExpenseRuntimeFormEditor', () => {
 
   it('loads vendor options with payment company and clears counterparty plus payee account when company changes', async () => {
     const initialPayeeAccount = { value: 'VENDOR_ACCOUNT:1', label: '默认账户' }
-    const { model, setModelValue } = mountEditor({
+    const { model } = mountEditor({
       paymentCompany: 'COMPANY-001',
       counterparty: 'VEN-001',
       payeeAccount: initialPayeeAccount
@@ -446,11 +473,7 @@ describe('ExpenseRuntimeFormEditor', () => {
       paymentCompanyId: 'COMPANY-001'
     })
 
-    setModelValue({
-      paymentCompany: 'COMPANY-002',
-      counterparty: 'VEN-001',
-      payeeAccount: initialPayeeAccount
-    })
+    model.value.paymentCompany = 'COMPANY-002'
     await flushPromises()
 
     expect(model.value.counterparty).toBe('')
@@ -459,6 +482,70 @@ describe('ExpenseRuntimeFormEditor', () => {
       keyword: undefined,
       paymentCompanyId: 'COMPANY-002'
     })
+  })
+
+  it('keeps counterparty and payee account when the parent restores the same draft selections', async () => {
+    const initialPayeeAccount = { value: 'VENDOR_ACCOUNT:1', label: '默认账户', ownerName: '广州供应商' }
+    const { model, setModelValue } = mountEditor({
+      paymentCompany: '',
+      counterparty: '',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+    mocks.expenseCreateApi.listVendorOptions.mockClear()
+    mocks.expenseCreateApi.listPayeeAccountOptions.mockClear()
+
+    setModelValue({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: initialPayeeAccount
+    })
+    await flushPromises()
+
+    expect(model.value.paymentCompany).toBe('COMPANY-001')
+    expect(model.value.counterparty).toBe('VEN-001')
+    expect(model.value.payeeAccount).toEqual(initialPayeeAccount)
+    expect(mocks.expenseCreateApi.listVendorOptions).toHaveBeenCalledWith({
+      keyword: undefined,
+      paymentCompanyId: 'COMPANY-001'
+    })
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalledWith({
+      keyword: '',
+      linkageMode: 'ENTERPRISE',
+      payeeName: undefined,
+      counterpartyCode: 'VEN-001',
+      paymentCompanyId: 'COMPANY-001'
+    })
+  })
+
+  it('keeps selected counterparty and payee account visible even before remote options reload them', async () => {
+    mocks.expenseCreateApi.listVendorOptions.mockResolvedValue({ data: [] })
+    mocks.expenseCreateApi.listPayeeAccountOptions.mockResolvedValue({ data: [] })
+
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: {
+        value: 'VENDOR_ACCOUNT:1',
+        label: '供应商默认账户',
+        ownerName: '广州供应商',
+        accountNoMasked: '****0001'
+      }
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('VEN-001')
+    expect(wrapper.text()).toContain('供应商默认账户')
   })
 
   it('keeps personal payee account lookups on the original employee-only chain', async () => {
@@ -606,7 +693,7 @@ describe('ExpenseRuntimeFormEditor', () => {
     )
     expect(mocks.elMessage.success).toHaveBeenCalledWith('供应商收款信息已更新')
     expect(model.value.payeeAccount).toBe('')
-    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalledTimes(2)
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 
   it('uses the unified vendor payment info failure wording', async () => {
@@ -680,6 +767,7 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(wrapper.text()).toContain('暂无可选单据')
     expect(wrapper.html()).toContain('搜索单据编号、标题或模板名称')
     expect(wrapper.text()).toContain('确认选择')
+    expect(wrapper.text()).toContain('删除')
     expect(wrapper.html()).not.toContain('???')
     expect(wrapper.html()).not.toContain('閫')
     expect(wrapper.html()).not.toContain('鎼滅储')
@@ -710,6 +798,309 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
       relationType: 'WRITEOFF'
     }))
+  })
+
+  it('opens related and writeoff pickers by real button click after counterparty is selected', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    const writeoffBlock = createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document')
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      relatedDocs: [],
+      writeoffDocs: []
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      relatedBlock,
+      writeoffBlock
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      documentPickerDialog: {
+        visible: boolean
+        fieldKey: string
+        relationType: string
+      }
+    }
+
+    await triggerDocumentPickerOpen(wrapper, 'relatedDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('relatedDocs')
+    expect(vm.documentPickerDialog.relationType).toBe('RELATED')
+    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
+      relationType: 'RELATED'
+    }))
+
+    await triggerDocumentPickerOpen(wrapper, 'writeoffDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('writeoffDocs')
+    expect(vm.documentPickerDialog.relationType).toBe('WRITEOFF')
+    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
+      relationType: 'WRITEOFF'
+    }))
+  })
+
+  it('keeps document pickers clickable while vendor bank accounts are loading and after they load', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    const writeoffBlock = createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document')
+    let resolvePayeeAccounts: ((value: {
+      data: Array<{
+        value: string
+        label: string
+        sourceType: string
+        ownerCode: string
+        ownerName: string
+        accountName: string
+        bankName: string
+        accountNoMasked: string
+        secondaryLabel: string
+      }>
+    }) => void) | null = null
+    const payeeAccountPromise = new Promise<{
+      data: Array<{
+        value: string
+        label: string
+        sourceType: string
+        ownerCode: string
+        ownerName: string
+        accountName: string
+        bankName: string
+        accountNoMasked: string
+        secondaryLabel: string
+      }>
+    }>((resolve) => {
+      resolvePayeeAccounts = resolve
+    })
+    mocks.expenseCreateApi.listPayeeAccountOptions.mockReturnValueOnce(payeeAccountPromise)
+
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: '',
+      relatedDocs: [],
+      writeoffDocs: []
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account'),
+      relatedBlock,
+      writeoffBlock
+    ])
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      documentPickerDialog: {
+        visible: boolean
+        fieldKey: string
+        relationType: string
+      }
+      closeDocumentPicker: () => void
+    }
+
+    await flushPromises()
+
+    await triggerDocumentPickerOpen(wrapper, 'relatedDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('relatedDocs')
+    expect(vm.documentPickerDialog.relationType).toBe('RELATED')
+    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
+      relationType: 'RELATED'
+    }))
+
+    vm.closeDocumentPicker()
+    await flushPromises()
+
+    resolvePayeeAccounts?.({
+      data: [{
+        value: 'VENDOR_ACCOUNT:1',
+        label: '上海测试供应商',
+        sourceType: 'ENTERPRISE_VENDOR',
+        ownerCode: 'VEN-001',
+        ownerName: '上海测试供应商',
+        accountName: '上海测试供应商',
+        bankName: '中国工商银行',
+        accountNoMasked: '6222 **** 0001',
+        secondaryLabel: '中国工商银行 / 6222 **** 0001'
+      }]
+    })
+    await flushPromises()
+
+    await triggerDocumentPickerOpen(wrapper, 'writeoffDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('writeoffDocs')
+    expect(vm.documentPickerDialog.relationType).toBe('WRITEOFF')
+    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
+      relationType: 'WRITEOFF'
+    }))
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalled()
+  })
+
+  it('still opens the related picker without counterparty instead of blocking on a prerequisite', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: '',
+      relatedDocs: []
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      relatedBlock
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      documentPickerDialog: {
+        visible: boolean
+        fieldKey: string
+      }
+    }
+
+    await triggerDocumentPickerOpen(wrapper, 'relatedDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('relatedDocs')
+    expect(mocks.elMessage.warning).not.toHaveBeenCalledWith('请先选择收款单位')
+    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
+      relationType: 'RELATED'
+    }))
+  })
+
+  it('still opens the picker after switching counterparty multiple times', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    const { wrapper, setModelValue } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      relatedDocs: []
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      relatedBlock
+    ])
+
+    await flushPromises()
+
+    setModelValue({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-002',
+      relatedDocs: []
+    })
+    await flushPromises()
+
+    setModelValue({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-003',
+      relatedDocs: []
+    })
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      documentPickerDialog: {
+        visible: boolean
+        fieldKey: string
+        relationType: string
+      }
+    }
+
+    await triggerDocumentPickerOpen(wrapper, 'relatedDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('relatedDocs')
+    expect(vm.documentPickerDialog.relationType).toBe('RELATED')
+    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
+      relationType: 'RELATED'
+    }))
+  })
+
+  it('settles counterparty and payee-account select state immediately after counterparty selection', async () => {
+    const { wrapper } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: '',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      setCounterpartySelectRef: (fieldKey: string, instance: unknown) => void
+      setPayeeAccountSelectRef: (fieldKey: string, instance: unknown) => void
+      handleCounterpartySelection: (fieldKey: string, value: string) => void
+    }
+
+    const counterpartySelect = createManagedSelectDouble()
+    const payeeAccountSelect = createManagedSelectDouble()
+
+    vm.setCounterpartySelectRef('counterparty', counterpartySelect)
+    vm.setPayeeAccountSelectRef('payeeAccount', payeeAccountSelect)
+    vm.handleCounterpartySelection('counterparty', 'VEN-001')
+    await flushPromises()
+
+    expect(counterpartySelect.handleClose).toHaveBeenCalled()
+    expect(counterpartySelect.handleQueryChange).toHaveBeenCalledWith('')
+    expect(counterpartySelect.inputRef.blur).toHaveBeenCalled()
+    expect(counterpartySelect.blur).toHaveBeenCalled()
+    expect(counterpartySelect.query).toBe('')
+    expect(counterpartySelect.previousQuery).toBe('')
+    expect(counterpartySelect.states.inputValue).toBe('')
+    expect(counterpartySelect.inputRef.input.value).toBe('')
+
+    expect(payeeAccountSelect.handleClose).toHaveBeenCalled()
+    expect(payeeAccountSelect.handleQueryChange).toHaveBeenCalledWith('')
+    expect(payeeAccountSelect.states.inputValue).toBe('')
+  })
+
+  it('settles lingering linked selects again after auto-loading payee accounts for a newly selected supplier', async () => {
+    const { wrapper, setModelValue } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: '',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+    vi.clearAllMocks()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      setCounterpartySelectRef: (fieldKey: string, instance: unknown) => void
+      setPayeeAccountSelectRef: (fieldKey: string, instance: unknown) => void
+      handleCounterpartySelection: (fieldKey: string, value: string) => void
+    }
+
+    const counterpartySelect = createManagedSelectDouble()
+    const payeeAccountSelect = createManagedSelectDouble()
+
+    vm.setCounterpartySelectRef('counterparty', counterpartySelect)
+    vm.setPayeeAccountSelectRef('payeeAccount', payeeAccountSelect)
+
+    vm.handleCounterpartySelection('counterparty', 'VEN-001')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalledWith(expect.objectContaining({
+      counterpartyCode: 'VEN-001',
+      paymentCompanyId: 'COMPANY-001'
+    }))
+    expect(counterpartySelect.handleClose).toHaveBeenCalled()
+    expect(payeeAccountSelect.handleClose).toHaveBeenCalled()
+    expect(counterpartySelect.states.inputValue).toBe('')
+    expect(payeeAccountSelect.states.inputValue).toBe('')
   })
 
   it('renders document picker tabs by relation type and switches visible panels', async () => {

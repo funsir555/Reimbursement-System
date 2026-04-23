@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.entity.FinanceVendor;
 import com.finex.auth.entity.ProcessCustomArchiveDesign;
 import com.finex.auth.entity.ProcessCustomArchiveItem;
+import com.finex.auth.entity.ProcessDocumentActionLog;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
@@ -15,6 +16,7 @@ import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceVendorMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
+import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
@@ -43,6 +45,8 @@ import static org.mockito.Mockito.when;
 class ExpenseSummaryAssemblerTest {
 
     @Mock
+    private ProcessDocumentActionLogMapper processDocumentActionLogMapper;
+    @Mock
     private ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     @Mock
     private ProcessDocumentTemplateMapper templateMapper;
@@ -68,6 +72,7 @@ class ExpenseSummaryAssemblerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         assembler = new ExpenseSummaryAssembler(
+                processDocumentActionLogMapper,
                 processDocumentExpenseDetailMapper,
                 templateMapper,
                 processTemplateScopeMapper,
@@ -136,7 +141,55 @@ class ExpenseSummaryAssemblerTest {
         assertEquals(List.of("\u91cd\u70b9"), result.get(0).getTagNames());
     }
 
+    @Test
+    void toExpenseSummariesMapsKnownStatusesExplicitlyAndKeepsUnknownNeutral() throws Exception {
+        stubSummaryLookups(false);
+
+        var result = assembler.toExpenseSummaries(List.of(
+                buildSummaryInstanceWithStatus("DOC-PENDING", "PENDING_APPROVAL"),
+                buildSummaryInstanceWithStatus("DOC-REJECTED", "REJECTED"),
+                buildSummaryInstanceWithStatus("DOC-DRAFT", "DRAFT"),
+                buildSummaryInstanceWithStatus("DOC-PAYMENT", "PENDING_PAYMENT"),
+                buildSummaryInstanceWithStatus("DOC-UNKNOWN", "SOMETHING_ELSE")
+        ));
+
+        assertEquals("\u5ba1\u6279\u4e2d", result.get(0).getDocumentStatusLabel());
+        assertEquals("\u5df2\u9a73\u56de", result.get(1).getDocumentStatusLabel());
+        assertEquals("\u8349\u7a3f", result.get(2).getDocumentStatusLabel());
+        assertEquals("\u5f85\u652f\u4ed8", result.get(3).getDocumentStatusLabel());
+        assertEquals("\u672a\u77e5\u72b6\u6001", result.get(4).getDocumentStatusLabel());
+    }
+
+    @Test
+    void toExpenseSummariesUsesLatestSubmitLogAndMarksRecalledDraftAsNonDeletable() throws Exception {
+        stubSummaryLookups(false);
+        ProcessDocumentActionLog recallLog = new ProcessDocumentActionLog();
+        recallLog.setDocumentCode("DOC-DRAFT");
+        recallLog.setActionType("RECALL");
+        recallLog.setCreatedAt(LocalDateTime.of(2026, 4, 21, 12, 0));
+        ProcessDocumentActionLog resubmitLog = new ProcessDocumentActionLog();
+        resubmitLog.setDocumentCode("DOC-RESUBMIT");
+        resubmitLog.setActionType("RESUBMIT");
+        resubmitLog.setCreatedAt(LocalDateTime.of(2026, 4, 20, 9, 30));
+        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(recallLog, resubmitLog));
+
+        ProcessDocumentInstance resubmitted = buildSummaryInstanceWithStatus("DOC-RESUBMIT", "PENDING_APPROVAL");
+        resubmitted.setCreatedAt(LocalDateTime.of(2026, 4, 1, 8, 0));
+        resubmitted.setUpdatedAt(LocalDateTime.of(2026, 4, 20, 9, 35));
+        ProcessDocumentInstance draft = buildSummaryInstanceWithStatus("DOC-DRAFT", "DRAFT");
+        draft.setCreatedAt(LocalDateTime.of(2026, 4, 5, 8, 0));
+        draft.setUpdatedAt(LocalDateTime.of(2026, 4, 21, 12, 5));
+
+        var result = assembler.toExpenseSummaries(List.of(resubmitted, draft));
+
+        assertEquals("2026-04-20 09:30", result.get(0).getSubmittedAt());
+        assertEquals("2026-04-20", result.get(0).getDate());
+        assertEquals("2026-04-21 12:05", result.get(1).getSubmittedAt());
+        assertEquals(Boolean.FALSE, result.get(1).getDraftDeletable());
+    }
+
     private void stubSummaryLookups(boolean includeTags) throws Exception {
+        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of());
         ProcessDocumentTemplate template = createTemplate();
         when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of(buildSummaryExpenseDetail()));
         when(templateMapper.selectList(any())).thenReturn(List.of(template));
@@ -238,6 +291,13 @@ class ExpenseSummaryAssemblerTest {
 
     private ProcessDocumentInstance buildSummaryInstance() throws Exception {
         return buildSummaryInstance("\u652f\u4ed8\u65e5\u671f");
+    }
+
+    private ProcessDocumentInstance buildSummaryInstanceWithStatus(String documentCode, String status) throws Exception {
+        ProcessDocumentInstance instance = buildSummaryInstance();
+        instance.setDocumentCode(documentCode);
+        instance.setStatus(status);
+        return instance;
     }
 
     private ProcessDocumentInstance buildSummaryInstance(String paymentDateLabel) throws Exception {

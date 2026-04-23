@@ -72,6 +72,14 @@ public class ExpenseRelationWriteOffService {
     private static final String DOCUMENT_STATUS_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
     private static final String MESSAGE_RELATED_TEMPLATE_TYPE_NOT_ALLOWED = "\u5173\u8054\u5355\u636e\u7c7b\u578b\u4e0d\u5728\u5f53\u524d\u7ec4\u4ef6\u5141\u8bb8\u8303\u56f4\u5185";
     private static final String MESSAGE_WRITEOFF_TEMPLATE_TYPE_NOT_ALLOWED = "\u6838\u9500\u5355\u636e\u7c7b\u578b\u4e0d\u5728\u5f53\u524d\u7ec4\u4ef6\u5141\u8bb8\u8303\u56f4\u5185";
+    private static final String MESSAGE_RELATED_DOCUMENT_SCOPE_RESTRICTED = "\u4ec5\u53ef\u5173\u8054\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e";
+    private static final String MESSAGE_WRITEOFF_DOCUMENT_SCOPE_RESTRICTED = "\u4ec5\u53ef\u9009\u62e9\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e\u8fdb\u884c\u6838\u9500";
+    private static final List<String> RELATION_PICKER_ALLOWED_STATUSES = List.of(
+            DOCUMENT_STATUS_PENDING_PAYMENT,
+            DOCUMENT_STATUS_PAYING,
+            DOCUMENT_STATUS_PAYMENT_COMPLETED,
+            DOCUMENT_STATUS_PAYMENT_FINISHED
+    );
 
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     private final ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
@@ -231,18 +239,16 @@ public ExpenseDocumentPickerVO getDocumentPicker(
 
         List<ProcessDocumentInstance> visibleApprovedDocuments = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getStatus, List.of(
-                                DOCUMENT_STATUS_APPROVED,
-                                DOCUMENT_STATUS_COMPLETED,
-                                DOCUMENT_STATUS_PENDING_PAYMENT,
-                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
-                                DOCUMENT_STATUS_PAYMENT_FINISHED
-                        ))
+                        .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
+                        .in(ProcessDocumentInstance::getStatus, RELATION_PICKER_ALLOWED_STATUSES)
                         .in(ProcessDocumentInstance::getTemplateType, normalizedTemplateTypes)
                         .ne(excludedDocumentCode != null, ProcessDocumentInstance::getDocumentCode, excludedDocumentCode)
-                        .eq(!allowCrossView, ProcessDocumentInstance::getSubmitterUserId, userId)
                         .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
         ).stream()
+                .filter(item -> Objects.equals(item.getSubmitterUserId(), userId))
+                .filter(item -> isRelationSelectableStatus(item.getStatus()))
+                .filter(item -> normalizedTemplateTypes.contains(normalizeTemplateType(item.getTemplateType())))
+                .filter(item -> excludedDocumentCode == null || !Objects.equals(item.getDocumentCode(), excludedDocumentCode))
                 .filter(item -> matchesKeyword(
                         normalizedKeyword,
                         item.getDocumentCode(),
@@ -428,6 +434,8 @@ public void syncDocumentBusinessRelations(
         if (trimToNull(documentCode) == null || formDesign == null) {
             return;
         }
+        ProcessDocumentInstance source = requireDocument(documentCode);
+        Long sourceSubmitterUserId = source.getSubmitterUserId();
         voidActiveRelations(documentCode);
         voidPendingWriteOffs(documentCode);
 
@@ -471,7 +479,12 @@ public void syncDocumentBusinessRelations(
         LocalDateTime now = LocalDateTime.now();
 
         for (RelatedDocumentSelection selection : relatedSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "鍏宠仈鍗曟嵁");
+            ProcessDocumentInstance target = requireRelationSelectableTargetDocument(
+                    targetDocumentMap,
+                    selection.documentCode(),
+                    sourceSubmitterUserId,
+                    MESSAGE_RELATED_DOCUMENT_SCOPE_RESTRICTED
+            );
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
                 throw new IllegalStateException(MESSAGE_RELATED_TEMPLATE_TYPE_NOT_ALLOWED);
@@ -489,7 +502,12 @@ public void syncDocumentBusinessRelations(
         }
 
         for (WriteOffSelection selection : writeOffSelections) {
-            ProcessDocumentInstance target = requireApprovedTargetDocument(targetDocumentMap, selection.documentCode(), "鏍搁攢鍗曟嵁");
+            ProcessDocumentInstance target = requireRelationSelectableTargetDocument(
+                    targetDocumentMap,
+                    selection.documentCode(),
+                    sourceSubmitterUserId,
+                    MESSAGE_WRITEOFF_DOCUMENT_SCOPE_RESTRICTED
+            );
             String normalizedTemplateType = normalizeTemplateType(target.getTemplateType());
             if (!selection.allowedTemplateTypes().contains(normalizedTemplateType)) {
                 throw new IllegalStateException(MESSAGE_WRITEOFF_TEMPLATE_TYPE_NOT_ALLOWED);
@@ -1008,6 +1026,21 @@ private Map<String, Object> toObjectMap(Map<?, ?> source) {
         return result;
     }
 
+    private ProcessDocumentInstance requireRelationSelectableTargetDocument(
+            Map<String, ProcessDocumentInstance> targetDocumentMap,
+            String documentCode,
+            Long submitterUserId,
+            String invalidMessage
+    ) {
+        ProcessDocumentInstance target = targetDocumentMap.get(documentCode);
+        if (target == null
+                || !Objects.equals(target.getSubmitterUserId(), submitterUserId)
+                || !isRelationSelectableStatus(target.getStatus())) {
+            throw new IllegalStateException(invalidMessage);
+        }
+        return target;
+    }
+
 private ProcessDocumentInstance requireApprovedTargetDocument(
             Map<String, ProcessDocumentInstance> targetDocumentMap,
             String documentCode,
@@ -1125,6 +1158,14 @@ private boolean isEffectiveApprovedStatus(String status) {
         return DOCUMENT_STATUS_APPROVED.equals(normalized)
                 || DOCUMENT_STATUS_COMPLETED.equals(normalized)
                 || DOCUMENT_STATUS_PENDING_PAYMENT.equals(normalized)
+                || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
+                || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
+    }
+
+    private boolean isRelationSelectableStatus(String status) {
+        String normalized = trimToNull(status);
+        return DOCUMENT_STATUS_PENDING_PAYMENT.equals(normalized)
+                || DOCUMENT_STATUS_PAYING.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
     }

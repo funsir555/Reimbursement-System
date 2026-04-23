@@ -4,13 +4,19 @@ import type {
   ProcessFormDesignSchema
 } from '@/api'
 import { centsToMoney, normalizeMoneyValue, toMoneyCents, type MoneyInputValue } from '@/utils/money'
-import { getControlType } from '@/views/process/formDesignerHelper'
+import {
+  BUSINESS_SCENARIO_MODE_FULL,
+  BUSINESS_SCENARIO_MODE_PREPAY,
+  getControlType,
+  isBusinessScenarioBlock,
+  normalizeBusinessScenarioEnabledModes
+} from '@/views/process/formDesignerHelper'
 
 export const DETAIL_TYPE_NORMAL = 'NORMAL_REIMBURSEMENT'
 export const DETAIL_TYPE_ENTERPRISE = 'ENTERPRISE_TRANSACTION'
 
-export const MODE_PREPAY_UNBILLED = 'PREPAY_UNBILLED'
-export const MODE_INVOICE_FULL_PAYMENT = 'INVOICE_FULL_PAYMENT'
+export const MODE_PREPAY_UNBILLED = BUSINESS_SCENARIO_MODE_PREPAY
+export const MODE_INVOICE_FULL_PAYMENT = BUSINESS_SCENARIO_MODE_FULL
 
 export const FIELD_EXPENSE_TYPE_CODE = 'expenseTypeCode'
 export const FIELD_BUSINESS_SCENARIO = 'businessScenario'
@@ -33,10 +39,8 @@ export function buildExpenseDetailFormData(
     next[key] = cloneValue(value)
   })
 
-  const resolvedScenario = resolveBusinessScenario(next, detailType, defaultBusinessScenario)
-  if (resolvedScenario) {
-    next[FIELD_BUSINESS_SCENARIO] = resolvedScenario
-  }
+  const resolvedScenario = resolveBusinessScenario(next, detailType, defaultBusinessScenario, schema)
+  next[FIELD_BUSINESS_SCENARIO] = resolvedScenario || ''
   delete next[FIELD_PENDING_WRITE_OFF_AMOUNT]
 
   return next
@@ -44,18 +48,15 @@ export function buildExpenseDetailFormData(
 
 export function enrichExpenseDetailInstance(
   detail: ExpenseDetailInstance,
-  defaultBusinessScenario?: string
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
 ): ExpenseDetailInstance {
   const nextFormData = cloneRecord(detail.formData)
   const detailType = String(detail.detailType || '')
-  const businessSceneMode = resolveBusinessScenario(nextFormData, detailType, defaultBusinessScenario)
-  const enterpriseMode = detailType === DETAIL_TYPE_ENTERPRISE
-    ? (businessSceneMode || resolveDefaultBusinessScenario(detailType, defaultBusinessScenario) || MODE_PREPAY_UNBILLED)
-    : ''
+  const businessSceneMode = resolveBusinessScenario(nextFormData, detailType, defaultBusinessScenario, schema)
+  const enterpriseMode = detailType === DETAIL_TYPE_ENTERPRISE ? businessSceneMode : ''
 
-  if (businessSceneMode) {
-    nextFormData[FIELD_BUSINESS_SCENARIO] = businessSceneMode
-  }
+  nextFormData[FIELD_BUSINESS_SCENARIO] = businessSceneMode || ''
   delete nextFormData[FIELD_PENDING_WRITE_OFF_AMOUNT]
 
   return {
@@ -103,7 +104,8 @@ export function isExpenseDetailBlockVisible(
   block: ProcessFormDesignBlock,
   formData: Record<string, unknown>,
   detailType?: string,
-  defaultBusinessScenario?: string
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
 ) {
   const visibleSceneModes = Array.isArray(block.props.visibleSceneModes)
     ? block.props.visibleSceneModes.map((item) => String(item))
@@ -113,7 +115,7 @@ export function isExpenseDetailBlockVisible(
     return true
   }
 
-  const businessScenario = resolveBusinessScenario(formData, detailType, defaultBusinessScenario)
+  const businessScenario = resolveBusinessScenario(formData, detailType, defaultBusinessScenario, schema)
   return businessScenario ? visibleSceneModes.includes(businessScenario) : false
 }
 
@@ -124,20 +126,27 @@ export function isExpenseDetailBlockReadOnly(block: ProcessFormDesignBlock) {
 export function resolveBusinessScenario(
   formData: Record<string, unknown> | null | undefined,
   detailType?: string,
-  defaultBusinessScenario?: string
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
 ) {
   const normalizedDetailType = detailType === DETAIL_TYPE_ENTERPRISE ? DETAIL_TYPE_ENTERPRISE : DETAIL_TYPE_NORMAL
   if (normalizedDetailType === DETAIL_TYPE_NORMAL) {
     return MODE_INVOICE_FULL_PAYMENT
   }
 
+  const enabledModes = resolveEnabledBusinessScenarioModes(schema, normalizedDetailType)
   const rawValue = trimToUndefined(formData?.[FIELD_BUSINESS_SCENARIO])
-  if (rawValue === MODE_PREPAY_UNBILLED || rawValue === MODE_INVOICE_FULL_PAYMENT) {
+  if (rawValue && enabledModes.includes(rawValue)) {
     return rawValue
   }
 
+  const schemaDefaultValue = resolveSchemaDefaultBusinessScenario(schema, enabledModes)
+  if (schemaDefaultValue) {
+    return schemaDefaultValue
+  }
+
   const fallbackValue = trimToUndefined(defaultBusinessScenario)
-  if (fallbackValue === MODE_PREPAY_UNBILLED || fallbackValue === MODE_INVOICE_FULL_PAYMENT) {
+  if (fallbackValue && enabledModes.includes(fallbackValue)) {
     return fallbackValue
   }
 
@@ -147,14 +156,18 @@ export function resolveBusinessScenario(
 export function resolveExpenseDetailAmount(
   formData: Record<string, unknown> | null | undefined,
   detailType?: string,
-  defaultBusinessScenario?: string
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
 ) {
   const detail = formData || {}
+  const businessScenario = resolveBusinessScenario(detail, detailType, defaultBusinessScenario, schema)
+  if (detailType === DETAIL_TYPE_ENTERPRISE && !businessScenario) {
+    return ''
+  }
   const actualPaymentAmount = safeMoneyValue(detail[FIELD_ACTUAL_PAYMENT_AMOUNT])
   if (actualPaymentAmount) {
     return actualPaymentAmount
   }
-  const businessScenario = resolveBusinessScenario(detail, detailType, defaultBusinessScenario)
   const detailAmount = safeMoneyValue(detail[FIELD_DETAIL_AMOUNT])
   const invoiceAmount = safeMoneyValue(detail[FIELD_INVOICE_AMOUNT])
   if (businessScenario === MODE_PREPAY_UNBILLED) {
@@ -168,7 +181,8 @@ export function resolveExpenseDetailAmount(
 
 export function sumExpenseDetailAmounts(
   details: Array<Pick<ExpenseDetailInstance, 'detailType' | 'businessSceneMode' | 'enterpriseMode' | 'formData'>> | null | undefined,
-  defaultBusinessScenario?: string
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
 ) {
   if (!Array.isArray(details) || details.length === 0) {
     return ''
@@ -179,7 +193,8 @@ export function sumExpenseDetailAmounts(
     const amount = resolveExpenseDetailAmount(
       isRecord(detail.formData) ? detail.formData : {},
       String(detail.detailType || ''),
-      trimToUndefined(detail.businessSceneMode) || trimToUndefined(detail.enterpriseMode) || defaultBusinessScenario
+      trimToUndefined(detail.businessSceneMode) || trimToUndefined(detail.enterpriseMode) || defaultBusinessScenario,
+      schema
     )
     if (!amount) {
       return
@@ -216,9 +231,10 @@ export function resolveDocumentTotalAmount(
   blocks: ProcessFormDesignBlock[] | null | undefined,
   formData: Record<string, unknown> | null | undefined,
   details: Array<Pick<ExpenseDetailInstance, 'detailType' | 'businessSceneMode' | 'enterpriseMode' | 'formData'>> | null | undefined,
-  defaultBusinessScenario?: string
+  defaultBusinessScenario?: string,
+  expenseDetailSchema?: ProcessFormDesignSchema | null
 ) {
-  const detailAmount = sumExpenseDetailAmounts(details, defaultBusinessScenario)
+  const detailAmount = sumExpenseDetailAmounts(details, defaultBusinessScenario, expenseDetailSchema)
   if (detailAmount) {
     return detailAmount
   }
@@ -266,15 +282,32 @@ export function syncInvoiceAmountWithOcr(
   return false
 }
 
-function resolveDefaultBusinessScenario(detailType?: string, defaultBusinessScenario?: string) {
-  if (detailType === DETAIL_TYPE_ENTERPRISE) {
-    const fallbackValue = trimToUndefined(defaultBusinessScenario)
-    if (fallbackValue === MODE_PREPAY_UNBILLED || fallbackValue === MODE_INVOICE_FULL_PAYMENT) {
-      return fallbackValue
-    }
-    return ''
+function resolveEnabledBusinessScenarioModes(
+  schema: ProcessFormDesignSchema | null | undefined,
+  detailType?: string
+) {
+  if (detailType !== DETAIL_TYPE_ENTERPRISE) {
+    return [MODE_INVOICE_FULL_PAYMENT]
   }
-  return MODE_INVOICE_FULL_PAYMENT
+  const scenarioBlock = Array.isArray(schema?.blocks)
+    ? schema?.blocks.find((block) => isBusinessScenarioBlock(block))
+    : undefined
+  return normalizeBusinessScenarioEnabledModes(
+    scenarioBlock?.props?.enabledSceneModes,
+    detailType,
+    scenarioBlock?.props?.options
+  )
+}
+
+function resolveSchemaDefaultBusinessScenario(
+  schema: ProcessFormDesignSchema | null | undefined,
+  enabledModes: string[]
+) {
+  const scenarioBlock = Array.isArray(schema?.blocks)
+    ? schema?.blocks.find((block) => isBusinessScenarioBlock(block))
+    : undefined
+  const defaultValue = trimToUndefined(scenarioBlock?.defaultValue)
+  return defaultValue && enabledModes.includes(defaultValue) ? defaultValue : ''
 }
 
 function buildSchemaDefaultValues(schema: ProcessFormDesignSchema | null | undefined) {
@@ -335,9 +368,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function safeMoneyValue(value: MoneyInputValue) {
+function safeMoneyValue(value: unknown) {
   try {
-    return normalizeMoneyValue(value, { fallback: '' })
+    return normalizeMoneyValue(value as MoneyInputValue, { fallback: '' })
   } catch {
     return ''
   }

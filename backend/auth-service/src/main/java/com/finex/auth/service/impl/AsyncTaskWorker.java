@@ -247,7 +247,8 @@ public class AsyncTaskWorker {
     private byte[] buildPaymentPendingWorkbook(String sheetName, List<ExpensePaymentOrderVO> rows) {
         String[] headers = new String[] {
                 "\u5355\u636e\u7f16\u53f7", "\u5355\u636e\u540d\u79f0", "\u5355\u636e\u7c7b\u578b", "\u63d0\u5355\u4eba", "\u4ed8\u6b3e\u516c\u53f8",
-                "\u6536\u6b3e\u4ebaor\u6536\u6b3e\u5355\u4f4d", "\u6536\u6b3e\u8d26\u53f7", "\u5f00\u6237\u884c", "\u652f\u4ed8\u91d1\u989d", "\u5355\u636e\u72b6\u6001"
+                "\u6536\u6b3e\u5355\u4f4d", "\u6536\u6b3e\u8d26\u53f7", "\u5f00\u6237\u884c", "\u5f00\u6237\u7701",
+                "\u5f00\u6237\u5e02", "\u94f6\u884c\u63a8\u9001\u6458\u8981", "\u5b9e\u9645\u652f\u4ed8\u91d1\u989d", "\u5355\u636e\u72b6\u6001"
         };
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet(sheetName);
@@ -264,7 +265,10 @@ public class AsyncTaskWorker {
                 writeCell(row, cellIndex++, item.getPayeeOrCounterpartyName());
                 writeCell(row, cellIndex++, item.getPayeeAccountNo());
                 writeCell(row, cellIndex++, item.getPayeeBankName());
-                writeCell(row, cellIndex++, decimalText(item.getAmount()));
+                writeCell(row, cellIndex++, item.getPayeeBankProvince());
+                writeCell(row, cellIndex++, item.getPayeeBankCity());
+                writeCell(row, cellIndex++, item.getBankPushSummary());
+                writeCell(row, cellIndex++, decimalText(item.getActualPaymentAmount()));
                 writeCell(row, cellIndex, firstNonBlank(item.getPaymentStatusLabel(), item.getDocumentStatusLabel()));
             }
             workbook.write(outputStream);

@@ -9,7 +9,7 @@
         class="expense-wb-stat-card expense-wb-stat-card--compact expense-wb-stat-card--dense"
         :class="{
           'expense-wb-stat-card--filterable': true,
-          'expense-wb-stat-card--active': activeStatFilter === stat.filterValue
+          'expense-wb-stat-card--active': activeStatCard === stat.filterValue
         }"
         :data-testid="`expense-list-stat-${stat.filterKey}`"
         role="button"
@@ -211,7 +211,7 @@
               编辑
             </el-button>
             <el-button
-              v-if="isDraftDocument(row) && can('expense:list:delete')"
+              v-if="canDeleteDraft(row)"
               link
               type="danger"
               size="small"
@@ -250,8 +250,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleCheckFilled,
@@ -281,20 +281,22 @@ import {
   createExpenseWorkbenchFilters,
   filterExpenseWorkbenchRows,
   getExpenseWorkbenchStatusType,
-  isExpenseWorkbenchPendingLikeStatus,
   loadColumnOrder,
   loadColumnWidths,
+  matchesExpenseWorkbenchStatFilter,
   loadVisibleColumns,
   moveColumnOrder,
   resolveColumnText,
   resolveDocumentStatusLabel,
+  resolveExpenseWorkbenchStatusCode,
   resolveOrderedColumnDefinitions,
   resolveVisibleColumnDefinitions,
   saveColumnOrder,
   saveColumnWidth,
   saveVisibleColumns,
   sortVisibleColumnsByOrder,
-  type ExpenseWorkbenchColumnKey
+  type ExpenseWorkbenchColumnKey,
+  type ExpenseWorkbenchStatFilterKey
 } from './expenseWorkbenchListHelper'
 import { openDownloadCenter } from '@/utils/downloadCenter'
 
@@ -306,6 +308,8 @@ const expenseList = ref<ExpenseSummary[]>([])
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const filters = ref(createExpenseWorkbenchFilters())
 const showAdvancedFilters = ref(false)
+const activeStatFilter = ref<ExpenseWorkbenchStatFilterKey>('')
+const route = useRoute()
 const router = useRouter()
 
 const allowedColumnKeys: ExpenseWorkbenchColumnKey[] = EXPENSE_WORKBENCH_COLUMNS
@@ -337,46 +341,83 @@ onMounted(async () => {
   await loadExpenseList()
 })
 
-const filteredExpenseList = computed(() => filterExpenseWorkbenchRows(expenseList.value, filters.value))
-const activeStatFilter = computed(() => filters.value.documentStatusLabel || '')
+watch(
+  () => filters.value.documentStatusLabel,
+  (statusLabel) => {
+    if (statusLabel) {
+      activeStatFilter.value = ''
+    }
+  }
+)
+
+const filteredExpenseList = computed(() => {
+  const exactFilteredRows = filterExpenseWorkbenchRows(expenseList.value, filters.value)
+  return activeStatFilter.value
+    ? exactFilteredRows.filter((item) => matchesExpenseWorkbenchStatFilter(item, activeStatFilter.value))
+    : exactFilteredRows
+})
+const activeStatCard = computed<ExpenseWorkbenchStatFilterKey>(() => {
+  if (activeStatFilter.value) {
+    return activeStatFilter.value
+  }
+  switch (filters.value.documentStatusLabel) {
+    case '审批中':
+      return 'pending'
+    case '待支付':
+      return 'pending-payment'
+    case '草稿':
+      return 'draft'
+    default:
+      return ''
+  }
+})
 
 const pagedExpenseList = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredExpenseList.value.slice(start, start + pageSize.value)
 })
 
-const listStats = computed(() => [
+interface ExpenseListStatCard {
+  label: string
+  value: number
+  icon: typeof Tickets
+  tone: string
+  filterKey: string
+  filterValue: ExpenseWorkbenchStatFilterKey
+}
+
+const listStats = computed<ExpenseListStatCard[]>(() => [
   {
     label: '全部单据',
     value: expenseList.value.length,
     icon: Tickets,
     tone: 'blue',
     filterKey: 'all',
-    filterValue: ''
+    filterValue: 'all'
   },
   {
     label: '审批中',
-    value: expenseList.value.filter((item) => isExpenseWorkbenchPendingLikeStatus(resolveDocumentStatusLabel(item))).length,
+    value: expenseList.value.filter((item) => matchesExpenseWorkbenchStatFilter(item, 'pending')).length,
     icon: Clock,
     tone: 'amber',
     filterKey: 'pending',
-    filterValue: '审批中'
+    filterValue: 'pending'
   },
   {
     label: '待支付',
-    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '待支付').length,
+    value: expenseList.value.filter((item) => matchesExpenseWorkbenchStatFilter(item, 'pending-payment')).length,
     icon: CircleCheckFilled,
     tone: 'amber',
     filterKey: 'pending-payment',
-    filterValue: '待支付'
+    filterValue: 'pending-payment'
   },
   {
     label: '草稿中',
-    value: expenseList.value.filter((item) => resolveDocumentStatusLabel(item) === '草稿').length,
+    value: expenseList.value.filter((item) => matchesExpenseWorkbenchStatFilter(item, 'draft')).length,
     icon: EditPen,
     tone: 'rose',
     filterKey: 'draft',
-    filterValue: '草稿'
+    filterValue: 'draft'
   }
 ])
 
@@ -397,11 +438,13 @@ function getStatusType(status: string) {
 
 function resetFilters() {
   filters.value = createExpenseWorkbenchFilters()
+  activeStatFilter.value = ''
   currentPage.value = 1
 }
 
-function applyStatFilter(status: string) {
-  filters.value.documentStatusLabel = status
+function applyStatFilter(filterKey: ExpenseWorkbenchStatFilterKey) {
+  activeStatFilter.value = filterKey === 'all' ? '' : filterKey
+  filters.value.documentStatusLabel = ''
   currentPage.value = 1
 }
 
@@ -476,37 +519,25 @@ function goCreateExpense() {
   void router.push('/expense/create')
 }
 
-function resolveDocumentStatusCode(row: ExpenseSummary) {
-  const rawStatus = [row.documentStatus, row.status, row.documentStatusLabel]
-    .find((item) => typeof item === 'string' && item.trim())
-    ?.trim()
-
-  switch (rawStatus) {
-    case '草稿':
-      return 'DRAFT'
-    case '已驳回':
-      return 'REJECTED'
-    default:
-      return rawStatus || ''
-  }
-}
-
 function isDraftDocument(row: ExpenseSummary) {
-  return resolveDocumentStatusCode(row) === 'DRAFT'
+  return resolveExpenseWorkbenchStatusCode(row) === 'DRAFT'
 }
 
 function isRejectedDocument(row: ExpenseSummary) {
-  return resolveDocumentStatusCode(row) === 'REJECTED'
+  return resolveExpenseWorkbenchStatusCode(row) === 'REJECTED'
 }
 
 function isEditableDraftLike(row: ExpenseSummary) {
-  const statusCode = resolveDocumentStatusCode(row)
+  const statusCode = resolveExpenseWorkbenchStatusCode(row)
   return statusCode === 'DRAFT' || statusCode === 'REJECTED'
 }
 
-function buildResubmitEditorPath(documentCode: string, draftEntry: boolean) {
-  const basePath = `/expense/documents/${encodeURIComponent(documentCode)}/resubmit`
-  return draftEntry ? `${basePath}?entry=draft` : basePath
+function canDeleteDraft(row: ExpenseSummary) {
+  return isDraftDocument(row) && row.draftDeletable !== false && can('expense:list:delete')
+}
+
+function buildReturnToQuery(extraQuery: Record<string, string> = {}) {
+  return route.fullPath ? { ...extraQuery, returnTo: route.fullPath } : extraQuery
 }
 
 function openResubmitEditor(row: ExpenseSummary) {
@@ -515,7 +546,10 @@ function openResubmitEditor(row: ExpenseSummary) {
     ElMessage.warning('未找到单据编码')
     return
   }
-  void router.push(buildResubmitEditorPath(documentCode, isDraftDocument(row)))
+  void router.push({
+    path: `/expense/documents/${encodeURIComponent(documentCode)}/resubmit`,
+    query: buildReturnToQuery(isDraftDocument(row) ? { entry: 'draft' } : {})
+  })
 }
 
 function openDetail(row: ExpenseSummary) {
@@ -524,7 +558,10 @@ function openDetail(row: ExpenseSummary) {
     ElMessage.warning('未找到单据编码')
     return
   }
-  void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+  void router.push({
+    path: `/expense/documents/${encodeURIComponent(documentCode)}`,
+    query: buildReturnToQuery()
+  })
 }
 
 function handleRowDblClick(row: ExpenseSummary) {

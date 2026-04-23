@@ -389,7 +389,8 @@ function openDetail(row: ExpensePaymentOrder) {
     name: 'expense-document-detail',
     params: {
       documentCode: row.documentCode
-    }
+    },
+    query: route.fullPath ? { returnTo: route.fullPath } : {}
   })
 }
 

@@ -3,10 +3,18 @@
     <div v-if="!isCreateMode" class="expense-wb-hero">
         <div class="expense-wb-hero__row">
           <div class="expense-wb-hero__main">
+            <button
+              v-if="showResubmitHeroBack"
+              type="button"
+              class="mb-4 inline-flex items-center gap-2 text-sm font-medium text-blue-600 transition hover:text-blue-500"
+              data-testid="expense-resubmit-hero-back"
+              @click="goBack"
+            >
+              返回
+            </button>
             <p class="expense-wb-hero__eyebrow">{{ heroEyebrow }}</p>
             <h1 class="expense-wb-hero__title">{{ pageTitle }}</h1>
             <p class="expense-wb-hero__desc">{{ pageDescription }}</p>
-            <!-- 返回 -->
             <div class="expense-wb-meta">
               <span class="expense-wb-meta-pill">{{ modeTag?.label || '新建模式' }}</span>
               <span class="expense-wb-meta-pill">{{ heroMetaPrimary }}</span>
@@ -16,7 +24,7 @@
 
         </div>
 
-      <div class="expense-wb-stat-grid">
+      <div v-if="showHeroStats" class="expense-wb-stat-grid">
           <article v-for="stat in showTemplateChooser ? chooserStats : editorStats" :key="stat.label" class="expense-wb-stat-card">
             <div class="expense-wb-stat-card__top">
               <div>
@@ -290,6 +298,7 @@
                       {{ enterpriseModeLabel(detail.enterpriseMode) }}
                     </el-tag>
                   </div>
+                  <p class="mt-2 text-sm font-medium text-slate-600">{{ expenseDetailAmountText(detail) }}</p>
                 </div>
 
                 <div class="expense-wb-compact-actions">
@@ -372,6 +381,8 @@ import { getControlType } from '@/views/process/formDesignerHelper'
 import {
   buildExpenseDetailFormData,
   enrichExpenseDetailInstance,
+  resolveBusinessScenario,
+  resolveExpenseDetailAmount,
   resolveDocumentTotalAmount
 } from './expenseDetailRuntime'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
@@ -503,7 +514,8 @@ const totalAmount = computed(() =>
     blocks.value,
     formValues,
     hasExpenseDetailSection.value ? expenseDetails.value : [],
-    templateDetail.value?.expenseDetailModeDefault
+    templateDetail.value?.expenseDetailModeDefault,
+    templateDetail.value?.expenseDetailSchema
   )
 )
 
@@ -541,6 +553,8 @@ const pageTitle = computed(() => {
   return '新建审批单'
 })
 
+const showResubmitHeroBack = computed(() => pageMode.value === 'resubmit')
+const showHeroStats = computed(() => pageMode.value !== 'resubmit')
 const showFloatingActionBar = computed(() => !showTemplateChooser.value && Boolean(templateDetail.value))
 
 const pageDescription = computed(() => {
@@ -765,7 +779,11 @@ async function syncEditPage(version: number) {
     resetFormValues()
     Object.assign(formValues, cloneRecord(context.formData))
     expenseDetails.value = Array.isArray(context.expenseDetails) ? context.expenseDetails.map(cloneDetail) : []
-    restoreManualApproverSelections(readDraft()?.manualApproverSelections)
+    if (pageMode.value === 'resubmit') {
+      restoreResubmitDraftState(context.templateCode)
+    } else {
+      restoreManualApproverSelections(readDraft()?.manualApproverSelections)
+    }
     persistDraft({ includeTemplateDetail: true })
   } catch (error: unknown) {
     if (version !== pageSyncVersion) {
@@ -1039,6 +1057,20 @@ function readDraft(): ExpenseCreateDraft | null {
   }
 }
 
+function restoreResubmitDraftState(templateCode: string) {
+  const draft = readDraft()
+  if (!draft || draft.templateCode !== templateCode) {
+    restoreManualApproverSelections(undefined)
+    return
+  }
+  if (draft.templateDetail?.templateCode === templateCode) {
+    applyTemplateDetail(draft.templateDetail)
+  }
+  Object.assign(formValues, cloneRecord(draft.formValues || {}))
+  expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
+  restoreManualApproverSelections(draft.manualApproverSelections)
+}
+
 function schedulePersistDraft() {
   if (isComponentUnmounted || !currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
     return
@@ -1210,9 +1242,7 @@ function addExpenseDetail() {
     detailNo,
     detailDesignCode: templateDetail.value.expenseDetailDesignCode,
     detailType: templateDetail.value.expenseDetailType,
-    enterpriseMode: templateDetail.value.expenseDetailType === 'ENTERPRISE_TRANSACTION'
-      ? (templateDetail.value.expenseDetailModeDefault || 'PREPAY_UNBILLED')
-      : '',
+    enterpriseMode: '',
     detailTitle: `费用明细 ${sortOrder}`,
     sortOrder,
     formData: buildExpenseDetailFormData(
@@ -1221,7 +1251,7 @@ function addExpenseDetail() {
       {},
       templateDetail.value.expenseDetailModeDefault
     )
-  }, templateDetail.value.expenseDetailModeDefault)
+  }, templateDetail.value.expenseDetailModeDefault, templateDetail.value.expenseDetailSchema)
   expenseDetails.value = [...expenseDetails.value, detail]
   persistDraft()
   editExpenseDetail(detailNo)
@@ -1281,16 +1311,35 @@ function reselectTemplate() {
   void router.replace({ name: 'expense-create', query: {} })
 }
 
+function resolveReturnToPath() {
+  return typeof route.query.returnTo === 'string' && route.query.returnTo.trim() ? route.query.returnTo.trim() : ''
+}
+
+async function navigateBackWithFallback(fallbackPath = '') {
+  const returnTo = resolveReturnToPath()
+  if (returnTo) {
+    await router.push(returnTo)
+    return
+  }
+  if (window.history.length > 1) {
+    await router.back()
+    return
+  }
+  if (fallbackPath) {
+    await router.push(fallbackPath)
+    return
+  }
+  await router.push('/expense/list')
+}
+
 function goBack() {
   if (pageMode.value === 'create') {
     reselectTemplate()
     return
   }
-  if (editingDocumentCode.value) {
-    void router.push(`/expense/documents/${encodeURIComponent(editingDocumentCode.value)}`)
-    return
-  }
-  void router.back()
+  void navigateBackWithFallback(
+    editingDocumentCode.value ? `/expense/documents/${encodeURIComponent(editingDocumentCode.value)}` : ''
+  )
 }
 
 function goBackToList() {
@@ -1337,6 +1386,11 @@ async function submitDocument() {
       ElMessage.warning('费用明细最多只能添加 10 份')
       return
     }
+  }
+  const expenseDetailScenarioIssue = validateExpenseDetailBusinessScenarios()
+  if (expenseDetailScenarioIssue) {
+    ElMessage.warning(expenseDetailScenarioIssue)
+    return
   }
 
   submitting.value = true
@@ -1403,11 +1457,39 @@ function enterpriseModeLabel(mode?: string) {
   return ''
 }
 
+function expenseDetailAmountText(detail: ExpenseDetailInstance) {
+  const amount = resolveExpenseDetailAmount(
+    isRecord(detail.formData) ? detail.formData : {},
+    String(detail.detailType || ''),
+    String(detail.businessSceneMode || detail.enterpriseMode || templateDetail.value?.expenseDetailModeDefault || ''),
+    templateDetail.value?.expenseDetailSchema
+  ) || '0.00'
+  return `金额：¥ ${formatMoney(amount)}`
+}
+
 function cloneDetail(detail: ExpenseDetailInstance): ExpenseDetailInstance {
   return enrichExpenseDetailInstance({
     ...detail,
     formData: cloneRecord(detail.formData || {})
-  }, templateDetail.value?.expenseDetailModeDefault)
+  }, templateDetail.value?.expenseDetailModeDefault, templateDetail.value?.expenseDetailSchema)
+}
+
+function validateExpenseDetailBusinessScenarios() {
+  if (!isReportTemplate.value || templateDetail.value?.expenseDetailType !== 'ENTERPRISE_TRANSACTION') {
+    return ''
+  }
+  for (const detail of expenseDetails.value) {
+    const resolvedScenario = resolveBusinessScenario(
+      isRecord(detail.formData) ? detail.formData : {},
+      templateDetail.value?.expenseDetailType,
+      templateDetail.value?.expenseDetailModeDefault,
+      templateDetail.value?.expenseDetailSchema
+    )
+    if (!resolvedScenario) {
+      return `请先为“${detail.detailTitle || detail.detailNo}”选择业务场景`
+    }
+  }
+  return ''
 }
 
 function cloneRecord(value: Record<string, unknown>) {

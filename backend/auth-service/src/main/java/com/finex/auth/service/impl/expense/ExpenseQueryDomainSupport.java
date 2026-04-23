@@ -1,7 +1,7 @@
-// 业务域：报销单录入、流转与查询
-// 文件角色：领域规则支撑类
-// 上下游关系：上游通常来自 报销单页面、审批页面、付款页面对应的 Controller，下游会继续协调 报销单、流程节点、附件、付款与核销等数据。
-// 风险提醒：改坏后最容易影响 单据状态、审批链、金额结果和重复提交。
+// 涓氬姟鍩燂細鎶ラ攢鍗曞綍鍏ャ€佹祦杞笌鏌ヨ
+// 鏂囦欢瑙掕壊锛氶鍩熻鍒欐敮鎾戠被
+// 涓婁笅娓稿叧绯伙細涓婃父閫氬父鏉ヨ嚜 鎶ラ攢鍗曢〉闈€佸鎵归〉闈€佷粯娆鹃〉闈㈠搴旂殑 Controller锛屼笅娓镐細缁х画鍗忚皟 鎶ラ攢鍗曘€佹祦绋嬭妭鐐广€侀檮浠躲€佷粯娆句笌鏍搁攢绛夋暟鎹€?
+// 椋庨櫓鎻愰啋锛氭敼鍧忓悗鏈€瀹规槗褰卞搷 鍗曟嵁鐘舵€併€佸鎵归摼銆侀噾棰濈粨鏋滃拰閲嶅鎻愪氦銆?
 
 package com.finex.auth.service.impl.expense;
 
@@ -42,9 +42,9 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * ExpenseQueryDomainSupport：领域规则支撑类。
- * 承接 报销单的核心业务规则。
- * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
+ * ExpenseQueryDomainSupport锛氶鍩熻鍒欐敮鎾戠被銆?
+ * 鎵挎帴 鎶ラ攢鍗曠殑鏍稿績涓氬姟瑙勫垯銆?
+ * 鏀硅繖閲屾椂锛岃鐗瑰埆鍏虫敞 鍗曟嵁鐘舵€併€佸鎵归摼銆侀噾棰濈粨鏋滃拰閲嶅鎻愪氦鏄惁浼氳涓€璧峰甫鍧忋€?
  */
 @Service
 @RequiredArgsConstructor
@@ -61,6 +61,8 @@ public class ExpenseQueryDomainSupport {
     private static final String TASK_STATUS_PENDING = "PENDING";
     private static final String TASK_STATUS_PAUSED = "PAUSED";
     private static final String TASK_STATUS_CANCELLED = "CANCELLED";
+    private static final String LOG_SUBMIT = "SUBMIT";
+    private static final String LOG_RESUBMIT = "RESUBMIT";
     private static final String LOG_RECALL = "RECALL";
     private static final String LOG_COMMENT = "COMMENT";
     private static final String LOG_REMIND = "REMIND";
@@ -83,7 +85,7 @@ public class ExpenseQueryDomainSupport {
     private final NotificationService notificationService;
 
     /**
-     * 查询报销单Summaries列表。
+     * 鏌ヨ鎶ラ攢鍗昐ummaries鍒楄〃銆?
      */
     public List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
@@ -91,11 +93,11 @@ public class ExpenseQueryDomainSupport {
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
         );
-        return expenseSummaryAssembler.toExpenseSummaries(instances);
+        return sortSummaries(expenseSummaryAssembler.toExpenseSummaries(instances));
     }
 
     /**
-     * 查询查询单据Summaries列表。
+     * 鏌ヨ鏌ヨ鍗曟嵁Summaries鍒楄〃銆?
      */
     public List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
@@ -103,11 +105,11 @@ public class ExpenseQueryDomainSupport {
                         .ne(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_DRAFT)
                         .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
         );
-        return expenseSummaryAssembler.toExpenseSummaries(instances);
+        return sortSummaries(expenseSummaryAssembler.toExpenseSummaries(instances));
     }
 
     /**
-     * 查询Outstanding单据列表。
+     * 鏌ヨOutstanding鍗曟嵁鍒楄〃銆?
      */
     public List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
         String normalizedKind = normalizeOutstandingKind(kind);
@@ -142,7 +144,7 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 获取单据明细。
+     * 鑾峰彇鍗曟嵁鏄庣粏銆?
      */
     public ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
@@ -151,21 +153,21 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 获取报销单明细。
+     * 鑾峰彇鎶ラ攢鍗曟槑缁嗐€?
      */
     public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         return expenseDocumentReadSupport.getExpenseDetail(userId, documentCode, detailNo, allowCrossView);
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public ExpenseDocumentDetailVO recallDocument(Long userId, String username, String documentCode) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.requireSubmitter(instance, userId);
         String status = trimToNull(instance.getStatus());
         if (!Objects.equals(status, DOCUMENT_STATUS_PENDING) && !Objects.equals(status, DOCUMENT_STATUS_EXCEPTION)) {
-            throw new IllegalStateException("瑜版挸澧犻崡鏇熷祦娑撳秵鏁幐浣稿将閸?");
+            throw new IllegalStateException("鐟滅増鎸告晶鐘诲础閺囩喎绁﹀☉鎾崇У閺侇噣骞愭担绋垮皢闁?");
         }
         LocalDateTime now = LocalDateTime.now();
         cancelOpenTasks(loadOpenTasks(instance.getDocumentCode()), now);
@@ -184,18 +186,18 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public ExpenseDocumentDetailVO commentOnDocument(Long userId, String username, String documentCode, ExpenseDocumentCommentDTO dto, boolean allowCrossView) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
         if (!isFlowRelatedUser(instance, userId)) {
-            throw new IllegalStateException("閸欘亝婀佸ù浣衡柤閻╃鍙ф禍鍝勫讲娴犮儴鐦庣拋鍝勭秼閸撳秴宕熼幑?");
+            throw new IllegalStateException("闁告瑯浜濆﹢浣该规担琛℃煠闁烩晝顭堥崣褎绂嶉崫鍕濞寸姰鍎撮惁搴ｆ媼閸濆嫮绉奸柛鎾崇Т瀹曠喖骞?");
         }
         String comment = trimToNull(dto == null ? null : dto.getComment());
         List<String> attachmentFileNames = normalizeStringList(dto == null ? Collections.emptyList() : dto.getAttachmentFileNames());
         if (comment == null && attachmentFileNames.isEmpty()) {
-            throw new IllegalArgumentException("鐠囧嫯顔戦崘鍛啇娑撳秷鍏樻稉铏光敄");
+            throw new IllegalArgumentException("閻犲洤瀚鎴﹀礃閸涱収鍟囧☉鎾崇Х閸忔ɑ绋夐搹鍏夋晞");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         if (comment != null) {
@@ -218,17 +220,17 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 处理报销单中的这一步。
+     * 澶勭悊鎶ラ攢鍗曚腑鐨勮繖涓€姝ャ€?
      */
     public ExpenseDocumentDetailVO remindDocument(Long userId, String username, String documentCode, ExpenseDocumentReminderDTO dto) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_PENDING)) {
-            throw new IllegalStateException("閸欘亝婀佺€光剝澹掓稉顓犳畱閸楁洘宓侀幍宥呭讲娴犮儱鍋撻崝?");
+            throw new IllegalStateException("\u53ea\u6709\u5ba1\u6279\u4e2d\u7684\u5355\u636e\u624d\u53ef\u4ee5\u50ac\u529e");
         }
         List<ProcessDocumentTask> currentTasks = loadPendingTasks(instance.getDocumentCode());
         if (currentTasks.isEmpty()) {
-            throw new IllegalStateException("瑜版挸澧犻崡鏇熷祦濞屸剝婀佸鍛吀閹甸€涙眽閿涘本娈忛弮鑸垫￥濞夋洖鍋撻崝?");
+            throw new IllegalStateException("\u5f53\u524d\u6ca1\u6709\u53ef\u50ac\u529e\u7684\u5ba1\u6279\u4eba");
         }
         ensureReminderThrottle(instance.getDocumentCode(), userId);
         String remark = trimToNull(dto == null ? null : dto.getRemark());
@@ -238,10 +240,10 @@ public class ExpenseQueryDomainSupport {
                         item -> new ArrayList<>(item.values())
                 ));
         for (ProcessDocumentTask task : distinctTasks) {
-            String title = "鐎光剝澹掗崒顒€濮欓幓鎰板晪";
-            String content = "閸楁洘宓?" + instance.getDocumentCode() + " 濮濓絽婀粵澶婄窡娴ｇ姷娈戞径鍕倞";
+            String title = "\u50ac\u529e\u63d0\u9192";
+            String content = "\u5355\u636e " + instance.getDocumentCode() + " \u6b63\u5728\u7b49\u5f85\u4f60\u5904\u7406\u3002";
             if (remark != null) {
-                content = content + "閿涘苯顦▔顭掔窗" + remark;
+                content = content + " \u50ac\u529e\u5907\u6ce8\uff1a" + remark;
             }
             notificationService.sendAsyncNotification(task.getAssigneeUserId(), "EXPENSE_REMINDER", title, content, instance.getDocumentCode());
         }
@@ -268,7 +270,7 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 获取单据Navigation。
+     * 鑾峰彇鍗曟嵁Navigation銆?
      */
     public ExpenseDocumentNavigationVO getDocumentNavigation(Long userId, String documentCode, boolean approvalViewer) {
         ExpenseDocumentNavigationVO navigation = new ExpenseDocumentNavigationVO();
@@ -291,7 +293,7 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 获取单据Edit上下文。
+     * 鑾峰彇鍗曟嵁Edit涓婁笅鏂囥€?
      */
     public ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode) {
         return expenseDocumentTemplateSupport.getDocumentEditContext(userId, documentCode);
@@ -301,7 +303,10 @@ public class ExpenseQueryDomainSupport {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.requireSubmitter(instance, userId);
         if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("仅草稿状态单据允许删除");
+            throw new IllegalStateException("\u4ec5\u8349\u7a3f\u72b6\u6001\u5355\u636e\u5141\u8bb8\u5220\u9664");
+        }
+        if (hasFormalProcessHistory(instance.getDocumentCode())) {
+            throw new IllegalStateException("\u5df2\u63d0\u4ea4\u8fc7\u7684\u5355\u636e\u53ec\u56de\u540e\u4e0d\u5141\u8bb8\u5220\u9664");
         }
         String normalizedDocumentCode = instance.getDocumentCode();
         pmBankPaymentRecordMapper.delete(
@@ -338,8 +343,36 @@ public class ExpenseQueryDomainSupport {
         return true;
     }
 
+    private boolean hasFormalProcessHistory(String documentCode) {
+        Long lifecycleLogCount = processDocumentActionLogMapper.selectCount(
+                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
+                        .eq(ProcessDocumentActionLog::getDocumentCode, documentCode)
+                        .in(ProcessDocumentActionLog::getActionType, List.of(LOG_SUBMIT, LOG_RESUBMIT, LOG_RECALL))
+        );
+        return lifecycleLogCount != null && lifecycleLogCount > 0;
+    }
+
+    private List<ExpenseSummaryVO> sortSummaries(List<ExpenseSummaryVO> summaries) {
+        return summaries.stream()
+                .sorted((left, right) -> {
+                    String leftSubmittedAt = trimToNull(left == null ? null : left.getSubmittedAt());
+                    String rightSubmittedAt = trimToNull(right == null ? null : right.getSubmittedAt());
+                    if (Objects.equals(leftSubmittedAt, rightSubmittedAt)) {
+                        return 0;
+                    }
+                    if (leftSubmittedAt == null) {
+                        return 1;
+                    }
+                    if (rightSubmittedAt == null) {
+                        return -1;
+                    }
+                    return rightSubmittedAt.compareTo(leftSubmittedAt);
+                })
+                .toList();
+    }
+
     /**
-     * 判断流程Related用户是否成立。
+     * 鍒ゆ柇娴佺▼Related鐢ㄦ埛鏄惁鎴愮珛銆?
      */
     private boolean isFlowRelatedUser(ProcessDocumentInstance instance, Long userId) {
         if (Objects.equals(instance.getSubmitterUserId(), userId)) {
@@ -373,12 +406,12 @@ public class ExpenseQueryDomainSupport {
         if (latestLog != null
                 && latestLog.getCreatedAt() != null
                 && latestLog.getCreatedAt().isAfter(LocalDateTime.now().minusMinutes(10))) {
-            throw new IllegalStateException("閸氬奔绔撮崡鏇熷祦 10 閸掑棝鎸撻崘鍛涧閼宠棄鍋撻崝鐐扮濞?");
+            throw new IllegalStateException("10\u5206\u949f\u5185\u53ea\u80fd\u50ac\u529e\u4e00\u6b21\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5");
         }
     }
 
     /**
-     * 加载Pending任务。
+     * 鍔犺浇Pending浠诲姟銆?
      */
     private List<ProcessDocumentTask> loadPendingTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
@@ -390,7 +423,7 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 加载开立任务。
+     * 鍔犺浇寮€绔嬩换鍔°€?
      */
     private List<ProcessDocumentTask> loadOpenTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
@@ -424,7 +457,7 @@ public class ExpenseQueryDomainSupport {
     }
 
     /**
-     * 加载Navigation单据编码。
+     * 鍔犺浇Navigation鍗曟嵁缂栫爜銆?
      */
     private List<String> loadNavigationDocumentCodes(Long userId, String currentDocumentCode) {
         List<String> pendingCodes = processDocumentTaskMapper.selectList(

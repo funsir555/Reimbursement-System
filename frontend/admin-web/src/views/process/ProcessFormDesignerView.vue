@@ -356,6 +356,33 @@
                     <el-input v-else :model-value="stringDefaultValue(selectedBlock)" placeholder="请输入默认值" @update:model-value="setSelectedBlockDefaultValue" />
                   </el-form-item>
 
+                  <div
+                    v-if="usesBusinessScenarioModeEditor(selectedBlock)"
+                    class="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
+                    data-testid="business-scenario-config"
+                  >
+                    <div>
+                      <p class="text-base font-semibold text-slate-800">业务场景配置</p>
+                      <p class="mt-1 text-sm text-slate-500">固定维护全额付款与预付未到票，至少保留一个开启项。</p>
+                    </div>
+                    <div class="mt-4 space-y-3">
+                      <div
+                        v-for="item in BUSINESS_SCENARIO_MODE_OPTIONS"
+                        :key="item.value"
+                        class="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                      >
+                        <div>
+                          <p class="text-sm font-semibold text-slate-800">{{ item.label }}</p>
+                          <p class="mt-1 text-xs text-slate-400">{{ item.value }}</p>
+                        </div>
+                        <el-switch
+                          :model-value="isBusinessScenarioModeEnabled(selectedBlock, item.value)"
+                          @update:model-value="toggleBusinessScenarioMode(item.value, $event)"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div v-if="usesOptionEditor(selectedBlock)" class="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
                     <div class="flex items-center justify-between gap-3">
                       <div>
@@ -601,6 +628,8 @@ import {
   FORM_PERMISSION_VALUE_OPTIONS,
   RELATED_DOCUMENT_ALLOWED_TEMPLATE_TYPES,
   WRITEOFF_DOCUMENT_ALLOWED_TEMPLATE_TYPES,
+  BUSINESS_SCENARIO_MODE_FULL,
+  BUSINESS_SCENARIO_MODE_OPTIONS,
   type FormDesignerPaletteItem,
   buildBusinessComponentPaletteItems,
   buildSharedFieldPaletteItems,
@@ -611,10 +640,12 @@ import {
   getControlType,
   getOptionItems,
   getSharedArchiveCode,
+  isBusinessScenarioBlock,
   insertBlockAt,
   moveBlock,
   moveBlockByOffset,
   normalizeBusinessComponentAllowedTemplateTypes,
+  normalizeBusinessScenarioEnabledModes,
   normalizeFormSchema,
   removeBlock
 } from '@/views/process/formDesignerHelper'
@@ -745,6 +776,7 @@ watch(selectedBlock, (block) => {
 watch(() => working.detailType, (detailType) => {
   if (isExpenseDetailDesigner.value) {
     working.detailTypeLabel = resolveExpenseDetailTypeLabel(detailType || 'NORMAL_REIMBURSEMENT')
+    working.schema = normalizeFormSchema(working.schema, { detailType: detailType || 'NORMAL_REIMBURSEMENT' })
   }
 })
 
@@ -802,7 +834,7 @@ function assignDetail(detail: ProcessFormDesignDetail | ProcessExpenseDetailDesi
       templateTypeLabel: resolveTemplateTypeLabel('report'),
       formDescription: expenseDetail.detailDescription || '',
       updatedAt: expenseDetail.updatedAt || '',
-      schema: normalizeFormSchema(expenseDetail.schema),
+      schema: normalizeFormSchema(expenseDetail.schema, { detailType: expenseDetail.detailType || 'NORMAL_REIMBURSEMENT' }),
       detailType: expenseDetail.detailType || 'NORMAL_REIMBURSEMENT',
       detailTypeLabel: expenseDetail.detailTypeLabel || resolveExpenseDetailTypeLabel(expenseDetail.detailType || 'NORMAL_REIMBURSEMENT')
     })
@@ -826,7 +858,7 @@ function assignCopiedExpenseDetail(detail: ProcessExpenseDetailDesignDetail) {
     ...createEmptyDetail('report'),
     formName: sourceName ? `${sourceName}-副本` : '费用明细表单-副本',
     formDescription: detail.detailDescription || '',
-    schema: normalizeFormSchema(detail.schema),
+    schema: normalizeFormSchema(detail.schema, { detailType: detail.detailType || 'NORMAL_REIMBURSEMENT' }),
     detailType: detail.detailType || 'NORMAL_REIMBURSEMENT',
     detailTypeLabel: detail.detailTypeLabel || resolveExpenseDetailTypeLabel(detail.detailType || 'NORMAL_REIMBURSEMENT')
   })
@@ -1310,7 +1342,24 @@ function optionItems(block: ProcessFormDesignBlock) {
   return getOptionItems(block)
 }
 
+function usesBusinessScenarioModeEditor(block: ProcessFormDesignBlock) {
+  return isExpenseDetailDesigner.value
+    && working.detailType === 'ENTERPRISE_TRANSACTION'
+    && isBusinessScenarioBlock(block)
+}
+
+function isBusinessScenarioModeEnabled(block: ProcessFormDesignBlock, mode: string) {
+  return normalizeBusinessScenarioEnabledModes(
+    block.props.enabledSceneModes,
+    working.detailType || undefined,
+    block.props.options
+  ).includes(mode)
+}
+
 function usesOptionEditor(block: ProcessFormDesignBlock) {
+  if (isBusinessScenarioBlock(block)) {
+    return false
+  }
   return ['SELECT', 'MULTI_SELECT', 'RADIO', 'CHECKBOX'].includes(controlType(block))
 }
 
@@ -1327,6 +1376,33 @@ function addOptionItem() {
   const options = optionItems(selectedBlock.value)
   selectedBlock.value.props.options = options
   options.push({ label: `选项 ${options.length + 1}`, value: `option-${Date.now()}` })
+}
+
+function toggleBusinessScenarioMode(mode: string, enabled: string | number | boolean) {
+  if (!selectedBlock.value || !isBusinessScenarioBlock(selectedBlock.value)) {
+    return
+  }
+  const currentModes = normalizeBusinessScenarioEnabledModes(
+    selectedBlock.value.props.enabledSceneModes,
+    working.detailType || undefined,
+    selectedBlock.value.props.options
+  )
+  const wantsEnabled = Boolean(enabled)
+
+  if (!wantsEnabled && currentModes.length <= 1) {
+    ElMessage.warning('至少保留一个业务场景')
+    return
+  }
+
+  const nextModes = wantsEnabled
+    ? BUSINESS_SCENARIO_MODE_OPTIONS.map((item) => item.value).filter((item) => item === mode || currentModes.includes(item))
+    : currentModes.filter((item) => item !== mode)
+
+  selectedBlock.value.props.enabledSceneModes = nextModes
+  selectedBlock.value.props.options = BUSINESS_SCENARIO_MODE_OPTIONS.filter((item) => nextModes.includes(item.value))
+  if (selectedBlock.value.defaultValue && !nextModes.includes(String(selectedBlock.value.defaultValue))) {
+    selectedBlock.value.defaultValue = ''
+  }
 }
 
 function removeOptionItem(index: number) {
@@ -1443,11 +1519,17 @@ async function saveFormDesign(mode: 'draft' | 'final' = 'final') {
     ElMessage.warning(formNameIssue)
     return
   }
-  const schema = normalizeFormSchema(working.schema)
+  const schema = normalizeFormSchema(
+    working.schema,
+    isExpenseDetailDesigner.value ? { detailType: working.detailType || 'NORMAL_REIMBURSEMENT' } : {}
+  )
   const schemaIssues = validateSchemaFieldKeys(
     schema,
     isExpenseDetailDesigner.value ? '费用明细表单' : '表单设计',
-    { isExpenseDetail: isExpenseDetailDesigner.value }
+    {
+      isExpenseDetail: isExpenseDetailDesigner.value,
+      detailType: isExpenseDetailDesigner.value ? (working.detailType || 'NORMAL_REIMBURSEMENT') : undefined
+    }
   )
   if (schemaIssues.length) {
     ElMessage.warning(schemaIssues[0])

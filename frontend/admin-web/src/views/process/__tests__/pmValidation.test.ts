@@ -67,4 +67,75 @@ describe('pmValidation', () => {
       ]
     }, '费用明细表单', { isExpenseDetail: true })).toContain('费用明细表单只允许保留一个金额组件')
   })
+
+  it('requires at least one enabled business scenario for enterprise expense details', () => {
+    expect(validateSchemaFieldKeys({
+      layoutMode: 'TWO_COLUMN',
+      blocks: [
+        {
+          blockId: 'scenario',
+          fieldKey: 'businessScenario',
+          kind: 'CONTROL',
+          label: '业务场景',
+          props: {
+            controlType: 'SELECT',
+            systemFieldCode: 'BUSINESS_SCENARIO',
+            enabledSceneModes: []
+          },
+          permission: { fixedStages: {}, sceneOverrides: [] }
+        }
+      ]
+    }, '费用明细表单', {
+      isExpenseDetail: true,
+      detailType: 'ENTERPRISE_TRANSACTION'
+    })).toContain('业务场景至少保留一个开启项')
+  })
+
+  it('rejects business-scenario defaults outside the enabled modes', () => {
+    expect(validateSchemaFieldKeys({
+      layoutMode: 'TWO_COLUMN',
+      blocks: [
+        {
+          blockId: 'scenario',
+          fieldKey: 'businessScenario',
+          kind: 'CONTROL',
+          label: '业务场景',
+          defaultValue: 'PREPAY_UNBILLED',
+          props: {
+            controlType: 'SELECT',
+            systemFieldCode: 'BUSINESS_SCENARIO',
+            enabledSceneModes: ['INVOICE_FULL_PAYMENT']
+          },
+          permission: { fixedStages: {}, sceneOverrides: [] }
+        }
+      ]
+    }, '费用明细表单', {
+      isExpenseDetail: true,
+      detailType: 'ENTERPRISE_TRANSACTION'
+    })).toContain('业务场景默认值必须属于当前启用场景')
+  })
+
+  it('forces normal reimbursement details to keep only full-payment scenario', () => {
+    expect(validateSchemaFieldKeys({
+      layoutMode: 'TWO_COLUMN',
+      blocks: [
+        {
+          blockId: 'scenario',
+          fieldKey: 'businessScenario',
+          kind: 'CONTROL',
+          label: '业务场景',
+          defaultValue: 'PREPAY_UNBILLED',
+          props: {
+            controlType: 'SELECT',
+            systemFieldCode: 'BUSINESS_SCENARIO',
+            enabledSceneModes: ['PREPAY_UNBILLED']
+          },
+          permission: { fixedStages: {}, sceneOverrides: [] }
+        }
+      ]
+    }, '费用明细表单', {
+      isExpenseDetail: true,
+      detailType: 'NORMAL_REIMBURSEMENT'
+    })).toContain('普通报销只能保留全额付款业务场景')
+  })
 })

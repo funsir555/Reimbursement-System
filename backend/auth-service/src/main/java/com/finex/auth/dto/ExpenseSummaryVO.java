@@ -50,6 +50,8 @@ public class ExpenseSummaryVO {
 
     private String submittedAt;
 
+    private Boolean draftDeletable;
+
     private String paymentDate;
 
     private String paymentCompanyName;

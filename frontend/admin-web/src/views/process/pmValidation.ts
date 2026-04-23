@@ -8,7 +8,13 @@ import type {
   ProcessFormOption,
   ProcessTemplateFormOptions
 } from '@/api'
-import { getBusinessComponentDefinition, getControlType } from '@/views/process/formDesignerHelper'
+import {
+  BUSINESS_SCENARIO_MODE_FULL,
+  getBusinessComponentDefinition,
+  getControlType,
+  isBusinessScenarioBlock,
+  normalizeBusinessScenarioEnabledModes
+} from '@/views/process/formDesignerHelper'
 
 export const PM_NAME_MAX_LENGTH = 64
 export const PM_TITLE_MAX_LENGTH = 128
@@ -179,7 +185,7 @@ export function validateFlowPayload(
 export function validateSchemaFieldKeys(
   schema: ProcessFormDesignSchema,
   subjectLabel: string,
-  options: { isExpenseDetail?: boolean } = {}
+  options: { isExpenseDetail?: boolean; detailType?: string } = {}
 ) {
   const issues: string[] = []
   const seen = new Set<string>()
@@ -216,6 +222,30 @@ export function validateSchemaFieldKeys(
       }
       if (fieldKey === 'actualPaymentAmount' || systemFieldCode === 'ACTUAL_PAYMENT_AMOUNT') {
         actualPaymentAmountCount += 1
+      }
+      if (isBusinessScenarioBlock(block)) {
+        const rawEnabledSceneModes = Array.isArray(block.props?.enabledSceneModes)
+          ? block.props.enabledSceneModes
+            .map((item) => trimValue(item))
+            .filter((item, index, list) => (
+              (item === 'INVOICE_FULL_PAYMENT' || item === 'PREPAY_UNBILLED') && list.indexOf(item) === index
+            ))
+          : []
+        const enabledSceneModes = normalizeBusinessScenarioEnabledModes(
+          block.props?.enabledSceneModes,
+          options.detailType,
+          block.props?.options
+        )
+        if (options.detailType === 'ENTERPRISE_TRANSACTION' && Array.isArray(block.props?.enabledSceneModes) && rawEnabledSceneModes.length === 0) {
+          issues.push('业务场景至少保留一个开启项')
+        }
+        const defaultScenario = trimValue(block.defaultValue)
+        if (defaultScenario && !enabledSceneModes.includes(defaultScenario)) {
+          issues.push('业务场景默认值必须属于当前启用场景')
+        }
+        if (options.detailType && options.detailType !== 'ENTERPRISE_TRANSACTION' && rawEnabledSceneModes.some((item) => item !== BUSINESS_SCENARIO_MODE_FULL)) {
+          issues.push('普通报销只能保留全额付款业务场景')
+        }
       }
       return
     }

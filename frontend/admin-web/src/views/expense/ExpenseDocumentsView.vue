@@ -210,7 +210,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   CircleCheckFilled,
@@ -258,6 +258,7 @@ const pageSize = ref(10)
 const expenseList = ref<ExpenseSummary[]>([])
 const filters = ref(createExpenseWorkbenchFilters())
 const showAdvancedFilters = ref(false)
+const route = useRoute()
 const router = useRouter()
 
 const allowedColumnKeys: ExpenseWorkbenchColumnKey[] = EXPENSE_WORKBENCH_COLUMNS
@@ -428,7 +429,10 @@ function openDetail(row: ExpenseSummary) {
     ElMessage.warning('未找到单据编码')
     return
   }
-  void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+  void router.push({
+    path: `/expense/documents/${encodeURIComponent(documentCode)}`,
+    query: route.fullPath ? { returnTo: route.fullPath } : {}
+  })
 }
 
 function handleRowDblClick(row: ExpenseSummary) {

@@ -65,18 +65,28 @@
             <template #header>
               <div class="flex items-center justify-between gap-3">
                 <div>
-                  <p class="text-lg font-semibold text-slate-800">关联单据</p>
-                  <p class="mt-1 text-sm text-slate-500">展示当前单据主动关联与被其它单据反向引用的真实业务关系。</p>
+                  <p class="text-lg font-semibold text-slate-800">{{ relatedCardTitle }}</p>
+                  <p class="mt-1 text-sm text-slate-500">{{ relatedCardDescription }}</p>
                 </div>
-                <el-tag effect="plain">{{ relatedDocumentBindings.length }} 条</el-tag>
+                <div class="binding-card-header-actions">
+                  <el-tag effect="plain">{{ relatedDocumentBindings.length }} {{ bindingCountSuffix }}</el-tag>
+                  <button
+                    type="button"
+                    class="binding-card-toggle"
+                    data-testid="related-bindings-toggle"
+                    @click="relatedBindingsExpanded = !relatedBindingsExpanded"
+                  >
+                    {{ relatedBindingsExpanded ? collapseText : expandText }}
+                  </button>
+                </div>
               </div>
             </template>
 
-            <div class="space-y-5">
+            <div v-if="relatedBindingsExpanded" class="space-y-5">
               <div class="space-y-3">
                 <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">当前单据主动关联</p>
-                  <el-tag size="small" effect="plain">{{ outboundRelatedBindings.length }} 条</el-tag>
+                  <p class="text-sm font-semibold text-slate-800">{{ relatedOutboundTitle }}</p>
+                  <el-tag size="small" effect="plain">{{ outboundRelatedBindings.length }} {{ bindingCountSuffix }}</el-tag>
                 </div>
                 <div v-if="outboundRelatedBindings.length" class="space-y-3">
                   <div
@@ -89,14 +99,14 @@
                       <div class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                           <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
                           <el-tag v-if="item.statusLabel" size="small" effect="plain">{{ item.statusLabel }}</el-tag>
                         </div>
                         <p class="text-sm text-slate-500">
-                          单据编号：{{ item.documentCode }} · 发起人：{{ item.submitterName || '-' }}
+                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ submitterLabel }}{{ item.submitterName || '-' }}
                         </p>
                         <p class="text-xs leading-6 text-slate-500">
-                          来源字段：{{ item.fieldKey || '-' }}
+                          {{ sourceFieldLabel }}{{ item.fieldKey || '-' }}
                         </p>
                       </div>
                       <div class="expense-wb-compact-actions">
@@ -105,19 +115,19 @@
                           :data-testid="`open-bound-document-${item.documentCode}`"
                           @click="openBoundDocument(item.documentCode)"
                         >
-                          查看单据
+                          {{ viewBoundDocumentLabel }}
                         </el-button>
                       </div>
                     </div>
                   </div>
                 </div>
-                <el-empty v-else description="暂无主动关联记录" :image-size="72" />
+                <p v-else class="binding-card-inline-empty" data-testid="related-outbound-empty">{{ relatedOutboundEmptyText }}</p>
               </div>
 
               <div class="space-y-3">
                 <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">被其它单据关联</p>
-                  <el-tag size="small" effect="plain">{{ inboundRelatedBindings.length }} 条</el-tag>
+                  <p class="text-sm font-semibold text-slate-800">{{ relatedInboundTitle }}</p>
+                  <el-tag size="small" effect="plain">{{ inboundRelatedBindings.length }} {{ bindingCountSuffix }}</el-tag>
                 </div>
                 <div v-if="inboundRelatedBindings.length" class="space-y-3">
                   <div
@@ -130,14 +140,14 @@
                       <div class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                           <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
                           <el-tag v-if="item.statusLabel" size="small" effect="plain">{{ item.statusLabel }}</el-tag>
                         </div>
                         <p class="text-sm text-slate-500">
-                          单据编号：{{ item.documentCode }} · 发起人：{{ item.submitterName || '-' }}
+                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ submitterLabel }}{{ item.submitterName || '-' }}
                         </p>
                         <p class="text-xs leading-6 text-slate-500">
-                          关联字段：{{ item.fieldKey || '-' }}
+                          {{ bindingFieldLabel }}{{ item.fieldKey || '-' }}
                         </p>
                       </div>
                       <div class="expense-wb-compact-actions">
@@ -146,13 +156,13 @@
                           :data-testid="`open-bound-document-${item.documentCode}`"
                           @click="openBoundDocument(item.documentCode)"
                         >
-                          查看单据
+                          {{ viewBoundDocumentLabel }}
                         </el-button>
                       </div>
                     </div>
                   </div>
                 </div>
-                <el-empty v-else description="暂无反向关联记录" :image-size="72" />
+                <p v-else class="binding-card-inline-empty" data-testid="related-inbound-empty">{{ relatedInboundEmptyText }}</p>
               </div>
             </div>
           </el-card>
@@ -161,18 +171,28 @@
             <template #header>
               <div class="flex items-center justify-between gap-3">
                 <div>
-                  <p class="text-lg font-semibold text-slate-800">核销单据</p>
-                  <p class="mt-1 text-sm text-slate-500">展示当前单据主动核销与被其它单据反向核销的真实金额和生效状态。</p>
+                  <p class="text-lg font-semibold text-slate-800">{{ writeOffCardTitle }}</p>
+                  <p class="mt-1 text-sm text-slate-500">{{ writeOffCardDescription }}</p>
                 </div>
-                <el-tag effect="plain">{{ writeOffDocumentBindings.length }} 条</el-tag>
+                <div class="binding-card-header-actions">
+                  <el-tag effect="plain">{{ writeOffDocumentBindings.length }} {{ bindingCountSuffix }}</el-tag>
+                  <button
+                    type="button"
+                    class="binding-card-toggle"
+                    data-testid="writeoff-bindings-toggle"
+                    @click="writeOffBindingsExpanded = !writeOffBindingsExpanded"
+                  >
+                    {{ writeOffBindingsExpanded ? collapseText : expandText }}
+                  </button>
+                </div>
               </div>
             </template>
 
-            <div class="space-y-5">
+            <div v-if="writeOffBindingsExpanded" class="space-y-5">
               <div class="space-y-3">
                 <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">当前单据主动核销</p>
-                  <el-tag size="small" effect="plain">{{ outboundWriteOffBindings.length }} 条</el-tag>
+                  <p class="text-sm font-semibold text-slate-800">{{ writeOffOutboundTitle }}</p>
+                  <el-tag size="small" effect="plain">{{ outboundWriteOffBindings.length }} {{ bindingCountSuffix }}</el-tag>
                 </div>
                 <div v-if="outboundWriteOffBindings.length" class="space-y-3">
                   <div
@@ -185,14 +205,14 @@
                       <div class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                           <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
-                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || '状态未知' }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || unknownStatusLabel }}</el-tag>
                         </div>
                         <p class="text-sm text-slate-500">
-                          单据编号：{{ item.documentCode }} · 核销来源：{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
+                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ writeOffSourceLabel }}{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
                         </p>
                         <p class="text-xs leading-6 text-slate-500">
-                          请求核销：{{ formatBindingMoney(item.requestedAmount) }} · 已生效：{{ formatBindingMoney(item.effectiveAmount) }} · 剩余金额：{{ formatBindingMoney(item.remainingAmount) }}
+                          {{ requestedAmountLabel }}{{ formatBindingMoney(item.requestedAmount) }} {{ bindingInlineSeparator }} {{ effectiveAmountLabel }}{{ formatBindingMoney(item.effectiveAmount) }} {{ bindingInlineSeparator }} {{ remainingAmountLabel }}{{ formatBindingMoney(item.remainingAmount) }}
                         </p>
                       </div>
                       <div class="expense-wb-compact-actions">
@@ -201,19 +221,19 @@
                           :data-testid="`open-bound-document-${item.documentCode}`"
                           @click="openBoundDocument(item.documentCode)"
                         >
-                          查看单据
+                          {{ viewBoundDocumentLabel }}
                         </el-button>
                       </div>
                     </div>
                   </div>
                 </div>
-                <el-empty v-else description="暂无主动核销记录" :image-size="72" />
+                <p v-else class="binding-card-inline-empty" data-testid="writeoff-outbound-empty">{{ writeOffOutboundEmptyText }}</p>
               </div>
 
               <div class="space-y-3">
                 <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">被其它单据核销</p>
-                  <el-tag size="small" effect="plain">{{ inboundWriteOffBindings.length }} 条</el-tag>
+                  <p class="text-sm font-semibold text-slate-800">{{ writeOffInboundTitle }}</p>
+                  <el-tag size="small" effect="plain">{{ inboundWriteOffBindings.length }} {{ bindingCountSuffix }}</el-tag>
                 </div>
                 <div v-if="inboundWriteOffBindings.length" class="space-y-3">
                   <div
@@ -226,14 +246,14 @@
                       <div class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                           <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || '业务单据' }}</el-tag>
-                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || '状态未知' }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
+                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || unknownStatusLabel }}</el-tag>
                         </div>
                         <p class="text-sm text-slate-500">
-                          单据编号：{{ item.documentCode }} · 核销来源：{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
+                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ writeOffSourceLabel }}{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
                         </p>
                         <p class="text-xs leading-6 text-slate-500">
-                          请求核销：{{ formatBindingMoney(item.requestedAmount) }} · 已生效：{{ formatBindingMoney(item.effectiveAmount) }} · 剩余金额：{{ formatBindingMoney(item.remainingAmount) }}
+                          {{ requestedAmountLabel }}{{ formatBindingMoney(item.requestedAmount) }} {{ bindingInlineSeparator }} {{ effectiveAmountLabel }}{{ formatBindingMoney(item.effectiveAmount) }} {{ bindingInlineSeparator }} {{ remainingAmountLabel }}{{ formatBindingMoney(item.remainingAmount) }}
                         </p>
                       </div>
                       <div class="expense-wb-compact-actions">
@@ -242,13 +262,13 @@
                           :data-testid="`open-bound-document-${item.documentCode}`"
                           @click="openBoundDocument(item.documentCode)"
                         >
-                          查看单据
+                          {{ viewBoundDocumentLabel }}
                         </el-button>
                       </div>
                     </div>
                   </div>
                 </div>
-                <el-empty v-else description="暂无反向核销记录" :image-size="72" />
+                <p v-else class="binding-card-inline-empty" data-testid="writeoff-inbound-empty">{{ writeOffInboundEmptyText }}</p>
               </div>
             </div>
           </el-card>
@@ -798,6 +818,8 @@ const router = useRouter()
 const detailLoading = ref(false)
 const navigationLoading = ref(false)
 const detail = ref<ExpenseDocumentDetail | null>(null)
+const relatedBindingsExpanded = ref(false)
+const writeOffBindingsExpanded = ref(false)
 const detailLoadError = ref('')
 const printLoading = ref(false)
 const printLoadError = ref('')
@@ -948,6 +970,33 @@ const inboundRelatedBindings = computed<ExpenseDocumentRelationBinding[]>(() => 
 const writeOffDocumentBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => detail.value?.writeOffDocumentBindings || [])
 const outboundWriteOffBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => writeOffDocumentBindings.value.filter((item) => item.direction === 'OUTBOUND'))
 const inboundWriteOffBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => writeOffDocumentBindings.value.filter((item) => item.direction === 'INBOUND'))
+const bindingCountSuffix = '条'
+const bindingInlineSeparator = '\u00b7'
+const expandText = '展开'
+const collapseText = '收起'
+const businessDocumentLabel = '业务单据'
+const viewBoundDocumentLabel = '查看单据'
+const relatedCardTitle = '关联单据'
+const relatedCardDescription = '展示当前单据主动关联与被其它单据反向引用的真实业务关系。'
+const relatedOutboundTitle = '当前单据主动关联'
+const relatedInboundTitle = '被其它单据关联'
+const writeOffCardTitle = '核销单据'
+const writeOffCardDescription = '展示当前单据主动核销与被其它单据反向核销的真实金额和生效状态。'
+const writeOffOutboundTitle = '当前单据主动核销'
+const writeOffInboundTitle = '被其它单据核销'
+const documentCodeLabel = '单据编号：'
+const submitterLabel = '发起人：'
+const sourceFieldLabel = '来源字段：'
+const bindingFieldLabel = '关联字段：'
+const writeOffSourceLabel = '核销来源：'
+const requestedAmountLabel = '请求核销：'
+const effectiveAmountLabel = '已生效：'
+const remainingAmountLabel = '剩余金额：'
+const unknownStatusLabel = '状态未知'
+const relatedOutboundEmptyText = '暂无主动关联记录'
+const relatedInboundEmptyText = '暂无反向关联记录'
+const writeOffOutboundEmptyText = '暂无主动核销记录'
+const writeOffInboundEmptyText = '暂无反向核销记录'
 const statusBucket = computed<'pending' | 'exception' | 'terminal' | 'other'>(() => {
   const status = detail.value?.status || ''
   if (status === 'PENDING_APPROVAL') {
@@ -1010,11 +1059,33 @@ watch(
 )
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back()
+  void navigateBackWithFallback('/expense/list')
+}
+
+function resolveReturnToPath() {
+  return typeof route.query.returnTo === 'string' && route.query.returnTo.trim() ? route.query.returnTo.trim() : ''
+}
+
+function buildReturnToQuery(extraQuery: Record<string, string> = {}) {
+  const returnTo = resolveReturnToPath()
+  return returnTo ? { ...extraQuery, returnTo } : extraQuery
+}
+
+function buildCurrentPageReturnToQuery(extraQuery: Record<string, string> = {}) {
+  return route.fullPath ? { ...extraQuery, returnTo: route.fullPath } : extraQuery
+}
+
+async function navigateBackWithFallback(fallbackPath: string) {
+  const returnTo = resolveReturnToPath()
+  if (returnTo) {
+    await router.push(returnTo)
     return
   }
-  void router.push('/expense/list')
+  if (window.history.length > 1) {
+    await router.back()
+    return
+  }
+  await router.push(fallbackPath)
 }
 
 function openExpenseDetail(detailNo: string) {
@@ -1023,7 +1094,8 @@ function openExpenseDetail(detailNo: string) {
     params: {
       documentCode: String(route.params.documentCode || ''),
       detailNo
-    }
+    },
+    query: buildCurrentPageReturnToQuery()
   })
 }
 
@@ -1031,7 +1103,16 @@ function openBoundDocument(documentCode?: string) {
   if (!documentCode) {
     return
   }
-  void router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
+  void router.push({
+    path: `/expense/documents/${encodeURIComponent(documentCode)}`,
+    query: buildCurrentPageReturnToQuery()
+  })
+}
+
+function syncBindingPanelExpansion(nextDetail?: ExpenseDocumentDetail | null) {
+  const source = nextDetail || null
+  relatedBindingsExpanded.value = Boolean(source?.relatedDocumentBindings?.length)
+  writeOffBindingsExpanded.value = Boolean(source?.writeOffDocumentBindings?.length)
 }
 
 async function selectExpenseDetail(detailNo: string) {
@@ -1081,6 +1162,7 @@ async function loadDetail() {
   detailLoadError.value = ''
   printLoadError.value = ''
   detail.value = null
+  syncBindingPanelExpansion(null)
   manualApproverForm.value = {
     userIds: []
   }
@@ -1102,6 +1184,7 @@ async function loadDetail() {
         return
       }
       detail.value = bundle.detail
+      syncBindingPanelExpansion(bundle.detail)
       printExpenseDetails.value = bundle.expenseDetails
       await syncReadonlyPayeeLookupsBatch([
         bundle.detail.formSchemaSnapshot,
@@ -1114,6 +1197,7 @@ async function loadDetail() {
         return
       }
       detail.value = res.data
+      syncBindingPanelExpansion(res.data)
       void syncReadonlyPayeeLookups(res.data.formSchemaSnapshot)
       void loadNavigation(res.data.documentCode, requestVersion)
     }
@@ -1361,7 +1445,8 @@ async function handleRecall() {
     ElMessage.success('单据已召回，正在进入重提编辑页')
     await router.push({
       name: 'expense-document-resubmit',
-      params: { documentCode: detail.value.documentCode }
+      params: { documentCode: detail.value.documentCode },
+      query: buildReturnToQuery()
     })
   } catch (error: unknown) {
     if (error === 'cancel' || String(error).includes('cancel')) {
@@ -1535,6 +1620,7 @@ async function refreshAfterAction(nextDetail?: ExpenseDocumentDetail) {
   if (nextDetail) {
     detailLoadError.value = ''
     detail.value = nextDetail
+    syncBindingPanelExpansion(nextDetail)
     navigation.value = {}
     void syncReadonlyPayeeLookups(nextDetail.formSchemaSnapshot)
     await loadNavigation(nextDetail.documentCode, detailRequestVersion)
@@ -1561,8 +1647,10 @@ async function openResubmitPage() {
     ElMessage.warning('缺少单据编码，无法打开编辑页')
     return
   }
-  const query = detail.value?.status === 'DRAFT' ? '?entry=draft' : ''
-  await router.push(`/expense/documents/${encodeURIComponent(documentCode)}/resubmit${query}`)
+  await router.push({
+    path: `/expense/documents/${encodeURIComponent(documentCode)}/resubmit`,
+    query: buildReturnToQuery(detail.value?.status === 'DRAFT' ? { entry: 'draft' } : {})
+  })
 }
 
 function formatBindingMoney(value: unknown) {
@@ -1715,6 +1803,37 @@ function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
 .approval-scroll::-webkit-scrollbar-track {
   background: rgba(226, 232, 240, 0.7);
   border-radius: 999px;
+}
+
+.binding-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.binding-card-toggle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgb(37 99 235);
+  cursor: pointer;
+}
+
+.binding-card-toggle:hover {
+  color: rgb(29 78 216);
+}
+
+.binding-card-inline-empty {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px dashed rgba(203, 213, 225, 0.9);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.82);
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgb(100 116 139);
 }
 
 .approval-node-status-list {

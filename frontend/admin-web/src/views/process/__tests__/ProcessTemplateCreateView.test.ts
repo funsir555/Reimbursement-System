@@ -39,9 +39,13 @@ vi.mock('@/api', () => ({
   processApi: mocks.processApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 vi.mock('@/utils/permissions', () => ({
   readStoredUser: () => ({
@@ -63,11 +67,15 @@ vi.mock('@/utils/permissions', () => ({
   }
 }))
 
-vi.mock('@element-plus/icons-vue', () => ({
-  ArrowLeft: { template: '<span />' },
-  Close: { template: '<span />' },
-  Plus: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async () => {
+  const actual = await vi.importActual<typeof import('@element-plus/icons-vue')>('@element-plus/icons-vue')
+  return {
+    ...actual,
+    ArrowLeft: { template: '<span />' },
+    Close: { template: '<span />' },
+    Plus: { template: '<span />' }
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="header" /><slot /><slot name="footer" /></div>'
@@ -301,8 +309,7 @@ describe('ProcessTemplateCreateView', () => {
       templateName: '对公费用报销',
       formDesign: 'FD202603290001',
       approvalFlow: 'FLOW-001',
-      expenseDetailDesign: 'EDD202603310002',
-      expenseDetailModeDefault: 'PREPAY_UNBILLED'
+      expenseDetailDesign: 'EDD202603310002'
     })
 
     const wrapper = await mountView()
@@ -317,7 +324,7 @@ describe('ProcessTemplateCreateView', () => {
       formDesign: 'FD202603290001',
       approvalFlow: 'FLOW-001',
       expenseDetailDesign: 'EDD202603310002',
-      expenseDetailModeDefault: 'PREPAY_UNBILLED'
+      expenseDetailModeDefault: ''
     }))
     expect(mocks.elMessage.success).toHaveBeenCalledWith('模板已保存，可在新建报销中直接使用：FX202603310001')
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/workbench/process-management')
@@ -355,8 +362,7 @@ describe('ProcessTemplateCreateView', () => {
       templateName: '对公费用报销',
       formDesign: 'FD202603290001',
       approvalFlow: 'FLOW-001',
-      expenseDetailDesign: 'EDD202603310002',
-      expenseDetailModeDefault: 'PREPAY_UNBILLED'
+      expenseDetailDesign: 'EDD202603310002'
     })
     mocks.processApi.createTemplate.mockRejectedValue(new Error('保存模板超时，请检查后端服务或稍后重试'))
 
@@ -369,14 +375,20 @@ describe('ProcessTemplateCreateView', () => {
     expect(findSaveButton(wrapper).attributes('data-loading')).toBe('false')
   })
 
+  it('does not render the enterprise default mode selector anymore', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).not.toContain('企业往来默认模式')
+    expect(wrapper.findAll('select').some((item) => item.html().includes('PREPAY_UNBILLED'))).toBe(false)
+  })
+
   it('blocks save when template name exceeds 64 characters', async () => {
     seedDraft({
       category: 'employee-expense',
       templateName: 'A'.repeat(65),
       formDesign: 'FD202603290001',
       approvalFlow: 'FLOW-001',
-      expenseDetailDesign: 'EDD202603310002',
-      expenseDetailModeDefault: 'PREPAY_UNBILLED'
+      expenseDetailDesign: 'EDD202603310002'
     })
 
     const wrapper = await mountView()

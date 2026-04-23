@@ -24,11 +24,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -78,7 +80,7 @@ class ExpenseQueryDomainSupportTest {
         when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
         when(expenseDocumentReadSupport.getExpenseDetail(1L, "DOC-001", "D1", false)).thenReturn(expenseDetailVo);
 
-        assertSame(summaries, support.listExpenseSummaries(1L));
+        assertEquals(summaries, support.listExpenseSummaries(1L));
         assertSame(detail, support.getDocumentDetail(1L, "DOC-001", false));
         assertSame(expenseDetailVo, support.getExpenseDetail(1L, "DOC-001", "D1", false));
     }
@@ -119,6 +121,13 @@ class ExpenseQueryDomainSupportTest {
         ExpenseDocumentDetailVO actual = support.remindDocument(1L, "tester", "DOC-001", dto);
 
         assertSame(detail, actual);
+        verify(notificationService).sendAsyncNotification(
+                eq(2L),
+                eq("EXPENSE_REMINDER"),
+                eq("催办提醒"),
+                eq("单据 DOC-001 正在等待你处理。 催办备注：please review"),
+                eq("DOC-001")
+        );
         verify(expenseDocumentActionLogSupport).appendLog(any(), any(), any(), any(), any(), any(), any(), anyMap());
     }
 
@@ -151,6 +160,7 @@ class ExpenseQueryDomainSupportTest {
         instance.setStatus("DRAFT");
         ExpenseQueryDomainSupport support = newSupport();
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+        when(processDocumentActionLogMapper.selectCount(any())).thenReturn(0L);
 
         assertTrue(support.deleteDraftDocument(1L, "DOC-001"));
 
@@ -162,6 +172,22 @@ class ExpenseQueryDomainSupportTest {
         verify(processDocumentActionLogMapper).delete(any());
         verify(processDocumentExpenseDetailMapper).delete(any());
         verify(processDocumentInstanceMapper).deleteById(10L);
+    }
+
+    @Test
+    void deleteDraftDocumentRejectsRecalledDraftsWithHistory() {
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setId(10L);
+        instance.setDocumentCode("DOC-001");
+        instance.setSubmitterUserId(1L);
+        instance.setStatus("DRAFT");
+        ExpenseQueryDomainSupport support = newSupport();
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+        when(processDocumentActionLogMapper.selectCount(any())).thenReturn(2L);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> support.deleteDraftDocument(1L, "DOC-001"));
+
+        assertTrue(error.getMessage().contains("已提交过的单据召回后不允许删除"));
     }
 
     @Test

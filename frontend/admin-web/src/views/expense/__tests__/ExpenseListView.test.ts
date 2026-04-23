@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseListView from '@/views/expense/ExpenseListView.vue'
 
 const mocks = vi.hoisted(() => ({
+  route: {
+    fullPath: '/expense/list'
+  },
   router: {
     push: vi.fn()
   },
@@ -28,6 +31,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('vue-router', () => ({
+  useRoute: () => mocks.route,
   useRouter: () => mocks.router
 }))
 
@@ -172,6 +176,7 @@ describe('ExpenseListView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.clear()
+    mocks.route.fullPath = '/expense/list'
     mocks.router.push.mockResolvedValue(undefined)
     mocks.expenseApi.list.mockResolvedValue({
       data: [
@@ -303,14 +308,14 @@ describe('ExpenseListView', () => {
 
     await wrapper.get('[data-testid="expense-list-stat-draft"]').trigger('click')
     await flushPromises()
-    expect(vm.filters.documentStatusLabel).toBe('草稿')
-    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-002'])
+    expect(vm.filters.documentStatusLabel).toBe('')
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-002', 'DOC-003'])
     expect(wrapper.get('[data-testid="expense-list-stat-draft"]').classes()).toContain('expense-wb-stat-card--filterable')
     expect(wrapper.get('[data-testid="expense-list-stat-draft"]').classes()).toContain('expense-wb-stat-card--active')
 
     await wrapper.get('[data-testid="expense-list-stat-pending"]').trigger('click')
     await flushPromises()
-    expect(vm.filters.documentStatusLabel).toBe('审批中')
+    expect(vm.filters.documentStatusLabel).toBe('')
     expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001'])
 
     vm.filters.documentStatusLabel = '待支付'
@@ -368,7 +373,10 @@ describe('ExpenseListView', () => {
     vm.openDetail({ documentCode: 'DOC-001', no: 'DOC-001' })
 
     expect(mocks.router.push).toHaveBeenCalledWith('/expense/create')
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-001',
+      query: { returnTo: '/expense/list' }
+    })
   })
 
   it('opens the shared editor for draft-like rows and detail for normal rows on row double click', async () => {
@@ -378,9 +386,18 @@ describe('ExpenseListView', () => {
     await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-003"]').trigger('dblclick')
     await wrapper.get('.row-dblclick-trigger[data-document-code="DOC-001"]').trigger('dblclick')
 
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-002/resubmit?entry=draft')
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-003/resubmit')
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-002/resubmit',
+      query: { entry: 'draft', returnTo: '/expense/list' }
+    })
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-003/resubmit',
+      query: { returnTo: '/expense/list' }
+    })
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-001',
+      query: { returnTo: '/expense/list' }
+    })
   })
 
   it('routes draft edit and rejected resubmit buttons to the shared resubmit editor', async () => {
@@ -392,8 +409,14 @@ describe('ExpenseListView', () => {
     vm.openResubmitEditor({ documentCode: 'DOC-002', no: 'DOC-002', status: 'DRAFT', documentStatus: 'DRAFT', documentStatusLabel: '草稿' })
     vm.openResubmitEditor({ documentCode: 'DOC-003', no: 'DOC-003', status: 'REJECTED', documentStatus: 'REJECTED', documentStatusLabel: '已驳回' })
 
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-002/resubmit?entry=draft')
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-003/resubmit')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-002/resubmit',
+      query: { entry: 'draft', returnTo: '/expense/list' }
+    })
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-003/resubmit',
+      query: { returnTo: '/expense/list' }
+    })
   })
 
   it('confirms and deletes draft documents before refreshing the list', async () => {
@@ -409,6 +432,33 @@ describe('ExpenseListView', () => {
     expect(mocks.expenseApi.deleteDocument).toHaveBeenCalledWith('DOC-002')
     expect(mocks.expenseApi.list).toHaveBeenCalledTimes(2)
     expect(mocks.elMessage.success).toHaveBeenCalledWith('草稿已删除')
+  })
+
+  it('hides the delete action for recalled drafts that are no longer deletable', async () => {
+    mocks.expenseApi.list.mockResolvedValueOnce({
+      data: [
+        {
+          documentCode: 'DOC-004',
+          no: 'DOC-004',
+          type: '办公费',
+          reason: '召回草稿',
+          documentTitle: '召回后的办公费',
+          templateName: '办公报销模板',
+          currentNodeName: '',
+          amount: 100,
+          date: '2026-04-04',
+          status: 'DRAFT',
+          documentStatus: 'DRAFT',
+          documentStatusLabel: '草稿',
+          submittedAt: '2026-04-04 10:00',
+          draftDeletable: false
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="expense-delete-DOC-004"]').exists()).toBe(false)
   })
 
   it('submits export task with filtered document codes', async () => {

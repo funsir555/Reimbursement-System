@@ -655,6 +655,7 @@ describe('ExpenseCreateView', () => {
 
     expect(detailCard.find('.expense-wb-detail-card__body').exists()).toBe(true)
     expect(detailCard.text()).toContain('差旅行程')
+    expect(detailCard.text()).toContain('金额：¥ 12.30')
     expect(detailCard.text()).toContain('编辑')
     expect(detailCard.text()).toContain('删除')
     expect(wrapper.text()).not.toContain('明细编号')
@@ -750,6 +751,61 @@ describe('ExpenseCreateView', () => {
         __totalAmount: '88.50'
       })
     }))
+  })
+
+  it('blocks enterprise expense-detail submit until each detail explicitly selects a business scenario', async () => {
+    mocks.route.query = { templateCode: 'TPL-004B', draftKey: 'draft-missing-business-scenario' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-004B&draftKey=draft-missing-business-scenario'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-004B', '对公模板', 'report', '报销单'),
+        expenseDetailType: 'ENTERPRISE_TRANSACTION',
+        expenseDetailTypeLabel: '企业往来',
+        expenseDetailModeDefault: '',
+        expenseDetailSchema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            {
+              blockId: 'business-scenario',
+              fieldKey: 'businessScenario',
+              kind: 'CONTROL',
+              label: '业务场景',
+              props: {
+                controlType: 'SELECT',
+                systemFieldCode: 'BUSINESS_SCENARIO',
+                enabledSceneModes: ['INVOICE_FULL_PAYMENT', 'PREPAY_UNBILLED'],
+                options: [
+                  { label: '全额付款', value: 'INVOICE_FULL_PAYMENT' },
+                  { label: '预付未到票', value: 'PREPAY_UNBILLED' }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    })
+    writeDraft('draft-missing-business-scenario', 'TPL-004B', {
+      expenseDetails: [
+        {
+          detailNo: 'D-001',
+          detailTitle: '费用明细 1',
+          detailType: 'ENTERPRISE_TRANSACTION',
+          formData: {
+            businessScenario: '',
+            actualPaymentAmount: '12.00'
+          }
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先为“费用明细 1”选择业务场景')
   })
 
   it('preserves related and writeoff form values when submitting', async () => {
@@ -894,6 +950,134 @@ describe('ExpenseCreateView', () => {
     })
   })
 
+  it('shows a top back button, hides hero stat cards, and prefers returnTo on the shared resubmit page', async () => {
+    mocks.route.name = 'expense-document-resubmit'
+    mocks.route.params = { documentCode: 'DOC-102' }
+    mocks.route.query = { returnTo: '/expense/list?tab=rejected' }
+    mocks.route.fullPath = '/expense/documents/DOC-102/resubmit'
+    mocks.expenseApi.getEditContext.mockResolvedValue({
+      data: {
+        documentCode: 'DOC-102',
+        ...buildTemplateDetail('TPL-006A', '办公费用模板', 'report', '报销单'),
+        formData: {},
+        expenseDetails: []
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="expense-resubmit-hero-back"]').text()).toContain('返回')
+    expect(wrapper.findAll('.expense-wb-stat-card')).toHaveLength(0)
+
+    await wrapper.get('[data-testid="expense-resubmit-hero-back"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/list?tab=rejected')
+    expect(mocks.router.back).not.toHaveBeenCalled()
+  })
+
+  it('falls back to router.back before the detail page when resubmit has no returnTo', async () => {
+    mocks.route.name = 'expense-document-resubmit'
+    mocks.route.params = { documentCode: 'DOC-103' }
+    mocks.route.fullPath = '/expense/documents/DOC-103/resubmit'
+    window.history.pushState({}, '', '/expense/list')
+    mocks.expenseApi.getEditContext.mockResolvedValue({
+      data: {
+        documentCode: 'DOC-103',
+        ...buildTemplateDetail('TPL-006B', '市场费用模板', 'report', '报销单'),
+        formData: {},
+        expenseDetails: []
+      }
+    })
+
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-resubmit-hero-back"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.router.back).toHaveBeenCalledTimes(1)
+  })
+
+  it('prefers the local resubmit draft over edit context for form values and expense details', async () => {
+    mocks.route.name = 'expense-document-resubmit'
+    mocks.route.params = { documentCode: 'DOC-200' }
+    mocks.route.fullPath = '/expense/documents/DOC-200/resubmit'
+    mocks.expenseApi.getEditContext.mockResolvedValue({
+      data: {
+        documentCode: 'DOC-200',
+        ...buildTemplateDetail('TPL-020', '差旅重提模板', 'report', '报销单', {
+          blocks: [buildAmountBlock('amountOne')]
+        }),
+        formData: {
+          amountOne: '1.00'
+        },
+        expenseDetails: [buildExpenseDetail('DETAIL-OLD', '5.00')]
+      }
+    })
+    writeDraft('resubmit-DOC-200', 'TPL-020', {
+      formValues: {
+        amountOne: '9.90'
+      },
+      expenseDetails: [buildExpenseDetail('DETAIL-001', '12.34'), buildExpenseDetail('DETAIL-002', '7.66')]
+    })
+
+    const wrapper = await mountView()
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('重新提交审批单'))
+
+    expect(runtimeFormValue(wrapper).amountOne).toBe('9.90')
+    expect(wrapper.get('[data-testid="expense-create-floating-amount"]').text()).toContain('金额：¥ 20.00')
+
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseApi.resubmit).toHaveBeenCalledWith('DOC-200', {
+      formData: {
+        amountOne: '9.90',
+        __totalAmount: '20.00'
+      },
+      expenseDetails: [
+        expect.objectContaining({
+          detailNo: 'DETAIL-001',
+          formData: expect.objectContaining({ actualPaymentAmount: '12.34' })
+        }),
+        expect.objectContaining({
+          detailNo: 'DETAIL-002',
+          formData: expect.objectContaining({ actualPaymentAmount: '7.66' })
+        })
+      ]
+    })
+  })
+
+  it('keeps restored counterparty and payee account selections when reopening a saved draft', async () => {
+    mocks.route.query = { templateCode: 'TPL-021', draftKey: 'draft-payee-restore' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-021&draftKey=draft-payee-restore'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: buildTemplateDetail('TPL-021', '对公收款模板', 'report', '报销单')
+    })
+    writeDraft('draft-payee-restore', 'TPL-021', {
+      formValues: {
+        paymentCompany: 'COMPANY-001',
+        counterparty: 'VEN-001',
+        payeeAccount: {
+          value: 'VENDOR_ACCOUNT:1',
+          label: '供应商默认账户',
+          ownerName: '广州供应商',
+          accountNoMasked: '****0001'
+        }
+      }
+    })
+
+    const wrapper = await mountView()
+    const modelValue = runtimeFormValue(wrapper)
+
+    expect(modelValue.paymentCompany).toBe('COMPANY-001')
+    expect(modelValue.counterparty).toBe('VEN-001')
+    expect(modelValue.payeeAccount).toEqual(expect.objectContaining({
+      value: 'VENDOR_ACCOUNT:1',
+      label: '供应商默认账户'
+    }))
+  })
+
   it('uses draft-edit wording when a draft enters through the shared resubmit route', async () => {
     mocks.route.name = 'expense-document-resubmit'
     mocks.route.params = { documentCode: 'DOC-101' }
@@ -914,6 +1098,8 @@ describe('ExpenseCreateView', () => {
     expect(wrapper.text()).toContain('草稿编辑')
     expect(wrapper.text()).toContain('提交审批单')
     expect(wrapper.text()).not.toContain('召回后重新提交审批单')
+    expect(wrapper.find('[data-testid="expense-resubmit-hero-back"]').exists()).toBe(true)
+    expect(wrapper.findAll('.expense-wb-stat-card')).toHaveLength(0)
   })
 
   it('blocks submit when relation fieldKey exceeds 64 characters', async () => {

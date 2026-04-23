@@ -1398,7 +1398,7 @@ abstract class AbstractProcessManagementSupport {
         }
         String normalizedMode = trimToNull(expenseDetailModeDefault);
         if (normalizedMode == null) {
-            return "PREPAY_UNBILLED";
+            return null;
         }
         if (!Objects.equals(normalizedMode, "PREPAY_UNBILLED") && !Objects.equals(normalizedMode, "INVOICE_FULL_PAYMENT")) {
             throw new IllegalArgumentException("\u4f01\u4e1a\u5f80\u6765\u8d39\u7528\u660e\u7ec6\u9ed8\u8ba4\u6a21\u5f0f\u4e0d\u5408\u6cd5");

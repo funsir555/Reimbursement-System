@@ -5,7 +5,9 @@ import ExpenseDocumentDetailView from '@/views/expense/ExpenseDocumentDetailView
 
 const mocks = vi.hoisted(() => ({
   route: {
-    params: { documentCode: 'DOC-001' }
+    params: { documentCode: 'DOC-001' },
+    query: {},
+    fullPath: '/expense/documents/DOC-001'
   },
   router: {
     push: vi.fn(),
@@ -319,6 +321,7 @@ describe('ExpenseDocumentDetailView', () => {
     vi.clearAllMocks()
     mocks.route.params.documentCode = 'DOC-001'
     mocks.route.query = {}
+    mocks.route.fullPath = '/expense/documents/DOC-001'
     mocks.elMessageBox.confirm.mockReset()
     mocks.elMessageBox.prompt.mockReset()
     mocks.router.push.mockResolvedValue(undefined)
@@ -450,7 +453,74 @@ describe('ExpenseDocumentDetailView', () => {
 
     await wrapper.get('[data-testid="open-bound-document-DOC-REL-001"]').trigger('click')
 
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-REL-001')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-REL-001',
+      query: {
+        returnTo: '/expense/documents/DOC-001'
+      }
+    })
+  })
+
+
+  it('collapses empty related and writeoff sections until expanded', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="related-bindings-card"]').text()).toContain('关联单据')
+    expect(wrapper.get('[data-testid="writeoff-bindings-card"]').text()).toContain('核销单据')
+    expect(wrapper.find('[data-testid="related-outbound-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="related-inbound-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="writeoff-outbound-empty"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="writeoff-inbound-empty"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="related-bindings-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="writeoff-bindings-toggle"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="related-outbound-empty"]').text()).toContain('暂无主动关联记录')
+    expect(wrapper.get('[data-testid="related-inbound-empty"]').text()).toContain('暂无反向关联记录')
+    expect(wrapper.get('[data-testid="writeoff-outbound-empty"]').text()).toContain('暂无主动核销记录')
+    expect(wrapper.get('[data-testid="writeoff-inbound-empty"]').text()).toContain('暂无反向核销记录')
+  })
+
+  it('keeps binding cards expanded when one side has data and renders compact empty hints for the other side', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        relatedDocumentBindings: [
+          {
+            direction: 'OUTBOUND',
+            fieldKey: 'relatedDocs',
+            documentCode: 'DOC-REL-101',
+            documentTitle: '项目申请单',
+            templateTypeLabel: '申请单',
+            statusLabel: '已完成',
+            submitterName: '王五'
+          }
+        ],
+        writeOffDocumentBindings: [
+          {
+            direction: 'INBOUND',
+            fieldKey: 'writeoffDocs',
+            documentCode: 'DOC-WO-101',
+            documentTitle: '借款单',
+            templateTypeLabel: '借款单',
+            writeOffSourceKind: 'LOAN',
+            requestedAmount: '88.00',
+            effectiveAmount: '30.00',
+            remainingAmount: '58.00',
+            effectiveStatusLabel: '待生效'
+          }
+        ]
+      })
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="related-bindings-card"]').text()).toContain('项目申请单')
+    expect(wrapper.get('[data-testid="related-inbound-empty"]').text()).toContain('暂无反向关联记录')
+    expect(wrapper.find('[data-testid="related-outbound-empty"]').exists()).toBe(false)
+
+    expect(wrapper.get('[data-testid="writeoff-bindings-card"]').text()).toContain('借款单')
+    expect(wrapper.get('[data-testid="writeoff-outbound-empty"]').text()).toContain('暂无主动核销记录')
+    expect(wrapper.find('[data-testid="writeoff-inbound-empty"]').exists()).toBe(false)
   })
 
   it('keeps the original detail navigation button', async () => {
@@ -467,6 +537,44 @@ describe('ExpenseDocumentDetailView', () => {
       params: {
         documentCode: 'DOC-001',
         detailNo: 'D001'
+      },
+      query: {
+        returnTo: '/expense/documents/DOC-001'
+      }
+    })
+  })
+
+  it('opens related or writeoff target documents with the current detail page as returnTo', async () => {
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        relatedDocumentBindings: [
+          {
+            direction: 'OUTBOUND',
+            fieldKey: 'relatedDocs',
+            documentCode: 'DOC-REL-002',
+            documentTitle: '项目申请单',
+            templateType: 'application',
+            templateTypeLabel: '申请单',
+            status: 'APPROVED',
+            statusLabel: '已审批',
+            submitterName: '王五'
+          }
+        ]
+      })
+    })
+
+    const wrapper = await mountView()
+    const openButton = wrapper.findAll('button').find((item) => item.text().includes('查看单据'))
+
+    expect(openButton).toBeTruthy()
+
+    await openButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-REL-002',
+      query: {
+        returnTo: '/expense/documents/DOC-001'
       }
     })
   })
@@ -941,7 +1049,18 @@ describe('ExpenseDocumentDetailView', () => {
     expect(bankSection.text()).toContain('DOC-001-银行回单.txt')
   })
 
-  it('keeps the compact hero back button wired to the original goBack fallback behavior', async () => {
+  it('prefers returnTo when clicking the detail back button', async () => {
+    mocks.route.query = { returnTo: '/expense/list?tab=rejected' }
+
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="detail-back-button"]').trigger('click')
+
+    expect(mocks.router.back).not.toHaveBeenCalled()
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/list?tab=rejected')
+  })
+
+  it('falls back to the expense list when no previous page is available', async () => {
     const wrapper = await mountView()
 
     await wrapper.get('[data-testid="detail-back-button"]').trigger('click')
@@ -1401,7 +1520,10 @@ describe('ExpenseDocumentDetailView', () => {
       isSubmitter: true,
       canResubmitEdit: true
     }))
-    expect(mocks.router.push).toHaveBeenCalledWith('/expense/documents/DOC-001/resubmit?entry=draft')
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      path: '/expense/documents/DOC-001/resubmit',
+      query: { entry: 'draft' }
+    })
   })
 
   it('renders print mode without interactive chrome and auto prints after data is ready', async () => {

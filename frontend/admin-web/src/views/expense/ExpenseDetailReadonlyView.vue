@@ -110,6 +110,13 @@ async function loadDetail() {
 }
 
 function goBack() {
+  const returnTo = typeof route.query.returnTo === 'string' && route.query.returnTo.trim()
+    ? route.query.returnTo.trim()
+    : ''
+  if (returnTo) {
+    void router.push(returnTo)
+    return
+  }
   void router.push({
     name: 'expense-document-detail',
     params: {

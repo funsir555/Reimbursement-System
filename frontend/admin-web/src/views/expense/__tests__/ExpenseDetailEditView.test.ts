@@ -280,4 +280,38 @@ describe('ExpenseDetailEditView', () => {
     expect(mocks.elMessage.success).toHaveBeenCalledWith('费用明细已保存')
     expect(mocks.router.push).toHaveBeenCalled()
   })
+
+  it('keeps detail title and business scenario when saving the draft detail', async () => {
+    const enterpriseDraft = buildDraft({
+      businessScenario: 'PREPAY_UNBILLED',
+      amount: '66.80',
+      actualPaymentAmount: ''
+    })
+    enterpriseDraft.templateDetail.expenseDetailType = 'ENTERPRISE_TRANSACTION'
+    enterpriseDraft.templateDetail.expenseDetailTypeLabel = '企业往来'
+    enterpriseDraft.expenseDetails[0].detailType = 'ENTERPRISE_TRANSACTION'
+    window.sessionStorage.setItem('expense-create-draft:draft-001', JSON.stringify(enterpriseDraft))
+
+    const wrapper = mount(ExpenseDetailEditView, {
+      global: {
+        stubs: globalStubs,
+        directives: {
+          loading: () => undefined
+        }
+      }
+    })
+    await flushPromises()
+
+    await wrapper.get('input').setValue('差旅住宿')
+    await flushPromises()
+
+    const saveButton = wrapper.findAll('button').find((item) => item.text().includes('保存并返回'))
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    const savedDraft = JSON.parse(window.sessionStorage.getItem('expense-create-draft:draft-001') || '{}')
+    expect(savedDraft.expenseDetails[0].detailTitle).toBe('差旅住宿')
+    expect(savedDraft.expenseDetails[0].formData.businessScenario).toBe('PREPAY_UNBILLED')
+    expect(savedDraft.expenseDetails[0].formData.amount).toBe('66.80')
+  })
 })

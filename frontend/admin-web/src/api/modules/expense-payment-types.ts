@@ -34,6 +34,10 @@ export interface ExpensePaymentOrder {
   payeeOrCounterpartyName?: string
   payeeAccountNo?: string
   payeeBankName?: string
+  actualPaymentAmount?: MoneyValue
+  bankPushSummary?: string
+  payeeBankProvince?: string
+  payeeBankCity?: string
 }
 
 export interface ExpenseBankLinkSummary {

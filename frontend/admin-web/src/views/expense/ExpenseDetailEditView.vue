@@ -136,7 +136,12 @@ const detailNo = computed(() => String(route.params.detailNo || ''))
 const draftKey = computed(() => String(route.query.draftKey || ''))
 const returnTo = computed(() => String(route.query.returnTo || ''))
 const emptySchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
-const paymentAmountValue = computed(() => resolveExpenseDetailAmount(detailFormData, templateDetail.value?.expenseDetailType, templateDetail.value?.expenseDetailModeDefault) || '0.00')
+const paymentAmountValue = computed(() => resolveExpenseDetailAmount(
+  detailFormData,
+  templateDetail.value?.expenseDetailType,
+  templateDetail.value?.expenseDetailModeDefault,
+  templateDetail.value?.expenseDetailSchema
+) || '0.00')
 const paymentAmountText = computed(() => `¥ ${formatMoney(paymentAmountValue.value)}`)
 const detailFormDataModel = computed<Record<string, unknown>>({
   get: () => detailFormData,
@@ -290,7 +295,8 @@ function saveDetail() {
         sortOrder: sortOrder.value ?? current?.sortOrder,
         formData: nextFormData
       },
-      templateDetail.value?.expenseDetailModeDefault
+      templateDetail.value?.expenseDetailModeDefault,
+      templateDetail.value?.expenseDetailSchema
     )
     window.sessionStorage.setItem(storageKey(), JSON.stringify(draft))
     ElMessage.success('费用明细已保存')

@@ -13,6 +13,7 @@ import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.entity.FinanceVendor;
 import com.finex.auth.entity.ProcessCustomArchiveDesign;
 import com.finex.auth.entity.ProcessCustomArchiveItem;
+import com.finex.auth.entity.ProcessDocumentActionLog;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
@@ -24,6 +25,7 @@ import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceVendorMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
+import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
@@ -71,6 +73,8 @@ public class ExpenseSummaryAssembler {
     private static final String TEMPLATE_SCOPE_TYPE_TAG_ARCHIVE = "TAG_ARCHIVE";
     private static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
     private static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
+    private static final String DOCUMENT_STATUS_DRAFT = "DRAFT";
+    private static final String DOCUMENT_STATUS_PENDING_APPROVAL = "PENDING_APPROVAL";
     private static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
     private static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
@@ -78,7 +82,11 @@ public class ExpenseSummaryAssembler {
     private static final String DOCUMENT_STATUS_PAYMENT_COMPLETED = "PAYMENT_COMPLETED";
     private static final String DOCUMENT_STATUS_PAYMENT_FINISHED = "PAYMENT_FINISHED";
     private static final String DOCUMENT_STATUS_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
+    private static final String LOG_SUBMIT = "SUBMIT";
+    private static final String LOG_RESUBMIT = "RESUBMIT";
+    private static final String LOG_RECALL = "RECALL";
 
+    private final ProcessDocumentActionLogMapper processDocumentActionLogMapper;
     private final ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     private final ProcessDocumentTemplateMapper templateMapper;
     private final ProcessTemplateScopeMapper processTemplateScopeMapper;
@@ -135,9 +143,11 @@ public class ExpenseSummaryAssembler {
         summary.setDocumentStatus(instance.getStatus());
         summary.setDocumentStatusLabel(statusLabel);
         summary.setAmount(defaultDecimal(instance.getTotalAmount()));
-        summary.setDate(instance.getCreatedAt() == null ? "" : instance.getCreatedAt().format(DATE_FORMATTER));
+        LocalDateTime displaySubmittedAt = enrichmentData.submittedAt(instance.getDocumentCode(), instance);
+        summary.setDate(displaySubmittedAt == null ? "" : displaySubmittedAt.format(DATE_FORMATTER));
         summary.setStatus(statusLabel);
-        summary.setSubmittedAt(formatTime(instance.getCreatedAt()));
+        summary.setSubmittedAt(formatTime(displaySubmittedAt));
+        summary.setDraftDeletable(enrichmentData.draftDeletable(instance.getDocumentCode()));
         summary.setPaymentDate(metadata.paymentDate());
         summary.setPaymentCompanyName(metadata.paymentCompanyName());
         summary.setPayeeName(metadata.payeeName());
@@ -171,7 +181,7 @@ public class ExpenseSummaryAssembler {
         item.setStatus(task.getStatus());
         item.setDocumentStatus(instance == null ? null : instance.getStatus());
         item.setDocumentStatusLabel(instance == null ? null : resolveStatusLabel(instance.getStatus()));
-        item.setSubmittedAt(instance == null ? null : formatTime(instance.getCreatedAt()));
+        item.setSubmittedAt(instance == null ? null : formatTime(enrichmentData.submittedAt(task.getDocumentCode(), instance)));
         item.setPaymentDate(metadata.paymentDate());
         item.setPaymentCompanyName(metadata.paymentCompanyName());
         item.setPayeeName(metadata.payeeName());
@@ -213,6 +223,27 @@ public class ExpenseSummaryAssembler {
                 LinkedHashMap::new,
                 Collectors.toList()
         ));
+        List<ProcessDocumentActionLog> lifecycleLogs = documentCodes.isEmpty()
+                ? Collections.emptyList()
+                : processDocumentActionLogMapper.selectList(
+                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
+                        .in(ProcessDocumentActionLog::getDocumentCode, documentCodes)
+                        .in(ProcessDocumentActionLog::getActionType, List.of(LOG_SUBMIT, LOG_RESUBMIT, LOG_RECALL))
+                        .orderByDesc(ProcessDocumentActionLog::getCreatedAt, ProcessDocumentActionLog::getId)
+        );
+        Map<String, LocalDateTime> latestSubmitAtMap = new LinkedHashMap<>();
+        Set<String> formalProcessHistoryDocumentCodes = new LinkedHashSet<>();
+        for (ProcessDocumentActionLog log : lifecycleLogs) {
+            String logDocumentCode = trimToNull(log.getDocumentCode());
+            if (logDocumentCode == null) {
+                continue;
+            }
+            formalProcessHistoryDocumentCodes.add(logDocumentCode);
+            if ((Objects.equals(log.getActionType(), LOG_SUBMIT) || Objects.equals(log.getActionType(), LOG_RESUBMIT))
+                    && log.getCreatedAt() != null) {
+                latestSubmitAtMap.putIfAbsent(logDocumentCode, log.getCreatedAt());
+            }
+        }
 
         List<String> templateCodes = instances.stream()
                 .map(ProcessDocumentInstance::getTemplateCode)
@@ -339,7 +370,34 @@ public class ExpenseSummaryAssembler {
             );
             metadataMap.put(instance.getDocumentCode(), metadata);
         }
-        return new SummaryEnrichmentData(metadataMap);
+        Map<String, LocalDateTime> submittedAtMap = new LinkedHashMap<>();
+        Map<String, Boolean> draftDeletableMap = new LinkedHashMap<>();
+        for (ProcessDocumentInstance instance : instances) {
+            String instanceDocumentCode = trimToNull(instance.getDocumentCode());
+            if (instanceDocumentCode == null) {
+                continue;
+            }
+            submittedAtMap.put(
+                    instanceDocumentCode,
+                    resolveDisplaySubmittedAt(instance, latestSubmitAtMap.get(instanceDocumentCode))
+            );
+            draftDeletableMap.put(
+                    instanceDocumentCode,
+                    Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)
+                            && !formalProcessHistoryDocumentCodes.contains(instanceDocumentCode)
+            );
+        }
+        return new SummaryEnrichmentData(metadataMap, submittedAtMap, draftDeletableMap);
+    }
+
+    private LocalDateTime resolveDisplaySubmittedAt(ProcessDocumentInstance instance, LocalDateTime latestSubmitAt) {
+        if (instance == null) {
+            return null;
+        }
+        if (Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
+            return instance.getUpdatedAt() == null ? instance.getCreatedAt() : instance.getUpdatedAt();
+        }
+        return latestSubmitAt == null ? instance.getCreatedAt() : latestSubmitAt;
     }
 
     /**
@@ -876,6 +934,7 @@ public class ExpenseSummaryAssembler {
      */
     private String resolveStatusLabel(String status) {
         return switch (trimToNull(status) == null ? "" : status.trim()) {
+            case DOCUMENT_STATUS_PENDING_APPROVAL -> "\u5ba1\u6279\u4e2d";
             case DOCUMENT_STATUS_PENDING_PAYMENT -> "\u5f85\u652f\u4ed8";
             case DOCUMENT_STATUS_PAYING -> "\u652f\u4ed8\u4e2d";
             case DOCUMENT_STATUS_PAYMENT_COMPLETED -> "\u5df2\u652f\u4ed8";
@@ -883,9 +942,9 @@ public class ExpenseSummaryAssembler {
             case DOCUMENT_STATUS_PAYMENT_EXCEPTION -> "\u652f\u4ed8\u5f02\u5e38";
             case DOCUMENT_STATUS_APPROVED, DOCUMENT_STATUS_COMPLETED -> "\u5df2\u5b8c\u6210";
             case DOCUMENT_STATUS_REJECTED -> "\u5df2\u9a73\u56de";
-            case "DRAFT" -> "\u8349\u7a3f";
+            case DOCUMENT_STATUS_DRAFT -> "\u8349\u7a3f";
             case DOCUMENT_STATUS_EXCEPTION -> "\u6d41\u7a0b\u5f02\u5e38";
-            default -> "\u5ba1\u6279\u4e2d";
+            default -> "\u672a\u77e5\u72b6\u6001";
         };
     }
 
@@ -921,11 +980,23 @@ public class ExpenseSummaryAssembler {
     }
 
     static final class SummaryEnrichmentData {
-        static final SummaryEnrichmentData EMPTY = new SummaryEnrichmentData(Collections.emptyMap());
+        static final SummaryEnrichmentData EMPTY = new SummaryEnrichmentData(
+                Collections.emptyMap(),
+                Collections.emptyMap(),
+                Collections.emptyMap()
+        );
         private final Map<String, SummaryMetadata> metadataByDocumentCode;
+        private final Map<String, LocalDateTime> submittedAtByDocumentCode;
+        private final Map<String, Boolean> draftDeletableByDocumentCode;
 
-        private SummaryEnrichmentData(Map<String, SummaryMetadata> metadataByDocumentCode) {
+        private SummaryEnrichmentData(
+                Map<String, SummaryMetadata> metadataByDocumentCode,
+                Map<String, LocalDateTime> submittedAtByDocumentCode,
+                Map<String, Boolean> draftDeletableByDocumentCode
+        ) {
             this.metadataByDocumentCode = metadataByDocumentCode;
+            this.submittedAtByDocumentCode = submittedAtByDocumentCode;
+            this.draftDeletableByDocumentCode = draftDeletableByDocumentCode;
         }
 
         static SummaryEnrichmentData empty() {
@@ -934,6 +1005,14 @@ public class ExpenseSummaryAssembler {
 
         SummaryMetadata metadata(String documentCode) {
             return metadataByDocumentCode.getOrDefault(documentCode, SummaryMetadata.empty());
+        }
+
+        LocalDateTime submittedAt(String documentCode, ProcessDocumentInstance instance) {
+            return submittedAtByDocumentCode.getOrDefault(documentCode, instance == null ? null : instance.getCreatedAt());
+        }
+
+        boolean draftDeletable(String documentCode) {
+            return Boolean.TRUE.equals(draftDeletableByDocumentCode.get(documentCode));
         }
     }
 
