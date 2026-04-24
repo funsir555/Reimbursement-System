@@ -1,6 +1,7 @@
 package com.finex.auth.service.impl;
 
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -46,6 +47,19 @@ class ExpenseDocumentSubmissionServiceTest {
 
         assertSame(expected, actual);
         verify(expenseSubmissionDomainSupport).submitDocument(1L, "tester", dto);
+    }
+
+    @Test
+    void saveDraftDocumentDelegatesToMutationSupport() {
+        ExpenseDocumentUpdateDTO dto = new ExpenseDocumentUpdateDTO();
+        ExpenseDocumentEditContextVO expected = new ExpenseDocumentEditContextVO();
+        ExpenseDocumentSubmissionService service = new ExpenseDocumentSubmissionService(expenseSubmissionDomainSupport);
+        when(expenseSubmissionDomainSupport.saveDraftDocument(1L, "DOC-1", dto)).thenReturn(expected);
+
+        ExpenseDocumentEditContextVO actual = service.saveDraftDocument(1L, "DOC-1", dto);
+
+        assertSame(expected, actual);
+        verify(expenseSubmissionDomainSupport).saveDraftDocument(1L, "DOC-1", dto);
     }
 
     @Test

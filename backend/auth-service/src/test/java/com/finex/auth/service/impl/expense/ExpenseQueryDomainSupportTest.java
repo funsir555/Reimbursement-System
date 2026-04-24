@@ -31,6 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,6 +96,38 @@ class ExpenseQueryDomainSupportTest {
         ExpenseDocumentEditContextVO actual = support.getDocumentEditContext(1L, "DOC-001");
 
         assertSame(context, actual);
+    }
+
+    @Test
+    void recallDocumentClearsRuntimeStateAndVoidsActiveRelations() {
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setId(10L);
+        instance.setDocumentCode("DOC-001");
+        instance.setSubmitterUserId(1L);
+        instance.setStatus("PENDING_APPROVAL");
+        instance.setCurrentNodeKey("N1");
+        instance.setCurrentNodeName("领导审批");
+        instance.setCurrentTaskType("APPROVAL");
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setStatus("PENDING");
+        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+        ExpenseQueryDomainSupport support = newSupport();
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance, instance);
+        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
+        when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
+
+        ExpenseDocumentDetailVO actual = support.recallDocument(1L, "tester", "DOC-001");
+
+        assertSame(detail, actual);
+        assertEquals("DRAFT", instance.getStatus());
+        assertEquals(null, instance.getCurrentNodeKey());
+        assertEquals(null, instance.getCurrentNodeName());
+        assertEquals(null, instance.getCurrentTaskType());
+        assertEquals(null, instance.getFinishedAt());
+        verify(processDocumentInstanceMapper).update(isNull(), any(com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper.class));
+        verify(processDocumentInstanceMapper, never()).updateById(any());
+        verify(expenseRelationWriteOffService).voidActiveRelations("DOC-001");
+        verify(expenseRelationWriteOffService).voidPendingWriteOffs("DOC-001");
     }
 
     @Test

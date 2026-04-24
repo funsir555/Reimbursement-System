@@ -10,9 +10,11 @@ import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
 import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
+import com.finex.auth.entity.ProcessDocumentInstance;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -94,6 +96,11 @@ public class ExpenseSubmissionDomainSupport {
      */
     public ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         return expenseDocumentMutationDomainSupport.submitDocument(userId, username, dto);
+    }
+
+    public ExpenseDocumentEditContextVO saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
+        ProcessDocumentInstance instance = expenseDocumentMutationDomainSupport.saveDraftDocument(userId, documentCode, dto);
+        return expenseDocumentTemplateDomainSupport.buildEditContext(userId, instance, null, "RESUBMIT");
     }
 
     /**

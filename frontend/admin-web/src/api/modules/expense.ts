@@ -116,6 +116,11 @@ export const expenseApi = {
     }),
   getEditContext: (documentCode: string) =>
     request<ExpenseDocumentEditContext>(`/auth/expenses/${encodeURIComponent(documentCode)}/edit-context`),
+  saveDraft: (documentCode: string, payload: ExpenseDocumentUpdatePayload) =>
+    request<ExpenseDocumentEditContext>(`/auth/expenses/${encodeURIComponent(documentCode)}/draft`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
   deleteDocument: (documentCode: string) =>
     request<boolean>(`/auth/expenses/${encodeURIComponent(documentCode)}`, {
       method: 'DELETE'

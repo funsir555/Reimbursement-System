@@ -279,6 +279,12 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
         return expenseDocumentQueryService.getDocumentEditContext(userId, documentCode);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseDocumentEditContextVO saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
+        return expenseDocumentSubmissionService.saveDraftDocument(userId, documentCode, dto);
+    }
+
     /**
      * 重新提交单据。
      */

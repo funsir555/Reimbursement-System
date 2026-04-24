@@ -10,6 +10,7 @@ import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
 import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -89,6 +90,10 @@ public class ExpenseDocumentSubmissionService {
      */
     public ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         return expenseSubmissionDomainSupport.submitDocument(userId, username, dto);
+    }
+
+    public ExpenseDocumentEditContextVO saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
+        return expenseSubmissionDomainSupport.saveDraftDocument(userId, documentCode, dto);
     }
 
     /**

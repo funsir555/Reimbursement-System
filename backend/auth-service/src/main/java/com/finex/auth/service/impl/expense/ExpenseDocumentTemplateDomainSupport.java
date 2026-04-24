@@ -47,6 +47,7 @@ class ExpenseDocumentTemplateDomainSupport {
     private final AbstractExpenseDocumentSupport support;
     private final ExpenseDocumentReadSupport readSupport;
     private final ProcessDocumentTaskMapper processDocumentTaskMapper;
+    private final ExpenseReadonlyPayeeAccountSnapshotEnhancer readonlyPayeeAccountSnapshotEnhancer;
     private final ObjectMapper objectMapper;
 
     /**
@@ -56,11 +57,13 @@ class ExpenseDocumentTemplateDomainSupport {
             AbstractExpenseDocumentSupport support,
             ExpenseDocumentReadSupport readSupport,
             ProcessDocumentTaskMapper processDocumentTaskMapper,
+            ExpenseReadonlyPayeeAccountSnapshotEnhancer readonlyPayeeAccountSnapshotEnhancer,
             ObjectMapper objectMapper
     ) {
         this.support = support;
         this.readSupport = readSupport;
         this.processDocumentTaskMapper = processDocumentTaskMapper;
+        this.readonlyPayeeAccountSnapshotEnhancer = readonlyPayeeAccountSnapshotEnhancer;
         this.objectMapper = objectMapper;
     }
 
@@ -147,13 +150,18 @@ class ExpenseDocumentTemplateDomainSupport {
      * 组装Edit上下文。
      */
     ExpenseDocumentEditContextVO buildEditContext(Long userId, ProcessDocumentInstance instance, Long taskId, String editMode) {
-        ExpenseCreateTemplateDetailVO templateDetail = getTemplateDetail(userId, instance.getTemplateCode());
+        ExpenseCreateTemplateDetailVO templateDetail = support.getDocumentTemplateDetail(userId, instance.getTemplateCode());
         ExpenseDocumentEditContextVO context = new ExpenseDocumentEditContextVO();
         context.setEditMode(editMode);
         context.setDocumentCode(instance.getDocumentCode());
         context.setTaskId(taskId);
         copyTemplateDetail(templateDetail, context);
-        context.setFormData(readSupport.readFormData(instance.getFormDataJson()));
+        Map<String, Object> formData = readSupport.readFormData(instance.getFormDataJson());
+        context.setFormData(readonlyPayeeAccountSnapshotEnhancer.enhanceFormData(
+                context.getSchema(),
+                formData,
+                templateDetail.getCurrentUserCompanyId()
+        ));
         context.setExpenseDetails(readSupport.loadExpenseDetails(instance.getDocumentCode()).stream()
                 .map(readSupport::toRuntimeExpenseDetailDTO)
                 .toList());

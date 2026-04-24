@@ -256,6 +256,20 @@ public class ExpenseDocumentQueryController {
     }
 
     // 澶勭悊 resubmit 璇锋眰銆?
+    @PutMapping("/{documentCode}/draft")
+    public Result<ExpenseDocumentEditContextVO> saveDraft(
+            @PathVariable String documentCode,
+            @Valid @RequestBody ExpenseDocumentUpdateDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(
+                "草稿已保存",
+                expenseDocumentService.saveDraftDocument(userId, documentCode, dto)
+        );
+    }
+
     @PutMapping("/{documentCode}/resubmit")
     public Result<ExpenseDocumentSubmitResultVO> resubmit(
             @PathVariable String documentCode,

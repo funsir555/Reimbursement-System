@@ -24,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -452,6 +453,68 @@ class ProcessFlowDesignServiceImplTest {
         verify(processFlowVersionMapper, never()).delete(any());
         verify(processFlowNodeMapper, never()).delete(any());
         verify(processFlowRouteMapper, never()).delete(any());
+    }
+
+    @Test
+    void normalizeNodeConfigForcesAndSignWhenManagerLevelIsGreaterThanOne() {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalized = (Map<String, Object>) ReflectionTestUtils.invokeMethod(
+                service,
+                "normalizeNodeConfig",
+                "APPROVAL",
+                new LinkedHashMap<>(Map.of(
+                        "approverType", "MANAGER",
+                        "approvalMode", "OR_SIGN",
+                        "managerConfig", Map.of(
+                                "deptSource", "UNDERTAKE_DEPT",
+                                "managerLevel", 2,
+                                "orgTreeLookupEnabled", true,
+                                "orgTreeLookupLevel", 1
+                        )
+                )),
+                false
+        );
+
+        assertEquals("AND_SIGN", normalized.get("approvalMode"));
+    }
+
+    @Test
+    void resolveManagerMembersReturnsFirstToNthManagersInOrder() {
+        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(
+                buildDepartment(3L, "Root Dept", null, 701L),
+                buildDepartment(7L, "Parent Dept", 3L, 601L),
+                buildDepartment(15L, "Undertake Dept", 7L, 501L)
+        ));
+        when(userMapper.selectBatchIds(List.of(501L))).thenReturn(List.of(createActiveUser(501L, "Leader L1")));
+        when(userMapper.selectBatchIds(List.of(601L))).thenReturn(List.of(createActiveUser(601L, "Leader L2")));
+
+        @SuppressWarnings("unchecked")
+        List<com.finex.auth.entity.User> resolved = (List<com.finex.auth.entity.User>) ReflectionTestUtils.invokeMethod(
+                service,
+                "resolveManagerMembers",
+                Map.of(
+                        "managerConfig", Map.of(
+                                "deptSource", "UNDERTAKE_DEPT",
+                                "managerLevel", 2,
+                                "orgTreeLookupEnabled", true,
+                                "orgTreeLookupLevel", 1
+                        )
+                ),
+                Map.of("undertakeDeptIds", List.of(15L)),
+                new java.util.ArrayList<String>()
+        );
+
+        assertEquals(List.of(501L, 601L), resolved.stream().map(com.finex.auth.entity.User::getId).toList());
+    }
+
+    private com.finex.auth.entity.SystemDepartment buildDepartment(Long id, String name, Long parentId, Long leaderUserId) {
+        com.finex.auth.entity.SystemDepartment department = new com.finex.auth.entity.SystemDepartment();
+        department.setId(id);
+        department.setDeptName(name);
+        department.setParentId(parentId);
+        department.setLeaderUserId(leaderUserId);
+        department.setStatus(1);
+        return department;
     }
 
     private com.finex.auth.entity.User createActiveUser(Long id, String name) {

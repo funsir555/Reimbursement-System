@@ -7,9 +7,9 @@ import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.sql.SQLDataException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.SQLSyntaxErrorException;
-import java.sql.SQLDataException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -66,6 +66,40 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleDatabaseWrappedReturnsReadableMessageForDuplicateRelationConstraint() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        PersistenceException exception = new PersistenceException(
+                "insert relation failed",
+                new SQLIntegrityConstraintViolationException("Duplicate entry 'DOC-001-relatedDocs-DOC-002' for key 'uk_pm_document_relation_source_target'")
+        );
+
+        Result<Void> result = handler.handleDatabaseWrapped(
+                exception,
+                new MockHttpServletRequest("PUT", "/auth/expenses/DOC-001/resubmit")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("\u5173\u8054\u5355\u636e\u8bb0\u5f55\u5df2\u5b58\u5728\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5", result.getMessage());
+    }
+
+    @Test
+    void handleDatabaseWrappedReturnsReadableMessageForDuplicateWriteOffConstraint() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        PersistenceException exception = new PersistenceException(
+                "insert writeoff failed",
+                new SQLIntegrityConstraintViolationException("Duplicate entry 'DOC-001-writeoffDocs-DOC-003' for key 'uk_pm_document_write_off_source_target'")
+        );
+
+        Result<Void> result = handler.handleDatabaseWrapped(
+                exception,
+                new MockHttpServletRequest("PUT", "/auth/expenses/DOC-001/resubmit")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("\u6838\u9500\u5355\u636e\u8bb0\u5f55\u5df2\u5b58\u5728\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5", result.getMessage());
+    }
+
+    @Test
     void handleIllegalStateReturnsBusinessMessageForTemplateBindingErrors() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         IllegalStateException exception = new IllegalStateException("\u5f53\u524d\u5ba1\u6279\u6a21\u677f\u7ed1\u5b9a\u7684\u6d41\u7a0b\u4e0d\u5b58\u5728\uff0c\u8bf7\u5148\u4fee\u590d\u6a21\u677f\u914d\u7f6e");
@@ -96,7 +130,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleIllegalStateReturnsFinanceSystemChineseMessageDirectly() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
-        IllegalStateException exception = new IllegalStateException("账套模板已停用");
+        IllegalStateException exception = new IllegalStateException("\u8d26\u5957\u6a21\u677f\u5df2\u505c\u7528");
 
         Result<Void> result = handler.handleIllegalState(
                 exception,
@@ -104,13 +138,13 @@ class GlobalExceptionHandlerTest {
         );
 
         assertEquals(500, result.getCode());
-        assertEquals("账套模板已停用", result.getMessage());
+        assertEquals("\u8d26\u5957\u6a21\u677f\u5df2\u505c\u7528", result.getMessage());
     }
 
     @Test
-    void handleIllegalStateDoesNotBroadenFinanceSystemPassthroughToOtherPaths() {
+    void handleIllegalStateStillKeepsUnknownEnglishMessageGenericOnExpensePaths() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
-        IllegalStateException exception = new IllegalStateException("账套模板已停用");
+        IllegalStateException exception = new IllegalStateException("Account set template disabled");
 
         Result<Void> result = handler.handleIllegalState(
                 exception,
@@ -137,7 +171,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleIllegalStateReturnsChineseMessageDirectlyForGlRequests() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
-        IllegalStateException exception = new IllegalStateException("客户编码已存在");
+        IllegalStateException exception = new IllegalStateException("\u5ba2\u6237\u7f16\u7801\u5df2\u5b58\u5728");
 
         Result<Void> result = handler.handleIllegalState(
                 exception,
@@ -145,27 +179,41 @@ class GlobalExceptionHandlerTest {
         );
 
         assertEquals(500, result.getCode());
-        assertEquals("客户编码已存在", result.getMessage());
+        assertEquals("\u5ba2\u6237\u7f16\u7801\u5df2\u5b58\u5728", result.getMessage());
     }
 
     @Test
-    void handleIllegalStateReturnsChineseMessageDirectlyForPmRequests() {
+    void handleIllegalStateReturnsChineseMessageDirectlyForExpenseResubmitPath() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
-        IllegalStateException exception = new IllegalStateException("当前单据不能核销自己");
+        IllegalStateException exception = new IllegalStateException("\u8282\u70b9\u3010\u9886\u5bfc\u5ba1\u6279\u3011\u627e\u4e0d\u5230\u5ba1\u6279\u4eba\uff0c\u5f53\u524d\u914d\u7f6e\u4e0d\u5141\u8bb8\u63d0\u4ea4");
 
         Result<Void> result = handler.handleIllegalState(
                 exception,
-                new MockHttpServletRequest("POST", "/auth/expense/documents/DOC-001/resubmit")
+                new MockHttpServletRequest("PUT", "/auth/expenses/DOC-001/resubmit")
         );
 
         assertEquals(500, result.getCode());
-        assertEquals("当前单据不能核销自己", result.getMessage());
+        assertEquals("\u8282\u70b9\u3010\u9886\u5bfc\u5ba1\u6279\u3011\u627e\u4e0d\u5230\u5ba1\u6279\u4eba\uff0c\u5f53\u524d\u914d\u7f6e\u4e0d\u5141\u8bb8\u63d0\u4ea4", result.getMessage());
+    }
+
+    @Test
+    void handleIllegalStateReturnsChineseMessageDirectlyForExpenseCreatePath() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("\u8bf7\u5148\u586b\u5199\u3010\u6536\u6b3e\u5355\u4f4d\u3011");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/expenses/create/documents")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("\u8bf7\u5148\u586b\u5199\u3010\u6536\u6b3e\u5355\u4f4d\u3011", result.getMessage());
     }
 
     @Test
     void handleIllegalStateReturnsChineseMessageDirectlyForProcessManagementRequests() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
-        IllegalStateException exception = new IllegalStateException("模板名称长度不能超过 64 个字符");
+        IllegalStateException exception = new IllegalStateException("\u6a21\u677f\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
 
         Result<Void> result = handler.handleIllegalState(
                 exception,
@@ -173,6 +221,6 @@ class GlobalExceptionHandlerTest {
         );
 
         assertEquals(500, result.getCode());
-        assertEquals("模板名称长度不能超过 64 个字符", result.getMessage());
+        assertEquals("\u6a21\u677f\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26", result.getMessage());
     }
 }

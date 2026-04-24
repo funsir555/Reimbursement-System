@@ -1,6 +1,6 @@
 // 业务域：流程模板与流程配置
-// 文件角色：service 入口实现
-// 上下游关系：上游通常来自 流程管理页面对应的 Controller，下游会继续协调 流程模板、报销类型、自定义档案和发布状态。
+// 文件角色：服务入口实现
+// 上下游关系：上游通常来自流程管理页面对应的控制器，下游会继续协调流程模板、报销类型、自定义档案和发布状态。
 // 风险提醒：改坏后最容易影响 审批路由、模板发布和后续单据流转。
 
 package com.finex.auth.service.impl;
@@ -68,9 +68,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * ProcessFlowDesignServiceImpl：service 入口实现。
- * 接住上层请求，并把 流程流程设计相关流程分发到更细的规则组件。
- * 改这里时，要特别关注 审批路由、模板发布和后续单据流转是否会被一起带坏。
+ * 流程设计服务实现。
+ * 接住上层请求，并把流程设计相关逻辑分发到更细的规则组件。
+ * 改这里时，要特别关注审批路由、模板发布和后续单据流转是否会被一起带坏。
  */
 @Service
 @RequiredArgsConstructor
@@ -111,7 +111,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     private static final String APPROVAL_MODE_AND_SIGN = "AND_SIGN";
     private static final String MANUAL_SCOPE_ALL_ACTIVE_USERS = "ALL_ACTIVE_USERS";
 
-    private static final List<String> DEFAULT_OPINIONS = List.of("閫氳繃", "鎷掔粷", "鍔犵", "杞氦");
+    private static final List<String> DEFAULT_OPINIONS = List.of("通过", "拒绝", "加签", "转交");
     private static final Set<String> APPROVER_TYPES = Set.of(
             APPROVER_TYPE_MANAGER,
             APPROVER_TYPE_DESIGNATED_MEMBER,
@@ -412,7 +412,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 更新流程Status。
+     * 更新流程状态。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -428,7 +428,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 创建流程Scene。
+     * 创建流程场景。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -512,7 +512,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 查询Published流程选项。
+     * 查询已发布流程选项。
      */
     @Override
     public List<ProcessFormOptionVO> listPublishedFlowOptions() {
@@ -568,7 +568,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 校验流程Save。
+     * 校验流程保存参数。
      */
     private void validateFlowSave(ProcessFlowSaveDTO dto) {
         String flowName = trimToNull(dto.getFlowName());
@@ -725,7 +725,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
 
         String approverType = asText(config.get("approverType"), APPROVER_TYPE_MANAGER);
         if (!APPROVER_TYPES.contains(approverType)) {
-            throw new IllegalStateException("瀹℃壒浜虹被鍨嬩笉鍚堟硶");
+            throw new IllegalStateException("审批人类型不合法");
         }
         config.put("approverType", approverType);
 
@@ -736,15 +736,17 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         if (!APPROVAL_MODES.contains(approvalMode)) {
             throw new IllegalStateException("审批方式不合法");
         }
+        Map<String, Object> managerConfig = normalizeManagerConfig(config.get("managerConfig"));
+        Map<String, Object> designatedMemberConfig = normalizeDesignatedMemberConfig(config.get("designatedMemberConfig"));
+        Map<String, Object> manualSelectConfig = normalizeManualSelectConfig(config.get("manualSelectConfig"));
+        if (shouldForceManagerAndSign(approverType, managerConfig)) {
+            approvalMode = APPROVAL_MODE_AND_SIGN;
+        }
         config.put("approvalMode", approvalMode);
 
         List<String> opinions = toStringList(config.get("opinionDefaults"));
         config.put("opinionDefaults", opinions.isEmpty() ? new ArrayList<>(DEFAULT_OPINIONS) : opinions);
         config.put("specialSettings", toStringList(config.get("specialSettings")));
-
-        Map<String, Object> managerConfig = normalizeManagerConfig(config.get("managerConfig"));
-        Map<String, Object> designatedMemberConfig = normalizeDesignatedMemberConfig(config.get("designatedMemberConfig"));
-        Map<String, Object> manualSelectConfig = normalizeManualSelectConfig(config.get("manualSelectConfig"));
         config.put("managerConfig", managerConfig);
         config.put("designatedMemberConfig", designatedMemberConfig);
         config.put("manualSelectConfig", manualSelectConfig);
@@ -757,6 +759,13 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             validateActiveUsers(userIds);
         }
         return config;
+    }
+
+    private boolean shouldForceManagerAndSign(String approverType, Map<String, Object> managerConfig) {
+        if (!APPROVER_TYPE_MANAGER.equals(approverType)) {
+            return false;
+        }
+        return limitLevel(asInteger(managerConfig.get("managerLevel"), 1), "主管级次") > 1;
     }
 
     private Map<String, Object> normalizeManagerConfig(Object source) {
@@ -775,9 +784,9 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             throw new IllegalStateException("部门来源不合法");
         }
         config.put("deptSource", deptSource);
-        config.put("managerLevel", limitLevel(asInteger(raw.get("managerLevel"), 1), "涓荤绾ф"));
+        config.put("managerLevel", limitLevel(asInteger(raw.get("managerLevel"), 1), "主管级次"));
         config.put("orgTreeLookupEnabled", asBoolean(raw.get("orgTreeLookupEnabled"), true));
-        config.put("orgTreeLookupLevel", limitLevel(asInteger(raw.get("orgTreeLookupLevel"), 1), "鍚戜笂鏌ユ壘绾ф"));
+        config.put("orgTreeLookupLevel", limitLevel(asInteger(raw.get("orgTreeLookupLevel"), 1), "向上查找级次"));
 
         return config;
     }
@@ -797,7 +806,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 创建DraftVersion。
+     * 创建草稿版本。
      */
     private ProcessFlowVersion createDraftVersion(Long flowId, int versionNo, ProcessFlowSaveDTO dto) {
         ProcessFlowVersion version = new ProcessFlowVersion();
@@ -839,7 +848,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             route.setRouteKey(item.getRouteKey());
             route.setSourceNodeKey(trimToNull(item.getSourceNodeKey()));
             route.setTargetNodeKey(trimToNull(item.getTargetNodeKey()));
-            route.setRouteName(asText(item.getRouteName(), "鍒嗘敮"));
+            route.setRouteName(asText(item.getRouteName(), "分支"));
             route.setPriority(item.getPriority() == null ? 1 : item.getPriority());
             route.setDefaultRoute(Boolean.TRUE.equals(item.getDefaultRoute()) ? 1 : 0);
             route.setAttachBelowNodes(Boolean.TRUE.equals(item.getAttachBelowNodes()) ? 1 : 0);
@@ -849,7 +858,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载VersionNodes。
+     * 加载版本节点。
      */
     private List<ProcessFlowNodeDTO> loadVersionNodes(Long versionId) {
         return processFlowNodeMapper.selectList(
@@ -870,7 +879,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载VersionRoutes。
+     * 加载版本分支。
      */
     private List<ProcessFlowRouteDTO> loadVersionRoutes(Long versionId) {
         return processFlowRouteMapper.selectList(
@@ -892,19 +901,19 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 解析ManagerMembers。
+     * 解析主管审批人。
      */
     private List<User> resolveManagerMembers(Map<String, Object> config, Map<String, Object> context, List<String> trace) {
         Map<String, Object> managerConfig = normalizeManagerConfig(config.get("managerConfig"));
         String ruleMode = asText(managerConfig.get("ruleMode"), MANAGER_RULE_MODE_FORM_DEPT_MANAGER);
         String deptSource = asText(managerConfig.get("deptSource"), DEPT_SOURCE_UNDERTAKE);
-        int managerLevel = limitLevel(asInteger(managerConfig.get("managerLevel"), 1), "涓荤绾ф");
+        int managerLevel = limitLevel(asInteger(managerConfig.get("managerLevel"), 1), "主管级次");
         boolean orgTreeLookupEnabled = asBoolean(managerConfig.get("orgTreeLookupEnabled"), true);
-        int lookupLevel = limitLevel(asInteger(managerConfig.get("orgTreeLookupLevel"), 1), "鍚戜笂鏌ユ壘绾ф");
+        int lookupLevel = limitLevel(asInteger(managerConfig.get("orgTreeLookupLevel"), 1), "向上查找级次");
         Map<Long, SystemDepartment> departmentMap = loadAllDepartmentMap();
         List<Long> startDeptIds = resolveStartDeptIds(deptSource, context);
         if (startDeptIds.isEmpty()) {
-            trace.add("No start department available for manager resolution");
+            trace.add("未找到可用于解析主管的起始部门");
             return Collections.emptyList();
         }
 
@@ -913,25 +922,33 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         for (Long deptId : startDeptIds) {
             SystemDepartment sourceDept = departmentMap.get(deptId);
             if (sourceDept == null) {
-                trace.add("璧峰閮ㄩ棬涓嶅瓨鍦細" + deptId);
+                trace.add("起始部门不存在：" + deptId);
                 continue;
             }
 
-            SystemDepartment targetDept = sourceDept;
-            if (MANAGER_RULE_MODE_FORM_DEPT_MANAGER.equals(ruleMode)) {
-                targetDept = climbDepartment(sourceDept, departmentMap, Math.max(managerLevel - 1, 0));
-                trace.add("Department " + deptId + " positioned to " + (targetDept == null ? "none" : targetDept.getDeptName()));
-            }
+            for (int levelIndex = 0; levelIndex < managerLevel; levelIndex++) {
+                SystemDepartment targetDept = sourceDept;
+                if (MANAGER_RULE_MODE_FORM_DEPT_MANAGER.equals(ruleMode)) {
+                    targetDept = climbDepartment(sourceDept, departmentMap, levelIndex);
+                    trace.add("部门 " + deptId + " 解析第 " + (levelIndex + 1) + " 级主管，命中部门：" + (targetDept == null ? "无" : targetDept.getDeptName()));
+                }
+                if (targetDept == null) {
+                    trace.add("第 " + (levelIndex + 1) + " 级主管对应部门不存在");
+                    return Collections.emptyList();
+                }
 
-            User approver = findLeaderForDepartment(
-                    targetDept,
-                    departmentMap,
-                    submitterUserId,
-                    orgTreeLookupEnabled,
-                    lookupLevel,
-                    trace
-            );
-            if (approver != null) {
+                User approver = findLeaderForDepartment(
+                        targetDept,
+                        departmentMap,
+                        submitterUserId,
+                        orgTreeLookupEnabled,
+                        lookupLevel,
+                        trace
+                );
+                if (approver == null) {
+                    trace.add("第 " + (levelIndex + 1) + " 级主管未命中审批人");
+                    return Collections.emptyList();
+                }
                 result.add(approver);
             }
         }
@@ -939,7 +956,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 查询上级ForDepartment。
+     * 按部门查找主管审批人。
      */
     private User findLeaderForDepartment(
             SystemDepartment targetDept,
@@ -1003,33 +1020,33 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 解析DesignatedMembers。
+     * 解析指定成员审批人。
      */
     private List<User> resolveDesignatedMembers(Map<String, Object> config, List<String> trace) {
         List<Long> userIds = toLongList(toObjectMap(config.get("designatedMemberConfig")).get("userIds"));
         if (userIds.isEmpty()) {
-            trace.add("No designated members configured");
+            trace.add("未配置指定成员");
             return Collections.emptyList();
         }
-        trace.add("Designated members: " + userIds);
+        trace.add("指定成员：" + userIds);
         return loadActiveUsers(userIds);
     }
 
     /**
-     * 解析ManualMembers。
+     * 解析手动选择审批人。
      */
     private List<User> resolveManualMembers(Map<String, Object> context, List<String> trace) {
         List<Long> userIds = toLongList(context == null ? null : context.get("manualSelectedUserIds"));
         if (userIds.isEmpty()) {
-            trace.add("No manual approvers selected");
+            trace.add("未选择手动审批人");
             return Collections.emptyList();
         }
-        trace.add("Manual approvers: " + userIds);
+        trace.add("手动选择审批人：" + userIds);
         return loadActiveUsers(userIds);
     }
 
     /**
-     * 解析StartDeptIds。
+     * 解析起始部门集合。
      */
     private List<Long> resolveStartDeptIds(String deptSource, Map<String, Object> context) {
         if (DEPT_SOURCE_SUBMITTER.equals(deptSource)) {
@@ -1055,7 +1072,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载Version映射。
+     * 加载版本映射。
      */
     private Map<Long, ProcessFlowVersion> loadVersionMap(Collection<Long> versionIds) {
         if (versionIds == null || versionIds.isEmpty()) {
@@ -1095,7 +1112,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 解析EditableVersion。
+     * 解析可编辑版本。
      */
     private ProcessFlowVersion resolveEditableVersion(ProcessFlow flow) {
         ProcessFlowVersion draft = currentDraftVersion(flow);
@@ -1121,7 +1138,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 组装流程编码。
+     * 生成流程编码。
      */
     private String buildFlowCode() {
         String prefix = "PF" + LocalDate.now().format(CODE_DATE_FORMATTER);
@@ -1132,7 +1149,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 组装Scene编码。
+     * 生成场景编码。
      */
     private String buildSceneCode() {
         String prefix = "PS" + LocalDate.now().format(CODE_DATE_FORMATTER);
@@ -1143,7 +1160,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载Scene选项。
+     * 加载场景选项。
      */
     private List<ProcessFlowSceneVO> loadSceneOptions() {
         return processFlowSceneMapper.selectList(
@@ -1175,7 +1192,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 组装Level选项。
+     * 组装级次选项。
      */
     private List<ProcessFormOptionVO> buildLevelOptions(String pattern) {
         List<ProcessFormOptionVO> result = new ArrayList<>();
@@ -1186,7 +1203,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 组装Condition字段。
+     * 组装条件字段。
      */
     private List<ProcessFlowConditionFieldVO> buildConditionFields() {
         return List.of(
@@ -1210,7 +1227,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载Department选项。
+     * 加载部门选项。
      */
     private List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
@@ -1254,7 +1271,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载全部Department映射。
+     * 加载全部部门映射。
      */
     private Map<Long, SystemDepartment> loadAllDepartmentMap() {
         return systemDepartmentMapper.selectList(
@@ -1268,7 +1285,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载DeptName映射。
+     * 加载部门名称映射。
      */
     private Map<Long, String> loadDeptNameMap(List<Long> deptIds) {
         if (deptIds == null || deptIds.isEmpty()) {
@@ -1285,7 +1302,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载Active用户。
+     * 加载有效用户。
      */
     private List<User> loadActiveUsers(List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
@@ -1299,7 +1316,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 加载Active用户。
+     * 加载有效用户。
      */
     private User loadActiveUser(Long userId) {
         if (userId == null) {
@@ -1310,12 +1327,12 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     }
 
     /**
-     * 校验Active用户。
+     * 校验有效用户。
      */
     private void validateActiveUsers(List<Long> userIds) {
         if (loadActiveUsers(userIds).stream().map(User::getId).collect(Collectors.toCollection(LinkedHashSet::new)).size()
                 != new LinkedHashSet<>(userIds).size()) {
-            throw new IllegalStateException("瀹℃壒鑺傜偣涓瓨鍦ㄦ棤鏁堢殑绯荤粺鎴愬憳");
+            throw new IllegalStateException("审批节点中存在无效的系统成员");
         }
     }
 
@@ -1343,7 +1360,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("娴佺▼閰嶇疆瑙ｆ瀽澶辫触", exception);
+            throw new IllegalStateException("流程配置解析失败", exception);
         }
     }
 
@@ -1354,14 +1371,14 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("娴佺▼鍒嗘敮鏉′欢瑙ｆ瀽澶辫触", exception);
+            throw new IllegalStateException("流程分支条件解析失败", exception);
         }
     }
 
     private String normalizeFlowStatus(String status) {
         String value = asText(status, FLOW_STATUS_DRAFT);
         if (!FLOW_STATUSES.contains(value)) {
-            throw new IllegalStateException("娴佺▼鐘舵€佷笉鍚堟硶");
+            throw new IllegalStateException("流程状态不合法");
         }
         return value;
     }
@@ -1470,7 +1487,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
     private int limitLevel(Integer value, String label) {
         int level = value == null ? 1 : value;
         if (level < 1 || level > 10) {
-            throw new IllegalStateException(label + "鍙兘閫夋嫨 1-10");
+            throw new IllegalStateException(label + "只能选择 1-10");
         }
         return level;
     }

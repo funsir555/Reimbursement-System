@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,6 +34,8 @@ class ExpenseDocumentTemplateDomainSupportTest {
     private ExpenseDocumentReadSupport readSupport;
     @Mock
     private ProcessDocumentTaskMapper processDocumentTaskMapper;
+    @Mock
+    private ExpenseReadonlyPayeeAccountSnapshotEnhancer readonlyPayeeAccountSnapshotEnhancer;
 
     @Test
     void listAvailableTemplatesDelegatesToSharedSupport() {
@@ -59,13 +62,17 @@ class ExpenseDocumentTemplateDomainSupportTest {
         templateDetail.setTemplateName("Travel");
         templateDetail.setTemplateType("report");
         templateDetail.setCurrentUserCompanyId("COMPANY_A");
-        templateDetail.setCurrentUserCompanyName("广州远智教育科技有限公司");
+        templateDetail.setCurrentUserCompanyName("Company A");
         ProcessDocumentExpenseDetail detail = new ProcessDocumentExpenseDetail();
         ExpenseDetailInstanceDTO runtimeDetail = new ExpenseDetailInstanceDTO();
         runtimeDetail.setDetailNo("D1");
+        Map<String, Object> rawFormData = new LinkedHashMap<>(Map.of("reason", "trip"));
+        Map<String, Object> enhancedFormData = new LinkedHashMap<>(rawFormData);
+        enhancedFormData.put("payeeAccount", Map.of("value", "VENDOR_ACCOUNT:1", "ownerName", "Vendor Owner"));
         when(readSupport.requireDocument("DOC-1")).thenReturn(instance);
-        when(support.getTemplateDetail(1L, "TPL-1")).thenReturn(templateDetail);
-        when(readSupport.readFormData("{}")).thenReturn(Map.of("reason", "trip"));
+        when(support.getDocumentTemplateDetail(1L, "TPL-1")).thenReturn(templateDetail);
+        when(readSupport.readFormData("{}")).thenReturn(rawFormData);
+        when(readonlyPayeeAccountSnapshotEnhancer.enhanceFormData(any(), any(), any())).thenReturn(enhancedFormData);
         when(readSupport.loadExpenseDetails("DOC-1")).thenReturn(List.of(detail));
         when(readSupport.toRuntimeExpenseDetailDTO(detail)).thenReturn(runtimeDetail);
 
@@ -76,11 +83,13 @@ class ExpenseDocumentTemplateDomainSupportTest {
         assertEquals("TPL-1", actual.getTemplateCode());
         assertEquals("Travel", actual.getTemplateName());
         assertEquals("COMPANY_A", actual.getCurrentUserCompanyId());
-        assertEquals("广州远智教育科技有限公司", actual.getCurrentUserCompanyName());
+        assertEquals("Company A", actual.getCurrentUserCompanyName());
         assertEquals("trip", actual.getFormData().get("reason"));
+        assertEquals("Vendor Owner", ((Map<?, ?>) actual.getFormData().get("payeeAccount")).get("ownerName"));
         assertEquals(1, actual.getExpenseDetails().size());
         assertSame(runtimeDetail, actual.getExpenseDetails().get(0));
         verify(readSupport).requireSubmitter(instance, 1L);
+        verify(readonlyPayeeAccountSnapshotEnhancer).enhanceFormData(actual.getSchema(), rawFormData, "COMPANY_A");
     }
 
     @Test
@@ -126,8 +135,9 @@ class ExpenseDocumentTemplateDomainSupportTest {
         task.setNodeKey("finance");
         task.setNodeType("APPROVAL");
         task.setStatus("PENDING");
-        when(support.getTemplateDetail(1L, "TPL-2")).thenReturn(templateDetail);
+        when(support.getDocumentTemplateDetail(1L, "TPL-2")).thenReturn(templateDetail);
         when(readSupport.readFormData("{}")).thenReturn(Map.of());
+        when(readonlyPayeeAccountSnapshotEnhancer.enhanceFormData(any(), any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
         when(readSupport.loadExpenseDetails("DOC-2")).thenReturn(List.of());
         when(processDocumentTaskMapper.selectOne(any())).thenReturn(task);
 
@@ -143,6 +153,7 @@ class ExpenseDocumentTemplateDomainSupportTest {
                 support,
                 readSupport,
                 processDocumentTaskMapper,
+                readonlyPayeeAccountSnapshotEnhancer,
                 new ObjectMapper()
         );
     }

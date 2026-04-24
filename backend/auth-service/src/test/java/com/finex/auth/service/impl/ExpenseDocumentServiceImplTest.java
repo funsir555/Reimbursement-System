@@ -4,8 +4,10 @@ import com.finex.auth.dto.ExpenseApprovalActionDTO;
 import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
+import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
 import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.service.impl.expense.ExpenseRelationWriteOffService;
@@ -120,6 +122,19 @@ class ExpenseDocumentServiceImplTest {
         org.junit.jupiter.api.Assertions.assertTrue(service.deleteDraftDocument(1L, "DOC-001"));
 
         verify(expenseDocumentQueryService).deleteDraftDocument(1L, "DOC-001");
+    }
+
+    @Test
+    void saveDraftDocumentDelegatesToSubmissionService() {
+        ExpenseDocumentServiceImpl service = newService();
+        ExpenseDocumentUpdateDTO dto = new ExpenseDocumentUpdateDTO();
+        ExpenseDocumentEditContextVO expected = new ExpenseDocumentEditContextVO();
+        when(expenseDocumentSubmissionService.saveDraftDocument(1L, "DOC-001", dto)).thenReturn(expected);
+
+        ExpenseDocumentEditContextVO actual = service.saveDraftDocument(1L, "DOC-001", dto);
+
+        assertSame(expected, actual);
+        verify(expenseDocumentSubmissionService).saveDraftDocument(1L, "DOC-001", dto);
     }
 
     @Test

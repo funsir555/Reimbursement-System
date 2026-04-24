@@ -53,6 +53,7 @@
 
           <ExpenseRuntimeFormEditor
             v-if="templateDetail"
+            ref="runtimeEditorRef"
             v-model="detailFormDataModel"
             :schema="templateDetail.expenseDetailSchema || emptySchema"
             :shared-archives="templateDetail.expenseDetailSharedArchives || []"
@@ -123,6 +124,7 @@ const router = useRouter()
 
 const loading = ref(false)
 const saving = ref(false)
+const runtimeEditorRef = ref<InstanceType<typeof ExpenseRuntimeFormEditor> | null>(null)
 const pageRootRef = ref<HTMLElement | null>(null)
 const floatingBarStyle = ref<Record<string, string>>({})
 const templateDetail = ref<ExpenseCreateTemplateDetail | null>(null)
@@ -261,6 +263,9 @@ function saveDetail() {
   const normalizedTitle = detailTitle.value.trim()
   if (!normalizedTitle) {
     ElMessage.warning('请先填写明细标题')
+    return
+  }
+  if (runtimeEditorRef.value?.validateBeforeSubmit && !runtimeEditorRef.value.validateBeforeSubmit()) {
     return
   }
 

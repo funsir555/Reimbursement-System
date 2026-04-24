@@ -1,4 +1,4 @@
-﻿<template>
+<template>
 
 
 
@@ -422,7 +422,7 @@
 
 
 
-            @update:model-value="formData[block.fieldKey] = $event"
+            @update:model-value="handleAmountInput(block, $event)"
 
 
 
@@ -1368,7 +1368,7 @@
 
 
             v-model="formData[block.fieldKey]"
-            :ref="(instance) => setCounterpartySelectRef(block.fieldKey, instance)"
+            :ref="(instance: unknown) => setCounterpartySelectRef(block.fieldKey, instance)"
 
 
 
@@ -1907,7 +1907,7 @@
 
 
             v-model="formData[block.fieldKey]"
-            :ref="(instance) => setPayeeAccountSelectRef(block.fieldKey, instance)"
+            :ref="(instance: unknown) => setPayeeAccountSelectRef(block.fieldKey, instance)"
 
 
 
@@ -1997,6 +1997,7 @@
 
 
             :disabled="isPayeeAccountDisabled(block)"
+            @visible-change="handlePayeeAccountDropdownVisibleChange"
 
 
 
@@ -2132,86 +2133,21 @@
 
 
 
-            <template v-if="showVendorAccountMaintenanceEntry" #footer>
-
-
-
-
-
-
-
-              <button
-
-
-
-
-
-
-
-                type="button"
-
-
-
-
-
-
-
-                data-testid="payee-account-maintain-vendor"
-
-
-
-
-
-
-
-                class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
-
-
-
-
-
-
-
-                :disabled="isReadOnly(block)"
-
-
-
-
-
-
-
-                @click.stop="openVendorAccountDialog"
-
-
-
-
-
-
-
-              >
-
-
-
-
-
-
-
-                维护收款账户
-
-
-
-
-
-
-
-              </button>
-
-
-
-
-
-
-
+            <template v-if="showVendorAccountMaintenanceEntry" #empty>
+              <div class="space-y-3 px-3 py-4 text-center">
+                <p class="text-sm text-slate-500">
+                  {{ MISSING_VENDOR_BANK_INFO_MESSAGE }}
+                </p>
+                <button
+                  type="button"
+                  data-testid="payee-account-maintain-vendor"
+                  class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                  :disabled="isReadOnly(block)"
+                  @click.stop="openVendorAccountDialog"
+                >
+                  新增银行账户
+                </button>
+              </div>
             </template>
 
 
@@ -4199,12 +4135,15 @@ import {
 
 
 import {
+  applyExpenseDetailAmountInput,
+  buildExpenseDetailAmountValidationMessage,
   ensureExpenseDetailFormDefaults,
   FIELD_INVOICE_ATTACHMENTS,
   isExpenseDetailBlockReadOnly,
   isExpenseDetailBlockVisible,
   resolveInvoiceOcrTotal,
-  syncInvoiceAmountWithOcr
+  syncInvoiceAmountWithOcr,
+  validateExpenseDetailAmountRules
 } from '@/views/expense/expenseDetailRuntime'
 
 
@@ -4213,7 +4152,11 @@ import {
 
 
 
-import { documentTitleMaxLength, validateRuntimeTitleValues } from '@/views/process/pmValidation'
+import {
+  documentTitleMaxLength,
+  validateRuntimeRequiredValues,
+  validateRuntimeTitleValues
+} from '@/views/process/pmValidation'
 
 
 
@@ -4460,6 +4403,8 @@ const PAYEE_PLACEHOLDER = '\u8bf7\u9009\u62e9\u6536\u6b3e\u4eba'
 
 const PAYEE_ACCOUNT_PLACEHOLDER = '\u8bf7\u9009\u62e9\u6536\u6b3e\u8d26\u6237'
 
+const MISSING_VENDOR_BANK_INFO_MESSAGE = '未维护银行信息，请维护银行信息'
+
 
 
 
@@ -4556,6 +4501,10 @@ const props = withDefaults(defineProps<{
 
   currentUserCompanyId?: string
 
+  hydratingForm?: boolean
+
+  hydrationVersion?: number
+
   approvalEditMode?: boolean
 
   allowEditFormModule?: boolean
@@ -4612,6 +4561,10 @@ const props = withDefaults(defineProps<{
 
   currentUserCompanyId: '',
 
+  hydratingForm: false,
+
+  hydrationVersion: 0,
+
   approvalEditMode: false,
 
   allowEditFormModule: false,
@@ -4652,76 +4605,44 @@ const props = withDefaults(defineProps<{
 
 const blocks = computed(() => props.schema?.blocks || [])
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+function handleAmountInput(block: ProcessFormDesignBlock, nextValue: string | number) {
+  applyExpenseDetailAmountInput(
+    formData.value,
+    block.fieldKey,
+    nextValue,
+    props.detailType,
+    props.defaultBusinessScenario,
+    props.schema
+  )
+}
 
 function validateBeforeSubmit() {
-
-
-
-
-
-
-
-  const issues = validateRuntimeTitleValues(props.schema, formData.value || {})
-
-
-
-
-
-
-
-  if (issues.length) {
-
-
-
-
-
-
-
-    ElMessage.warning(issues[0])
-
-
-
-
-
-
-
+  const requiredIssues = validateRuntimeRequiredValues(props.schema, formData.value || {}, {
+    shouldValidateBlock: (block) => isVisible(block) && !isReadOnly(block)
+  })
+  if (requiredIssues.length) {
+    ElMessage.warning(requiredIssues[0])
     return false
-
-
-
-
-
-
-
   }
 
+  const titleIssues = validateRuntimeTitleValues(props.schema, formData.value || {})
+  if (titleIssues.length) {
+    ElMessage.warning(titleIssues[0])
+    return false
+  }
 
-
-
-
-
+  const amountIssue = validateExpenseDetailAmountRules(
+    formData.value || {},
+    props.detailType,
+    props.defaultBusinessScenario,
+    props.schema
+  )
+  if (amountIssue) {
+    ElMessage.warning(buildExpenseDetailAmountValidationMessage(amountIssue))
+    return false
+  }
 
   return true
-
-
-
-
-
-
-
 }
 
 
@@ -4857,6 +4778,8 @@ const payeeAccountOptions = ref<ExpenseCreatePayeeAccountOption[]>([])
 
 
 const payeeAccountOptionsLoading = ref(false)
+const payeeAccountDropdownVisible = ref(false)
+const payeeAccountMissingInfoWarned = ref(false)
 const counterpartySelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
 const payeeAccountSelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
 const suppressLinkedFieldReset = ref(false)
@@ -5408,13 +5331,25 @@ const showVendorAccountMaintenanceEntry = computed(() => (
 
 ))
 
+function maybeWarnMissingVendorBankInfo() {
+  if (
+    !payeeAccountDropdownVisible.value
+    || payeeAccountMissingInfoWarned.value
+    || !showVendorAccountMaintenanceEntry.value
+  ) {
+    return
+  }
+  payeeAccountMissingInfoWarned.value = true
+  ElMessage.warning(MISSING_VENDOR_BANK_INFO_MESSAGE)
+}
+
 
 
 const vendorDialogTitle = computed(() => (
 
 
 
-  vendorDialogMode.value === 'edit' ? '维护收款账户' : '新增供应商'
+  vendorDialogMode.value === 'edit' ? '新增银行账户' : '新增供应商'
 
 
 
@@ -5423,7 +5358,7 @@ const vendorDialogTitle = computed(() => (
 
 
 const vendorDialogSubmitText = computed(() => (
-  vendorDialogMode.value === 'edit' ? '保存收款账户' : '保存供应商'
+  vendorDialogMode.value === 'edit' ? '保存银行账户' : '保存供应商'
 ))
 
 void loadVendorOptions('')
@@ -5521,7 +5456,7 @@ watch(
 )
 
 watch(
-  () => formData.value,
+  () => props.hydrationVersion,
   () => {
     syncLinkedLookupsFromExternalState()
   },
@@ -5591,7 +5526,7 @@ watch(
 
 
 
-    if (suppressLinkedFieldReset.value) {
+    if (props.hydratingForm || suppressLinkedFieldReset.value) {
       void loadVendorOptions('')
       void loadPayeeAccountOptions('', { settleAfterLoad: true })
       return
@@ -5892,7 +5827,7 @@ watch(
 
 
 
-    if (suppressLinkedFieldReset.value) {
+    if (props.hydratingForm || suppressLinkedFieldReset.value) {
       void loadPayeeAccountOptions('', { settleAfterLoad: true })
       return
     }
@@ -6843,6 +6778,15 @@ function isPayeeAccountDisabled(block: ProcessFormDesignBlock) {
 
 
 
+function handlePayeeAccountDropdownVisibleChange(visible: boolean) {
+  payeeAccountDropdownVisible.value = visible
+  if (!visible) {
+    payeeAccountMissingInfoWarned.value = false
+    return
+  }
+  maybeWarnMissingVendorBankInfo()
+}
+
 function buildPayeeSnapshot(option: ExpenseCreatePayeeOption): RuntimePayeeSnapshot {
 
 
@@ -7109,7 +7053,7 @@ function settleLinkedSelectInteractions() {
 }
 
 function prepareDocumentPickerOpen() {
-    if (suppressLinkedFieldReset.value) {
+    if (props.hydratingForm || suppressLinkedFieldReset.value) {
       void loadPayeeAccountOptions('', { settleAfterLoad: true })
       return
     }
@@ -9597,6 +9541,7 @@ async function loadPayeeAccountOptions(keyword: string, options?: { settleAfterL
 
 
     payeeAccountOptionsLoading.value = false
+    maybeWarnMissingVendorBankInfo()
     if (options?.settleAfterLoad) {
       settleLinkedSelectInteractions()
       void nextTick(() => settleLinkedSelectInteractions())
@@ -10166,7 +10111,10 @@ function syncInvoiceAmountFromAttachments(
   syncInvoiceAmountWithOcr(
     formData.value,
     resolveInvoiceOcrTotal(previousAttachments),
-    resolveInvoiceOcrTotal(nextAttachments)
+    resolveInvoiceOcrTotal(nextAttachments),
+    props.detailType,
+    props.defaultBusinessScenario,
+    props.schema
   )
 }
 
@@ -11623,7 +11571,7 @@ async function saveVendor() {
 
 
 
-      ElMessage.success('供应商收款信息已更新')
+      ElMessage.success('供应商银行信息已更新')
 
 
 
@@ -11728,7 +11676,7 @@ async function saveVendor() {
 
     ElMessage.error(resolveErrorMessage(
       error,
-      vendorDialogMode.value === 'edit' ? '维护供应商收款信息失败' : '新增供应商及收款信息失败'
+      vendorDialogMode.value === 'edit' ? '维护供应商银行信息失败' : '新增供应商及收款信息失败'
     ))
 
 
@@ -12727,6 +12675,9 @@ function toOptionalString(value: unknown) {
 
 
 </style>
+
+
+
 
 
 

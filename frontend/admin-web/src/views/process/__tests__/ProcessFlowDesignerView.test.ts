@@ -603,6 +603,40 @@ describe('ProcessFlowDesignerView', () => {
     expect(mocks.processApi.updateFlow.mock.calls[0][1].flowDescription).toBe('updated flow description')
   })
 
+  it('forces manager approval nodes with managerLevel > 1 to save as AND_SIGN and shows the countersign hint', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.nodes[0]!.config = {
+      approverType: 'MANAGER',
+      missingHandler: 'AUTO_SKIP',
+      approvalMode: 'OR_SIGN',
+      opinionDefaults: [],
+      specialSettings: [],
+      managerConfig: {
+        ruleMode: 'FORM_DEPT_MANAGER',
+        deptSource: 'UNDERTAKE_DEPT',
+        managerLevel: 2,
+        orgTreeLookupEnabled: true,
+        orgTreeLookupLevel: 1
+      },
+      designatedMemberConfig: { userIds: [] },
+      manualSelectConfig: { candidateScope: 'ALL_ACTIVE_USERS' }
+    }
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
+
+    await wrapper.get('[data-testid="select-approval-root"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('第 1..N 级主管共同审批')
+
+    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0]!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
+    const payload = mocks.processApi.updateFlow.mock.calls[0][1]
+    expect(payload.nodes.find((item: any) => item.nodeKey === 'approval-root')?.config.approvalMode).toBe('AND_SIGN')
+  })
+
 
   it('prefills copied approval flows in create mode and still saves through createFlow', async () => {
     mocks.route.name = 'expense-workbench-process-flow-create'

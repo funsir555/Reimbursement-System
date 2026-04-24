@@ -35,6 +35,10 @@ class ExpenseDocumentMutationDomainSupport {
         return support.submitDocument(userId, username, dto);
     }
 
+    ProcessDocumentInstance saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
+        return support.saveDraftDocument(userId, documentCode, dto);
+    }
+
     /**
      * 重新提交单据。
      */

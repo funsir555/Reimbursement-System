@@ -29,10 +29,13 @@ class ExpenseDocumentMutationDomainSupportTest {
         ExpenseDocumentUpdateDTO updateDto = new ExpenseDocumentUpdateDTO();
         ExpenseDocumentSubmitResultVO submitResult = new ExpenseDocumentSubmitResultVO();
         ExpenseDocumentSubmitResultVO resubmitResult = new ExpenseDocumentSubmitResultVO();
+        ProcessDocumentInstance savedDraft = new ProcessDocumentInstance();
         when(support.submitDocument(1L, "tester", submitDto)).thenReturn(submitResult);
+        when(support.saveDraftDocument(1L, "DOC-1", updateDto)).thenReturn(savedDraft);
         when(support.resubmitDocument(1L, "tester", "DOC-1", updateDto)).thenReturn(resubmitResult);
 
         assertSame(submitResult, domainSupport.submitDocument(1L, "tester", submitDto));
+        assertSame(savedDraft, domainSupport.saveDraftDocument(1L, "DOC-1", updateDto));
         assertSame(resubmitResult, domainSupport.resubmitDocument(1L, "tester", "DOC-1", updateDto));
     }
 
@@ -42,7 +45,7 @@ class ExpenseDocumentMutationDomainSupportTest {
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         ExpenseDocumentUpdateDTO dto = new ExpenseDocumentUpdateDTO();
         AbstractExpenseDocumentSupport.DocumentMutationContext context =
-                new AbstractExpenseDocumentSupport.DocumentMutationContext(null, null, null, Map.of(), List.of(), Map.of(), null, null, null);
+                new AbstractExpenseDocumentSupport.DocumentMutationContext(null, null, null, Map.of(), List.of(), null, Map.of(), null, null, null);
         when(support.buildMutationContext(instance, dto, true)).thenReturn(context);
 
         assertSame(context, domainSupport.buildMutationContext(instance, dto, true));

@@ -2,6 +2,7 @@ package com.finex.auth.controller;
 
 import com.finex.auth.config.GlobalExceptionHandler;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.service.AccessControlService;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -225,5 +227,26 @@ class ExpenseDocumentQueryControllerTest {
 
         verify(accessControlService).requirePermission(1L, "expense:list:delete");
         verify(expenseDocumentService).deleteDraftDocument(1L, "DOC-001");
+    }
+
+    @Test
+    void saveDraftDelegatesToService() throws Exception {
+        ExpenseDocumentEditContextVO context = new ExpenseDocumentEditContextVO();
+        context.setDocumentCode("DOC-001");
+        doNothing().when(accessControlService).requireAnyPermission(1L, "expense:list:view", "expense:create:create", "expense:create:submit");
+        when(expenseDocumentService.saveDraftDocument(eq(1L), eq("DOC-001"), any())).thenReturn(context);
+
+        mockMvc.perform(
+                        put("/auth/expenses/DOC-001/draft")
+                                .requestAttr("currentUserId", 1L)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"formData\":{},\"expenseDetails\":[]}")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.documentCode").value("DOC-001"));
+
+        verify(accessControlService).requireAnyPermission(1L, "expense:list:view", "expense:create:create", "expense:create:submit");
+        verify(expenseDocumentService).saveDraftDocument(eq(1L), eq("DOC-001"), any());
     }
 }

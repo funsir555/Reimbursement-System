@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   expenseApi: {
     getEditContext: vi.fn(),
+    saveDraft: vi.fn(),
     resubmit: vi.fn()
   },
   expenseApprovalApi: {
@@ -278,6 +279,19 @@ function buildAmountBlock(fieldKey: string) {
     kind: 'CONTROL',
     props: {
       controlType: 'AMOUNT'
+    }
+  }
+}
+
+function buildTextBlock(fieldKey: string, label: string) {
+  return {
+    blockId: `block-${fieldKey}`,
+    fieldKey,
+    kind: 'CONTROL',
+    label,
+    required: true,
+    props: {
+      controlType: 'TEXT'
     }
   }
 }
@@ -555,6 +569,75 @@ describe('ExpenseCreateView', () => {
     expect(storedDraft.templateDetail?.templateName).toBe('差旅报销模板')
   })
 
+  it('persists draft edits to the backend for server-side draft documents', async () => {
+    mocks.route.name = 'expense-document-resubmit'
+    mocks.route.params = { documentCode: 'DOC-900' }
+    mocks.route.query = { entry: 'draft' }
+    mocks.route.fullPath = '/expense/documents/DOC-900/resubmit?entry=draft'
+    mocks.expenseApi.getEditContext.mockResolvedValue({
+      data: {
+        documentCode: 'DOC-900',
+        ...buildTemplateDetail('TPL-900', '草稿模板', 'report', '报销单'),
+        formData: {
+          paymentCompany: 'COMPANY-001',
+          counterparty: 'VEN-001',
+          payeeAccount: {
+            value: 'VENDOR_ACCOUNT:1',
+            label: '旧账户'
+          }
+        },
+        expenseDetails: [buildExpenseDetail('DETAIL-001', '10.00')]
+      }
+    })
+    mocks.expenseApi.saveDraft.mockResolvedValue({
+      data: {
+        documentCode: 'DOC-900',
+        ...buildTemplateDetail('TPL-900', '草稿模板', 'report', '报销单'),
+        formData: {
+          paymentCompany: 'COMPANY-001',
+          counterparty: 'VEN-001',
+          payeeAccount: {
+            value: 'VENDOR_ACCOUNT:2',
+            label: '新账户'
+          },
+          __totalAmount: '88.88'
+        },
+        expenseDetails: [buildExpenseDetail('DETAIL-001', '88.88')]
+      }
+    })
+
+    const wrapper = await mountView()
+    mocks.elMessage.success.mockClear()
+    const saveDraftButton = wrapper.findAll('button').find((item) => item.text().includes('保存草稿'))
+
+    expect(saveDraftButton).toBeTruthy()
+
+    await saveDraftButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseApi.saveDraft).toHaveBeenCalledWith('DOC-900', {
+      formData: expect.objectContaining({
+        paymentCompany: 'COMPANY-001',
+        counterparty: 'VEN-001',
+        __totalAmount: '10.00'
+      }),
+      expenseDetails: [
+        expect.objectContaining({
+          detailNo: 'DETAIL-001',
+          formData: expect.objectContaining({ actualPaymentAmount: '10.00' })
+        })
+      ]
+    })
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('草稿已保存')
+
+    const storedDraft = JSON.parse(window.sessionStorage.getItem('expense-create-draft:resubmit-DOC-900') || '{}')
+    expect(storedDraft.formValues.payeeAccount).toEqual(expect.objectContaining({
+      value: 'VENDOR_ACCOUNT:2',
+      label: '新账户'
+    }))
+    expect(storedDraft.expenseDetails[0].formData.actualPaymentAmount).toBe('88.88')
+  })
+
   it('ignores pending draft persistence after unmount', async () => {
     vi.useFakeTimers()
     try {
@@ -662,6 +745,62 @@ describe('ExpenseCreateView', () => {
     expect(wrapper.text()).not.toContain('排序')
   })
 
+  it('persists the latest counterparty and payee account before editing an existing expense detail', async () => {
+    mocks.route.query = { templateCode: 'TPL-001', draftKey: 'draft-edit-existing-detail' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-001&draftKey=draft-edit-existing-detail'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: buildTemplateDetail()
+    })
+    writeDraft('draft-edit-existing-detail', 'TPL-001', {
+      expenseDetails: [
+        {
+          detailNo: 'DETAIL-001',
+          detailTitle: '差旅行程',
+          detailType: 'COMMON',
+          sortOrder: 1,
+          formData: {
+            actualPaymentAmount: '12.30'
+          }
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    await wrapper.findComponent(ExpenseRuntimeFormEditorStub).vm.$emit('update:modelValue', {
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: {
+        value: 'VENDOR_ACCOUNT:1',
+        label: '供应商默认账户',
+        ownerName: '广州供应商'
+      }
+    })
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((item) => item.text() === '编辑')
+    expect(editButton).toBeTruthy()
+
+    await editButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-create-detail-edit',
+      params: { detailNo: 'DETAIL-001' },
+      query: {
+        draftKey: 'draft-edit-existing-detail',
+        templateCode: 'TPL-001',
+        returnTo: '/expense/create?templateCode=TPL-001&draftKey=draft-edit-existing-detail'
+      }
+    })
+
+    const storedDraft = JSON.parse(window.sessionStorage.getItem('expense-create-draft:draft-edit-existing-detail') || '{}')
+    expect(storedDraft.formValues.counterparty).toBe('VEN-001')
+    expect(storedDraft.formValues.payeeAccount).toEqual(expect.objectContaining({
+      value: 'VENDOR_ACCOUNT:1',
+      label: '供应商默认账户'
+    }))
+  })
+
   it('falls back to summing main form amount controls when the template has no expense details', async () => {
     mocks.route.query = { templateCode: 'TPL-003', draftKey: 'draft-contract-amount' }
     mocks.route.fullPath = '/expense/create?templateCode=TPL-003&draftKey=draft-contract-amount'
@@ -721,17 +860,15 @@ describe('ExpenseCreateView', () => {
     mocks.route.fullPath = '/expense/create?templateCode=TPL-004A&draftKey=draft-detail-amount-fallback'
     mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
       data: {
-        ...buildTemplateDetail('TPL-004A', '对公模板', 'report', '报销单'),
-        expenseDetailType: 'ENTERPRISE_TRANSACTION',
-        expenseDetailModeDefault: 'PREPAY_UNBILLED'
+        ...buildTemplateDetail('TPL-004A', '普通模板', 'report', '报销单'),
+        expenseDetailType: 'COMMON'
       }
     })
     writeDraft('draft-detail-amount-fallback', 'TPL-004A', {
       expenseDetails: [
         {
           detailNo: 'D-001',
-          detailType: 'ENTERPRISE_TRANSACTION',
-          businessSceneMode: 'PREPAY_UNBILLED',
+          detailType: 'COMMON',
           formData: {
             amount: '88.50',
             actualPaymentAmount: ''
@@ -806,6 +943,78 @@ describe('ExpenseCreateView', () => {
 
     expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
     expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先为“费用明细 1”选择业务场景')
+  })
+
+  it('blocks submit when prepay detail amount does not equal actualPaymentAmount', async () => {
+    mocks.route.query = { templateCode: 'TPL-004C', draftKey: 'draft-invalid-prepay-amount' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-004C&draftKey=draft-invalid-prepay-amount'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-004C', '对公模板', 'report', '报销单'),
+        expenseDetailType: 'ENTERPRISE_TRANSACTION',
+        expenseDetailModeDefault: 'PREPAY_UNBILLED'
+      }
+    })
+    writeDraft('draft-invalid-prepay-amount', 'TPL-004C', {
+      expenseDetails: [
+        {
+          detailNo: 'D-001',
+          detailTitle: '费用明细 1',
+          detailType: 'ENTERPRISE_TRANSACTION',
+          businessSceneMode: 'PREPAY_UNBILLED',
+          formData: {
+            businessScenario: 'PREPAY_UNBILLED',
+            amount: '88.50',
+            actualPaymentAmount: '66.00'
+          }
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先完善费用明细“费用明细 1”：预付未到票场景下，【金额】必须等于【实际支付金额】')
+  })
+
+  it('blocks manual draft save when full-payment detail actualPaymentAmount exceeds invoiceAmount', async () => {
+    mocks.route.query = { templateCode: 'TPL-004D', draftKey: 'draft-invalid-full-payment-save' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-004D&draftKey=draft-invalid-full-payment-save'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-004D', '对公模板', 'report', '报销单'),
+        expenseDetailType: 'ENTERPRISE_TRANSACTION',
+        expenseDetailModeDefault: 'INVOICE_FULL_PAYMENT'
+      }
+    })
+    writeDraft('draft-invalid-full-payment-save', 'TPL-004D', {
+      expenseDetails: [
+        {
+          detailNo: 'D-001',
+          detailTitle: '费用明细 1',
+          detailType: 'ENTERPRISE_TRANSACTION',
+          businessSceneMode: 'INVOICE_FULL_PAYMENT',
+          formData: {
+            businessScenario: 'INVOICE_FULL_PAYMENT',
+            invoiceAmount: '100.00',
+            actualPaymentAmount: '120.00'
+          }
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const saveDraftButton = wrapper.findAll('button').find((item) => item.text().includes('保存草稿'))
+
+    await saveDraftButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseApi.saveDraft).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先完善费用明细“费用明细 1”：全额付款场景下，【发票金额】必须大于或等于【实际支付金额】')
   })
 
   it('preserves related and writeoff form values when submitting', async () => {
@@ -886,6 +1095,60 @@ describe('ExpenseCreateView', () => {
         writeOffSourceKind: 'LOAN'
       })
     ])
+  })
+
+  it('does not submit when runtime editor validation fails', async () => {
+    mocks.route.query = { templateCode: 'TPL-REQ-001', draftKey: 'draft-required-main' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-REQ-001&draftKey=draft-required-main'
+    writeDraft('draft-required-main', 'TPL-REQ-001')
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: buildTemplateDetail('TPL-REQ-001', 'Required Template', 'contract', 'Contract', {
+        blocks: [buildTextBlock('counterpartyName', '收款单位')]
+      })
+    })
+    mocks.runtimeEditor.validateBeforeSubmit.mockImplementation(() => {
+      mocks.elMessage.warning('请先填写【收款单位】')
+      return false
+    })
+
+    const wrapper = await mountView()
+    const submitButtons = wrapper.findAll('button')
+    expect(submitButtons.length).toBeGreaterThan(0)
+
+    await submitButtons[submitButtons.length - 1]!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先填写【收款单位】')
+  })
+
+  it('does not submit when an expense detail misses a required field', async () => {
+    mocks.route.query = { templateCode: 'TPL-REQ-DETAIL', draftKey: 'draft-required-detail' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-REQ-DETAIL&draftKey=draft-required-detail'
+    const templateDetail = buildTemplateDetail('TPL-REQ-DETAIL', 'Required Detail Template', 'report', 'Report')
+    templateDetail.expenseDetailSchema = {
+      layoutMode: 'TWO_COLUMN',
+      blocks: [buildTextBlock('detailReason', '费用说明')]
+    }
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({ data: templateDetail })
+    writeDraft('draft-required-detail', 'TPL-REQ-DETAIL', {
+      expenseDetails: [{
+        detailNo: 'DETAIL-001',
+        detailTitle: '费用明细 1',
+        detailType: 'COMMON',
+        formData: {}
+      }]
+    })
+
+    const wrapper = await mountView()
+    const submitButtons = wrapper.findAll('button')
+    expect(submitButtons.length).toBeGreaterThan(0)
+
+    await submitButtons[submitButtons.length - 1]!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先完善费用明细“费用明细 1”：请先填写【费用说明】')
+    expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
   })
 
   it('writes __totalAmount as an exact money string when resubmitting', async () => {

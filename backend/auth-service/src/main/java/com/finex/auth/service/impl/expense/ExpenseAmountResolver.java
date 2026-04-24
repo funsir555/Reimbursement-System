@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Shared amount resolution for expense documents and expense details.
+ * 报销单与费用明细共用的金额解析工具。
  */
 public final class ExpenseAmountResolver {
 
@@ -107,6 +107,47 @@ public final class ExpenseAmountResolver {
         return resolveExpenseDetailAmount(merged, detailType, businessSceneMode);
     }
 
+    public static String validateExpenseDetailAmountRule(
+            Map<String, Object> detailFormData,
+            String detailType,
+            String defaultBusinessScenario
+    ) {
+        return validateResolvedExpenseDetailAmountRule(
+                detailFormData,
+                detailType,
+                resolveBusinessScenario(detailType, detailFormData == null ? null : detailFormData.get(FIELD_BUSINESS_SCENARIO), defaultBusinessScenario)
+        );
+    }
+
+    public static String validateResolvedExpenseDetailAmountRule(
+            Map<String, Object> detailFormData,
+            String detailType,
+            String businessSceneMode
+    ) {
+        if (!Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
+            return null;
+        }
+        Map<String, Object> safeFormData = detailFormData == null ? Collections.emptyMap() : detailFormData;
+        if (Objects.equals(businessSceneMode, MODE_PREPAY_UNBILLED)) {
+            BigDecimal detailAmount = toBigDecimal(safeFormData.get(FIELD_DETAIL_AMOUNT));
+            BigDecimal actualPaymentAmount = toBigDecimal(safeFormData.get(FIELD_ACTUAL_PAYMENT_AMOUNT));
+            if (!Objects.equals(detailAmount, actualPaymentAmount)) {
+                return "\u9884\u4ed8\u672a\u5230\u7968\u573a\u666f\u4e0b\uff0c\u3010\u91d1\u989d\u3011\u5fc5\u987b\u7b49\u4e8e\u3010\u5b9e\u9645\u652f\u4ed8\u91d1\u989d\u3011";
+            }
+            return null;
+        }
+        if (Objects.equals(businessSceneMode, MODE_INVOICE_FULL_PAYMENT)) {
+            BigDecimal invoiceAmount = toBigDecimal(safeFormData.get(FIELD_INVOICE_AMOUNT));
+            BigDecimal actualPaymentAmount = toBigDecimal(safeFormData.get(FIELD_ACTUAL_PAYMENT_AMOUNT));
+            BigDecimal safeInvoiceAmount = invoiceAmount == null ? BigDecimal.ZERO : invoiceAmount;
+            BigDecimal safeActualPaymentAmount = actualPaymentAmount == null ? BigDecimal.ZERO : actualPaymentAmount;
+            if (safeActualPaymentAmount.compareTo(safeInvoiceAmount) > 0) {
+                return "\u5168\u989d\u4ed8\u6b3e\u573a\u666f\u4e0b\uff0c\u3010\u53d1\u7968\u91d1\u989d\u3011\u5fc5\u987b\u5927\u4e8e\u6216\u7b49\u4e8e\u3010\u5b9e\u9645\u652f\u4ed8\u91d1\u989d\u3011";
+            }
+        }
+        return null;
+    }
+
     public static BigDecimal resolvePrepayWriteOffAmount(
             Map<String, Object> detailFormData,
             BigDecimal actualPaymentAmount
@@ -196,3 +237,4 @@ public final class ExpenseAmountResolver {
         return trimmed.isEmpty() ? null : trimmed;
     }
 }
+

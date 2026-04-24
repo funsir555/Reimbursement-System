@@ -258,6 +258,8 @@
             <expense-runtime-form-editor
               ref="runtimeEditorRef"
               v-model="formValuesModel"
+              :hydrating-form="isFormHydrating"
+              :hydration-version="formHydrationVersion"
               :schema="templateDetail?.schema || emptySchema"
               :shared-archives="templateDetail?.sharedArchives || []"
               :company-options="templateDetail?.companyOptions || []"
@@ -329,7 +331,8 @@
           <div class="expense-create-floating-bar__actions">
             <el-button
               class="expense-create-floating-bar__button"
-              :disabled="loading || !templateDetail"
+              :loading="savingDraft"
+              :disabled="loading || savingDraft || !templateDetail"
               @click="saveDraftManually"
           >
             保存草稿
@@ -368,6 +371,7 @@ import {
   type ExpenseDetailInstance,
   type ExpenseDocumentEditContext,
   type ExpenseDocumentSubmitResult,
+  type ExpenseDocumentUpdatePayload,
   type ProcessFormDesignBlock,
   type ProcessFormDesignSchema
 } from '@/api'
@@ -379,14 +383,18 @@ import {
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 import { getControlType } from '@/views/process/formDesignerHelper'
 import {
+  buildExpenseDetailAmountValidationMessage,
   buildExpenseDetailFormData,
   enrichExpenseDetailInstance,
+  isExpenseDetailBlockReadOnly,
+  isExpenseDetailBlockVisible,
   resolveBusinessScenario,
   resolveExpenseDetailAmount,
-  resolveDocumentTotalAmount
+  resolveDocumentTotalAmount,
+  validateExpenseDetailAmountRules
 } from './expenseDetailRuntime'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
-import { validateExpenseRuntimeSchema } from '@/views/process/pmValidation'
+import { validateExpenseRuntimeSchema, validateRuntimeRequiredValues } from '@/views/process/pmValidation'
 
 type PageMode = 'create' | 'resubmit' | 'modify'
 type AsyncStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
@@ -417,6 +425,9 @@ const router = useRouter()
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const loading = ref(false)
 const submitting = ref(false)
+const savingDraft = ref(false)
+const isFormHydrating = ref(false)
+const formHydrationVersion = ref(0)
 const templates = ref<ExpenseCreateTemplateSummary[]>([])
 const templateKeyword = ref('')
 const templateListStatus = ref<AsyncStatus>('idle')
@@ -439,6 +450,7 @@ let draftPersistTimer: ReturnType<typeof setTimeout> | undefined
 let pageSyncVersion = 0
 let templateListRequestVersion = 0
 let templateListLoadingPromise: Promise<void> | null = null
+let formHydrationToken = 0
 let floatingBarResizeObserver: ResizeObserver | null = null
 let isComponentUnmounted = false
 
@@ -532,15 +544,16 @@ const heroMetaSecondary = computed(() =>
 )
 
 const isDraftEditEntry = computed(() => pageMode.value === 'resubmit' && String(route.query.entry || '') === 'draft')
+const useServerDraftSave = computed(() => pageMode.value === 'resubmit' && isDraftEditEntry.value && Boolean(editingDocumentCode.value))
 
 const heroEyebrow = computed(() => {
   if (pageMode.value === 'resubmit') {
-    return isDraftEditEntry.value ? 'Draft Edit' : 'Resubmit Flow'
+    return isDraftEditEntry.value ? '草稿编辑' : '重新提交审批'
   }
   if (pageMode.value === 'modify') {
-    return 'Approval Revision'
+    return '审批修改'
   }
-  return showTemplateChooser.value ? 'Expense Entry' : 'Expense Draft'
+  return showTemplateChooser.value ? '新建审批单' : '报销草稿'
 })
 
 const pageTitle = computed(() => {
@@ -773,12 +786,7 @@ async function syncEditPage(version: number) {
       return
     }
     selectedTemplateCode.value = context.templateCode
-    currentDraftKey.value = buildEditDraftKey(context)
-    applyTemplateDetail(extractTemplateDetail(context))
-    applyEditContextPermissions(context)
-    resetFormValues()
-    Object.assign(formValues, cloneRecord(context.formData))
-    expenseDetails.value = Array.isArray(context.expenseDetails) ? context.expenseDetails.map(cloneDetail) : []
+    applyEditContextState(context)
     if (pageMode.value === 'resubmit') {
       restoreResubmitDraftState(context.templateCode)
     } else {
@@ -894,9 +902,11 @@ async function loadTemplateDetail(templateCode: string, useDraft: boolean, versi
     if (useDraft) {
       const draft = readDraft()
       if (draft && draft.templateCode === templateCode) {
-        Object.assign(formValues, draft.formValues || {})
-        expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
-        restoreManualApproverSelections(draft.manualApproverSelections)
+        runWithFormHydration(() => {
+          Object.assign(formValues, draft.formValues || {})
+          expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
+          restoreManualApproverSelections(draft.manualApproverSelections)
+        })
         if (draft.templateDetail) {
           applyTemplateDetail(draft.templateDetail)
         }
@@ -923,13 +933,7 @@ async function loadTemplateDetail(templateCode: string, useDraft: boolean, versi
 
 async function loadEditContext() {
   const context = await fetchEditContext()
-  selectedTemplateCode.value = context.templateCode
-  currentDraftKey.value = buildEditDraftKey(context)
-  applyTemplateDetail(extractTemplateDetail(context))
-  applyEditContextPermissions(context)
-  resetFormValues()
-  Object.assign(formValues, cloneRecord(context.formData))
-  expenseDetails.value = Array.isArray(context.expenseDetails) ? context.expenseDetails.map(cloneDetail) : []
+  applyEditContextState(context)
   restoreManualApproverSelections(readDraft()?.manualApproverSelections)
   persistDraft()
 }
@@ -979,6 +983,18 @@ function extractTemplateDetail(context: ExpenseDocumentEditContext): ExpenseCrea
     currentUserDeptId: context.currentUserDeptId,
     currentUserDeptName: context.currentUserDeptName
   }
+}
+
+function applyEditContextState(context: ExpenseDocumentEditContext) {
+  selectedTemplateCode.value = context.templateCode
+  currentDraftKey.value = buildEditDraftKey(context)
+  applyTemplateDetail(extractTemplateDetail(context))
+  applyEditContextPermissions(context)
+  runWithFormHydration(() => {
+    resetFormValues()
+    Object.assign(formValues, cloneRecord(context.formData))
+    expenseDetails.value = Array.isArray(context.expenseDetails) ? context.expenseDetails.map(cloneDetail) : []
+  })
 }
 
 function applyTemplateDetail(nextDetail: ExpenseCreateTemplateDetail) {
@@ -1066,9 +1082,27 @@ function restoreResubmitDraftState(templateCode: string) {
   if (draft.templateDetail?.templateCode === templateCode) {
     applyTemplateDetail(draft.templateDetail)
   }
-  Object.assign(formValues, cloneRecord(draft.formValues || {}))
-  expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
-  restoreManualApproverSelections(draft.manualApproverSelections)
+  runWithFormHydration(() => {
+    Object.assign(formValues, cloneRecord(draft.formValues || {}))
+    expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
+    restoreManualApproverSelections(draft.manualApproverSelections)
+  })
+}
+
+function bumpFormHydrationVersion() {
+  formHydrationVersion.value += 1
+}
+
+function runWithFormHydration(apply: () => void) {
+  const token = ++formHydrationToken
+  isFormHydrating.value = true
+  apply()
+  bumpFormHydrationVersion()
+  void nextTick(() => {
+    if (token === formHydrationToken) {
+      isFormHydrating.value = false
+    }
+  })
 }
 
 function schedulePersistDraft() {
@@ -1175,6 +1209,21 @@ function normalizeManualApproverSelections() {
   )
 }
 
+function buildDocumentUpdatePayload(): ExpenseDocumentUpdatePayload {
+  const payload: ExpenseDocumentUpdatePayload = {
+    formData: {
+      ...cloneRecord(formValues),
+      __totalAmount: totalAmount.value
+    },
+    expenseDetails: expenseDetails.value.map(cloneDetail)
+  }
+  const manualSelections = normalizeManualApproverSelections()
+  if (Object.keys(manualSelections).length > 0) {
+    payload.manualApproverSelections = manualSelections
+  }
+  return payload
+}
+
 function applyEditContextPermissions(context: ExpenseDocumentEditContext | null) {
   allowEditFormModule.value = Boolean(context?.allowEditFormModule)
   allowEditPayAccount.value = Boolean(context?.allowEditPayAccount)
@@ -1261,6 +1310,7 @@ function editExpenseDetail(detailNo: string) {
   if (!detailNo || !currentDraftKey.value || !selectedTemplateCode.value) {
     return
   }
+  persistDraft({ includeTemplateDetail: true })
   void router.push({
     name: 'expense-create-detail-edit',
     params: { detailNo },
@@ -1355,13 +1405,34 @@ function goBackToList() {
   void router.push('/dashboard')
 }
 
-function saveDraftManually() {
+async function saveDraftManually() {
   if (!currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
     ElMessage.warning('当前页面尚未准备好，暂时无法保存草稿')
     return
   }
+  const expenseDetailAmountIssue = validateExpenseDetailAmountValues()
+  if (expenseDetailAmountIssue) {
+    ElMessage.warning(expenseDetailAmountIssue)
+    return
+  }
   persistDraft({ includeTemplateDetail: true })
-  ElMessage.success('草稿已保存')
+  if (!useServerDraftSave.value) {
+    ElMessage.success('草稿已保存')
+    return
+  }
+  savingDraft.value = true
+  try {
+    const manualSelections = cloneManualApproverSelections()
+    const res = await expenseApi.saveDraft(editingDocumentCode.value, buildDocumentUpdatePayload())
+    applyEditContextState(res.data)
+    restoreManualApproverSelections(manualSelections)
+    persistDraft({ includeTemplateDetail: true })
+    ElMessage.success('草稿已保存')
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '保存草稿失败'))
+  } finally {
+    savingDraft.value = false
+  }
 }
 
 async function submitDocument() {
@@ -1387,22 +1458,25 @@ async function submitDocument() {
       return
     }
   }
+  const expenseDetailRequiredIssue = validateExpenseDetailRequiredValues()
+  if (expenseDetailRequiredIssue) {
+    ElMessage.warning(expenseDetailRequiredIssue)
+    return
+  }
   const expenseDetailScenarioIssue = validateExpenseDetailBusinessScenarios()
   if (expenseDetailScenarioIssue) {
     ElMessage.warning(expenseDetailScenarioIssue)
     return
   }
+  const expenseDetailAmountIssue = validateExpenseDetailAmountValues()
+  if (expenseDetailAmountIssue) {
+    ElMessage.warning(expenseDetailAmountIssue)
+    return
+  }
 
   submitting.value = true
   try {
-    const nextFormData = {
-      ...cloneRecord(formValues),
-      __totalAmount: totalAmount.value
-    }
-    const payload = {
-      formData: nextFormData,
-      expenseDetails: expenseDetails.value.map(cloneDetail)
-    }
+    const payload = buildDocumentUpdatePayload()
     if (pageMode.value === 'create') {
       const res = await expenseCreateApi.submit({
         templateCode: selectedTemplateCode.value,
@@ -1487,6 +1561,47 @@ function validateExpenseDetailBusinessScenarios() {
     )
     if (!resolvedScenario) {
       return `请先为“${detail.detailTitle || detail.detailNo}”选择业务场景`
+    }
+  }
+  return ''
+}
+
+function validateExpenseDetailAmountValues() {
+  if (!isReportTemplate.value) {
+    return ''
+  }
+  const detailType = templateDetail.value?.expenseDetailType
+  const defaultBusinessScenario = templateDetail.value?.expenseDetailModeDefault
+  const detailSchema = templateDetail.value?.expenseDetailSchema
+  for (const detail of expenseDetails.value) {
+    const detailFormData = isRecord(detail.formData) ? detail.formData : {}
+    const issue = validateExpenseDetailAmountRules(
+      detailFormData,
+      detailType || String(detail.detailType || ''),
+      String(detail.businessSceneMode || detail.enterpriseMode || defaultBusinessScenario || ''),
+      detailSchema
+    )
+    if (issue) {
+      return buildExpenseDetailAmountValidationMessage(issue, detail.detailTitle || detail.detailNo || '未命名明细')
+    }
+  }
+  return ''
+}
+
+function validateExpenseDetailRequiredValues() {
+  const detailSchema = templateDetail.value?.expenseDetailSchema || emptySchema
+  const detailType = templateDetail.value?.expenseDetailType
+  const defaultBusinessScenario = templateDetail.value?.expenseDetailModeDefault
+  for (const detail of expenseDetails.value) {
+    const detailFormData = isRecord(detail.formData) ? detail.formData : {}
+    const issues = validateRuntimeRequiredValues(detailSchema, detailFormData, {
+      shouldValidateBlock: (block) => (
+        isExpenseDetailBlockVisible(block, detailFormData, detailType, defaultBusinessScenario, detailSchema)
+          && !isExpenseDetailBlockReadOnly(block)
+      )
+    })
+    if (issues.length) {
+      return `请先完善费用明细“${detail.detailTitle || detail.detailNo || '未命名明细'}”：${issues[0]}`
     }
   }
   return ''

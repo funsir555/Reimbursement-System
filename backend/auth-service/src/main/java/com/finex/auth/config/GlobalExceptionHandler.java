@@ -21,6 +21,8 @@ public class GlobalExceptionHandler {
     private static final String CUSTOM_ARCHIVE_INIT_MESSAGE = "\u81ea\u5b9a\u4e49\u6863\u6848\u76f8\u5173\u8868\u672a\u521d\u59cb\u5316\uff0c\u8bf7\u5148\u6267\u884c backend/sql/init_custom_archive.sql";
     private static final String EXPENSE_CREATE_INIT_MESSAGE = "\u5ba1\u6279\u5355\u521b\u5efa\u76f8\u5173\u8868\u6216\u5b57\u6bb5\u672a\u521d\u59cb\u5316\uff0c\u8bf7\u5148\u6267\u884c backend/sql/init_expense_create_incremental.sql";
     private static final String LEGACY_EXPENSE_DETAIL_INDEX_MESSAGE = "\u8d39\u7528\u660e\u7ec6\u7f16\u53f7\u7d22\u5f15\u4ecd\u662f\u65e7\u7ed3\u6784\uff0c\u8bf7\u5148\u6267\u884c backend/sql/migrate_expense_detail_detail_no_unique_index.sql \u540e\u91cd\u8bd5";
+    private static final String DUPLICATE_RELATION_MESSAGE = "\u5173\u8054\u5355\u636e\u8bb0\u5f55\u5df2\u5b58\u5728\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5";
+    private static final String DUPLICATE_WRITEOFF_MESSAGE = "\u6838\u9500\u5355\u636e\u8bb0\u5f55\u5df2\u5b58\u5728\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5";
 
     @ExceptionHandler(IllegalArgumentException.class)
     public Result<Void> handleIllegalArgument(IllegalArgumentException ex) {
@@ -115,6 +117,12 @@ public class GlobalExceptionHandler {
         if (isLegacyExpenseDetailNoIndexConflict(message)) {
             return LEGACY_EXPENSE_DETAIL_INDEX_MESSAGE;
         }
+        if (isDuplicateKeyMessage(message, "uk_pm_document_relation_source_target")) {
+            return DUPLICATE_RELATION_MESSAGE;
+        }
+        if (isDuplicateKeyMessage(message, "uk_pm_document_write_off_source_target")) {
+            return DUPLICATE_WRITEOFF_MESSAGE;
+        }
         if (isMissingSqlObjectMessage(message) && message != null && message.contains("pm_custom_archive")) {
             return CUSTOM_ARCHIVE_INIT_MESSAGE;
         }
@@ -144,7 +152,13 @@ public class GlobalExceptionHandler {
         if (message.contains("Current user cannot view") || message.contains("Current user cannot handle")) {
             return "\u5f53\u524d\u7528\u6237\u6ca1\u6709\u6743\u9650\u6267\u884c\u8be5\u64cd\u4f5c";
         }
-        if (message.startsWith("\u5f53\u524d") || message.startsWith("\u53ea\u6709") || message.startsWith("\u540c\u4e00")) {
+        if (message.startsWith("\u5f53\u524d")
+                || message.startsWith("\u53ea\u6709")
+                || message.startsWith("\u540c\u4e00")
+                || message.startsWith("\u8bf7\u5148")
+                || message.startsWith("\u8282\u70b9\u3010")
+                || message.startsWith("\u4f60\u65e0\u6743")
+                || message.startsWith("\u4ec5\u652f\u6301")) {
             return message;
         }
         return null;
@@ -158,21 +172,7 @@ public class GlobalExceptionHandler {
         if (message == null || message.startsWith("Failed to ")) {
             return null;
         }
-        if (message.startsWith("目标公司")
-                || message.startsWith("账套主管")
-                || message.startsWith("启用年月")
-                || message.startsWith("创建方式")
-                || message.startsWith("科目编码规则")
-                || message.startsWith("当前公司")
-                || message.startsWith("参照账套")
-                || message.startsWith("账套模板")
-                || message.startsWith("任务号")
-                || message.startsWith("任务不存在")
-                || message.startsWith("任务参数序列化失败")
-                || message.startsWith("无法获取当前登录用户")) {
-            return message;
-        }
-        return null;
+        return containsChinese(message) ? message : null;
     }
 
     private String resolveGlBusinessMessage(IllegalStateException ex, HttpServletRequest request) {
@@ -219,6 +219,8 @@ public class GlobalExceptionHandler {
         }
         String uri = request.getRequestURI();
         return uri.startsWith("/auth/process-management/")
+                || uri.startsWith("/auth/expenses/")
+                || uri.startsWith("/auth/expenses/create/")
                 || uri.startsWith("/auth/expense/documents")
                 || uri.startsWith("/auth/expense-approval/tasks/");
     }
@@ -287,6 +289,15 @@ public class GlobalExceptionHandler {
         String normalized = message.toLowerCase();
         return (normalized.contains("duplicate entry") || normalized.contains("duplicate key"))
                 && normalized.contains("uk_pm_document_expense_detail_no");
+    }
+
+    private boolean isDuplicateKeyMessage(String message, String indexName) {
+        if (message == null || message.isBlank() || indexName == null || indexName.isBlank()) {
+            return false;
+        }
+        String normalized = message.toLowerCase();
+        return (normalized.contains("duplicate entry") || normalized.contains("duplicate key"))
+                && normalized.contains(indexName.toLowerCase());
     }
 
     private boolean isDataTooLongMessage(String message) {

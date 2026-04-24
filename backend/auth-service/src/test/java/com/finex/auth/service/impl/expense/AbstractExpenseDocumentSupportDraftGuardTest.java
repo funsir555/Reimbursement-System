@@ -1,8 +1,12 @@
 package com.finex.auth.service.impl.expense;
 
 import com.finex.auth.entity.ProcessDocumentActionLog;
+import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.entity.User;
 import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
+import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
+import com.finex.auth.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,12 +29,20 @@ class AbstractExpenseDocumentSupportDraftGuardTest {
     @Mock
     private ProcessDocumentActionLogMapper processDocumentActionLogMapper;
 
+    @Mock
+    private ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
+
+    @Mock
+    private UserMapper userMapper;
+
     private AbstractExpenseDocumentSupport support;
 
     @BeforeEach
     void setUp() {
         support = mock(AbstractExpenseDocumentSupport.class, Answers.CALLS_REAL_METHODS);
         ReflectionTestUtils.setField(support, "processDocumentActionLogMapper", processDocumentActionLogMapper);
+        ReflectionTestUtils.setField(support, "processDocumentExpenseDetailMapper", processDocumentExpenseDetailMapper);
+        ReflectionTestUtils.setField(support, "userMapper", userMapper);
     }
 
     @Test
@@ -44,7 +56,7 @@ class AbstractExpenseDocumentSupportDraftGuardTest {
                 () -> support.assertCanViewDocument(instance, 2L, true)
         );
 
-        assertEquals("你无权查看该单据", error.getMessage());
+        assertEquals("\u4f60\u65e0\u6743\u67e5\u770b\u8be5\u5355\u636e", error.getMessage());
     }
 
     @Test
@@ -73,5 +85,46 @@ class AbstractExpenseDocumentSupportDraftGuardTest {
         LocalDateTime submittedAt = ReflectionTestUtils.invokeMethod(support, "resolveDisplaySubmittedAt", instance);
 
         assertEquals(LocalDateTime.of(2026, 4, 21, 12, 5), submittedAt);
+    }
+
+    @Test
+    void requireExpenseDetailUsesReadableChineseMessage() {
+        when(processDocumentExpenseDetailMapper.selectOne(any())).thenReturn(null);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> support.requireExpenseDetail("DOC-1", "D001")
+        );
+
+        assertEquals("\u5f53\u524d\u8d39\u7528\u660e\u7ec6\u4e0d\u5b58\u5728", error.getMessage());
+    }
+
+    @Test
+    void requireSubmitterUsesReadableChineseMessage() {
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setSubmitterUserId(1L);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> support.requireSubmitter(instance, 2L)
+        );
+
+        assertEquals("\u53ea\u6709\u63d0\u5355\u4eba\u672c\u4eba\u53ef\u4ee5\u64cd\u4f5c\u5f53\u524d\u5355\u636e", error.getMessage());
+    }
+
+    @Test
+    void requireCurrentUserCompanyIdUsesReadableChineseMessage() {
+        User user = new User();
+        user.setId(1L);
+        user.setStatus(1);
+        user.setCompanyId(" ");
+        when(userMapper.selectById(1L)).thenReturn(user);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> ReflectionTestUtils.invokeMethod(support, "requireCurrentUserCompanyId", 1L)
+        );
+
+        assertEquals("\u5f53\u524d\u7528\u6237\u672a\u914d\u7f6e\u6240\u5c5e\u516c\u53f8\uff0c\u65e0\u6cd5\u7ee7\u7eed\u5904\u7406", error.getMessage());
     }
 }

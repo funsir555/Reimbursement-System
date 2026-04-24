@@ -325,3 +325,149 @@ export function validateRuntimeTitleValues(schema: ProcessFormDesignSchema, form
   })
   return issues
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function firstFilledText(...values: unknown[]) {
+  for (const value of values) {
+    const normalized = trimValue(value)
+    if (normalized) {
+      return normalized
+    }
+  }
+  return ''
+}
+
+function componentCodeOf(block: ProcessFormDesignBlock) {
+  return getBusinessComponentDefinition(String(block.props.componentCode || ''))?.code || String(block.props.componentCode || '')
+}
+
+function lookupIdentifier(value: unknown) {
+  if (typeof value === 'string') {
+    return trimValue(value)
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : ''
+  }
+  if (isRecord(value)) {
+    return firstFilledText(value.value, value.code, value.id, value.documentCode, value.attachmentId)
+  }
+  return ''
+}
+
+function hasAnyRuntimeValue(value: unknown): boolean {
+  if (value == null) {
+    return false
+  }
+  if (typeof value === 'boolean') {
+    return true
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value)
+  }
+  if (typeof value === 'string') {
+    return trimValue(value).length > 0
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasAnyRuntimeValue(item))
+  }
+  if (isRecord(value)) {
+    if (lookupIdentifier(value)) {
+      return true
+    }
+    return Object.values(value).some((item) => hasAnyRuntimeValue(item))
+  }
+  return false
+}
+
+function hasLookupValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => hasLookupValue(item))
+  }
+  if (typeof value === 'boolean') {
+    return true
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value)
+  }
+  return lookupIdentifier(value).length > 0
+}
+
+function hasCollectionValue(value: unknown): boolean {
+  return Array.isArray(value) && value.some((item) => hasAnyRuntimeValue(item))
+}
+
+function hasNumericValue(value: unknown): boolean {
+  if (typeof value === 'number') {
+    return Number.isFinite(value)
+  }
+  if (typeof value === 'string') {
+    return trimValue(value).length > 0
+  }
+  return false
+}
+
+function requiredBlockIssue(block: ProcessFormDesignBlock, value: unknown) {
+  if (!block.required) {
+    return ''
+  }
+
+  const label = trimValue(block.label) || trimValue(block.fieldKey) || '未命名字段'
+  const requiredMessage = `请先填写【${label}】`
+  if (block.kind === 'CONTROL') {
+    const controlType = getControlType(block)
+    if (controlType === 'SECTION') {
+      return ''
+    }
+    if (controlType === 'SWITCH') {
+      return typeof value === 'boolean' ? '' : requiredMessage
+    }
+    if (['MULTI_SELECT', 'CHECKBOX', 'DATE_RANGE', 'ATTACHMENT', 'IMAGE'].includes(controlType)) {
+      return hasCollectionValue(value) ? '' : requiredMessage
+    }
+    if (['NUMBER', 'AMOUNT'].includes(controlType)) {
+      return hasNumericValue(value) ? '' : requiredMessage
+    }
+    if (['SELECT', 'RADIO'].includes(controlType)) {
+      return hasLookupValue(value) ? '' : requiredMessage
+    }
+    return hasAnyRuntimeValue(value) ? '' : requiredMessage
+  }
+
+  if (block.kind === 'BUSINESS_COMPONENT') {
+    const componentCode = componentCodeOf(block)
+    if (componentCode === 'related-document' || componentCode === 'writeoff-document') {
+      return hasCollectionValue(value) ? '' : requiredMessage
+    }
+    if (['payment-company', 'counterparty', 'payee', 'payee-account', 'undertake-department'].includes(componentCode)) {
+      return hasLookupValue(value) ? '' : requiredMessage
+    }
+    if (componentCode === 'bank-push-summary') {
+      return hasAnyRuntimeValue(value) ? '' : requiredMessage
+    }
+  }
+
+  return hasAnyRuntimeValue(value) ? '' : requiredMessage
+}
+
+export function validateRuntimeRequiredValues(
+  schema: ProcessFormDesignSchema,
+  formData: Record<string, unknown>,
+  options: {
+    shouldValidateBlock?: (block: ProcessFormDesignBlock) => boolean
+  } = {}
+) {
+  const issues: string[] = []
+  schema.blocks.forEach((block) => {
+    if (options.shouldValidateBlock && !options.shouldValidateBlock(block)) {
+      return
+    }
+    const issue = requiredBlockIssue(block, formData[block.fieldKey])
+    if (issue) {
+      issues.push(issue)
+    }
+  })
+  return issues
+}

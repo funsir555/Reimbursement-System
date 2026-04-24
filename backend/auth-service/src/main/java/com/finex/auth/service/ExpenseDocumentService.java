@@ -186,6 +186,8 @@ public interface ExpenseDocumentService {
      */
     ExpenseDocumentEditContextVO getDocumentEditContext(Long userId, String documentCode);
 
+    ExpenseDocumentEditContextVO saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto);
+
     /**
      * 重新提交单据。
      */

@@ -1,8 +1,11 @@
 package com.finex.auth.service.impl.expense;
 
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
+import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
+import com.finex.auth.entity.ProcessDocumentInstance;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -51,5 +54,24 @@ class ExpenseSubmissionDomainSupportTest {
 
         assertSame(expected, actual);
         verify(expenseDocumentMutationDomainSupport).submitDocument(1L, "tester", dto);
+    }
+
+    @Test
+    void saveDraftUsesMutationAndTemplateSupports() {
+        ExpenseDocumentUpdateDTO dto = new ExpenseDocumentUpdateDTO();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        ExpenseDocumentEditContextVO expected = new ExpenseDocumentEditContextVO();
+        ExpenseSubmissionDomainSupport support = new ExpenseSubmissionDomainSupport(
+                expenseDocumentTemplateDomainSupport,
+                expenseDocumentMutationDomainSupport
+        );
+        when(expenseDocumentMutationDomainSupport.saveDraftDocument(1L, "DOC-1", dto)).thenReturn(instance);
+        when(expenseDocumentTemplateDomainSupport.buildEditContext(1L, instance, null, "RESUBMIT")).thenReturn(expected);
+
+        ExpenseDocumentEditContextVO actual = support.saveDraftDocument(1L, "DOC-1", dto);
+
+        assertSame(expected, actual);
+        verify(expenseDocumentMutationDomainSupport).saveDraftDocument(1L, "DOC-1", dto);
+        verify(expenseDocumentTemplateDomainSupport).buildEditContext(1L, instance, null, "RESUBMIT");
     }
 }

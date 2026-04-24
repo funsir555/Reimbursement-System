@@ -1,5 +1,5 @@
-﻿import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseDetailEditView from '@/views/expense/ExpenseDetailEditView.vue'
 
@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
     warning: vi.fn(),
     error: vi.fn(),
     success: vi.fn()
+  },
+  runtimeEditor: {
+    validateBeforeSubmit: vi.fn()
   }
 }))
 
@@ -81,6 +84,15 @@ const EmptyStub = defineComponent({
   template: '<div>{{ description }}</div>'
 })
 
+const DetailRuntimeEditorStub = defineComponent({
+  setup(_props, { expose }) {
+    expose({
+      validateBeforeSubmit: mocks.runtimeEditor.validateBeforeSubmit
+    })
+    return () => h('div', { 'data-testid': 'detail-form-editor' })
+  }
+})
+
 const globalStubs = {
   'el-card': SimpleContainer,
   'el-tag': TagStub,
@@ -89,9 +101,7 @@ const globalStubs = {
   'el-empty': EmptyStub,
   'el-form-item': FormItemStub,
   'el-icon': SimpleContainer,
-  'expense-runtime-form-editor': {
-    template: '<div data-testid="detail-form-editor" />'
-  }
+  'expense-runtime-form-editor': DetailRuntimeEditorStub
 }
 
 function buildDraft(detailFormData: Record<string, unknown>) {
@@ -157,6 +167,7 @@ describe('ExpenseDetailEditView', () => {
     mocks.route.fullPath = '/expense/create/details/D001?draftKey=draft-001'
     mocks.router.push.mockResolvedValue(undefined)
     mocks.router.replace.mockResolvedValue(undefined)
+    mocks.runtimeEditor.validateBeforeSubmit.mockReturnValue(true)
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
       x: 60,
       y: 0,
@@ -279,6 +290,25 @@ describe('ExpenseDetailEditView', () => {
     expect(savedDraft.expenseDetails[0].formData.actualPaymentAmount).toBe('120.50')
     expect(mocks.elMessage.success).toHaveBeenCalledWith('费用明细已保存')
     expect(mocks.router.push).toHaveBeenCalled()
+  })
+
+  it('does not save or navigate when runtime required validation fails', async () => {
+    mocks.runtimeEditor.validateBeforeSubmit.mockReturnValue(false)
+    const wrapper = await mountView({
+      actualPaymentAmount: '120.5',
+      invoiceAttachments: []
+    })
+
+    const saveButton = wrapper.findAll('button').find((item) => item.text().includes('保存'))
+    expect(saveButton).toBeTruthy()
+
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    const savedDraft = JSON.parse(window.sessionStorage.getItem('expense-create-draft:draft-001') || '{}')
+    expect(savedDraft.expenseDetails[0].formData.actualPaymentAmount).toBe('120.5')
+    expect(mocks.elMessage.success).not.toHaveBeenCalled()
+    expect(mocks.router.push).not.toHaveBeenCalled()
   })
 
   it('keeps detail title and business scenario when saving the draft detail', async () => {

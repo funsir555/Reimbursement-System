@@ -421,6 +421,10 @@
                     </el-select>
                   </el-form-item>
 
+                  <p class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-700">
+                    {{ managerApprovalHint }}
+                  </p>
+
                   <div class="rounded-2xl bg-white p-4">
                     <div class="flex flex-wrap items-center gap-3">
                       <el-checkbox v-model="selectedNode.config.managerConfig.orgTreeLookupEnabled">
@@ -487,11 +491,23 @@
 
                 <el-form-item label="操作类型" class="!mb-0">
                   <el-radio-group v-model="selectedNode.config.approvalMode" class="flex flex-wrap gap-3">
-                    <el-radio-button v-for="item in metaOptions.approvalModeOptions" :key="item.value" :label="item.value">
+                    <el-radio-button
+                      v-for="item in metaOptions.approvalModeOptions"
+                      :key="item.value"
+                      :label="item.value"
+                      :disabled="isManagerMultiLevelApproval && item.value !== 'AND_SIGN'"
+                    >
                       {{ item.label }}
                     </el-radio-button>
                   </el-radio-group>
                 </el-form-item>
+
+                <p
+                  v-if="isManagerMultiLevelApproval"
+                  class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-700"
+                >
+                  第 1..N 级主管共同审批：多级主管按同一审批节点会签处理，会自动包含第 1 到第 N 级主管，所有命中的主管都审批通过后，当前节点才会通过。
+                </p>
 
                 <el-form-item label="审批意见默认值" class="!mb-0">
                   <el-select
@@ -900,6 +916,14 @@ const removeButtonLabel = computed(() => {
 
 const approvalApproverTypes = computed(() => metaOptions.value.approvalApproverTypeOptions)
 const approvalOpinionCandidates = computed(() => metaOptions.value.defaultApprovalOpinions || ['通过', '拒绝', '加签', '转交'])
+const isManagerMultiLevelApproval = computed(() => shouldForceManagerAndSign(selectedNode.value?.config))
+const managerApprovalHint = computed(() => {
+  const managerLevel = Number(selectedNode.value?.config?.managerConfig?.managerLevel || 1)
+  if (managerLevel > 1) {
+    return `选择第 ${managerLevel} 级主管后，会按同一审批节点会签处理：自动包含第 1 到第 ${managerLevel} 级主管，所有命中的主管都审批通过后，当前节点才会通过。`
+  }
+  return '选择第 1 级主管时，仅第 1 级主管参与当前审批节点。'
+})
 
 function resolveErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
@@ -936,6 +960,21 @@ watch(
       }
     }
   }
+)
+
+watch(
+  () => [
+    selectedNode.value?.nodeKey,
+    selectedNode.value?.nodeType,
+    selectedNode.value?.config?.approverType,
+    selectedNode.value?.config?.managerConfig?.managerLevel
+  ],
+  () => {
+    if (selectedNode.value?.nodeType === 'APPROVAL' && shouldForceManagerAndSign(selectedNode.value.config)) {
+      selectedNode.value.config.approvalMode = 'AND_SIGN'
+    }
+  },
+  { immediate: true }
 )
 
 onMounted(async () => {
@@ -1247,10 +1286,16 @@ function normalizeNode(node: ProcessFlowNode, index: number): ProcessFlowNode {
 
   if (normalized.nodeType === 'APPROVAL') {
     const managerConfig = cloneValue(normalized.config.managerConfig || {})
+    const approvalMode = shouldForceManagerAndSign({
+      approverType: normalized.config.approverType || 'MANAGER',
+      managerConfig
+    })
+      ? 'AND_SIGN'
+      : (normalized.config.approvalMode || 'OR_SIGN')
     normalized.config = {
       approverType: normalized.config.approverType || 'MANAGER',
       missingHandler: normalized.config.missingHandler === 'MANUAL_SELECT_ON_SUBMIT' ? 'BLOCK_SUBMIT' : (normalized.config.missingHandler || 'AUTO_SKIP'),
-      approvalMode: normalized.config.approvalMode || 'OR_SIGN',
+      approvalMode,
       opinionDefaults: Array.isArray(normalized.config.opinionDefaults) && normalized.config.opinionDefaults.length
         ? normalized.config.opinionDefaults
         : ['通过', '拒绝', '加签', '转交'],
@@ -1302,10 +1347,17 @@ function normalizeNode(node: ProcessFlowNode, index: number): ProcessFlowNode {
   return normalized
 }
 
+function shouldForceManagerAndSign(config?: Pick<ProcessFlowNode['config'], 'approverType' | 'managerConfig'>) {
+  if (!config || config.approverType !== 'MANAGER') {
+    return false
+  }
+  return Number(config.managerConfig?.managerLevel || 1) > 1
+}
+
 function normalizeRoute(route: ProcessFlowRoute, index: number): EditableProcessFlowRoute {
   return {
     ...cloneValue(route),
-    routeName: route.routeName || `条件分支 ${index + 1}`,
+    routeName: route.routeName || `分支 ${index + 1}`,
     priority: route.priority ?? index + 1,
     defaultRoute: false,
     attachBelowNodes: Boolean(route.attachBelowNodes),
@@ -1417,11 +1469,15 @@ async function handleCanvasDrop(payload: CanvasDropTarget) {
   }
 
   try {
-    await ElMessageBox.confirm('确定将当前节点移动到这个位置吗？', '调整节点位置', {
-      type: 'warning',
-      confirmButtonText: '确认修改',
-      cancelButtonText: '取消'
-    })
+    await ElMessageBox.confirm(
+      '调整节点位置后，当前分支内的节点顺序会按目标位置重新整理。确定继续吗？',
+      '移动节点',
+      {
+        type: 'warning',
+        confirmButtonText: '确定移动',
+        cancelButtonText: '取消'
+      }
+    )
   } catch {
     return
   }
@@ -1982,7 +2038,7 @@ async function disableCurrentFlow() {
   }
 
   try {
-    await ElMessageBox.confirm('停用后，该流程将不能继续作为启用流程被模板选择。确定继续吗？', '停用流程', {
+    await ElMessageBox.confirm('停用后当前流程不会继续用于新单据，确定继续吗？', '停用流程', {
       type: 'warning',
       confirmButtonText: '确定停用',
       cancelButtonText: '取消'
@@ -2036,7 +2092,7 @@ async function submitScene() {
       selectedNode.value.sceneId = res.data.id
     }
     resetSceneDialog()
-    ElMessage.success('流程场景已添加')
+    ElMessage.success('流程场景已创建')
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '新增流程场景失败'))
   } finally {

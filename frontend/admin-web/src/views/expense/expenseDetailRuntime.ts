@@ -26,6 +26,16 @@ export const FIELD_ACTUAL_PAYMENT_AMOUNT = 'actualPaymentAmount'
 export const FIELD_INVOICE_ATTACHMENTS = 'invoiceAttachments'
 export const FIELD_PENDING_WRITE_OFF_AMOUNT = 'pendingWriteOffAmount'
 
+export type ExpenseDetailAmountValidationIssueCode =
+  | 'PREPAY_AMOUNT_MISMATCH'
+  | 'FULL_PAYMENT_INVOICE_LT_ACTUAL'
+
+export type ExpenseDetailAmountValidationIssue = {
+  code: ExpenseDetailAmountValidationIssueCode
+  businessScenario: string
+  message: string
+}
+
 export function buildExpenseDetailFormData(
   schema: ProcessFormDesignSchema | null | undefined,
   detailType?: string,
@@ -263,7 +273,10 @@ export function resolveInvoiceOcrTotal(attachments: unknown) {
 export function syncInvoiceAmountWithOcr(
   formData: Record<string, unknown>,
   previousOcrTotal: MoneyInputValue,
-  nextOcrTotal: MoneyInputValue
+  nextOcrTotal: MoneyInputValue,
+  detailType?: string,
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
 ) {
   const previous = safeMoneyValue(previousOcrTotal)
   const next = safeMoneyValue(nextOcrTotal)
@@ -271,15 +284,87 @@ export function syncInvoiceAmountWithOcr(
   if (!next) {
     if (!current || current === previous) {
       formData[FIELD_INVOICE_AMOUNT] = ''
+      syncActualPaymentAmountWithInvoice(formData, '', detailType, defaultBusinessScenario, schema)
       return true
     }
     return false
   }
   if (!current || current === previous) {
     formData[FIELD_INVOICE_AMOUNT] = next
+    syncActualPaymentAmountWithInvoice(formData, next, detailType, defaultBusinessScenario, schema)
     return true
   }
   return false
+}
+
+export function applyExpenseDetailAmountInput(
+  formData: Record<string, unknown>,
+  fieldKey: string,
+  nextValue: MoneyInputValue,
+  detailType?: string,
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
+) {
+  const normalized = safeMoneyValue(nextValue)
+  formData[fieldKey] = normalized
+  if (fieldKey === FIELD_INVOICE_AMOUNT) {
+    syncActualPaymentAmountWithInvoice(formData, normalized, detailType, defaultBusinessScenario, schema)
+  }
+}
+
+export function validateExpenseDetailAmountRules(
+  formData: Record<string, unknown> | null | undefined,
+  detailType?: string,
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
+): ExpenseDetailAmountValidationIssue | null {
+  const detail = isRecord(formData) ? formData : {}
+  if (detailType !== DETAIL_TYPE_ENTERPRISE) {
+    return null
+  }
+  const businessScenario = resolveBusinessScenario(detail, detailType, defaultBusinessScenario, schema)
+  if (!businessScenario) {
+    return null
+  }
+
+  const detailAmount = safeMoneyValue(detail[FIELD_DETAIL_AMOUNT])
+  const invoiceAmount = safeMoneyValue(detail[FIELD_INVOICE_AMOUNT])
+  const actualPaymentAmount = safeMoneyValue(detail[FIELD_ACTUAL_PAYMENT_AMOUNT])
+
+  if (businessScenario === MODE_PREPAY_UNBILLED && detailAmount !== actualPaymentAmount) {
+    return {
+      code: 'PREPAY_AMOUNT_MISMATCH',
+      businessScenario,
+      message: '预付未到票场景下，【金额】必须等于【实际支付金额】'
+    }
+  }
+
+  if (businessScenario === MODE_INVOICE_FULL_PAYMENT) {
+    const invoiceCents = invoiceAmount ? toMoneyCents(invoiceAmount) : 0n
+    const actualPaymentCents = actualPaymentAmount ? toMoneyCents(actualPaymentAmount) : 0n
+    if (actualPaymentCents > invoiceCents) {
+      return {
+        code: 'FULL_PAYMENT_INVOICE_LT_ACTUAL',
+        businessScenario,
+        message: '全额付款场景下，【发票金额】必须大于或等于【实际支付金额】'
+      }
+    }
+  }
+
+  return null
+}
+
+export function buildExpenseDetailAmountValidationMessage(
+  issue: ExpenseDetailAmountValidationIssue | null | undefined,
+  detailLabel?: string
+) {
+  if (!issue) {
+    return ''
+  }
+  const normalizedLabel = trimToUndefined(detailLabel)
+  return normalizedLabel
+    ? `请先完善费用明细“${normalizedLabel}”：${issue.message}`
+    : issue.message
 }
 
 function resolveEnabledBusinessScenarioModes(
@@ -297,6 +382,20 @@ function resolveEnabledBusinessScenarioModes(
     detailType,
     scenarioBlock?.props?.options
   )
+}
+
+function syncActualPaymentAmountWithInvoice(
+  formData: Record<string, unknown>,
+  invoiceAmount: MoneyInputValue,
+  detailType?: string,
+  defaultBusinessScenario?: string,
+  schema?: ProcessFormDesignSchema | null
+) {
+  const businessScenario = resolveBusinessScenario(formData, detailType, defaultBusinessScenario, schema)
+  if (businessScenario !== MODE_INVOICE_FULL_PAYMENT) {
+    return
+  }
+  formData[FIELD_ACTUAL_PAYMENT_AMOUNT] = safeMoneyValue(invoiceAmount)
 }
 
 function resolveSchemaDefaultBusinessScenario(

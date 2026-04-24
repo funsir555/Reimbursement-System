@@ -86,8 +86,8 @@ vi.mock('element-plus', async () => ({
         default: ''
       }
     },
-    emits: ['update:modelValue', 'change'],
-    template: '<div v-bind="$attrs"><slot /><slot name="footer" /></div>'
+    emits: ['update:modelValue', 'change', 'visible-change'],
+    template: '<div v-bind="$attrs"><slot /><slot name="empty" /><slot name="footer" /></div>'
   },
   ElOption: {
     name: 'ElOption',
@@ -301,6 +301,8 @@ function createDocumentPickerGroup(
 
 function mountEditor(initialModelValue: Record<string, unknown>, blocks: unknown[], extraProps: Record<string, unknown> = {}) {
   const model = ref<Record<string, unknown>>({ ...initialModelValue })
+  const hydratingForm = ref(false)
+  const hydrationVersion = ref(0)
   const Host = defineComponent({
     setup() {
       return () => h(ExpenseRuntimeFormEditor, {
@@ -308,6 +310,8 @@ function mountEditor(initialModelValue: Record<string, unknown>, blocks: unknown
         'onUpdate:modelValue': (next: Record<string, unknown>) => {
           model.value = next
         },
+        hydratingForm: hydratingForm.value,
+        hydrationVersion: hydrationVersion.value,
         schema: {
           layoutMode: 'TWO_COLUMN',
           blocks
@@ -338,7 +342,23 @@ function mountEditor(initialModelValue: Record<string, unknown>, blocks: unknown
     wrapper,
     model,
     setModelValue(next: Record<string, unknown>) {
+      hydratingForm.value = true
       model.value = { ...next }
+      hydrationVersion.value += 1
+      Promise.resolve().then(() => {
+        hydratingForm.value = false
+      })
+    },
+    hydrateInPlace(next: Record<string, unknown>) {
+      hydratingForm.value = true
+      Object.keys(model.value).forEach((key) => {
+        delete model.value[key]
+      })
+      Object.assign(model.value, next)
+      hydrationVersion.value += 1
+      Promise.resolve().then(() => {
+        hydratingForm.value = false
+      })
     }
   }
 }
@@ -486,7 +506,7 @@ describe('ExpenseRuntimeFormEditor', () => {
 
   it('keeps counterparty and payee account when the parent restores the same draft selections', async () => {
     const initialPayeeAccount = { value: 'VENDOR_ACCOUNT:1', label: '默认账户', ownerName: '广州供应商' }
-    const { model, setModelValue } = mountEditor({
+    const { model, hydrateInPlace } = mountEditor({
       paymentCompany: '',
       counterparty: '',
       payeeAccount: ''
@@ -500,7 +520,7 @@ describe('ExpenseRuntimeFormEditor', () => {
     mocks.expenseCreateApi.listVendorOptions.mockClear()
     mocks.expenseCreateApi.listPayeeAccountOptions.mockClear()
 
-    setModelValue({
+    hydrateInPlace({
       paymentCompany: 'COMPANY-001',
       counterparty: 'VEN-001',
       payeeAccount: initialPayeeAccount
@@ -508,6 +528,48 @@ describe('ExpenseRuntimeFormEditor', () => {
     await flushPromises()
 
     expect(model.value.paymentCompany).toBe('COMPANY-001')
+    expect(model.value.counterparty).toBe('VEN-001')
+    expect(model.value.payeeAccount).toEqual(initialPayeeAccount)
+    expect(mocks.expenseCreateApi.listVendorOptions).toHaveBeenCalledWith({
+      keyword: undefined,
+      paymentCompanyId: 'COMPANY-001'
+    })
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenCalledWith({
+      keyword: '',
+      linkageMode: 'ENTERPRISE',
+      payeeName: undefined,
+      counterpartyCode: 'VEN-001',
+      paymentCompanyId: 'COMPANY-001'
+    })
+  })
+
+  it('does not clear counterparty and payee account when the parent hydrates the same object in place', async () => {
+    const initialPayeeAccount = {
+      value: 'VENDOR_ACCOUNT:9',
+      label: '结算账户',
+      ownerName: '上海供应商'
+    }
+    const { model, hydrateInPlace } = mountEditor({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: initialPayeeAccount
+    }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+    mocks.expenseCreateApi.listVendorOptions.mockClear()
+    mocks.expenseCreateApi.listPayeeAccountOptions.mockClear()
+
+    hydrateInPlace({
+      paymentCompany: 'COMPANY-001',
+      counterparty: 'VEN-001',
+      payeeAccount: initialPayeeAccount
+    })
+    await flushPromises()
+
     expect(model.value.counterparty).toBe('VEN-001')
     expect(model.value.payeeAccount).toEqual(initialPayeeAccount)
     expect(mocks.expenseCreateApi.listVendorOptions).toHaveBeenCalledWith({
@@ -638,7 +700,112 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(mocks.elMessage.warning).not.toHaveBeenCalledWith('请先选择付款公司')
   })
 
-  it('shows vendor account maintenance entry and updates the selected supplier account in place', async () => {
+  it('warns and shows the add bank account entry when the selected supplier has no bank info', async () => {
+    const { wrapper } = mountEditor({ paymentCompany: 'COMPANY-001', counterparty: 'VEN-001', payeeAccount: '' }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const payeeAccountSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-account-select-payeeAccount')
+    expect(payeeAccountSelect).toBeTruthy()
+
+    payeeAccountSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('未维护银行信息，请维护银行信息')
+    expect(wrapper.get('[data-testid="payee-account-maintain-vendor"]').text()).toContain('新增银行账户')
+  })
+
+  it('warns after payee account loading finishes with no bank info while the dropdown stays open', async () => {
+    const resolvePayeeAccountsList: Array<(value: { data: [] }) => void> = []
+    mocks.expenseCreateApi.listPayeeAccountOptions.mockImplementation(() => (
+      new Promise<{ data: [] }>((resolve) => {
+        resolvePayeeAccountsList.push(resolve)
+      })
+    ))
+
+    const { wrapper } = mountEditor({ paymentCompany: 'COMPANY-001', counterparty: 'VEN-001', payeeAccount: '' }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    const payeeAccountSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-account-select-payeeAccount')
+    expect(payeeAccountSelect).toBeTruthy()
+
+    payeeAccountSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).not.toHaveBeenCalledWith('未维护银行信息，请维护银行信息')
+
+    resolvePayeeAccountsList.forEach((resolve) => resolve({ data: [] }))
+    await flushPromises()
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).toHaveBeenCalledTimes(1)
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('未维护银行信息，请维护银行信息')
+    expect(wrapper.get('[data-testid="payee-account-maintain-vendor"]').text()).toContain('新增银行账户')
+  })
+
+  it('does not warn or show the add bank account entry when enterprise supplier accounts already exist', async () => {
+    mocks.expenseCreateApi.listPayeeAccountOptions.mockResolvedValue({
+      data: [{
+        value: 'VENDOR_ACCOUNT:8',
+        label: '上海测试供应商',
+        sourceType: 'ENTERPRISE_VENDOR',
+        ownerCode: 'VEN-001',
+        ownerName: '上海测试供应商',
+        accountName: '上海测试供应商',
+        accountNoMasked: '6222 **** 8888',
+        bankName: '中国工商银行',
+        secondaryLabel: '中国工商银行 / 6222 **** 8888'
+      }]
+    })
+
+    const { wrapper } = mountEditor({ paymentCompany: 'COMPANY-001', counterparty: 'VEN-001', payeeAccount: '' }, [
+      createBusinessBlock('paymentCompany', '付款公司', 'payment-company'),
+      createBusinessBlock('counterparty', '收款单位', 'counterparty'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const payeeAccountSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-account-select-payeeAccount')
+    expect(payeeAccountSelect).toBeTruthy()
+
+    payeeAccountSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).not.toHaveBeenCalledWith('未维护银行信息，请维护银行信息')
+    expect(wrapper.find('[data-testid="payee-account-maintain-vendor"]').exists()).toBe(false)
+  })
+
+  it('does not warn or show the add bank account entry for personal payee accounts', async () => {
+    const { wrapper } = mountEditor({ payee: '', payeeAccount: '' }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const payeeAccountSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-account-select-payeeAccount')
+    expect(payeeAccountSelect).toBeTruthy()
+
+    payeeAccountSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+
+    expect(mocks.elMessage.warning).not.toHaveBeenCalledWith('未维护银行信息，请维护银行信息')
+    expect(wrapper.find('[data-testid="payee-account-maintain-vendor"]').exists()).toBe(false)
+  })
+
+  it('shows the add bank account entry and updates the selected supplier account in place', async () => {
     mocks.expenseCreateApi.listPayeeAccountOptions
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ data: [] })
@@ -671,14 +838,18 @@ describe('ExpenseRuntimeFormEditor', () => {
       paymentCompanyId: 'COMPANY-001'
     })
 
-    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
-      openVendorAccountDialog: () => Promise<void> | void
-    }
-    await vm.openVendorAccountDialog()
+    const payeeAccountSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-account-select-payeeAccount')
+    expect(payeeAccountSelect).toBeTruthy()
+    payeeAccountSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="payee-account-maintain-vendor"]').text()).toContain('新增银行账户')
+    await wrapper.get('[data-testid="payee-account-maintain-vendor"]').trigger('click')
     await flushPromises()
     expect(mocks.expenseCreateApi.getVendorDetail).toHaveBeenCalledWith('COMPANY-001', 'VEN-001')
 
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存收款账户')
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存银行账户')
     expect(saveButton).toBeTruthy()
     await saveButton!.trigger('click')
     await flushPromises()
@@ -691,12 +862,12 @@ describe('ExpenseRuntimeFormEditor', () => {
         cVenAccount: '6222020000000001'
       })
     )
-    expect(mocks.elMessage.success).toHaveBeenCalledWith('供应商收款信息已更新')
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('供应商银行信息已更新')
     expect(model.value.payeeAccount).toBe('')
     expect(mocks.expenseCreateApi.listPayeeAccountOptions.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('uses the unified vendor payment info failure wording', async () => {
+  it('uses the unified vendor bank info failure wording', async () => {
     mocks.expenseCreateApi.updateVendor.mockRejectedValueOnce(new Error(''))
 
     const { wrapper } = mountEditor({ paymentCompany: 'COMPANY-001', counterparty: 'VEN-001', payeeAccount: '' }, [
@@ -706,18 +877,20 @@ describe('ExpenseRuntimeFormEditor', () => {
     ])
 
     await flushPromises()
-    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
-      openVendorAccountDialog: () => Promise<void> | void
-    }
-    await vm.openVendorAccountDialog()
+    const payeeAccountSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-account-select-payeeAccount')
+    expect(payeeAccountSelect).toBeTruthy()
+    payeeAccountSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+    await wrapper.get('[data-testid="payee-account-maintain-vendor"]').trigger('click')
     await flushPromises()
 
-    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存收款账户')
+    const saveButton = wrapper.findAll('button').find((button) => button.text() === '保存银行账户')
     expect(saveButton).toBeTruthy()
     await saveButton!.trigger('click')
     await flushPromises()
 
-    expect(mocks.elMessage.error).toHaveBeenCalledWith('维护供应商收款信息失败')
+    expect(mocks.elMessage.error).toHaveBeenCalledWith('维护供应商银行信息失败')
   })
 
   it('renders repaired chinese copy for related and writeoff document blocks', async () => {
@@ -1485,10 +1658,12 @@ describe('ExpenseRuntimeFormEditor', () => {
     await flushPromises()
 
     expect(model.value.invoiceAmount).toBe('88.80')
+    expect(model.value.actualPaymentAmount).toBe('88.80')
 
     setModelValue({
       ...model.value,
-      invoiceAmount: '66.00'
+      invoiceAmount: '66.00',
+      actualPaymentAmount: '55.00'
     })
     await flushPromises()
 
@@ -1498,6 +1673,121 @@ describe('ExpenseRuntimeFormEditor', () => {
     await flushPromises()
 
     expect(model.value.invoiceAmount).toBe('66.00')
+    expect(model.value.actualPaymentAmount).toBe('55.00')
+  })
+
+  it('syncs actualPaymentAmount when invoiceAmount is edited in full-payment mode', async () => {
+    const { wrapper, model } = mountEditor({
+      businessScenario: 'INVOICE_FULL_PAYMENT',
+      invoiceAmount: '',
+      actualPaymentAmount: ''
+    }, [
+      createControlBlock('invoiceAmount', '发票金额', 'AMOUNT', {
+        systemFieldCode: 'INVOICE_AMOUNT'
+      }),
+      createControlBlock('actualPaymentAmount', '实际支付金额', 'AMOUNT', {
+        systemFieldCode: 'ACTUAL_PAYMENT_AMOUNT'
+      })
+    ], {
+      detailType: 'ENTERPRISE_TRANSACTION',
+      defaultBusinessScenario: 'INVOICE_FULL_PAYMENT'
+    })
+
+    await flushPromises()
+
+    await wrapper.findAll('input')[0]!.setValue('120.50')
+    await flushPromises()
+
+    expect(model.value.invoiceAmount).toBe('120.50')
+    expect(model.value.actualPaymentAmount).toBe('120.50')
+  })
+
+  it('validateBeforeSubmit blocks prepay details when amount and actualPaymentAmount differ', async () => {
+    const { wrapper } = mountEditor({
+      businessScenario: 'PREPAY_UNBILLED',
+      amount: '88.00',
+      actualPaymentAmount: '66.00'
+    }, [
+      createControlBlock('amount', '金额', 'AMOUNT', {
+        systemFieldCode: 'DETAIL_AMOUNT',
+        visibleSceneModes: ['PREPAY_UNBILLED']
+      }),
+      createControlBlock('actualPaymentAmount', '实际支付金额', 'AMOUNT', {
+        systemFieldCode: 'ACTUAL_PAYMENT_AMOUNT'
+      })
+    ], {
+      detailType: 'ENTERPRISE_TRANSACTION',
+      defaultBusinessScenario: 'PREPAY_UNBILLED'
+    })
+
+    await flushPromises()
+
+    const editor = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      validateBeforeSubmit: () => boolean
+    }
+
+    expect(editor.validateBeforeSubmit()).toBe(false)
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('预付未到票场景下，【金额】必须等于【实际支付金额】')
+  })
+
+  it('validateBeforeSubmit blocks empty required text fields', async () => {
+    const requiredTextBlock = {
+      ...createControlBlock('counterpartyName', '收款单位', 'TEXT'),
+      required: true
+    }
+    const { wrapper } = mountEditor({}, [requiredTextBlock])
+
+    await flushPromises()
+
+    const editor = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      validateBeforeSubmit: () => boolean
+    }
+
+    expect(editor.validateBeforeSubmit()).toBe(false)
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先填写【收款单位】')
+  })
+
+  it('validateBeforeSubmit treats zero amount and false switch as valid required values', async () => {
+    const { wrapper } = mountEditor({
+      amount: 0,
+      confirmed: false
+    }, [
+      {
+        ...createControlBlock('amount', '金额', 'AMOUNT'),
+        required: true
+      },
+      {
+        ...createControlBlock('confirmed', '是否确认', 'SWITCH'),
+        required: true
+      }
+    ])
+
+    await flushPromises()
+
+    const editor = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      validateBeforeSubmit: () => boolean
+    }
+
+    expect(editor.validateBeforeSubmit()).toBe(true)
+    expect(mocks.elMessage.warning).not.toHaveBeenCalled()
+  })
+
+  it('validateBeforeSubmit blocks empty required related document selections', async () => {
+    const { wrapper } = mountEditor({}, [
+      {
+        ...createBusinessBlock('relatedDocs', '关联单据', 'related-document'),
+        required: true
+      }
+    ])
+
+    await flushPromises()
+
+    const editor = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      validateBeforeSubmit: () => boolean
+    }
+
+    expect(editor.validateBeforeSubmit()).toBe(false)
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先填写【关联单据】')
   })
 
   it('uses the unified account and outlet wording when validating vendor drafts', async () => {

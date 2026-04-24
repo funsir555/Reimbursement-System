@@ -3,6 +3,7 @@ package com.finex.auth.service.impl.expense;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ProcessFlowConditionDTO;
 import com.finex.auth.dto.ProcessFlowConditionGroupDTO;
+import com.finex.auth.entity.ProcessDocumentActionLog;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.ProcessDocumentTemplate;
@@ -323,6 +324,139 @@ class ExpenseWorkflowRuntimeSupportTest {
         assertEquals(1, insertedTasks.size());
         assertEquals("approval-route-b", insertedTasks.get(0).getNodeKey());
     }
+    @Test
+    void undertakeDepartmentManagerResubmitPathCreatesApprovalTaskWhenLeaderExists() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(systemDepartmentMapper.selectList(any())).thenReturn(buildUndertakeDepartmentTree());
+        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "领导A"));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildUndertakeDeptManagerSnapshot("BLOCK_SUBMIT"));
+
+        support.initializeRuntime(instance, Map.of("undertakeDeptIds", List.of(15L)));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-manager", insertedTasks.get(0).getNodeKey());
+        assertEquals(501L, insertedTasks.get(0).getAssigneeUserId());
+    }
+
+    @Test
+    void undertakeDepartmentManagerResubmitPathReturnsReadableChineseErrorWhenLeaderMissing() throws Exception {
+        when(systemDepartmentMapper.selectList(any())).thenReturn(buildSubmitterDepartmentTree());
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildUndertakeDeptManagerSnapshot("BLOCK_SUBMIT"));
+
+        IllegalStateException error = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> support.initializeRuntime(instance, Map.of("undertakeDeptIds", List.of(15L)))
+        );
+
+        assertEquals("\u8282\u70b9\u3010\u9886\u5bfc\u5ba1\u6279\u3011\u627e\u4e0d\u5230\u5ba1\u6279\u4eba\uff0c\u5f53\u524d\u914d\u7f6e\u4e0d\u5141\u8bb8\u63d0\u4ea4", error.getMessage());
+    }
+
+    @Test
+    void undertakeDepartmentMultiLevelManagerCreatesAndSignTasksForEachResolvedLevel() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(systemDepartmentMapper.selectList(any())).thenReturn(buildUndertakeDepartmentTree());
+        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "领导L1"));
+        when(userMapper.selectById(701L)).thenReturn(createActiveUser(701L, "领导L2"));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildUndertakeDeptManagerSnapshot("BLOCK_SUBMIT", 2, "OR_SIGN"));
+
+        support.initializeRuntime(instance, Map.of("undertakeDeptIds", List.of(15L)));
+
+        assertEquals(2, insertedTasks.size());
+        assertEquals(List.of(501L, 701L), insertedTasks.stream().map(ProcessDocumentTask::getAssigneeUserId).toList());
+        assertTrue(insertedTasks.stream().allMatch(item -> "AND_SIGN".equals(item.getApprovalMode())));
+    }
+
+    @Test
+    void undertakeDepartmentMultiLevelManagerFailsWhenAnyRequiredLevelIsMissing() throws Exception {
+        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(
+                buildDepartment(3L, "根部门", null, null),
+                buildDepartment(7L, "上级部门", 3L, null),
+                buildDepartment(15L, "承担部门", 7L, 501L)
+        ));
+        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "领导L1"));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildUndertakeDeptManagerSnapshot("BLOCK_SUBMIT", 2, "OR_SIGN"));
+
+        IllegalStateException error = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> support.initializeRuntime(instance, Map.of("undertakeDeptIds", List.of(15L)))
+        );
+
+        assertEquals("\u8282\u70b9\u3010\u9886\u5bfc\u5ba1\u6279\u3011\u627e\u4e0d\u5230\u5ba1\u6279\u4eba\uff0c\u5f53\u524d\u914d\u7f6e\u4e0d\u5141\u8bb8\u63d0\u4ea4", error.getMessage());
+    }
+
+    @Test
+    void autoPassApprovedBeforeIgnoresPreviousRoundsWithoutCurrentRoundUpstreamApproval() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
+                actionLog("SUBMIT", null, null),
+                actionLog("APPROVE", "approval-start", 101L),
+                actionLog("RESUBMIT", null, null)
+        ));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildAutoPassSnapshot());
+
+        support.initializeRuntime(instance, Map.of("resumeNodeKey", "approval-review"));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-review", insertedTasks.get(0).getNodeKey());
+        assertEquals(101L, insertedTasks.get(0).getAssigneeUserId());
+    }
+
+    @Test
+    void autoPassApprovedBeforeStillWorksForCurrentRoundUpstreamApproval() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
+                actionLog("RESUBMIT", null, null),
+                actionLog("APPROVE", "approval-start", 101L)
+        ));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildAutoPassSnapshot());
+
+        support.initializeRuntime(instance, Map.of("resumeNodeKey", "approval-review"));
+
+        assertEquals("COMPLETED", instance.getStatus());
+        assertTrue(insertedTasks.isEmpty());
+    }
+
+    @Test
+    void rejectToAnyNodeRequiresSpecialSettingOnCurrentNode() throws Exception {
+        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
+                actionLog("SUBMIT", null, null),
+                actionLog("APPROVE", "approval-start", 101L)
+        ));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildRejectWithoutAnyNodeSnapshot());
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(10L);
+        task.setDocumentCode("DOC-001");
+        task.setNodeKey("approval-review");
+        task.setNodeName("复核审批");
+        task.setStatus("PENDING");
+
+        IllegalStateException error = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> support.rejectPendingTask(instance, task, 101L, "审批人A", "同意", "approval-start")
+        );
+
+        assertEquals("\u5f53\u524d\u5ba1\u6279\u8282\u70b9\u672a\u5f00\u542f\u9a73\u56de\u81f3\u4efb\u610f\u8282\u70b9", error.getMessage());
+    }
 
     private ExpenseWorkflowRuntimeSupport newSupport() {
         return new ExpenseWorkflowRuntimeSupport(
@@ -419,7 +553,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-route-a",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "分支A审批",
+                                "nodeName", "命中上级部门",
                                 "parentNodeKey", "route-a",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -432,7 +566,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-route-b",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "分支B审批",
+                                "nodeName", "默认分支",
                                 "parentNodeKey", "route-b",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -519,7 +653,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-route-a",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "命中上级部门",
+                                "nodeName", "分支A审批",
                                 "parentNodeKey", "route-a",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -532,7 +666,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-route-b",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "默认分支",
+                                "nodeName", "分支B审批",
                                 "parentNodeKey", "route-b",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -563,7 +697,107 @@ class ExpenseWorkflowRuntimeSupportTest {
                 )
         ));
     }
+    private String buildUndertakeDeptManagerSnapshot(String missingHandler) throws Exception {
+        return buildUndertakeDeptManagerSnapshot(missingHandler, 1, "OR_SIGN");
+    }
 
+    private String buildAutoPassSnapshot() throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "approval-start",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "开始审批",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        ),
+                        Map.of(
+                                "nodeKey", "approval-review",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "复核审批",
+                                "displayOrder", 2,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN",
+                                        "specialSettings", List.of("AUTO_PASS_IF_APPROVED_BEFORE")
+                                )
+                        )
+                ),
+                "routes", List.of()
+        ));
+    }
+
+    private String buildRejectWithoutAnyNodeSnapshot() throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "approval-start",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "开始审批",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        ),
+                        Map.of(
+                                "nodeKey", "approval-review",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "复核审批",
+                                "displayOrder", 2,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        )
+                ),
+                "routes", List.of()
+        ));
+    }
+
+    private String buildUndertakeDeptManagerSnapshot(String missingHandler, int managerLevel, String approvalMode) throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "approval-manager",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "\u9886\u5bfc\u5ba1\u6279",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "MANAGER",
+                                        "missingHandler", missingHandler,
+                                        "approvalMode", approvalMode,
+                                        "managerConfig", Map.of(
+                                                "deptSource", "UNDERTAKE_DEPT",
+                                                "managerLevel", managerLevel,
+                                                "orgTreeLookupEnabled", true,
+                                                "orgTreeLookupLevel", 1
+                                        )
+                                )
+                        )
+                ),
+                "routes", List.of()
+        ));
+    }
+
+    private List<SystemDepartment> buildUndertakeDepartmentTree() {
+        return List.of(
+                buildDepartment(3L, "根部门", null, 801L),
+                buildDepartment(7L, "上级部门", 3L, 701L),
+                buildDepartment(15L, "承担部门", 7L, 501L)
+        );
+    }
     private List<SystemDepartment> buildSubmitterDepartmentTree() {
         return List.of(
                 buildDepartment(3L, "上进青年", null),
@@ -573,11 +807,26 @@ class ExpenseWorkflowRuntimeSupportTest {
     }
 
     private SystemDepartment buildDepartment(Long id, String name, Long parentId) {
+        return buildDepartment(id, name, parentId, null);
+    }
+
+    private SystemDepartment buildDepartment(Long id, String name, Long parentId, Long leaderUserId) {
         SystemDepartment department = new SystemDepartment();
         department.setId(id);
         department.setDeptName(name);
         department.setParentId(parentId);
+        department.setLeaderUserId(leaderUserId);
         department.setStatus(1);
         return department;
     }
+
+    private ProcessDocumentActionLog actionLog(String actionType, String nodeKey, Long actorUserId) {
+        ProcessDocumentActionLog log = new ProcessDocumentActionLog();
+        log.setActionType(actionType);
+        log.setNodeKey(nodeKey);
+        log.setActorUserId(actorUserId);
+        return log;
+    }
 }
+
+

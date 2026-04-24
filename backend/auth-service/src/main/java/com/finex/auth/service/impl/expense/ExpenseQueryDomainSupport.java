@@ -167,20 +167,15 @@ public class ExpenseQueryDomainSupport {
         expenseDocumentReadSupport.requireSubmitter(instance, userId);
         String status = trimToNull(instance.getStatus());
         if (!Objects.equals(status, DOCUMENT_STATUS_PENDING) && !Objects.equals(status, DOCUMENT_STATUS_EXCEPTION)) {
-            throw new IllegalStateException("鐟滅増鎸告晶鐘诲础閺囩喎绁﹀☉鎾崇У閺侇噣骞愭担绋垮皢闁?");
+            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u72b6\u6001\u4e0d\u5141\u8bb8\u53ec\u56de");
         }
         LocalDateTime now = LocalDateTime.now();
         cancelOpenTasks(loadOpenTasks(instance.getDocumentCode()), now);
-        instance.setStatus(DOCUMENT_STATUS_DRAFT);
-        instance.setCurrentNodeKey(null);
-        instance.setCurrentNodeName(null);
-        instance.setCurrentTaskType(null);
-        instance.setFinishedAt(null);
-        instance.setUpdatedAt(now);
-        processDocumentInstanceMapper.updateById(instance);
+        persistRecalledDraftState(instance, now);
         expenseDocumentActionLogSupport.appendLog(instance.getDocumentCode(), null, null, LOG_RECALL, userId, defaultUsername(username), null, Map.of(
                 "fromStatus", defaultText(status, DOCUMENT_STATUS_PENDING)
         ));
+        expenseRelationWriteOffService.voidActiveRelations(instance.getDocumentCode());
         expenseRelationWriteOffService.voidPendingWriteOffs(instance.getDocumentCode());
         return expenseDocumentReadSupport.buildDocumentDetail(expenseDocumentReadSupport.requireDocument(instance.getDocumentCode()));
     }
@@ -192,12 +187,12 @@ public class ExpenseQueryDomainSupport {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
         expenseDocumentReadSupport.assertCanViewDocument(instance, userId, allowCrossView);
         if (!isFlowRelatedUser(instance, userId)) {
-            throw new IllegalStateException("闁告瑯浜濆﹢浣该规担琛℃煠闁烩晝顭堥崣褎绂嶉崫鍕濞寸姰鍎撮惁搴ｆ媼閸濆嫮绉奸柛鎾崇Т瀹曠喖骞?");
+            throw new IllegalStateException("\u5f53\u524d\u7528\u6237\u4e0d\u662f\u8be5\u5355\u636e\u6d41\u7a0b\u53c2\u4e0e\u4eba\uff0c\u4e0d\u80fd\u8bc4\u8bba");
         }
         String comment = trimToNull(dto == null ? null : dto.getComment());
         List<String> attachmentFileNames = normalizeStringList(dto == null ? Collections.emptyList() : dto.getAttachmentFileNames());
         if (comment == null && attachmentFileNames.isEmpty()) {
-            throw new IllegalArgumentException("閻犲洤瀚鎴﹀礃閸涱収鍟囧☉鎾崇Х閸忔ɑ绋夐搹鍏夋晞");
+            throw new IllegalArgumentException("\u8bc4\u8bba\u5185\u5bb9\u548c\u9644\u4ef6\u4e0d\u80fd\u540c\u65f6\u4e3a\u7a7a");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         if (comment != null) {
@@ -443,6 +438,26 @@ public class ExpenseQueryDomainSupport {
             task.setHandledAt(handledAt);
             processDocumentTaskMapper.updateById(task);
         }
+    }
+
+    private void persistRecalledDraftState(ProcessDocumentInstance instance, LocalDateTime updatedAt) {
+        instance.setStatus(DOCUMENT_STATUS_DRAFT);
+        instance.setCurrentNodeKey(null);
+        instance.setCurrentNodeName(null);
+        instance.setCurrentTaskType(null);
+        instance.setFinishedAt(null);
+        instance.setUpdatedAt(updatedAt);
+        processDocumentInstanceMapper.update(
+                null,
+                new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<ProcessDocumentInstance>()
+                        .eq("id", instance.getId())
+                        .set("status", DOCUMENT_STATUS_DRAFT)
+                        .set("current_node_key", null)
+                        .set("current_node_name", null)
+                        .set("current_task_type", null)
+                        .set("finished_at", null)
+                        .set("updated_at", updatedAt)
+        );
     }
 
     private List<String> normalizeStringList(List<String> values) {
