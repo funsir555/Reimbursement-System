@@ -1,0 +1,173 @@
+import { computed, type Ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { FinanceVoucherMeta, FinanceVoucherSavePayload } from '@/api'
+import type { FinanceVoucherEntryRow } from './useFinanceNewVoucherRowOwner'
+import { addMoney, isZeroMoney, normalizeMoneyValue } from '@/utils/money'
+
+type VoucherFormStateLike = {
+  companyId: string
+  iperiod: number
+  csign: string
+  inoId?: number
+  dbillDate: string
+  idoc: number
+  cbill: string
+  ctext1?: string
+  ctext2?: string
+  entries: FinanceVoucherEntryRow[]
+}
+
+type UseFinanceNewVoucherValidationPayloadOptions = {
+  form: VoucherFormStateLike
+  voucherMeta: Ref<FinanceVoucherMeta | null>
+  validationErrors: Ref<string[]>
+  entryFieldMaxLength: Record<string, number>
+  entryFieldLabels: Record<string, string>
+  validateEntrySelection: (row: FinanceVoucherEntryRow, rowNo: number, errors: string[]) => void
+}
+
+export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVoucherValidationPayloadOptions) {
+  const effectiveRows = computed(() => options.form.entries.filter((item) => !isEntryBlank(item)))
+  const totalDebit = computed(() => sumRows(effectiveRows.value, 'md'))
+  const totalCredit = computed(() => sumRows(effectiveRows.value, 'mc'))
+  const balanceGap = computed(() => subtractVoucherAmount(totalDebit.value, totalCredit.value))
+
+  function buildPayload(includeBlankRows = false): FinanceVoucherSavePayload {
+    const note = String(options.form.ctext2 || options.form.ctext1 || '').trim()
+    const entries = (includeBlankRows ? options.form.entries : effectiveRows.value).map((item, index) => ({
+      inid: index + 1,
+      cdigest: (item.cdigest || '').trim(),
+      ccode: item.ccode || '',
+      cdeptId: item.cdeptId || undefined,
+      cpersonId: item.cpersonId || undefined,
+      ccusId: item.ccusId || undefined,
+      csupId: item.csupId || undefined,
+      citemClass: item.citemClass || undefined,
+      citemId: item.citemId || undefined,
+      cashFlowItemId: item.cashFlowItemId,
+      cashFlowItemName: item.cashFlowItemName || undefined,
+      cexchName: item.cexchName || options.voucherMeta.value?.defaultCurrency || 'CNY',
+      nfrat: normalizeDecimal(item.nfrat),
+      md: normalizeMoneyField(item.md),
+      mc: normalizeMoneyField(item.mc),
+      ndS: normalizeQuantity(item.ndS),
+      ncS: normalizeQuantity(item.ncS)
+    }))
+
+    return {
+      companyId: options.form.companyId,
+      iperiod: options.form.iperiod,
+      csign: options.form.csign,
+      inoId: options.form.inoId,
+      dbillDate: options.form.dbillDate,
+      idoc: options.form.idoc,
+      cbill: options.form.cbill,
+      ctext1: '',
+      ctext2: note,
+      entries
+    }
+  }
+
+  function validateEntryLength(row: FinanceVoucherEntryRow, rowNo: number, errors: string[]) {
+    ;(Object.entries(options.entryFieldMaxLength) as Array<[keyof typeof options.entryFieldMaxLength, number]>).forEach(([fieldKey, maxLength]) => {
+      const value = row[fieldKey as keyof FinanceVoucherEntryRow]
+      if (typeof value !== 'string') {
+        return
+      }
+      const normalized = value.trim()
+      if (normalized.length > maxLength) {
+        errors.push(`第 ${rowNo} 行${options.entryFieldLabels[fieldKey]}最多 ${maxLength} 个字符`)
+      }
+    })
+  }
+
+  function validateVoucher(showToast = false) {
+    const errors: string[] = []
+    const entries = effectiveRows.value
+
+    if (!options.form.companyId) errors.push('当前公司未设置')
+    if (!options.form.dbillDate) errors.push('请选择制单日期')
+    if (!options.form.csign) errors.push('请选择凭证类别')
+    if (!options.form.iperiod || options.form.iperiod < 1 || options.form.iperiod > 12) errors.push('会计期间必须在 1 到 12 之间')
+    if (entries.length < 2) errors.push('至少需要两条有效分录')
+
+    entries.forEach((row, index) => {
+      const rowNo = index + 1
+      const debit = normalizeMoneyField(row.md)
+      const credit = normalizeMoneyField(row.mc)
+      if (!(row.cdigest || '').trim()) errors.push(`第 ${rowNo} 行摘要不能为空`)
+      if (!row.ccode) errors.push(`第 ${rowNo} 行请选择科目`)
+      validateEntryLength(row, rowNo, errors)
+      options.validateEntrySelection(row, rowNo, errors)
+      if (debit && credit) errors.push(`第 ${rowNo} 行借贷不能同时填写`)
+      if (!debit && !credit) errors.push(`第 ${rowNo} 行借方或贷方至少填写一项`)
+      if ((row.nfrat ?? 1) <= 0) errors.push(`第 ${rowNo} 行汇率必须大于 0`)
+    })
+
+    if (entries.length >= 2 && !isZeroMoney(balanceGap.value)) errors.push('借方合计必须等于贷方合计')
+
+    options.validationErrors.value = Array.from(new Set(errors))
+    if (showToast) {
+      options.validationErrors.value.length
+        ? ElMessage.warning(options.validationErrors.value[0])
+        : ElMessage.success('凭证校验通过，借贷已平衡')
+    }
+    return options.validationErrors.value.length === 0
+  }
+
+  function isEntryBlank(row: FinanceVoucherEntryRow) {
+    return !(row.cdigest || '').trim()
+      && !row.ccode
+      && !row.cdeptId
+      && !row.cpersonId
+      && !row.ccusId
+      && !row.csupId
+      && !row.citemClass
+      && !row.citemId
+      && !row.cashFlowItemId
+      && !normalizeMoneyField(row.md)
+      && !normalizeMoneyField(row.mc)
+      && !row.ndS
+      && !row.ncS
+  }
+
+  function buildSnapshot() {
+    return JSON.stringify(buildPayload(true))
+  }
+
+  function sumRows(rows: FinanceVoucherEntryRow[], field: 'md' | 'mc') {
+    return rows.reduce((total, row) => addMoney(total, normalizeMoneyField(row[field]) || '0.00'), '0.00')
+  }
+
+  function normalizeDecimal(value?: number) {
+    if (value === undefined || value === null || Number.isNaN(Number(value)) || Number(value) === 0) return undefined
+    return Number(Number(value).toFixed(2))
+  }
+
+  function normalizeMoneyField(value?: string) {
+    if (!value) return undefined
+    const normalized = normalizeMoneyValue(value, { fallback: '' })
+    return isZeroMoney(normalized) ? undefined : normalized
+  }
+
+  function subtractVoucherAmount(left: string, right: string) {
+    return addMoney(left, right ? `-${right}` : '0.00')
+  }
+
+  function normalizeQuantity(value?: number) {
+    if (value === undefined || value === null || Number.isNaN(Number(value)) || Number(value) === 0) return undefined
+    return Number(Number(value).toFixed(6))
+  }
+
+  return {
+    effectiveRows,
+    totalDebit,
+    totalCredit,
+    balanceGap,
+    buildPayload,
+    validateVoucher,
+    isEntryBlank,
+    buildSnapshot,
+    normalizeMoneyField
+  }
+}

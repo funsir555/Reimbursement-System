@@ -37,565 +37,50 @@
     <div v-loading="detailLoading" class="detail-layout grid grid-cols-1 gap-6 xl:grid-cols-[3fr_1fr]">
       <template v-if="detail">
         <div class="detail-main-scroll space-y-6" data-testid="detail-main-scroll">
-          <el-card class="expense-wb-panel">
-            <template #header>
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="text-lg font-semibold text-slate-800">单据表单</p>
-                  <p class="mt-1 text-sm text-slate-500">根据提交时保存的表单快照回看单据内容。</p>
-                </div>
-                <el-tag effect="plain">金额：{{ amountText }}</el-tag>
-              </div>
-            </template>
+          <ExpenseDocumentReadonlyFormPanel
+            :amount-text="amountText"
+            :display="readonlyFormDisplay"
+          />
 
-            <ExpenseFormReadonlyRenderer
-              v-if="detail"
-              :schema="detail.formSchemaSnapshot"
-              :form-data="detail.formData"
-              :company-options="detail.companyOptions"
-              :department-options="detail.departmentOptions"
-              :vendor-option-map="vendorOptionMap"
-              :payee-option-map="payeeOptionMap"
-              :payee-account-option-map="payeeAccountOptionMap"
-            />
-            <el-empty v-else description="暂无单据数据" :image-size="96" />
-          </el-card>
+          <ExpenseDocumentBindingPanels
+            :panels="bindingPanels"
+            :binding-count-suffix="bindingCountSuffix"
+            :view-bound-document-label="viewBoundDocumentLabel"
+            @open-bound-document="openBoundDocument"
+          />
 
-          <el-card class="expense-wb-panel" data-testid="related-bindings-card">
-            <template #header>
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="text-lg font-semibold text-slate-800">{{ relatedCardTitle }}</p>
-                  <p class="mt-1 text-sm text-slate-500">{{ relatedCardDescription }}</p>
-                </div>
-                <div class="binding-card-header-actions">
-                  <el-tag effect="plain">{{ relatedDocumentBindings.length }} {{ bindingCountSuffix }}</el-tag>
-                  <button
-                    type="button"
-                    class="binding-card-toggle"
-                    data-testid="related-bindings-toggle"
-                    @click="relatedBindingsExpanded = !relatedBindingsExpanded"
-                  >
-                    {{ relatedBindingsExpanded ? collapseText : expandText }}
-                  </button>
-                </div>
-              </div>
-            </template>
+          <ExpenseDocumentExpenseDetailSection
+            :cards="expenseDetailCards"
+            :summary-items="expenseDetailSummaryItems"
+            :workspace-visible="expenseDetailWorkspaceVisible"
+            :workbench-display="expenseDetailWorkbenchDisplay"
+            @select-detail="selectExpenseDetail"
+            @open-detail="openExpenseDetail"
+          />
 
-            <div v-if="relatedBindingsExpanded" class="space-y-5">
-              <div class="space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">{{ relatedOutboundTitle }}</p>
-                  <el-tag size="small" effect="plain">{{ outboundRelatedBindings.length }} {{ bindingCountSuffix }}</el-tag>
-                </div>
-                <div v-if="outboundRelatedBindings.length" class="space-y-3">
-                  <div
-                    v-for="item in outboundRelatedBindings"
-                    :key="`related-outbound-${item.fieldKey || 'field'}-${item.documentCode}`"
-                    class="expense-wb-detail-card"
-                    data-testid="related-binding-item"
-                  >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
-                          <el-tag v-if="item.statusLabel" size="small" effect="plain">{{ item.statusLabel }}</el-tag>
-                        </div>
-                        <p class="text-sm text-slate-500">
-                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ submitterLabel }}{{ item.submitterName || '-' }}
-                        </p>
-                        <p class="text-xs leading-6 text-slate-500">
-                          {{ sourceFieldLabel }}{{ item.fieldKey || '-' }}
-                        </p>
-                      </div>
-                      <div class="expense-wb-compact-actions">
-                        <el-button
-                          plain
-                          :data-testid="`open-bound-document-${item.documentCode}`"
-                          @click="openBoundDocument(item.documentCode)"
-                        >
-                          {{ viewBoundDocumentLabel }}
-                        </el-button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p v-else class="binding-card-inline-empty" data-testid="related-outbound-empty">{{ relatedOutboundEmptyText }}</p>
-              </div>
-
-              <div class="space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">{{ relatedInboundTitle }}</p>
-                  <el-tag size="small" effect="plain">{{ inboundRelatedBindings.length }} {{ bindingCountSuffix }}</el-tag>
-                </div>
-                <div v-if="inboundRelatedBindings.length" class="space-y-3">
-                  <div
-                    v-for="item in inboundRelatedBindings"
-                    :key="`related-inbound-${item.fieldKey || 'field'}-${item.documentCode}`"
-                    class="expense-wb-detail-card"
-                    data-testid="related-binding-item"
-                  >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
-                          <el-tag v-if="item.statusLabel" size="small" effect="plain">{{ item.statusLabel }}</el-tag>
-                        </div>
-                        <p class="text-sm text-slate-500">
-                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ submitterLabel }}{{ item.submitterName || '-' }}
-                        </p>
-                        <p class="text-xs leading-6 text-slate-500">
-                          {{ bindingFieldLabel }}{{ item.fieldKey || '-' }}
-                        </p>
-                      </div>
-                      <div class="expense-wb-compact-actions">
-                        <el-button
-                          plain
-                          :data-testid="`open-bound-document-${item.documentCode}`"
-                          @click="openBoundDocument(item.documentCode)"
-                        >
-                          {{ viewBoundDocumentLabel }}
-                        </el-button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p v-else class="binding-card-inline-empty" data-testid="related-inbound-empty">{{ relatedInboundEmptyText }}</p>
-              </div>
-            </div>
-          </el-card>
-
-          <el-card class="expense-wb-panel" data-testid="writeoff-bindings-card">
-            <template #header>
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="text-lg font-semibold text-slate-800">{{ writeOffCardTitle }}</p>
-                  <p class="mt-1 text-sm text-slate-500">{{ writeOffCardDescription }}</p>
-                </div>
-                <div class="binding-card-header-actions">
-                  <el-tag effect="plain">{{ writeOffDocumentBindings.length }} {{ bindingCountSuffix }}</el-tag>
-                  <button
-                    type="button"
-                    class="binding-card-toggle"
-                    data-testid="writeoff-bindings-toggle"
-                    @click="writeOffBindingsExpanded = !writeOffBindingsExpanded"
-                  >
-                    {{ writeOffBindingsExpanded ? collapseText : expandText }}
-                  </button>
-                </div>
-              </div>
-            </template>
-
-            <div v-if="writeOffBindingsExpanded" class="space-y-5">
-              <div class="space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">{{ writeOffOutboundTitle }}</p>
-                  <el-tag size="small" effect="plain">{{ outboundWriteOffBindings.length }} {{ bindingCountSuffix }}</el-tag>
-                </div>
-                <div v-if="outboundWriteOffBindings.length" class="space-y-3">
-                  <div
-                    v-for="item in outboundWriteOffBindings"
-                    :key="`writeoff-outbound-${item.fieldKey || 'field'}-${item.documentCode}`"
-                    class="expense-wb-detail-card"
-                    data-testid="writeoff-binding-item"
-                  >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
-                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || unknownStatusLabel }}</el-tag>
-                        </div>
-                        <p class="text-sm text-slate-500">
-                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ writeOffSourceLabel }}{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
-                        </p>
-                        <p class="text-xs leading-6 text-slate-500">
-                          {{ requestedAmountLabel }}{{ formatBindingMoney(item.requestedAmount) }} {{ bindingInlineSeparator }} {{ effectiveAmountLabel }}{{ formatBindingMoney(item.effectiveAmount) }} {{ bindingInlineSeparator }} {{ remainingAmountLabel }}{{ formatBindingMoney(item.remainingAmount) }}
-                        </p>
-                      </div>
-                      <div class="expense-wb-compact-actions">
-                        <el-button
-                          plain
-                          :data-testid="`open-bound-document-${item.documentCode}`"
-                          @click="openBoundDocument(item.documentCode)"
-                        >
-                          {{ viewBoundDocumentLabel }}
-                        </el-button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p v-else class="binding-card-inline-empty" data-testid="writeoff-outbound-empty">{{ writeOffOutboundEmptyText }}</p>
-              </div>
-
-              <div class="space-y-3">
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">{{ writeOffInboundTitle }}</p>
-                  <el-tag size="small" effect="plain">{{ inboundWriteOffBindings.length }} {{ bindingCountSuffix }}</el-tag>
-                </div>
-                <div v-if="inboundWriteOffBindings.length" class="space-y-3">
-                  <div
-                    v-for="item in inboundWriteOffBindings"
-                    :key="`writeoff-inbound-${item.fieldKey || 'field'}-${item.documentCode}`"
-                    class="expense-wb-detail-card"
-                    data-testid="writeoff-binding-item"
-                  >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <p class="text-base font-semibold text-slate-800">{{ item.documentTitle || item.documentCode }}</p>
-                          <el-tag size="small" effect="plain">{{ item.templateTypeLabel || businessDocumentLabel }}</el-tag>
-                          <el-tag size="small" effect="plain">{{ item.effectiveStatusLabel || unknownStatusLabel }}</el-tag>
-                        </div>
-                        <p class="text-sm text-slate-500">
-                          {{ documentCodeLabel }}{{ item.documentCode }} {{ bindingInlineSeparator }} {{ writeOffSourceLabel }}{{ writeOffSourceKindLabel(item.writeOffSourceKind) }}
-                        </p>
-                        <p class="text-xs leading-6 text-slate-500">
-                          {{ requestedAmountLabel }}{{ formatBindingMoney(item.requestedAmount) }} {{ bindingInlineSeparator }} {{ effectiveAmountLabel }}{{ formatBindingMoney(item.effectiveAmount) }} {{ bindingInlineSeparator }} {{ remainingAmountLabel }}{{ formatBindingMoney(item.remainingAmount) }}
-                        </p>
-                      </div>
-                      <div class="expense-wb-compact-actions">
-                        <el-button
-                          plain
-                          :data-testid="`open-bound-document-${item.documentCode}`"
-                          @click="openBoundDocument(item.documentCode)"
-                        >
-                          {{ viewBoundDocumentLabel }}
-                        </el-button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p v-else class="binding-card-inline-empty" data-testid="writeoff-inbound-empty">{{ writeOffInboundEmptyText }}</p>
-              </div>
-            </div>
-          </el-card>
-
-          <el-card v-if="detail?.expenseDetails?.length" class="expense-wb-panel">
-            <template #header>
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="text-lg font-semibold text-slate-800">费用明细</p>
-                  <p class="mt-1 text-sm text-slate-500">这里展示随单据一并提交并归档的费用明细快照，点击任一明细可在当前页展开其发票工作区。</p>
-                </div>
-                <el-tag effect="plain">{{ detail?.expenseDetails?.length || 0 }} 条</el-tag>
-              </div>
-            </template>
-
-            <div class="space-y-4">
-              <div
-                v-for="item in detail?.expenseDetails || []"
-                :key="item.detailNo"
-                class="expense-wb-detail-card expense-wb-detail-card--clickable"
-                :class="{ 'expense-wb-detail-card--selected': activeExpenseDetailNo === item.detailNo }"
-                data-testid="expense-detail-card"
-                @click="selectExpenseDetail(item.detailNo)"
-              >
-                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="text-base font-semibold text-slate-800">{{ item.detailTitle || item.detailNo }}</p>
-                      <el-tag effect="plain">
-                        {{ resolveExpenseDetailTypeLabel(item.detailType, item.detailTypeLabel) }}
-                      </el-tag>
-                      <el-tag v-if="item.enterpriseModeLabel" type="warning" effect="plain">{{ item.enterpriseModeLabel }}</el-tag>
-                      <el-tag v-if="activeExpenseDetailNo === item.detailNo" type="primary" effect="plain">发票工作区已展开</el-tag>
-                    </div>
-                    <p class="mt-2 text-sm text-slate-500">
-                      明细编号：{{ item.detailNo }} ｜ 排序：{{ item.sortOrder || '-' }} ｜ 创建时间：{{ item.createdAt || '-' }}
-                    </p>
-                  </div>
-
-                  <div class="expense-wb-compact-actions">
-                    <el-button plain @click.stop="selectExpenseDetail(item.detailNo)">查看发票</el-button>
-                    <el-button plain @click.stop="openExpenseDetail(item.detailNo)">查看明细</el-button>
-                  </div>
-                </div>
-              </div>
-
-              <div v-if="activeExpenseDetailNo" class="expense-document-invoice-shell">
-                <div class="expense-wb-summary-strip">
-                  <div class="expense-wb-summary-grid">
-                    <div class="expense-wb-summary-item">
-                      <span class="expense-wb-summary-item__label">当前明细</span>
-                      <span class="expense-wb-summary-item__value">{{ activeExpenseDetail?.detailTitle || activeExpenseDetailSummary?.detailTitle || activeExpenseDetailNo }}</span>
-                    </div>
-                    <div class="expense-wb-summary-item">
-                      <span class="expense-wb-summary-item__label">明细编号</span>
-                      <span class="expense-wb-summary-item__value">{{ activeExpenseDetail?.detailNo || activeExpenseDetailNo }}</span>
-                    </div>
-                    <div class="expense-wb-summary-item">
-                      <span class="expense-wb-summary-item__label">加载状态</span>
-                      <span class="expense-wb-summary-item__value">
-                        {{
-                          expenseDetailLoadingNo === activeExpenseDetailNo && !activeExpenseDetail
-                            ? '加载中'
-                            : activeExpenseDetailError
-                              ? '加载失败'
-                              : '已就绪'
-                        }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-6">
-                  <ExpenseInvoiceWorkbench
-                    :schema="activeExpenseDetail?.schemaSnapshot || emptyExpenseDetailSchema"
-                    :form-data="activeExpenseDetail?.formData || {}"
-                    :detail-title="activeExpenseDetail?.detailTitle || activeExpenseDetailSummary?.detailTitle || ''"
-                    :detail-no="activeExpenseDetail?.detailNo || activeExpenseDetailNo"
-                    :loading="expenseDetailLoadingNo === activeExpenseDetailNo && !activeExpenseDetail"
-                    :error-message="activeExpenseDetailError"
-                    result-mode="verification-placeholder"
-                  />
-                </div>
-              </div>
-            </div>
-          </el-card>
-
-          <el-card
-            v-if="detail?.bankPayment || detail?.bankReceipts?.length"
-            class="expense-wb-panel"
-            data-testid="detail-bank-section"
-          >
-            <template #header>
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <p class="text-lg font-semibold text-slate-800">银行付款 / 银行回单</p>
-                  <p class="mt-1 text-sm text-slate-500">这里展示银企直连付款状态，以及已回传到单据里的银行回单附件。</p>
-                </div>
-                <el-tag effect="plain">{{ detail?.bankPayment?.paymentStatusLabel || '暂无状态' }}</el-tag>
-              </div>
-            </template>
-
-            <div class="space-y-5">
-              <div v-if="detail?.bankPayment" class="expense-wb-summary-strip">
-                <div class="expense-wb-summary-grid">
-                  <div class="expense-wb-summary-item">
-                    <span class="expense-wb-summary-item__label">付款状态</span>
-                    <span class="expense-wb-summary-item__value">{{ detail.bankPayment.paymentStatusLabel || '-' }}</span>
-                  </div>
-                  <div class="expense-wb-summary-item">
-                    <span class="expense-wb-summary-item__label">直连账户</span>
-                    <span class="expense-wb-summary-item__value">{{ detail.bankPayment.companyBankAccountName || '-' }}</span>
-                  </div>
-                  <div class="expense-wb-summary-item">
-                    <span class="expense-wb-summary-item__label">回单状态</span>
-                    <span class="expense-wb-summary-item__value">{{ detail.bankPayment.receiptStatusLabel || '-' }}</span>
-                  </div>
-                  <div class="expense-wb-summary-item">
-                    <span class="expense-wb-summary-item__label">支付时间</span>
-                    <span class="expense-wb-summary-item__value">{{ detail.bankPayment.paidAt || '-' }}</span>
-                  </div>
-                  <div class="expense-wb-summary-item">
-                    <span class="expense-wb-summary-item__label">银行流水号</span>
-                    <span class="expense-wb-summary-item__value">{{ detail.bankPayment.bankFlowNo || '-' }}</span>
-                  </div>
-                  <div class="expense-wb-summary-item">
-                    <span class="expense-wb-summary-item__label">支付方式</span>
-                    <span class="expense-wb-summary-item__value">{{ detail.bankPayment.manualPaid ? '手动支付' : '银行回调' }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div class="mb-3 flex items-center justify-between gap-3">
-                  <p class="text-sm font-semibold text-slate-800">银行回单</p>
-                  <el-tag size="small" effect="plain">{{ detail?.bankReceipts?.length || 0 }} 份</el-tag>
-                </div>
-                <div v-if="detail?.bankReceipts?.length" class="space-y-3">
-                  <div
-                    v-for="receipt in detail.bankReceipts"
-                    :key="receipt.attachmentId || receipt.fileName"
-                    class="expense-wb-detail-card"
-                  >
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <p class="text-base font-semibold text-slate-800">{{ receipt.fileName }}</p>
-                          <el-tag effect="plain">{{ receipt.receivedAt || '待生成' }}</el-tag>
-                        </div>
-                        <p class="text-sm text-slate-500">
-                          {{ receipt.contentType || '未知类型' }} · {{ formatAttachmentSize(receipt.fileSize) }}
-                        </p>
-                      </div>
-                      <div class="expense-wb-compact-actions">
-                        <el-button
-                          v-if="receipt.previewUrl"
-                          plain
-                          tag="a"
-                          target="_blank"
-                          :href="buildAuthorizedAttachmentPreviewUrl(receipt.previewUrl)"
-                        >
-                          预览回单
-                        </el-button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <el-empty v-else description="暂无银行回单" :image-size="72" />
-              </div>
-            </div>
-          </el-card>
+          <ExpenseDocumentBankSection
+            :visible="bankSectionVisible"
+            :payment-status-label="detail?.bankPayment?.paymentStatusLabel || ''"
+            :payment-summary-items="bankPaymentSummaryItems"
+            :receipt-items="bankReceiptItems"
+          />
         </div>
 
-        <el-card class="expense-wb-panel">
-          <template #header>
-            <div>
-              <p class="text-lg font-semibold text-slate-800">审批流程</p>
-              <p class="mt-1 text-sm text-slate-500">真实任务状态与审批轨迹</p>
-            </div>
-          </template>
-
-          <div class="approval-scroll space-y-5">
-            <div class="expense-wb-summary-strip">
-              <div class="expense-wb-summary-grid">
-                <div class="expense-wb-summary-item">
-                  <span class="expense-wb-summary-item__label">当前节点</span>
-                  <span class="expense-wb-summary-item__value">{{ detail.currentNodeName || '未开始' }}</span>
-                </div>
-                <div class="expense-wb-summary-item">
-                  <span class="expense-wb-summary-item__label">模板名称</span>
-                  <span class="expense-wb-summary-item__value">{{ detail.templateName || '-' }}</span>
-                </div>
-                <div class="expense-wb-summary-item">
-                  <span class="expense-wb-summary-item__label">当前状态</span>
-                  <span class="expense-wb-summary-item__value">{{ detail.statusLabel || '-' }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div
-              v-if="isManualApproverSelectionPending"
-              class="rounded-[24px] border border-amber-200 bg-amber-50 p-5 space-y-4"
-              data-testid="manual-approver-selection-card"
-            >
-              <div class="space-y-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <p class="text-sm font-semibold text-slate-800">当前节点手动选择审批人</p>
-                  <el-tag size="small" type="warning" effect="plain">待处理</el-tag>
-                </div>
-                <p class="text-sm text-slate-600">
-                  当前流程停留在“{{ detail.manualApproverSelectionNodeName || detail.manualApproverSelectionNodeKey }}”节点，
-                  需要由提单人指定本节点审批人后继续流转。
-                </p>
-              </div>
-              <template v-if="canSubmitManualApproverSelection">
-                <el-select
-                  v-model="manualApproverForm.userIds"
-                  class="w-full"
-                  multiple
-                  collapse-tags
-                  collapse-tags-tooltip
-                  filterable
-                  clearable
-                  placeholder="请选择当前节点审批人"
-                  data-testid="manual-approver-selection-select"
-                >
-                  <el-option
-                    v-for="item in manualApproverOptions"
-                    :key="String(item.value || '')"
-                    :label="item.label"
-                    :value="Number(item.value)"
-                  />
-                </el-select>
-                <div class="flex justify-end">
-                  <el-button
-                    type="primary"
-                    :loading="manualApproverSubmitting"
-                    @click="submitManualApproverSelection"
-                  >
-                    提交审批人
-                  </el-button>
-                </div>
-              </template>
-              <p v-else class="text-xs leading-6 text-slate-500">
-                当前节点等待提单人完成手动选人；你可查看全流程轨迹，但不能代为提交。
-              </p>
-            </div>
-
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <p class="text-sm font-semibold text-slate-800">&#30495;&#23454;&#20219;&#21153;&#29366;&#24577;</p>
-                <el-tag size="small" effect="plain">{{ approvalNodeStatuses.length }} &#26465;</el-tag>
-              </div>
-
-              <div
-                v-if="approvalNodeStatuses.length"
-                class="approval-node-status-list"
-                data-testid="approval-node-status-list"
-              >
-                <div
-                  v-for="item in approvalNodeStatuses"
-                  :key="item.nodeKey"
-                  class="approval-node-status-card"
-                  :class="{
-                    'approval-node-status-card--pending': item.status === 'PENDING' || item.status === 'PAYMENT_PENDING' || item.status === 'MANUAL_SELECTION_PENDING',
-                    'approval-node-status-card--future': item.status === 'NOT_REACHED'
-                  }"
-                  data-testid="approval-node-status-item"
-                >
-                  <div class="approval-node-status-card__content">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="text-sm font-semibold text-slate-800">{{ item.nodeName || item.nodeKey }}</p>
-                      <el-tag size="small" effect="plain" :type="approvalStatusTagType(item.status)">
-                        {{ item.statusLabel || approvalStatusLabel(item.status) }}
-                      </el-tag>
-                    </div>
-                    <p v-if="item.description" class="text-xs leading-6 text-slate-500">{{ item.description }}</p>
-                    <p v-else-if="item.assigneeNames?.length" class="text-xs leading-6 text-slate-500">
-                      &#22788;&#29702;&#20154;&#65306;{{ item.assigneeNames.join('\u3001') }}
-                    </p>
-                  </div>
-                  <span v-if="item.occurredAt" class="approval-node-status-card__time">{{ item.occurredAt }}</span>
-                </div>
-              </div>
-              <el-empty v-else description="&#26242;&#26080;&#30495;&#23454;&#20219;&#21153;&#29366;&#24577;" :image-size="72" />
-            </div>
-
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <p class="text-sm font-semibold text-slate-800">&#23457;&#25209;&#36712;&#36857;</p>
-                <el-tag size="small" effect="plain">{{ approvalTimelineItems.length }} &#26465;</el-tag>
-              </div>
-
-              <el-timeline v-if="approvalTimelineItems.length" data-testid="approval-timeline-list">
-                <el-timeline-item
-                  v-for="item in approvalTimelineItems"
-                  :key="item.key"
-                  :timestamp="item.timestamp"
-                  placement="top"
-                  data-testid="approval-timeline-item"
-                >
-                  <div class="space-y-2">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <p class="text-sm font-semibold text-slate-800">{{ item.title }}</p>
-                      <el-tag v-if="item.statusLabel" size="small" effect="plain" :type="approvalStatusTagType(item.status)">
-                        {{ item.statusLabel }}
-                      </el-tag>
-                    </div>
-                    <p v-if="item.description" class="text-xs leading-6 text-slate-500">{{ item.description }}</p>
-                    <div v-if="item.attachmentNames?.length" class="flex flex-wrap gap-2">
-                      <el-tag
-                        v-for="name in item.attachmentNames || []"
-                        :key="name"
-                        size="small"
-                        effect="plain"
-                        type="info"
-                      >
-                        {{ name }}
-                      </el-tag>
-                    </div>
-                  </div>
-                </el-timeline-item>
-              </el-timeline>
-              <el-empty v-else description="&#26242;&#26080;&#23457;&#25209;&#36712;&#36857;" :image-size="72" />
-            </div>
-          </div>
-        </el-card>
+        <ExpenseDocumentApprovalPanel
+          :summary-items="approvalSummaryItems"
+          :is-manual-approver-selection-pending="isManualApproverSelectionPending"
+          :manual-approver-node-name="detail.manualApproverSelectionNodeName || detail.manualApproverSelectionNodeKey || ''"
+          :can-submit-manual-approver-selection="canSubmitManualApproverSelection"
+          :manual-approver-user-ids="manualApproverForm.userIds"
+          :manual-approver-options="manualApproverOptions"
+          :manual-approver-submitting="manualApproverSubmitting"
+          :approval-node-statuses="approvalNodeStatuses"
+          :approval-timeline-items="approvalTimelineItems"
+          :approval-status-tag-type="approvalStatusTagType"
+          :approval-status-label="approvalStatusLabel"
+          @update:manual-approver-user-ids="manualApproverForm.userIds = $event"
+          @submit-manual-approver-selection="submitManualApproverSelection"
+        />
       </template>
 
       <el-card v-else class="expense-wb-panel xl:col-span-2">
@@ -774,13 +259,17 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { type ProcessFormDesignSchema } from '@/api'
-import ExpenseFormReadonlyRenderer from './components/ExpenseFormReadonlyRenderer.vue'
-import ExpenseInvoiceWorkbench from './components/ExpenseInvoiceWorkbench.vue'
+import ExpenseDocumentApprovalPanel from './components/ExpenseDocumentApprovalPanel.vue'
+import ExpenseDocumentBankSection from './components/ExpenseDocumentBankSection.vue'
+import ExpenseDocumentBindingPanels from './components/ExpenseDocumentBindingPanels.vue'
+import ExpenseDocumentExpenseDetailSection from './components/ExpenseDocumentExpenseDetailSection.vue'
 import ExpenseDocumentPrintSheet from './components/ExpenseDocumentPrintSheet.vue'
+import ExpenseDocumentReadonlyFormPanel from './components/ExpenseDocumentReadonlyFormPanel.vue'
 import { buildAuthorizedAttachmentPreviewUrl } from './expenseInvoicePreview'
 import { useExpenseDocumentDetailRuntime } from './composables/useExpenseDocumentDetailRuntime'
 import { useExpenseDocumentDetailApprovalRuntime } from './composables/useExpenseDocumentDetailApprovalRuntime'
 import { useExpenseDocumentDetailActionOwner } from './composables/useExpenseDocumentDetailActionOwner'
+import { useExpenseDocumentDetailDisplayOwner } from './composables/useExpenseDocumentDetailDisplayOwner'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
 const route = useRoute()
@@ -798,8 +287,6 @@ const {
   detailLoading,
   navigationLoading,
   detail,
-  relatedBindingsExpanded,
-  writeOffBindingsExpanded,
   detailLoadError,
   printLoading,
   printLoadError,
@@ -815,6 +302,8 @@ const {
   payeeAccountOptionMap,
   amountText,
   isPrintMode,
+  relatedBindingsExpanded,
+  writeOffBindingsExpanded,
   relatedDocumentBindings,
   outboundRelatedBindings,
   inboundRelatedBindings,
@@ -863,6 +352,71 @@ const {
   resolveErrorMessage,
   resolveExpenseDetailTypeLabel
 } = useExpenseDocumentDetailRuntime({ canLoadNavigation: canApprovalView })
+
+const displayRuntime = useExpenseDocumentDetailDisplayOwner({
+  detail,
+  vendorOptionMap,
+  payeeOptionMap,
+  payeeAccountOptionMap,
+  relatedBindingsExpanded,
+  writeOffBindingsExpanded,
+  activeExpenseDetailNo,
+  expenseDetailLoadingNo,
+  activeExpenseDetail,
+  activeExpenseDetailSummary,
+  activeExpenseDetailError,
+  relatedDocumentBindings,
+  outboundRelatedBindings,
+  inboundRelatedBindings,
+  writeOffDocumentBindings,
+  outboundWriteOffBindings,
+  inboundWriteOffBindings,
+  bindingCountSuffix,
+  bindingInlineSeparator,
+  expandText,
+  collapseText,
+  businessDocumentLabel,
+  relatedCardTitle,
+  relatedCardDescription,
+  relatedOutboundTitle,
+  relatedInboundTitle,
+  writeOffCardTitle,
+  writeOffCardDescription,
+  writeOffOutboundTitle,
+  writeOffInboundTitle,
+  documentCodeLabel,
+  submitterLabel,
+  sourceFieldLabel,
+  bindingFieldLabel,
+  writeOffSourceLabel,
+  requestedAmountLabel,
+  effectiveAmountLabel,
+  remainingAmountLabel,
+  unknownStatusLabel,
+  relatedOutboundEmptyText,
+  relatedInboundEmptyText,
+  writeOffOutboundEmptyText,
+  writeOffInboundEmptyText,
+  emptyExpenseDetailSchema,
+  resolveExpenseDetailTypeLabel,
+  formatBindingMoney,
+  writeOffSourceKindLabel,
+  formatAttachmentSize,
+  buildAuthorizedAttachmentPreviewUrl
+})
+
+const {
+  readonlyFormDisplay,
+  bindingPanels,
+  expenseDetailCards,
+  expenseDetailWorkspaceVisible,
+  expenseDetailSummaryItems,
+  expenseDetailWorkbenchDisplay,
+  bankSectionVisible,
+  bankPaymentSummaryItems,
+  bankReceiptItems,
+  approvalSummaryItems
+} = displayRuntime
 
 const approvalRuntime = useExpenseDocumentDetailApprovalRuntime({
   detail,

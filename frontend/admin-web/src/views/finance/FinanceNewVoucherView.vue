@@ -241,10 +241,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleClose,
   Coin,
@@ -263,9 +262,7 @@ import {
   Tools
 } from '@element-plus/icons-vue'
 import {
-  financeApi,
   type FinanceVoucherDetail,
-  type FinanceVoucherEntry,
   type FinanceVoucherForm,
   type FinanceVoucherMeta,
   type FinanceVoucherOption,
@@ -273,27 +270,24 @@ import {
 } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
-import { showBusinessWarning } from '@/utils/businessWarning'
+import { useFinanceNewVoucherAssistCashflowOwner } from './composables/useFinanceNewVoucherAssistCashflowOwner'
+import { useFinanceNewVoucherBootstrap } from './composables/useFinanceNewVoucherBootstrap'
+import { useFinanceNewVoucherHeaderMetaOwner } from './composables/useFinanceNewVoucherHeaderMetaOwner'
+import {
+  useFinanceNewVoucherPageOrchestration,
+  type FinanceNewVoucherToolbarActionKey
+} from './composables/useFinanceNewVoucherPageOrchestration'
+import {
+  useFinanceNewVoucherRowOwner,
+  type FinanceVoucherEntryRow as VoucherEntryRow
+} from './composables/useFinanceNewVoucherRowOwner'
+import { useFinanceNewVoucherValidationPayload } from './composables/useFinanceNewVoucherValidationPayload'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
-import { absMoney, addMoney, formatMoney, isZeroMoney, normalizeMoneyValue } from '@/utils/money'
+import { formatMoney } from '@/utils/money'
 
-type ToolbarActionKey = 'new' | 'modify' | 'print' | 'export' | 'copy' | 'reverse' | 'void' | 'insert' | 'delete' | 'searchReplace' | 'cashFlow' | 'save' | 'assist' | 'balance' | 'calculator' | 'review' | 'unreview' | 'markError' | 'find'
-type VoucherEntryRow = FinanceVoucherEntry & { localId: string }
-type DepartmentTreeOption = FinanceVoucherOption & { children: DepartmentTreeOption[] }
+type ToolbarActionKey = FinanceNewVoucherToolbarActionKey
 type VoucherFormState = Omit<FinanceVoucherForm, 'entries'> & { entries: VoucherEntryRow[] }
 type VoucherPageMode = 'create' | 'detail' | 'review'
-type VoucherAssistCapability = {
-  department: boolean
-  employee: boolean
-  customer: boolean
-  supplier: boolean
-  project: boolean
-  lockedProjectClassCode?: string
-}
-type LeafSubjectSnapshot = {
-  code: string
-  name?: string
-}
 
 interface ToolbarAction {
   key: ToolbarActionKey
@@ -301,6 +295,33 @@ interface ToolbarAction {
   icon: Component
   emphasis?: 'primary' | 'secondary'
   disabled?: boolean
+}
+
+function createBootstrapEntry(defaultCurrency: string, rowNo: number): VoucherEntryRow {
+  return {
+    localId: `bootstrap-entry-${rowNo}`,
+    inid: rowNo,
+    cdigest: '',
+    ccode: '',
+    cdeptId: '',
+    cpersonId: '',
+    ccusId: '',
+    csupId: '',
+    citemClass: '',
+    citemId: '',
+    cashFlowItemId: undefined,
+    cashFlowItemName: '',
+    cexchName: defaultCurrency,
+    nfrat: 1,
+    md: '',
+    mc: '',
+    ndS: undefined,
+    ncS: undefined
+  }
+}
+
+function createBootstrapEntries(defaultCurrency: string, minRows: number) {
+  return Array.from({ length: minRows }, (_, index) => createBootstrapEntry(defaultCurrency, index + 1))
 }
 
 const DRAFT_STORAGE_KEY = 'finance-new-voucher-draft'
@@ -337,28 +358,9 @@ const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
 const currentUser = readStoredUser()
 
-const loading = ref(false)
-const saving = ref(false)
-const reviewActing = ref(false)
-const currentToolbarLoadingKey = ref<ToolbarActionKey | ''>('')
-const initializing = ref(false)
-const voucherMeta = ref<FinanceVoucherMeta | null>(null)
-const voucherDetail = ref<FinanceVoucherDetail | null>(null)
 const validationErrors = ref<string[]>([])
-const hasDraft = ref(false)
 const selectedRowIndex = ref(0)
-const editingExisting = ref(false)
 const lastCommittedSnapshot = ref('')
-const actionDialog = reactive({ visible: false, title: '', description: '' })
-const lastValidLeafSubjectByRow = reactive<Record<string, LeafSubjectSnapshot | undefined>>({})
-const leafSubjectWarningVisible = ref(false)
-const cashFlowDialogVisible = ref(false)
-const cashFlowDialogRowIndex = ref<number | null>(null)
-const cashFlowDialogSelection = ref('')
-const viewActive = ref(false)
-let entrySeed = 0
-let loadSequence = 0
-let guardRegistered = false
 
 const form = reactive<VoucherFormState>({
   companyId: '',
@@ -370,7 +372,7 @@ const form = reactive<VoucherFormState>({
   cbill: '',
   ctext1: '',
   ctext2: '',
-  entries: ensureMinimumRows([createEntry('CNY', 1), createEntry('CNY', 2)], 'CNY')
+  entries: createBootstrapEntries('CNY', MIN_ENTRY_ROWS)
 })
 const isDetailRoute = computed(() => props.pageMode === 'detail')
 const isReviewMode = computed(() => props.pageMode === 'review')
@@ -453,49 +455,168 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
   ]
 })
 
-const effectiveRows = computed(() => form.entries.filter((item) => !isEntryBlank(item)))
-const totalDebit = computed(() => sumRows(effectiveRows.value, 'md'))
-const totalCredit = computed(() => sumRows(effectiveRows.value, 'mc'))
-const balanceGap = computed(() => subtractVoucherAmount(totalDebit.value, totalCredit.value))
 const selectedRow = computed(() => form.entries[Math.min(selectedRowIndex.value, Math.max(form.entries.length - 1, 0))] as VoucherEntryRow)
-const financeCompanyState = financeCompany as typeof financeCompany & {
-  currentCompanyLabel?: string
-  currentCompanyHasActiveAccountSet?: boolean
-}
-const currentCompanyOption = computed(() =>
-  financeCompany.companyOptions?.find((item) => item.companyId === (financeCompany.currentCompanyId || form.companyId))
-)
-const currentRowLabel = computed(() => {
-  if (!selectedRow.value?.ccode) return ''
-  return resolveAccountLabel(selectedRow.value.ccode, selectedRow.value.ccodeName)
-})
-const currentCompanyName = computed(() => financeCompany.currentCompanyName || currentCompanyOption.value?.companyName || resolveCompanyName(form.companyId))
-const currentCompanyHasActiveAccountSet = computed(() => {
-  if (typeof financeCompanyState.currentCompanyHasActiveAccountSet === 'boolean') {
-    return financeCompanyState.currentCompanyHasActiveAccountSet
-  }
-  if (typeof currentCompanyOption.value?.hasActiveAccountSet === 'boolean') {
-    return currentCompanyOption.value.hasActiveAccountSet
-  }
-  return Boolean(financeCompany.currentCompanyId || form.companyId)
-})
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
-const accountOptionMap = computed(() => new Map((voucherMeta.value?.accountOptions || []).map((item) => [item.value, item] as const)))
-const cashFlowOptionMap = computed(() => new Map((voucherMeta.value?.cashFlowOptions || []).map((item) => [item.value, item] as const)))
-const selectedAccountOption = computed(() => {
-  const code = selectedRow.value?.ccode
-  return code ? accountOptionMap.value.get(code) : undefined
+const {
+  loading,
+  initializing,
+  voucherMeta,
+  voucherDetail,
+  hasDraft,
+  editingExisting,
+  initializePage,
+  loadMeta,
+  loadDetail
+} = useFinanceNewVoucherBootstrap({
+  financeCompany,
+  router,
+  companySwitchGuardKey: COMPANY_SWITCH_GUARD_KEY,
+  pageMode: computed(() => props.pageMode),
+  detailVoucherNo,
+  isDetailRoute,
+  isReviewMode,
+  backToListRouteName,
+  hasUnsavedChanges: () => hasUnsavedChanges.value,
+  validationErrors,
+  readDraft,
+  resetFormFromMeta,
+  applyDraft,
+  applyDetail,
+  markCommitted,
+  parseVoucherCompanyId,
+  resolveErrorMessage
 })
-const currentAssistCapability = computed(() => resolveAssistCapability(selectedAccountOption.value))
-const assistDisabledState = computed(() => ({
-  department: isReadonlyMode.value || !currentAssistCapability.value.department,
-  employee: isReadonlyMode.value || !currentAssistCapability.value.employee,
-  customer: isReadonlyMode.value || !currentAssistCapability.value.customer,
-  supplier: isReadonlyMode.value || !currentAssistCapability.value.supplier,
-  projectClass:
-    isReadonlyMode.value || !currentAssistCapability.value.project || Boolean(currentAssistCapability.value.lockedProjectClassCode),
-  project: isReadonlyMode.value || !currentAssistCapability.value.project
-}))
+const {
+  cashFlowDialogVisible,
+  cashFlowDialogSelection,
+  currentAssistCapability,
+  assistDisabledState,
+  projectClassOptionsForDisplay,
+  departmentTreeOptions,
+  filteredProjectOptions,
+  requiresRowCashFlow,
+  resetLeafSubjectHistory,
+  ensureSelectedRowUsesLeafSubject,
+  tryLeaveSubjectField,
+  closeCashFlowDialog,
+  confirmCashFlowSelection,
+  ensureRowCashFlowState,
+  validateEntrySelection,
+  handleSubjectChange,
+  handleSubjectFieldFocus,
+  handleSubjectDropdownVisibleChange,
+  handleAssistFieldFocus,
+  handleCashFlowFieldFocus,
+  handleAmountBlur,
+  filterDepartmentTreeNode,
+  resolveAccountLabel
+} = useFinanceNewVoucherAssistCashflowOwner({
+  voucherMeta,
+  entries: computed(() => form.entries),
+  selectedRow,
+  selectedRowIndex,
+  isReadonlyMode,
+  selectRow
+})
+const {
+  effectiveRows,
+  totalDebit,
+  totalCredit,
+  buildPayload,
+  validateVoucher,
+  isEntryBlank,
+  buildSnapshot
+} = useFinanceNewVoucherValidationPayload({
+  form,
+  voucherMeta,
+  validationErrors,
+  entryFieldMaxLength: ENTRY_FIELD_MAX_LENGTH,
+  entryFieldLabels: ENTRY_FIELD_LABELS,
+  validateEntrySelection
+})
+const {
+  createEntry,
+  createEntryFromValue,
+  ensureMinimumRows,
+  handleEntryFieldFocus,
+  insertEntryAfter,
+  removeSelectedEntry,
+  handleGridKeydown,
+  handleAmountKeydown
+} = useFinanceNewVoucherRowOwner({
+  getEntries: () => form.entries,
+  setEntries: (entries) => {
+    form.entries = entries
+  },
+  selectedRow,
+  selectedRowIndex,
+  effectiveRowCount: computed(() => effectiveRows.value.length),
+  isReadonlyMode,
+  defaultCurrency: computed(() => voucherMeta.value?.defaultCurrency || 'CNY'),
+  minEntryRows: MIN_ENTRY_ROWS,
+  isEntryBlank,
+  tryLeaveSubjectField,
+  resetLeafSubjectHistory
+})
+const {
+  currentCompanyName,
+  currentRowLabel,
+  voucherNoticeItems,
+  remarkText,
+  voucherNoInput
+} = useFinanceNewVoucherHeaderMetaOwner({
+  form,
+  financeCompany,
+  voucherMeta,
+  selectedRow,
+  currentAssistCapability,
+  voucherHeaderLocked,
+  loading,
+  initializing,
+  resolveAccountLabel,
+  resetLeafSubjectHistory,
+  resolveErrorMessage
+})
+const {
+  saving,
+  reviewActing,
+  currentToolbarLoadingKey,
+  actionDialog,
+  handleToolbarAction
+} = useFinanceNewVoucherPageOrchestration({
+  router,
+  voucherMeta,
+  voucherDetail,
+  editingExisting,
+  validationErrors,
+  isDetailRoute,
+  isReviewMode,
+  canEditExisting,
+  detailVoucherNo,
+  selectedRow,
+  selectedRowIndex,
+  currentCompanyId: () => financeCompany.currentCompanyId || form.companyId,
+  getCurrentContext: () => ({
+    companyId: financeCompany.currentCompanyId || form.companyId,
+    billDate: form.dbillDate,
+    csign: form.csign
+  }),
+  getEntries: () => form.entries,
+  selectRow,
+  loadMeta,
+  loadDetail,
+  clearDraft,
+  resetFormFromMeta,
+  markCommitted,
+  buildPayload,
+  validateVoucher,
+  ensureSelectedRowUsesLeafSubject,
+  ensureRowCashFlowState,
+  handleCashFlowFieldFocus,
+  resolveErrorMessage,
+  insertEntryAfter,
+  removeSelectedEntry
+})
 const accountOptionsForDisplay = computed(() => {
   const options = [...(voucherMeta.value?.accountOptions || [])]
   const existingValues = new Set(options.map((item) => item.value))
@@ -511,196 +632,12 @@ const accountOptionsForDisplay = computed(() => {
   })
   return options
 })
-const projectClassOptionsForDisplay = computed(() =>
-  appendDisplayOption(voucherMeta.value?.projectClassOptions || [], currentAssistCapability.value.lockedProjectClassCode || selectedRow.value?.citemClass)
-)
-const departmentTreeOptions = computed(() => buildDepartmentTreeOptions(voucherMeta.value?.departmentOptions || []))
-const filteredProjectOptions = computed(() => {
-  const projectClassCode = currentAssistCapability.value.lockedProjectClassCode || selectedRow.value?.citemClass
-  const options = voucherMeta.value?.projectOptions || []
-  const filtered = !projectClassCode ? options : options.filter((item) => item.parentValue === projectClassCode)
-  return appendDisplayOption(filtered, selectedRow.value?.citemId)
-})
-const voucherNoticeItems = computed<Array<{ level: 'warning' | 'danger' | 'info'; text: string }>>(() => {
-  const notices: Array<{ level: 'warning' | 'danger' | 'info'; text: string }> = []
-  if (!financeCompany.currentCompanyId) {
-    notices.push({ level: 'warning', text: '当前未选择财务公司，请先选择公司后再录入凭证。' })
-    return notices
-  }
-  if (!currentCompanyHasActiveAccountSet.value) {
-    notices.push({ level: 'warning', text: '当前公司未创建账套，请切换公司或先建账。' })
-    return notices
-  }
-  if (!voucherMeta.value) {
-    return notices
-  }
-  if (!voucherMeta.value.accountOptions?.length) {
-    notices.push({ level: 'danger', text: '当前公司账套已启用，但暂无会计科目数据，请检查账套初始化结果。' })
-  }
-  if (!voucherMeta.value.customerOptions?.length) {
-    notices.push({ level: 'info', text: '当前公司暂无客户档案数据。' })
-  }
-  if (!voucherMeta.value.supplierOptions?.length) {
-    notices.push({ level: 'info', text: '当前公司暂无供应商档案数据。' })
-  }
-  if (!voucherMeta.value.projectClassOptions?.length || !voucherMeta.value.projectOptions?.length) {
-    notices.push({ level: 'info', text: '当前公司暂无项目档案数据。' })
-  }
-  const lockedProjectClassCode = currentAssistCapability.value.lockedProjectClassCode
-  if (lockedProjectClassCode && !(voucherMeta.value.projectClassOptions || []).some((item) => item.value === lockedProjectClassCode)) {
-    notices.push({ level: 'warning', text: `当前科目挂载的项目分类【${lockedProjectClassCode}】不存在或当前不可用，请先维护项目档案。` })
-  }
-  return notices
-})
-const remarkText = computed({
-  get: () => form.ctext2 || form.ctext1 || '',
-  set: (value: string) => {
-    form.ctext1 = ''
-    form.ctext2 = value
-  }
-})
-const voucherNoInput = computed({
-  get: () => (form.inoId === undefined || form.inoId === null ? '' : String(form.inoId)),
-  set: (value: string) => {
-    if (voucherHeaderLocked.value) return
-    const digits = String(value || '').replace(/\D/g, '')
-    form.inoId = digits ? Number(digits) : undefined
-  }
-})
-
-watch(() => form.dbillDate, (value) => {
-  if (initializing.value || voucherHeaderLocked.value) return
-  const nextPeriod = inferPeriod(value)
-  if (nextPeriod) form.iperiod = nextPeriod
-})
-
-watch(() => [form.dbillDate, form.csign] as const, async () => {
-  if (initializing.value || loading.value || !voucherMeta.value || voucherHeaderLocked.value) return
-  await refreshSuggestedVoucherNo()
-})
-
-watch(
-  () =>
-    [
-      selectedRowIndex.value,
-      selectedRow.value?.ccode,
-      selectedRow.value?.citemClass,
-      selectedRow.value?.citemId,
-      voucherMeta.value?.accountOptions,
-      voucherMeta.value?.projectOptions,
-      isReadonlyMode.value
-    ] as const,
-  () => {
-    syncSelectedRowAssistState()
-  }
-)
 
 watch(() => form.entries.length, () => {
   if (selectedRowIndex.value >= form.entries.length) {
     selectedRowIndex.value = Math.max(0, form.entries.length - 1)
   }
 })
-
-watch(() => financeCompany.currentCompanyId, async (companyId, previousCompanyId) => {
-  if (!viewActive.value || !companyId || companyId === previousCompanyId) return
-  await initializePage()
-})
-
-watch(() => [props.pageMode, detailVoucherNo.value] as const, async ([pageMode, voucherNo], previousValue) => {
-  if (!viewActive.value) return
-  if (previousValue && pageMode === previousValue[0] && voucherNo === previousValue[1]) return
-  await initializePage()
-})
-
-onMounted(activateView)
-onActivated(activateView)
-onDeactivated(deactivateView)
-
-onBeforeUnmount(() => {
-  deactivateView()
-})
-
-async function initializePage() {
-  const companyId = financeCompany.currentCompanyId
-  if (!companyId || !viewActive.value) return
-  const loadId = beginLoad()
-
-  if (isDetailRoute.value || isReviewMode.value) {
-    const voucherCompanyId = parseVoucherCompanyId(detailVoucherNo.value)
-    if (voucherCompanyId && voucherCompanyId !== companyId) {
-      if (!isLiveLoad(loadId)) return
-      editingExisting.value = false
-      voucherDetail.value = null
-      await router.replace({ name: backToListRouteName.value })
-      return
-    }
-    await loadDetail(companyId, detailVoucherNo.value, loadId)
-    return
-  }
-
-  if (!isLiveLoad(loadId)) return
-  editingExisting.value = false
-  voucherDetail.value = null
-  await loadMeta(companyId, loadId)
-}
-
-async function loadMeta(companyId = financeCompany.currentCompanyId, loadId = beginLoad()) {
-  if (!companyId) return
-  loading.value = true
-  initializing.value = true
-  try {
-    const res = await financeApi.getVoucherMeta({ companyId })
-    if (!isLiveLoad(loadId)) return
-    voucherMeta.value = res.data
-    const draft = readDraft(companyId)
-    hasDraft.value = Boolean(draft)
-    if (draft) {
-      applyDraft(draft, res.data, companyId)
-      ElMessage.success('已恢复暂存草稿')
-    } else {
-      resetFormFromMeta(res.data, companyId)
-    }
-    validationErrors.value = []
-    markCommitted()
-  } catch (error: unknown) {
-    if (isLiveLoad(loadId)) {
-      ElMessage.error(resolveErrorMessage(error, '加载凭证配置失败'))
-    }
-  } finally {
-    if (isLiveLoad(loadId)) {
-      initializing.value = false
-      loading.value = false
-    }
-  }
-}
-
-async function loadDetail(companyId: string, voucherNo: string, loadId = beginLoad()) {
-  if (!companyId || !voucherNo) return
-  loading.value = true
-  initializing.value = true
-  try {
-    const detailRes = await financeApi.getVoucherDetail(companyId, voucherNo)
-    if (!isLiveLoad(loadId)) return
-    const metaRes = await financeApi.getVoucherMeta({ companyId, billDate: detailRes.data.dbillDate, csign: detailRes.data.csign })
-    if (!isLiveLoad(loadId)) return
-    voucherMeta.value = metaRes.data
-    voucherDetail.value = detailRes.data
-    applyDetail(detailRes.data, metaRes.data)
-    editingExisting.value = false
-    hasDraft.value = false
-    validationErrors.value = []
-    markCommitted()
-  } catch (error: unknown) {
-    if (isLiveLoad(loadId)) {
-      ElMessage.error(resolveErrorMessage(error, '加载凭证详情失败'))
-    }
-  } finally {
-    if (isLiveLoad(loadId)) {
-      initializing.value = false
-      loading.value = false
-    }
-  }
-}
 
 function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.currentCompanyId) {
   form.companyId = companyId || meta.defaultCompanyId || ''
@@ -746,45 +683,6 @@ function applyDetail(detail: FinanceVoucherDetail, meta: FinanceVoucherMeta) {
   resetLeafSubjectHistory(form.entries, meta.accountOptions)
   selectedRowIndex.value = 0
 }
-function createEntry(defaultCurrency: string, rowNo: number): VoucherEntryRow {
-  entrySeed += 1
-  return {
-    localId: `entry-${Date.now()}-${entrySeed}`,
-    inid: rowNo,
-    cdigest: '',
-    ccode: '',
-    cdeptId: '',
-    cpersonId: '',
-    ccusId: '',
-    csupId: '',
-    citemClass: '',
-    citemId: '',
-    cashFlowItemId: undefined,
-    cashFlowItemName: '',
-    cexchName: defaultCurrency,
-    nfrat: 1,
-    md: '',
-    mc: '',
-    ndS: undefined,
-    ncS: undefined
-  }
-}
-
-function createEntryFromValue(entry: FinanceVoucherEntry, defaultCurrency: string, rowNo: number): VoucherEntryRow {
-  return {
-    ...createEntry(defaultCurrency, rowNo),
-    ...entry,
-    inid: rowNo,
-    cexchName: entry.cexchName || defaultCurrency,
-    nfrat: entry.nfrat ?? 1
-  }
-}
-
-function ensureMinimumRows(entries: VoucherEntryRow[], defaultCurrency: string, minRows = MIN_ENTRY_ROWS) {
-  const nextEntries = [...entries]
-  while (nextEntries.length < minRows) nextEntries.push(createEntry(defaultCurrency, nextEntries.length + 1))
-  return nextEntries.map((item, index) => ({ ...item, inid: index + 1 }))
-}
 
 function readDraft(companyId = financeCompany.currentCompanyId): FinanceVoucherSavePayload | null {
   const raw = window.sessionStorage.getItem(buildDraftStorageKey(companyId))
@@ -801,826 +699,8 @@ function clearDraft(companyId = financeCompany.currentCompanyId) {
   window.sessionStorage.removeItem(buildDraftStorageKey(companyId))
   hasDraft.value = false
 }
-
-function buildPayload(includeBlankRows = false): FinanceVoucherSavePayload {
-  const note = (remarkText.value || '').trim()
-  const entries = (includeBlankRows ? form.entries : effectiveRows.value).map((item, index) => ({
-    inid: index + 1,
-    cdigest: (item.cdigest || '').trim(),
-    ccode: item.ccode || '',
-    cdeptId: item.cdeptId || undefined,
-    cpersonId: item.cpersonId || undefined,
-    ccusId: item.ccusId || undefined,
-    csupId: item.csupId || undefined,
-    citemClass: item.citemClass || undefined,
-    citemId: item.citemId || undefined,
-    cashFlowItemId: item.cashFlowItemId,
-    cashFlowItemName: item.cashFlowItemName || undefined,
-    cexchName: item.cexchName || voucherMeta.value?.defaultCurrency || 'CNY',
-    nfrat: normalizeDecimal(item.nfrat),
-    md: normalizeMoneyField(item.md),
-    mc: normalizeMoneyField(item.mc),
-    ndS: normalizeQuantity(item.ndS),
-    ncS: normalizeQuantity(item.ncS)
-  }))
-
-  return {
-    companyId: form.companyId,
-    iperiod: form.iperiod,
-    csign: form.csign,
-    inoId: form.inoId,
-    dbillDate: form.dbillDate,
-    idoc: form.idoc,
-    cbill: form.cbill,
-    ctext1: '',
-    ctext2: note,
-    entries
-  }
-}
-
-function buildOptionValueSet(options?: FinanceVoucherOption[]) {
-  return new Set((options || []).map((item) => item.value).filter((value): value is string => Boolean(value)))
-}
-
-function normalizeText(value?: string | null) {
-  const text = String(value || '').trim()
-  return text || undefined
-}
-
-function isOptionEnabled(value?: number | null) {
-  return Number(value || 0) === 1
-}
-
-function isLeafAccountOption(option?: FinanceVoucherOption | null) {
-  return Number(option?.leafFlag || 0) === 1
-}
-
-function findAccountOptionByCode(code?: string | null, options = voucherMeta.value?.accountOptions || []) {
-  const normalizedCode = normalizeText(code)
-  return normalizedCode ? options.find((item) => item.value === normalizedCode) : undefined
-}
-
-function rememberLeafSubject(row: VoucherEntryRow, option?: FinanceVoucherOption | null) {
-  if (!option || !isLeafAccountOption(option)) {
-    delete lastValidLeafSubjectByRow[row.localId]
-    return
-  }
-  lastValidLeafSubjectByRow[row.localId] = {
-    code: option.value,
-    name: option.name
-  }
-}
-
-function clearAssistSelections(row: VoucherEntryRow) {
-  row.cdeptId = ''
-  row.cpersonId = ''
-  row.ccusId = ''
-  row.csupId = ''
-  row.citemClass = ''
-  row.citemId = ''
-}
-
-function clearRowCashFlow(row: VoucherEntryRow) {
-  row.cashFlowItemId = undefined
-  row.cashFlowItemName = ''
-}
-
-function requiresRowCashFlow(row?: VoucherEntryRow | null) {
-  if (!row?.ccode) return false
-  const account = findAccountOptionByCode(row.ccode)
-  return Number(account?.bcash || 0) === 1 && (!isZeroMoney(row.md || '0') || !isZeroMoney(row.mc || '0'))
-}
-
-function syncRowAccountState(row: VoucherEntryRow, options = voucherMeta.value?.accountOptions || []) {
-  const option = findAccountOptionByCode(row.ccode, options)
-  if (option?.name) {
-    row.ccodeName = option.name
-  } else if (!row.ccode) {
-    row.ccodeName = ''
-  }
-  if (!row.ccode) {
-    delete lastValidLeafSubjectByRow[row.localId]
-    return
-  }
-  if (isLeafAccountOption(option)) {
-    rememberLeafSubject(row, option)
-    return
-  }
-  delete lastValidLeafSubjectByRow[row.localId]
-}
-
-function resetLeafSubjectHistory(entries: VoucherEntryRow[], options = voucherMeta.value?.accountOptions || []) {
-  Object.keys(lastValidLeafSubjectByRow).forEach((key) => {
-    delete lastValidLeafSubjectByRow[key]
-  })
-  entries.forEach((row) => {
-    syncRowAccountState(row, options)
-  })
-}
-
-function focusSubjectField(row: VoucherEntryRow) {
-  if (typeof document === 'undefined') return
-  const selector = `[data-subject-row-id="${row.localId}"]`
-  const host = document.querySelector(selector)
-  if (!(host instanceof HTMLElement)) return
-  const focusTarget = host.matches('input,select,[tabindex]') ? host : host.querySelector<HTMLElement>('input,select,[tabindex],.el-select__wrapper')
-  focusTarget?.focus?.()
-}
-
-async function restoreInvalidLeafSubject(row: VoucherEntryRow, rowIndex = selectedRowIndex.value) {
-  if (leafSubjectWarningVisible.value) {
-    return false
-  }
-  const invalidLabel = resolveAccountLabel(row.ccode, row.ccodeName)
-  const previousLeafSubject = lastValidLeafSubjectByRow[row.localId]
-  leafSubjectWarningVisible.value = true
-  try {
-    await showBusinessWarning({
-      title: '科目不可录入',
-      message: `当前科目【${invalidLabel}】不是末级科目，不允许录入凭证，请重新选择末级科目。`,
-      confirmButtonText: '返回科目'
-    })
-  } finally {
-    leafSubjectWarningVisible.value = false
-  }
-
-  if (previousLeafSubject) {
-    row.ccode = previousLeafSubject.code
-    row.ccodeName = previousLeafSubject.name || findAccountOptionByCode(previousLeafSubject.code)?.name || ''
-  } else {
-    row.ccode = ''
-    row.ccodeName = ''
-  }
-  clearAssistSelections(row)
-  clearDisabledAssistFields(row, resolveAssistCapability(findAccountOptionByCode(row.ccode)))
-  selectedRowIndex.value = Math.max(0, Math.min(rowIndex, form.entries.length - 1))
-  await nextTick()
-  focusSubjectField(row)
-  return false
-}
-
-async function ensureSelectedRowUsesLeafSubject() {
-  if (isReadonlyMode.value) return true
-  const row = selectedRow.value
-  if (!row?.ccode) return true
-  const option = findAccountOptionByCode(row.ccode)
-  if (!option || isLeafAccountOption(option)) {
-    return true
-  }
-  return restoreInvalidLeafSubject(row, selectedRowIndex.value)
-}
-
-async function tryLeaveSubjectField(nextRowIndex = selectedRowIndex.value) {
-  const canLeave = await ensureSelectedRowUsesLeafSubject()
-  if (canLeave) {
-    selectRow(nextRowIndex)
-  }
-  return canLeave
-}
-
-function openCashFlowDialog(index = selectedRowIndex.value) {
-  const row = form.entries[index]
-  if (!row || isReadonlyMode.value || !requiresRowCashFlow(row)) {
-    return false
-  }
-  cashFlowDialogRowIndex.value = index
-  cashFlowDialogSelection.value = row.cashFlowItemId ? String(row.cashFlowItemId) : ''
-  cashFlowDialogVisible.value = true
-  selectRow(index)
-  return true
-}
-
-function closeCashFlowDialog() {
-  cashFlowDialogVisible.value = false
-  const rowIndex = cashFlowDialogRowIndex.value
-  cashFlowDialogRowIndex.value = null
-  cashFlowDialogSelection.value = ''
-  if (rowIndex === null || isReadonlyMode.value) {
-    return
-  }
-  const row = form.entries[rowIndex]
-  if (!row) return
-  nextTick(() => {
-    selectRow(rowIndex)
-    focusSubjectField(row)
-  })
-}
-
-function confirmCashFlowSelection() {
-  const rowIndex = cashFlowDialogRowIndex.value
-  if (rowIndex === null) {
-    cashFlowDialogVisible.value = false
-    return
-  }
-  const row = form.entries[rowIndex]
-  const option = cashFlowOptionMap.value.get(cashFlowDialogSelection.value)
-  if (!row || !option) {
-    ElMessage.warning('请选择现金流量')
-    return
-  }
-  row.cashFlowItemId = Number(option.value)
-  row.cashFlowItemName = option.name || option.label || option.code || ''
-  cashFlowDialogVisible.value = false
-  cashFlowDialogRowIndex.value = null
-  cashFlowDialogSelection.value = ''
-}
-
-function ensureRowCashFlowState(row: VoucherEntryRow) {
-  if (!requiresRowCashFlow(row)) {
-    clearRowCashFlow(row)
-    return false
-  }
-  if (row.cashFlowItemId) {
-    const option = cashFlowOptionMap.value.get(String(row.cashFlowItemId))
-    row.cashFlowItemName = option?.name || option?.label || row.cashFlowItemName || ''
-    return false
-  }
-  return true
-}
-
-function resolveAssistCapability(option?: FinanceVoucherOption | null): VoucherAssistCapability {
-  return {
-    department: isOptionEnabled(option?.bdept),
-    employee: isOptionEnabled(option?.bperson),
-    customer: isOptionEnabled(option?.bcus),
-    supplier: isOptionEnabled(option?.bsup),
-    project: isOptionEnabled(option?.bitem),
-    lockedProjectClassCode: normalizeText(option?.cassItem)
-  }
-}
-
-function appendDisplayOption(options: FinanceVoucherOption[], value?: string, name?: string) {
-  const normalizedValue = normalizeText(value)
-  if (!normalizedValue || options.some((item) => item.value === normalizedValue)) {
-    return options
-  }
-  return [
-    ...options,
-    {
-      value: normalizedValue,
-      code: normalizedValue,
-      name,
-      label: name ? `${normalizedValue}  ${name}` : normalizedValue
-    }
-  ]
-}
-
-function clearDisabledAssistFields(row: VoucherEntryRow, capability: VoucherAssistCapability) {
-  if (!capability.department) row.cdeptId = ''
-  if (!capability.employee) row.cpersonId = ''
-  if (!capability.customer) row.ccusId = ''
-  if (!capability.supplier) row.csupId = ''
-  if (!capability.project) {
-    row.citemClass = ''
-    row.citemId = ''
-    return
-  }
-  if (capability.lockedProjectClassCode && row.citemClass !== capability.lockedProjectClassCode) {
-    row.citemClass = capability.lockedProjectClassCode
-  }
-}
-
-function syncSelectedRowAssistState() {
-  if (isReadonlyMode.value) return
-  const row = selectedRow.value
-  if (!row) return
-  const capability = resolveAssistCapability(accountOptionMap.value.get(row.ccode || ''))
-  clearDisabledAssistFields(row, capability)
-  if (!row.citemId) return
-  const project = (voucherMeta.value?.projectOptions || []).find((item) => item.value === row.citemId)
-  if (!project) {
-    row.citemId = ''
-    return
-  }
-  const projectClassCode = capability.lockedProjectClassCode || row.citemClass
-  if (projectClassCode && project.parentValue && project.parentValue !== projectClassCode) {
-    row.citemId = ''
-  }
-}
-
-function buildDepartmentTreeOptions(options: FinanceVoucherOption[]) {
-  const nodeMap = new Map<string, DepartmentTreeOption>()
-  const roots: DepartmentTreeOption[] = []
-
-  options.forEach((item) => {
-    nodeMap.set(item.value, {
-      ...item,
-      label: formatVoucherOptionLabel(item),
-      children: []
-    })
-  })
-
-  options.forEach((item) => {
-    const node = nodeMap.get(item.value)
-    if (!node) return
-    const parentValue = normalizeText(item.parentValue)
-    if (parentValue && parentValue !== item.value) {
-      const parentNode = nodeMap.get(parentValue)
-      if (parentNode) {
-        parentNode.children.push(node)
-        return
-      }
-    }
-    roots.push(node)
-  })
-
-  return roots
-}
-
-function validateEntryLength(row: VoucherEntryRow, rowNo: number, errors: string[]) {
-  ;(Object.entries(ENTRY_FIELD_MAX_LENGTH) as Array<[keyof typeof ENTRY_FIELD_MAX_LENGTH, number]>).forEach(([fieldKey, maxLength]) => {
-    const value = row[fieldKey]
-    if (typeof value !== 'string') {
-      return
-    }
-    const normalized = value.trim()
-    if (normalized.length > maxLength) {
-      errors.push(`第 ${rowNo} 行${ENTRY_FIELD_LABELS[fieldKey]}最多 ${maxLength} 个字符`)
-    }
-  })
-}
-
-function validateEntrySelection(row: VoucherEntryRow, rowNo: number, errors: string[]) {
-  const meta = voucherMeta.value
-  if (!meta) {
-    return
-  }
-
-  const accountMap = new Map((meta.accountOptions || []).map((item) => [item.value, item] as const))
-  const departmentValues = buildOptionValueSet(meta.departmentOptions)
-  const employeeValues = buildOptionValueSet(meta.employeeOptions)
-  const customerValues = buildOptionValueSet(meta.customerOptions)
-  const supplierValues = buildOptionValueSet(meta.supplierOptions)
-  const projectClassValues = buildOptionValueSet(meta.projectClassOptions)
-  const projectMap = new Map((meta.projectOptions || []).map((item) => [item.value, item] as const))
-  const cashFlowValues = buildOptionValueSet(meta.cashFlowOptions)
-  const account = row.ccode ? accountMap.get(row.ccode) : undefined
-  const capability = resolveAssistCapability(account)
-
-  if (row.ccode && !account) {
-    errors.push(`第 ${rowNo} 行科目不存在或当前不可用`)
-  }
-  if (account && !isLeafAccountOption(account)) {
-    errors.push(`第 ${rowNo} 行科目【${formatVoucherOptionLabel(account)}】不是末级科目，不允许录入凭证`)
-  }
-  if (row.cdeptId && !departmentValues.has(row.cdeptId)) {
-    errors.push(`第 ${rowNo} 行部门不存在或当前不可用`)
-  }
-  if (row.cpersonId && !employeeValues.has(row.cpersonId)) {
-    errors.push(`第 ${rowNo} 行人员不存在或当前不可用`)
-  }
-  if (row.ccusId && !customerValues.has(row.ccusId)) {
-    errors.push(`第 ${rowNo} 行客户不存在或当前不可用`)
-  }
-  if (row.csupId && !supplierValues.has(row.csupId)) {
-    errors.push(`第 ${rowNo} 行供应商不存在或当前不可用`)
-  }
-  if (row.cdeptId && !capability.department) {
-    errors.push(`第 ${rowNo} 行当前科目未启用部门辅助核算`)
-  }
-  if (row.cpersonId && !capability.employee) {
-    errors.push(`第 ${rowNo} 行当前科目未启用人员辅助核算`)
-  }
-  if (row.ccusId && !capability.customer) {
-    errors.push(`第 ${rowNo} 行当前科目未启用客户辅助核算`)
-  }
-  if (row.csupId && !capability.supplier) {
-    errors.push(`第 ${rowNo} 行当前科目未启用供应商辅助核算`)
-  }
-  if (row.citemClass && !projectClassValues.has(row.citemClass)) {
-    errors.push(`第 ${rowNo} 行项目分类不存在或当前不可用`)
-  }
-  if ((row.citemClass || row.citemId) && !capability.project) {
-    errors.push(`第 ${rowNo} 行当前科目未启用项目辅助核算`)
-  }
-  if (capability.lockedProjectClassCode && row.citemClass && row.citemClass !== capability.lockedProjectClassCode) {
-    errors.push(`第 ${rowNo} 行项目分类必须为科目挂载的项目分类【${capability.lockedProjectClassCode}】`)
-  }
-  if (row.citemId) {
-    if (!row.citemClass) {
-      errors.push(`第 ${rowNo} 行选择项目时必须同时选择项目分类`)
-      return
-    }
-    const project = projectMap.get(row.citemId)
-    if (!project) {
-      errors.push(`第 ${rowNo} 行项目不存在或当前不可用`)
-      return
-    }
-    if (project.parentValue && project.parentValue !== row.citemClass) {
-      errors.push(`第 ${rowNo} 行项目分类与项目归属不匹配`)
-    }
-  }
-  if (Number(account?.bcash || 0) === 1 && (!isZeroMoney(row.md || '0') || !isZeroMoney(row.mc || '0'))) {
-    if (!row.cashFlowItemId) {
-      errors.push(`第 ${rowNo} 行科目已启用现金管理，必须选择现金流量`)
-    } else if (!cashFlowValues.has(String(row.cashFlowItemId))) {
-      errors.push(`第 ${rowNo} 行现金流量不存在或当前不可用`)
-    }
-  }
-}
-
-function validateVoucher(showToast = false) {
-  const errors: string[] = []
-  const entries = effectiveRows.value
-
-  if (!form.companyId) errors.push('当前公司未设置')
-  if (!form.dbillDate) errors.push('请选择制单日期')
-  if (!form.csign) errors.push('请选择凭证类别')
-  if (!form.iperiod || form.iperiod < 1 || form.iperiod > 12) errors.push('会计期间必须在 1 到 12 之间')
-  if (entries.length < 2) errors.push('至少需要两条有效分录')
-
-  entries.forEach((row, index) => {
-    const rowNo = index + 1
-    const debit = normalizeMoneyField(row.md)
-    const credit = normalizeMoneyField(row.mc)
-    if (!row.cdigest.trim()) errors.push(`第 ${rowNo} 行摘要不能为空`)
-    if (!row.ccode) errors.push(`第 ${rowNo} 行请选择科目`)
-    validateEntryLength(row, rowNo, errors)
-    validateEntrySelection(row, rowNo, errors)
-    if (debit && credit) errors.push(`第 ${rowNo} 行借贷不能同时填写`)
-    if (!debit && !credit) errors.push(`第 ${rowNo} 行借方或贷方至少填写一项`)
-    if ((row.nfrat ?? 1) <= 0) errors.push(`第 ${rowNo} 行汇率必须大于 0`)
-  })
-
-  if (entries.length >= 2 && !isZeroMoney(balanceGap.value)) errors.push('借方合计必须等于贷方合计')
-
-  validationErrors.value = Array.from(new Set(errors))
-  if (showToast) {
-    validationErrors.value.length ? ElMessage.warning(validationErrors.value[0]) : ElMessage.success('凭证校验通过，借贷已平衡')
-  }
-  return validationErrors.value.length === 0
-}
-
-function isEntryBlank(row: VoucherEntryRow) {
-  return !row.cdigest.trim() && !row.ccode && !row.cdeptId && !row.cpersonId && !row.ccusId && !row.csupId && !row.citemClass && !row.citemId && !row.cashFlowItemId && !normalizeMoneyField(row.md) && !normalizeMoneyField(row.mc) && !row.ndS && !row.ncS
-}
-
-function sumRows(rows: FinanceVoucherEntry[], field: 'md' | 'mc') {
-  return rows.reduce((total, row) => addMoney(total, normalizeMoneyField(row[field]) || '0.00'), '0.00')
-}
-
-function normalizeDecimal(value?: number) {
-  if (value === undefined || value === null || Number.isNaN(Number(value)) || Number(value) === 0) return undefined
-  return Number(Number(value).toFixed(2))
-}
-
-function normalizeMoneyField(value?: string) {
-  if (!value) return undefined
-  const normalized = normalizeMoneyValue(value, { fallback: '' })
-  return isZeroMoney(normalized) ? undefined : normalized
-}
-
-function subtractVoucherAmount(left: string, right: string) {
-  return addMoney(left, right ? `-${right}` : '0.00')
-}
-
-function normalizeQuantity(value?: number) {
-  if (value === undefined || value === null || Number.isNaN(Number(value)) || Number(value) === 0) return undefined
-  return Number(Number(value).toFixed(6))
-}
-
-function inferPeriod(value: string) {
-  const month = Number(value?.split('-')?.[1])
-  return Number.isFinite(month) && month >= 1 && month <= 12 ? month : undefined
-}
-
-async function refreshSuggestedVoucherNo() {
-  try {
-    const companyId = financeCompany.currentCompanyId || form.companyId
-    const res = await financeApi.getVoucherMeta({ companyId, billDate: form.dbillDate, csign: form.csign })
-    voucherMeta.value = res.data
-    resetLeafSubjectHistory(form.entries, res.data.accountOptions)
-    form.companyId = companyId || ''
-    form.inoId = res.data.suggestedVoucherNo
-    if (!form.cbill) form.cbill = res.data.defaultMaker
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '刷新凭证编号失败'))
-  }
-}
 function selectRow(index: number) {
   selectedRowIndex.value = Math.max(0, Math.min(index, form.entries.length - 1))
-}
-
-function handleSubjectChange(index: number, value?: string | number) {
-  selectRow(index)
-  const row = form.entries[index]
-  if (!row) return
-  row.ccode = normalizeText(typeof value === 'number' ? String(value) : value) || ''
-  const option = findAccountOptionByCode(row.ccode)
-  row.ccodeName = option?.name || ''
-  if (!row.ccode) {
-    delete lastValidLeafSubjectByRow[row.localId]
-    clearAssistSelections(row)
-    clearRowCashFlow(row)
-    return
-  }
-  if (isLeafAccountOption(option)) {
-    rememberLeafSubject(row, option)
-  }
-  if (Number(option?.bcash || 0) !== 1) {
-    clearRowCashFlow(row)
-  } else {
-    ensureRowCashFlowState(row)
-  }
-}
-
-function handleSubjectFieldFocus(index: number) {
-  if (index === selectedRowIndex.value) {
-    selectRow(index)
-    return
-  }
-  void tryLeaveSubjectField(index)
-}
-
-function handleSubjectDropdownVisibleChange(index: number, visible: boolean) {
-  if (!visible) return
-  handleSubjectFieldFocus(index)
-}
-
-function handleEntryFieldFocus(index: number) {
-  void tryLeaveSubjectField(index)
-}
-
-function handleAssistFieldFocus() {
-  void ensureSelectedRowUsesLeafSubject()
-}
-
-function handleCashFlowFieldFocus() {
-  if (isReadonlyMode.value) return
-  if (!ensureRowCashFlowState(selectedRow.value)) {
-    if (requiresRowCashFlow(selectedRow.value)) {
-      void nextTick()
-    }
-    return
-  }
-  openCashFlowDialog(selectedRowIndex.value)
-}
-
-function insertEntryAfter(index: number) {
-  if (isReadonlyMode.value) return
-  const currency = voucherMeta.value?.defaultCurrency || 'CNY'
-  form.entries.splice(index + 1, 0, createEntry(currency, index + 2))
-  form.entries = ensureMinimumRows(form.entries, currency, Math.max(form.entries.length, MIN_ENTRY_ROWS))
-  resetLeafSubjectHistory(form.entries)
-  selectRow(index + 1)
-}
-
-function removeSelectedEntry() {
-  if (isReadonlyMode.value) return
-  if (effectiveRows.value.length <= 2 && !isEntryBlank(selectedRow.value)) {
-    ElMessage.warning('至少保留两条有效分录')
-    return
-  }
-  form.entries.splice(selectedRowIndex.value, 1)
-  form.entries = ensureMinimumRows(form.entries, voucherMeta.value?.defaultCurrency || 'CNY', Math.max(form.entries.length, 2))
-  resetLeafSubjectHistory(form.entries)
-  selectRow(Math.max(0, selectedRowIndex.value - 1))
-}
-
-async function handleNewVoucher() {
-  try {
-    await ElMessageBox.confirm('将清空当前录入内容并开始新的凭证，是否继续？', '新增凭证', {
-      type: 'warning',
-      confirmButtonText: '继续',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
-
-  editingExisting.value = false
-  voucherDetail.value = null
-  clearDraft()
-  validationErrors.value = []
-
-  if (isDetailRoute.value || isReviewMode.value) {
-    await router.push({ name: 'finance-new-voucher' })
-    return
-  }
-
-  if (voucherMeta.value) {
-    resetFormFromMeta(voucherMeta.value, financeCompany.currentCompanyId)
-    markCommitted()
-  } else {
-    await loadMeta(financeCompany.currentCompanyId)
-  }
-}
-
-function enterEditMode() {
-  if (!voucherDetail.value?.editable) {
-    ElMessage.warning('当前凭证状态不允许修改')
-    return
-  }
-  if (!canEditExisting.value) {
-    ElMessage.warning('当前账号没有修改凭证权限')
-    return
-  }
-  editingExisting.value = true
-}
-
-async function handleSave() {
-  if (!(await ensureSelectedRowUsesLeafSubject())) return
-  if (ensureRowCashFlowState(selectedRow.value)) {
-    openCashFlowDialog(selectedRowIndex.value)
-    return
-  }
-  if (!validateVoucher(true)) return
-
-  saving.value = true
-  try {
-    if (isDetailRoute.value && detailVoucherNo.value) {
-      const res = await financeApi.updateVoucher(financeCompany.currentCompanyId || form.companyId, detailVoucherNo.value, buildPayload())
-      ElMessage.success(`凭证修改成功：${res.data.voucherNo}`)
-      await loadDetail(financeCompany.currentCompanyId || form.companyId, detailVoucherNo.value)
-      return
-    }
-
-    const currentContext = { companyId: financeCompany.currentCompanyId || form.companyId, billDate: form.dbillDate, csign: form.csign }
-    const res = await financeApi.createVoucher(buildPayload())
-    clearDraft()
-    ElMessage.success(`凭证保存成功：${res.data.voucherNo}`)
-    const nextMeta = await financeApi.getVoucherMeta(currentContext)
-    voucherMeta.value = nextMeta.data
-    resetFormFromMeta(nextMeta.data, currentContext.companyId)
-    validationErrors.value = []
-    markCommitted()
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, isDetailRoute.value ? '修改凭证失败' : '保存凭证失败'))
-  } finally {
-    saving.value = false
-  }
-}
-
-async function handleReviewVoucher() {
-  const companyId = financeCompany.currentCompanyId || form.companyId
-  if (!companyId || !detailVoucherNo.value) return
-
-  reviewActing.value = true
-  currentToolbarLoadingKey.value = 'review'
-  try {
-    const res = await financeApi.reviewVoucher(companyId, detailVoucherNo.value)
-    ElMessage.success(`凭证审核成功：${res.data.voucherNo}`)
-    if (res.data.nextVoucherNo) {
-      await router.replace({
-        name: 'finance-review-voucher-detail',
-        params: { voucherNo: res.data.nextVoucherNo }
-      })
-      return
-    }
-    await loadDetail(companyId, detailVoucherNo.value)
-    if (res.data.lastVoucherOfMonth) {
-      ElMessage.warning('当前是最后一张')
-    }
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '审核凭证失败'))
-  } finally {
-    currentToolbarLoadingKey.value = ''
-    reviewActing.value = false
-  }
-}
-
-async function handleUnreviewVoucher() {
-  const companyId = financeCompany.currentCompanyId || form.companyId
-  if (!companyId || !detailVoucherNo.value) return
-
-  reviewActing.value = true
-  currentToolbarLoadingKey.value = 'unreview'
-  try {
-    const res = await financeApi.unreviewVoucher(companyId, detailVoucherNo.value)
-    ElMessage.success(`凭证反审核成功：${res.data.voucherNo}`)
-    await loadDetail(companyId, detailVoucherNo.value)
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '反审核凭证失败'))
-  } finally {
-    currentToolbarLoadingKey.value = ''
-    reviewActing.value = false
-  }
-}
-
-async function handleToggleVoucherError() {
-  const companyId = financeCompany.currentCompanyId || form.companyId
-  if (!companyId || !detailVoucherNo.value) return
-
-  const clearing = voucherDetail.value?.status === 'ERROR'
-  reviewActing.value = true
-  currentToolbarLoadingKey.value = 'markError'
-  try {
-    const res = clearing
-      ? await financeApi.clearVoucherError(companyId, detailVoucherNo.value)
-      : await financeApi.markVoucherError(companyId, detailVoucherNo.value)
-    ElMessage.success(clearing ? `凭证取消错误成功：${res.data.voucherNo}` : `凭证标记错误成功：${res.data.voucherNo}`)
-    await loadDetail(companyId, detailVoucherNo.value)
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, clearing ? '取消错误失败' : '标记错误失败'))
-  } finally {
-    currentToolbarLoadingKey.value = ''
-    reviewActing.value = false
-  }
-}
-
-async function handleExportCurrentVoucher() {
-  const companyId = financeCompany.currentCompanyId || form.companyId
-  if (!companyId || !detailVoucherNo.value) return
-  try {
-    await financeApi.exportVouchers({ companyId, voucherNo: detailVoucherNo.value })
-    ElMessage.success('当前凭证已开始导出')
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '导出当前凭证失败'))
-  }
-}
-
-function handleFindInEntries() {
-  const keyword = window.prompt('请输入关键字（摘要 / 科目编码 / 科目名称）')
-  const normalizedKeyword = normalizeText(keyword)?.toLowerCase()
-  if (!normalizedKeyword) {
-    return
-  }
-  const matchedIndex = form.entries.findIndex((row) => {
-    return [row.cdigest, row.ccode, row.ccodeName]
-      .filter((item): item is string => Boolean(item))
-      .some((item) => item.toLowerCase().includes(normalizedKeyword))
-  })
-  if (matchedIndex < 0) {
-    ElMessage.warning('当前凭证未找到匹配分录')
-    return
-  }
-  selectRow(matchedIndex)
-  ElMessage.success(`已定位到第 ${matchedIndex + 1} 行`)
-}
-
-function handleToolbarAction(action: ToolbarActionKey) {
-  if (action === 'new') return void handleNewVoucher()
-  if (action === 'modify') return void enterEditMode()
-  if (action === 'insert') return insertEntryAfter(selectedRowIndex.value)
-  if (action === 'delete') return removeSelectedEntry()
-  if (action === 'save') return void handleSave()
-  if (action === 'review') return void handleReviewVoucher()
-  if (action === 'unreview') return void handleUnreviewVoucher()
-  if (action === 'markError') return void handleToggleVoucherError()
-  if (action === 'find') return void handleFindInEntries()
-  if (action === 'export' && isReviewMode.value) return void handleExportCurrentVoucher()
-  if (action === 'cashFlow') {
-    if (isReadonlyMode.value) return
-    if (!ensureRowCashFlowState(selectedRow.value)) return
-    openCashFlowDialog(selectedRowIndex.value)
-    return
-  }
-
-  const descriptions: Record<Exclude<ToolbarActionKey, 'new' | 'modify' | 'insert' | 'delete' | 'save' | 'review' | 'unreview' | 'markError' | 'find'>, string> = {
-    print: '后续可接入正式打印模板与套打配置。',
-    export: '后续可扩展为 Excel、PDF 或外部接口输出。',
-    copy: '后续可按原凭证复制摘要、科目和金额。',
-    reverse: '后续可接入红字冲销与反向凭证生成流程。',
-    void: '后续可接入作废状态流转和权限校验。',
-    searchReplace: '后续可在分录摘要、科目和辅助项中做批量查找替换。',
-    cashFlow: '请选择当前分录对应的现金流量。',
-    assist: '当前下方辅助核算区域已可录入基础信息，后续可扩展为侧边明细抽屉。',
-    balance: '后续可联动余额查询与科目实时余额提示。',
-    calculator: '后续可接入悬浮计算器或公式辅助输入能力。'
-  }
-
-  actionDialog.title = toolbarGroups.value.flatMap((group) => group.actions).find((item) => item.key === action)?.label || '提示'
-  actionDialog.description = descriptions[action]
-  actionDialog.visible = true
-}
-
-function handleGridKeydown(event: KeyboardEvent, index: number) {
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    void tryLeaveSubjectField(index - 1)
-  }
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    void tryLeaveSubjectField(index + 1)
-  }
-  if (!isReadonlyMode.value && event.key === 'Insert') {
-    event.preventDefault()
-    insertEntryAfter(index)
-  }
-}
-
-function handleAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 'mc') {
-  handleGridKeydown(event, index)
-  if (isReadonlyMode.value) return
-  const row = form.entries[index]
-  if (!row) return
-  if (field === 'md' && row.md) {
-    row.mc = ''
-    row.ncS = undefined
-  }
-  if (field === 'mc' && row.mc) {
-    row.md = ''
-    row.ndS = undefined
-  }
-}
-
-function handleAmountBlur(index: number, _field: 'md' | 'mc') {
-  if (isReadonlyMode.value) return
-  const row = form.entries[index]
-  if (!row) return
-  if (ensureRowCashFlowState(row)) {
-    openCashFlowDialog(index)
-  }
 }
 
 function formatVoucherOptionLabel(option?: FinanceVoucherOption | null) {
@@ -1631,104 +711,17 @@ function formatVoucherOptionLabel(option?: FinanceVoucherOption | null) {
   return option.label || option.value
 }
 
-function filterDepartmentTreeNode(query: string, data?: DepartmentTreeOption) {
-  const keyword = normalizeText(query)?.toLowerCase()
-  if (!keyword) return true
-  return [data?.label, data?.code, data?.name, data?.value]
-    .filter((item): item is string => Boolean(item))
-    .some((item) => item.toLowerCase().includes(keyword))
-}
-
-function resolveAccountLabel(code?: string, accountName?: string) {
-  if (!code) return '当前行'
-  const matched = voucherMeta.value?.accountOptions.find((item) => item.value === code)
-  if (matched) return formatVoucherOptionLabel(matched)
-  if (accountName) return `${code}  ${accountName}`
-  return code
-}
-
-function resolveCompanyName(companyId?: string) {
-  if (!companyId) return '未设置'
-  const matched = voucherMeta.value?.companyOptions.find((item) => item.value === companyId)
-  return matched?.name || companyId
-}
-
 function buildDraftStorageKey(companyId = financeCompany.currentCompanyId) {
   return `${DRAFT_STORAGE_KEY}:${companyId || 'default'}`
-}
-
-function buildSnapshot() {
-  return JSON.stringify(buildPayload(true))
 }
 
 function markCommitted() {
   lastCommittedSnapshot.value = buildSnapshot()
 }
 
-async function confirmCompanySwitch() {
-  if (!hasUnsavedChanges.value) {
-    return true
-  }
-  try {
-    await ElMessageBox.confirm('切换公司后将丢弃当前凭证未保存内容，并按新公司重新加载，是否继续？', '切换公司', {
-      type: 'warning',
-      confirmButtonText: '继续切换',
-      cancelButtonText: '取消'
-    })
-    if (isDetailRoute.value || isReviewMode.value) {
-      editingExisting.value = false
-      await router.replace({ name: backToListRouteName.value })
-    }
-    return true
-  } catch {
-    return false
-  }
-}
-
 function parseVoucherCompanyId(voucherNo: string) {
   const parts = String(voucherNo || '').split('~')
   return parts.length === 4 ? parts[0] : ''
-}
-
-function activateView() {
-  if (viewActive.value) return
-  viewActive.value = true
-  registerCompanySwitchGuard()
-  void initializePage()
-}
-
-function deactivateView() {
-  if (!viewActive.value && !guardRegistered) return
-  viewActive.value = false
-  loading.value = false
-  initializing.value = false
-  invalidatePendingLoads()
-  unregisterCompanySwitchGuard()
-}
-
-function beginLoad() {
-  loadSequence += 1
-  return loadSequence
-}
-
-function invalidatePendingLoads() {
-  loadSequence += 1
-}
-
-function isLiveLoad(loadId: number) {
-  return viewActive.value && loadId === loadSequence
-}
-
-function registerCompanySwitchGuard() {
-  if (guardRegistered) return
-  financeCompany.registerSwitchGuard(COMPANY_SWITCH_GUARD_KEY, confirmCompanySwitch)
-  guardRegistered = true
-}
-
-function unregisterCompanySwitchGuard() {
-  if (!guardRegistered) return
-  financeCompany.unregisterSwitchGuard(COMPANY_SWITCH_GUARD_KEY)
-  guardRegistered = false
 }
 
 function resolveErrorMessage(error: unknown, fallback: string) {

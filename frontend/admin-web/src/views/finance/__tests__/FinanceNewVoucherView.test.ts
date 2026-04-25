@@ -72,28 +72,36 @@ vi.mock('@/utils/money', () => ({
   normalizeMoneyValue: (value?: string, options?: { fallback?: string }) => value || options?.fallback || ''
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
-vi.mock('@element-plus/icons-vue', () => ({
-  CircleClose: { template: '<span />' },
-  Coin: { template: '<span />' },
-  Delete: { template: '<span />' },
-  DocumentCopy: { template: '<span />' },
-  Download: { template: '<span />' },
-  Edit: { template: '<span />' },
-  Plus: { template: '<span />' },
-  Printer: { template: '<span />' },
-  RefreshLeft: { template: '<span />' },
-  Search: { template: '<span />' },
-  Select: { template: '<span />' },
-  Tickets: { template: '<span />' },
-  Top: { template: '<span />' },
-  TrendCharts: { template: '<span />' },
-  Tools: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@element-plus/icons-vue')>()
+  return {
+    ...actual,
+    CircleClose: { template: '<span />' },
+    Coin: { template: '<span />' },
+    Delete: { template: '<span />' },
+    DocumentCopy: { template: '<span />' },
+    Download: { template: '<span />' },
+    Edit: { template: '<span />' },
+    Plus: { template: '<span />' },
+    Printer: { template: '<span />' },
+    RefreshLeft: { template: '<span />' },
+    Search: { template: '<span />' },
+    Select: { template: '<span />' },
+    Tickets: { template: '<span />' },
+    Top: { template: '<span />' },
+    TrendCharts: { template: '<span />' },
+    Tools: { template: '<span />' }
+  }
+})
 
 const InputStub = defineComponent({
   props: {
