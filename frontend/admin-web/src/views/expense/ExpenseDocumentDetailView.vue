@@ -770,927 +770,177 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import {
-  expenseApi,
-  expenseApprovalApi,
-  type ExpenseActionUserOption,
-  type ExpenseApprovalNodeStatus,
-  type ExpenseApprovalTimelineItem,
-  type ExpenseDetailInstanceDetail,
-  type ExpenseDocumentDetail,
-  type ExpenseDocumentNavigation,
-  type ProcessFlowNode,
-  type ProcessFormDesignSchema,
-  type ProcessFormOption
-} from '@/api'
-import type { ExpenseDocumentRelationBinding, ExpenseDocumentWriteOffBinding } from '@/api/modules/expense-types'
+import { type ProcessFormDesignSchema } from '@/api'
 import ExpenseFormReadonlyRenderer from './components/ExpenseFormReadonlyRenderer.vue'
 import ExpenseInvoiceWorkbench from './components/ExpenseInvoiceWorkbench.vue'
 import ExpenseDocumentPrintSheet from './components/ExpenseDocumentPrintSheet.vue'
 import { buildAuthorizedAttachmentPreviewUrl } from './expenseInvoicePreview'
-import { useReadonlyPayeeLookups } from './useReadonlyPayeeLookups'
-import {
-  resolveDisabledExpenseDetailActionHint,
-  resolveExpenseDetailActions,
-  type ExpenseDetailActionItem as ActionItem,
-  type ExpenseDetailActionKey as ActionKey
-} from './expenseDetailActionMatrix'
+import { useExpenseDocumentDetailRuntime } from './composables/useExpenseDocumentDetailRuntime'
+import { useExpenseDocumentDetailApprovalRuntime } from './composables/useExpenseDocumentDetailApprovalRuntime'
+import { useExpenseDocumentDetailActionOwner } from './composables/useExpenseDocumentDetailActionOwner'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
-import { formatMoney } from '@/utils/money'
-import { buildExpenseDetailPrintHref, isExpenseDetailPrintMode, loadExpenseDocumentPrintBundle, openExpensePrintWindow } from './expensePrintSupport'
-
-type UserActionMode = 'transfer' | 'add-sign' | ''
-type TaskActionMode = 'approve' | 'reject' | ''
-
-type RejectTargetOption = {
-  nodeKey: string
-  nodeName: string
-  optionLabel: string
-  isSubmitter?: boolean
-}
 
 const route = useRoute()
-const router = useRouter()
-const detailLoading = ref(false)
-const navigationLoading = ref(false)
-const detail = ref<ExpenseDocumentDetail | null>(null)
-const relatedBindingsExpanded = ref(false)
-const writeOffBindingsExpanded = ref(false)
-const detailLoadError = ref('')
-const printLoading = ref(false)
-const printLoadError = ref('')
-const printExpenseDetails = ref<ExpenseDetailInstanceDetail[]>([])
-const navigation = ref<ExpenseDocumentNavigation>({})
-const activeExpenseDetailNo = ref('')
-const expenseDetailLoadingNo = ref('')
-const expenseDetailCache = ref<Record<string, ExpenseDetailInstanceDetail>>({})
-const expenseDetailErrors = ref<Record<string, string>>({})
-const { vendorOptionMap, payeeOptionMap, payeeAccountOptionMap, syncReadonlyPayeeLookups, syncReadonlyPayeeLookupsBatch } = useReadonlyPayeeLookups()
 const storedUser = (readStoredUser() || {}) as { userId?: number; permissionCodes?: string[] }
-const commentDialogVisible = ref(false)
-const commentSubmitting = ref(false)
-const commentFileInput = ref<HTMLInputElement | null>(null)
-const commentForm = ref({
-  comment: '',
-  attachmentFileNames: [] as string[]
-})
-const taskActionDialogVisible = ref(false)
-const taskActionMode = ref<TaskActionMode>('')
-const taskActionSubmitting = ref(false)
-const taskActionForm = ref({
-  comment: '',
-  targetNodeKey: ''
-})
-const manualApproverSubmitting = ref(false)
-const manualApproverForm = ref({
-  userIds: [] as number[]
-})
-const userActionDialogVisible = ref(false)
-const userActionMode = ref<UserActionMode>('')
-const userActionSubmitting = ref(false)
-const userOptionsLoading = ref(false)
-const userOptions = ref<ExpenseActionUserOption[]>([])
-const userActionForm = ref({
-  targetUserId: undefined as number | undefined,
-  remark: ''
-})
-const emptyExpenseDetailSchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
-let detailRequestVersion = 0
-let navigationRequestVersion = 0
-let lastPrintedDocumentCode = ''
-
-const amountText = computed(() => `¥ ${formatDetailMoney(detail.value?.totalAmount)}`)
-const isPrintMode = computed(() => isExpenseDetailPrintMode(route.query))
-const activeExpenseDetail = computed(() => (
-  activeExpenseDetailNo.value ? expenseDetailCache.value[activeExpenseDetailNo.value] || null : null
-))
-const activeExpenseDetailError = computed(() => (
-  activeExpenseDetailNo.value ? expenseDetailErrors.value[activeExpenseDetailNo.value] || '' : ''
-))
-const activeExpenseDetailSummary = computed(() => (
-  detail.value?.expenseDetails?.find((item) => item.detailNo === activeExpenseDetailNo.value) || null
-))
 const currentUserId = computed(() => Number(storedUser.userId || 0))
 const permissionCodes = computed(() => storedUser.permissionCodes || [])
-const approvableTasks = computed(() =>
-  (detail.value?.currentTasks || []).filter((task) => task.assigneeUserId === currentUserId.value && task.nodeType === 'APPROVAL')
-)
-const currentApprovalNode = computed<ProcessFlowNode | null>(() => {
-  const taskNodeKey = approvableTasks.value[0]?.nodeKey || detail.value?.currentNodeKey || ''
-  if (!taskNodeKey) {
-    return null
-  }
-  const flowNodes = Array.isArray(detail.value?.flowSnapshot?.nodes) ? detail.value?.flowSnapshot?.nodes || [] : []
-  return flowNodes.find((node) => node.nodeKey === taskNodeKey) || null
-})
-const currentApprovalSpecialSettings = computed(() => new Set(
-  Array.isArray(currentApprovalNode.value?.config?.specialSettings)
-    ? currentApprovalNode.value?.config?.specialSettings || []
-    : []
-))
-const canModifyCurrentTask = computed(() => (
-  currentApprovalSpecialSettings.value.has('ALLOW_EDIT_FORM_MODULE')
-  || currentApprovalSpecialSettings.value.has('ALLOW_EDIT_PAY_ACCOUNT')
-))
-const rejectTargetOptions = computed<RejectTargetOption[]>(() => {
-  if (!currentApprovalSpecialSettings.value.has('REJECT_TO_ANY_NODE')) {
-    return []
-  }
-  const currentNodeKey = currentApprovalNode.value?.nodeKey || detail.value?.currentNodeKey || ''
-  const options: RejectTargetOption[] = [
-    {
-      nodeKey: '__SUBMITTER__',
-      nodeName: '驳回到提单人',
-      optionLabel: formatRejectTargetLabel('驳回到提单人', detail.value?.submitterName),
-      isSubmitter: true
-    }
-  ]
-  const upstreamApprovalNodes = (detail.value?.approvalNodeStatuses || [])
-    .filter((item) =>
-      item.nodeType === 'APPROVAL'
-      && item.nodeKey !== currentNodeKey
-      && item.status !== 'NOT_REACHED'
-      && item.status !== 'PENDING'
-      && item.status !== 'MANUAL_SELECTION_PENDING'
-    )
-    .map((item) => ({
-      nodeKey: item.nodeKey,
-      nodeName: item.nodeName || item.nodeKey,
-      optionLabel: formatRejectTargetLabel(item.nodeName || item.nodeKey, item.assigneeNames)
-    }))
-  return [...options, ...upstreamApprovalNodes]
-})
-function formatRejectTargetLabel(nodeName: string, assigneeNames?: string[] | string) {
-  const names = Array.isArray(assigneeNames)
-    ? assigneeNames.filter((item) => Boolean(String(item || '').trim()))
-    : [String(assigneeNames || '').trim()].filter(Boolean)
-  if (!names.length) {
-    return nodeName
-  }
-  return `${nodeName}（${names.join('、')}）`
-}
 const canApprovalView = computed(() =>
   hasPermission('expense:approval:view', permissionCodes.value)
   || hasPermission('expense:approval:approve', permissionCodes.value)
   || hasPermission('expense:approval:reject', permissionCodes.value)
 )
-const isSubmitter = computed(() => detail.value?.submitterUserId === currentUserId.value)
-const isManualApproverSelectionPending = computed(() => Boolean(detail.value?.manualApproverSelectionPending))
-const canSubmitManualApproverSelection = computed(() => isSubmitter.value && isManualApproverSelectionPending.value)
-const manualApproverOptions = computed<ProcessFormOption[]>(() => detail.value?.manualApproverOptions || [])
-const isActiveApprover = computed(() => approvableTasks.value.length > 0)
-const canResubmitEdit = computed(() => {
-  const status = detail.value?.status || ''
-  return isSubmitter.value && (status === 'DRAFT' || status === 'REJECTED')
-})
-const isFlowParticipant = computed(() => {
-  if (!detail.value) {
-    return false
-  }
-  if (isSubmitter.value || isActiveApprover.value) {
-    return true
-  }
-  const userId = currentUserId.value
-  return detail.value.actionLogs.some((log) => {
-    if (log.actorUserId === userId) {
-      return true
-    }
-    const approverUserIds = Array.isArray(log.payload?.approverUserIds) ? log.payload.approverUserIds : []
-    return approverUserIds.some((item) => Number(item) === userId)
-  })
-})
-const canComment = computed(() => isSubmitter.value || isFlowParticipant.value)
-const relatedDocumentBindings = computed<ExpenseDocumentRelationBinding[]>(() => detail.value?.relatedDocumentBindings || [])
-const outboundRelatedBindings = computed<ExpenseDocumentRelationBinding[]>(() => relatedDocumentBindings.value.filter((item) => item.direction === 'OUTBOUND'))
-const inboundRelatedBindings = computed<ExpenseDocumentRelationBinding[]>(() => relatedDocumentBindings.value.filter((item) => item.direction === 'INBOUND'))
-const writeOffDocumentBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => detail.value?.writeOffDocumentBindings || [])
-const outboundWriteOffBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => writeOffDocumentBindings.value.filter((item) => item.direction === 'OUTBOUND'))
-const inboundWriteOffBindings = computed<ExpenseDocumentWriteOffBinding[]>(() => writeOffDocumentBindings.value.filter((item) => item.direction === 'INBOUND'))
-const bindingCountSuffix = '条'
-const bindingInlineSeparator = '\u00b7'
-const expandText = '展开'
-const collapseText = '收起'
-const businessDocumentLabel = '业务单据'
-const viewBoundDocumentLabel = '查看单据'
-const relatedCardTitle = '关联单据'
-const relatedCardDescription = '展示当前单据主动关联与被其它单据反向引用的真实业务关系。'
-const relatedOutboundTitle = '当前单据主动关联'
-const relatedInboundTitle = '被其它单据关联'
-const writeOffCardTitle = '核销单据'
-const writeOffCardDescription = '展示当前单据主动核销与被其它单据反向核销的真实金额和生效状态。'
-const writeOffOutboundTitle = '当前单据主动核销'
-const writeOffInboundTitle = '被其它单据核销'
-const documentCodeLabel = '单据编号：'
-const submitterLabel = '发起人：'
-const sourceFieldLabel = '来源字段：'
-const bindingFieldLabel = '关联字段：'
-const writeOffSourceLabel = '核销来源：'
-const requestedAmountLabel = '请求核销：'
-const effectiveAmountLabel = '已生效：'
-const remainingAmountLabel = '剩余金额：'
-const unknownStatusLabel = '状态未知'
-const relatedOutboundEmptyText = '暂无主动关联记录'
-const relatedInboundEmptyText = '暂无反向关联记录'
-const writeOffOutboundEmptyText = '暂无主动核销记录'
-const writeOffInboundEmptyText = '暂无反向核销记录'
-const statusBucket = computed<'pending' | 'exception' | 'terminal' | 'other'>(() => {
-  const status = detail.value?.status || ''
-  if (status === 'PENDING_APPROVAL') {
-    return 'pending'
-  }
-  if (status === 'EXCEPTION') {
-    return 'exception'
-  }
-  if (
-    status === 'APPROVED'
-    || status === 'COMPLETED'
-    || status === 'PAID'
-    || status === 'PENDING_PAYMENT'
-    || status === 'PAYING'
-    || status === 'PAYMENT_COMPLETED'
-    || status === 'PAYMENT_FINISHED'
-    || status === 'PAYMENT_EXCEPTION'
-  ) {
-    return 'terminal'
-  }
-  return 'other'
+const emptyExpenseDetailSchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
+
+const {
+  detailLoading,
+  navigationLoading,
+  detail,
+  relatedBindingsExpanded,
+  writeOffBindingsExpanded,
+  detailLoadError,
+  printLoading,
+  printLoadError,
+  printExpenseDetails,
+  navigation,
+  activeExpenseDetailNo,
+  expenseDetailLoadingNo,
+  activeExpenseDetail,
+  activeExpenseDetailError,
+  activeExpenseDetailSummary,
+  vendorOptionMap,
+  payeeOptionMap,
+  payeeAccountOptionMap,
+  amountText,
+  isPrintMode,
+  relatedDocumentBindings,
+  outboundRelatedBindings,
+  inboundRelatedBindings,
+  writeOffDocumentBindings,
+  outboundWriteOffBindings,
+  inboundWriteOffBindings,
+  bindingCountSuffix,
+  bindingInlineSeparator,
+  expandText,
+  collapseText,
+  businessDocumentLabel,
+  viewBoundDocumentLabel,
+  relatedCardTitle,
+  relatedCardDescription,
+  relatedOutboundTitle,
+  relatedInboundTitle,
+  writeOffCardTitle,
+  writeOffCardDescription,
+  writeOffOutboundTitle,
+  writeOffInboundTitle,
+  documentCodeLabel,
+  submitterLabel,
+  sourceFieldLabel,
+  bindingFieldLabel,
+  writeOffSourceLabel,
+  requestedAmountLabel,
+  effectiveAmountLabel,
+  remainingAmountLabel,
+  unknownStatusLabel,
+  relatedOutboundEmptyText,
+  relatedInboundEmptyText,
+  writeOffOutboundEmptyText,
+  writeOffInboundEmptyText,
+  goBack,
+  buildReturnToQuery,
+  openExpenseDetail,
+  openBoundDocument,
+  selectExpenseDetail,
+  loadDetail,
+  handlePrint,
+  navigateDetail,
+  refreshAfterAction,
+  formatBindingMoney,
+  writeOffSourceKindLabel,
+  formatAttachmentSize,
+  resolveErrorMessage,
+  resolveExpenseDetailTypeLabel
+} = useExpenseDocumentDetailRuntime({ canLoadNavigation: canApprovalView })
+
+const approvalRuntime = useExpenseDocumentDetailApprovalRuntime({
+  detail,
+  navigation,
+  currentUserId,
+  canApprovalView
 })
 
-const approvalNodeStatuses = computed<ExpenseApprovalNodeStatus[]>(() => detail.value?.approvalNodeStatuses || [])
-const approvalTimelineItems = computed<ExpenseApprovalTimelineItem[]>(() => detail.value?.approvalTimeline || [])
-const actionItems = computed<ActionItem[]>(() => {
-  if (!detail.value) {
-    return []
-  }
-  return resolveExpenseDetailActions({
-    statusBucket: statusBucket.value,
-    isSubmitter: isSubmitter.value,
-    canResubmitEdit: canResubmitEdit.value,
-    isActiveApprover: isActiveApprover.value,
-    canModify: canModifyCurrentTask.value,
-    isFlowParticipant: isFlowParticipant.value,
-    canComment: canComment.value,
-    canApprovalView: canApprovalView.value,
-    prevDocumentCode: navigation.value.prevDocumentCode,
-    nextDocumentCode: navigation.value.nextDocumentCode
-  })
+const {
+  approvableTasks,
+  rejectTargetOptions,
+  isSubmitter,
+  isManualApproverSelectionPending,
+  canSubmitManualApproverSelection,
+  manualApproverOptions,
+  approvalNodeStatuses,
+  approvalTimelineItems,
+  actionItems,
+  secondaryActionItems,
+  primaryActionItems,
+  disabledActionHint,
+  approvalStatusLabel,
+  approvalStatusTagType
+} = approvalRuntime
+
+const actionRuntime = useExpenseDocumentDetailActionOwner({
+  detail,
+  navigation,
+  approvableTasks,
+  rejectTargetOptions,
+  permissionCodes,
+  buildReturnToQuery,
+  loadDetail,
+  handlePrint,
+  navigateDetail,
+  refreshAfterAction,
+  resolveErrorMessage
 })
-const taskActionDialogTitle = computed(() => taskActionMode.value === 'approve' ? '通过审批' : '驳回审批')
-const taskActionDialogConfirm = computed(() => taskActionMode.value === 'approve' ? '通过' : '驳回')
-const taskActionDialogPlaceholder = computed(() => taskActionMode.value === 'approve' ? '请输入审批意见（可空）' : '请输入驳回原因')
-const secondaryActionItems = computed(() => actionItems.value.filter((item) => !item.primary))
-const primaryActionItems = computed(() => actionItems.value.filter((item) => item.primary))
-const disabledActionHint = computed(() => resolveDisabledExpenseDetailActionHint(actionItems.value))
-const userActionDialogTitle = computed(() => userActionMode.value === 'transfer' ? '转交审批任务' : '发起前加签')
-const userActionDialogLabel = computed(() => userActionMode.value === 'transfer' ? '转交给' : '加签人')
-const userActionDialogConfirm = computed(() => userActionMode.value === 'transfer' ? '确认转交' : '确认加签')
-const userActionDialogPlaceholder = computed(() => userActionMode.value === 'transfer' ? '可选填写转交说明' : '可选填写加签说明')
 
-watch(
-  () => [route.params.documentCode, route.query.print],
-  () => {
-    void loadDetail()
-  },
-  { immediate: true }
-)
+const {
+  commentDialogVisible,
+  commentSubmitting,
+  commentFileInput,
+  commentForm,
+  taskActionDialogVisible,
+  taskActionMode,
+  taskActionSubmitting,
+  taskActionForm,
+  manualApproverSubmitting,
+  manualApproverForm,
+  userActionDialogVisible,
+  userActionMode,
+  userActionSubmitting,
+  userOptionsLoading,
+  userOptions,
+  userActionForm,
+  taskActionDialogTitle,
+  taskActionDialogConfirm,
+  taskActionDialogPlaceholder,
+  userActionDialogTitle,
+  userActionDialogLabel,
+  userActionDialogConfirm,
+  userActionDialogPlaceholder,
+  closeTaskActionDialog,
+  closeUserActionDialog,
+  submitManualApproverSelection,
+  handleActionClick,
+  submitTaskAction,
+  submitComment,
+  pickCommentFiles,
+  handleCommentFileChange,
+  removeCommentAttachment,
+  loadActionUsers,
+  submitUserAction
+} = actionRuntime
 
-function goBack() {
-  void navigateBackWithFallback('/expense/list')
-}
-
-function resolveReturnToPath() {
-  return typeof route.query.returnTo === 'string' && route.query.returnTo.trim() ? route.query.returnTo.trim() : ''
-}
-
-function buildReturnToQuery(extraQuery: Record<string, string> = {}) {
-  const returnTo = resolveReturnToPath()
-  return returnTo ? { ...extraQuery, returnTo } : extraQuery
-}
-
-function buildCurrentPageReturnToQuery(extraQuery: Record<string, string> = {}) {
-  return route.fullPath ? { ...extraQuery, returnTo: route.fullPath } : extraQuery
-}
-
-async function navigateBackWithFallback(fallbackPath: string) {
-  const returnTo = resolveReturnToPath()
-  if (returnTo) {
-    await router.push(returnTo)
-    return
-  }
-  if (window.history.length > 1) {
-    await router.back()
-    return
-  }
-  await router.push(fallbackPath)
-}
-
-function openExpenseDetail(detailNo: string) {
-  void router.push({
-    name: 'expense-document-expense-detail',
-    params: {
-      documentCode: String(route.params.documentCode || ''),
-      detailNo
-    },
-    query: buildCurrentPageReturnToQuery()
-  })
-}
-
-function openBoundDocument(documentCode?: string) {
-  if (!documentCode) {
-    return
-  }
-  void router.push({
-    path: `/expense/documents/${encodeURIComponent(documentCode)}`,
-    query: buildCurrentPageReturnToQuery()
-  })
-}
-
-function syncBindingPanelExpansion(nextDetail?: ExpenseDocumentDetail | null) {
-  const source = nextDetail || null
-  relatedBindingsExpanded.value = Boolean(source?.relatedDocumentBindings?.length)
-  writeOffBindingsExpanded.value = Boolean(source?.writeOffDocumentBindings?.length)
-}
-
-async function selectExpenseDetail(detailNo: string) {
-  if (!detailNo) {
-    return
-  }
-
-  if (activeExpenseDetailNo.value === detailNo) {
-    activeExpenseDetailNo.value = ''
-    return
-  }
-
-  activeExpenseDetailNo.value = detailNo
-  if (expenseDetailCache.value[detailNo] || expenseDetailLoadingNo.value === detailNo) {
-    return
-  }
-
-  const nextErrors = { ...expenseDetailErrors.value }
-  delete nextErrors[detailNo]
-  expenseDetailErrors.value = nextErrors
-  expenseDetailLoadingNo.value = detailNo
-
-  try {
-    const res = await expenseApi.getExpenseDetail(String(route.params.documentCode || ''), detailNo)
-    expenseDetailCache.value = {
-      ...expenseDetailCache.value,
-      [detailNo]: res.data
-    }
-  } catch (error: unknown) {
-    expenseDetailErrors.value = {
-      ...expenseDetailErrors.value,
-      [detailNo]: resolveErrorMessage(error, '加载费用明细发票信息失败')
-    }
-  } finally {
-    if (expenseDetailLoadingNo.value === detailNo) {
-      expenseDetailLoadingNo.value = ''
-    }
-  }
-}
-
-async function loadDetail() {
-  const requestVersion = ++detailRequestVersion
-  detailLoading.value = true
-  printLoading.value = isPrintMode.value
-  navigationRequestVersion += 1
-  navigationLoading.value = false
-  detailLoadError.value = ''
-  printLoadError.value = ''
-  detail.value = null
-  syncBindingPanelExpansion(null)
-  manualApproverForm.value = {
-    userIds: []
-  }
-  printExpenseDetails.value = []
-  navigation.value = {}
-  activeExpenseDetailNo.value = ''
-  expenseDetailLoadingNo.value = ''
-  expenseDetailCache.value = {}
-  expenseDetailErrors.value = {}
-  try {
-    const documentCode = String(route.params.documentCode || '')
-    if (!documentCode) {
-      throw new Error('\u7f3a\u5c11\u5355\u636e\u7f16\u53f7')
-    }
-
-    if (isPrintMode.value) {
-      const bundle = await loadExpenseDocumentPrintBundle(documentCode)
-      if (requestVersion !== detailRequestVersion) {
-        return
-      }
-      detail.value = bundle.detail
-      syncBindingPanelExpansion(bundle.detail)
-      printExpenseDetails.value = bundle.expenseDetails
-      await syncReadonlyPayeeLookupsBatch([
-        bundle.detail.formSchemaSnapshot,
-        ...bundle.expenseDetails.map((item) => item.schemaSnapshot)
-      ])
-      await triggerPrint(documentCode)
-    } else {
-      const res = await expenseApi.getDetail(documentCode)
-      if (requestVersion !== detailRequestVersion) {
-        return
-      }
-      detail.value = res.data
-      syncBindingPanelExpansion(res.data)
-      void syncReadonlyPayeeLookups(res.data.formSchemaSnapshot)
-      void loadNavigation(res.data.documentCode, requestVersion)
-    }
-  } catch (error: unknown) {
-    if (requestVersion === detailRequestVersion) {
-      const message = resolveErrorMessage(
-        error,
-        isPrintMode.value ? '\u52a0\u8f7d\u6253\u5370\u6570\u636e\u5931\u8d25' : '\u52a0\u8f7d\u5355\u636e\u8be6\u60c5\u5931\u8d25'
-      )
-      if (isPrintMode.value) {
-        printLoadError.value = message
-      } else {
-        detailLoadError.value = message
-      }
-      ElMessage.error(message)
-    }
-  } finally {
-    if (requestVersion === detailRequestVersion) {
-      detailLoading.value = false
-      printLoading.value = false
-    }
-  }
-}
-
-async function loadNavigation(documentCode: string, requestVersion: number) {
-  const navigationVersion = ++navigationRequestVersion
-  if (!documentCode || !canApprovalView.value) {
-    navigation.value = {}
-    navigationLoading.value = false
-    return
-  }
-  navigationLoading.value = true
-  try {
-    const res = await expenseApi.getNavigation(documentCode)
-    if (requestVersion === detailRequestVersion && navigationVersion === navigationRequestVersion) {
-      navigation.value = res.data
-    }
-  } catch {
-    if (requestVersion === detailRequestVersion && navigationVersion === navigationRequestVersion) {
-      navigation.value = {}
-    }
-  } finally {
-    if (requestVersion === detailRequestVersion && navigationVersion === navigationRequestVersion) {
-      navigationLoading.value = false
-    }
-  }
-}
-
-function approvalStatusLabel(status?: string) {
-  const labels: Record<string, string> = {
-    NOT_REACHED: '未到达',
-    PENDING: '审批中',
-    MANUAL_SELECTION_PENDING: '待手动选择审批人',
-    APPROVED: '已通过',
-    REJECTED: '已驳回',
-    AUTO_SKIPPED: '已自动跳过',
-    EXCEPTION: '异常',
-    PAYMENT_PENDING: '待支付',
-    PAYMENT_COMPLETED: '已支付',
-    PAYMENT_EXCEPTION: '支付异常'
-  }
-  return labels[status || ''] || '处理中'
-}
-
-function approvalStatusTagType(status?: string) {
-  switch (status) {
-    case 'PENDING':
-    case 'PAYMENT_PENDING':
-    case 'MANUAL_SELECTION_PENDING':
-      return 'warning'
-    case 'APPROVED':
-    case 'PAYMENT_COMPLETED':
-      return 'success'
-    case 'REJECTED':
-    case 'EXCEPTION':
-    case 'PAYMENT_EXCEPTION':
-      return 'danger'
-    case 'AUTO_SKIPPED':
-      return 'info'
-    default:
-      return 'info'
-  }
-}
-
-function openTaskActionDialog(action: 'approve' | 'reject') {
-  taskActionMode.value = action
-  taskActionForm.value = {
-    comment: action === 'approve' ? '通过' : '驳回',
-    targetNodeKey: action === 'reject' && rejectTargetOptions.value.length ? '__SUBMITTER__' : ''
-  }
-  taskActionDialogVisible.value = true
-}
-
-function closeTaskActionDialog() {
-  taskActionDialogVisible.value = false
-  taskActionMode.value = ''
-  taskActionForm.value = {
-    comment: '',
-    targetNodeKey: ''
-  }
-}
-
-async function handleTaskAction(action: 'approve' | 'reject') {
-  if (!detail.value || !approvableTasks.value.length) {
-    return
-  }
-  const permissionCode = action === 'approve' ? 'expense:approval:approve' : 'expense:approval:reject'
-  if (!hasPermission(permissionCode, permissionCodes.value)) {
-    ElMessage.warning('当前账号没有处理该审批的权限')
-    return
-  }
-  openTaskActionDialog(action)
-}
-
-async function submitTaskAction() {
-  const action = taskActionMode.value
-  const task = approvableTasks.value[0]
-  if (!action || !task) {
-    return
-  }
-  taskActionSubmitting.value = true
-  try {
-    const api = action === 'approve' ? expenseApprovalApi.approve : expenseApprovalApi.reject
-    const payload = {
-      comment: taskActionForm.value.comment || '',
-      ...(action === 'reject' && taskActionForm.value.targetNodeKey && taskActionForm.value.targetNodeKey !== '__SUBMITTER__'
-        ? { targetNodeKey: taskActionForm.value.targetNodeKey }
-        : {})
-    }
-    const res = await api(task.id, payload)
-    closeTaskActionDialog()
-    await refreshAfterAction(res.data)
-    ElMessage.success(action === 'approve' ? '审批已通过' : '审批已驳回')
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, action === 'approve' ? '审批通过失败' : '审批驳回失败'))
-  } finally {
-    taskActionSubmitting.value = false
-  }
-}
-
-async function submitManualApproverSelection() {
-  const documentCode = detail.value?.documentCode || ''
-  const nodeKey = detail.value?.manualApproverSelectionNodeKey || ''
-  if (!documentCode || !nodeKey) {
-    return
-  }
-  if (!manualApproverForm.value.userIds.length) {
-    ElMessage.warning('请至少选择一位审批人')
-    return
-  }
-  manualApproverSubmitting.value = true
-  try {
-    await expenseApi.submitManualApproverSelection(documentCode, {
-      nodeKey,
-      userIds: manualApproverForm.value.userIds
-    })
-    ElMessage.success('手动审批人已提交')
-    await loadDetail()
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '提交手动审批人失败'))
-  } finally {
-    manualApproverSubmitting.value = false
-  }
-}
-
-async function handleActionClick(action: ActionItem) {
-  if (action.disabled) {
-    ElMessage.warning(action.reason || '\u5f53\u524d\u52a8\u4f5c\u6682\u4e0d\u53ef\u7528')
-    return
-  }
-
-  switch (action.key) {
-    case 'resubmit':
-      await openResubmitPage()
-      return
-    case 'recall':
-      await handleRecall()
-      return
-    case 'print':
-      handlePrint()
-      return
-    case 'download':
-      ElMessage.info('\u529f\u80fd\u5efa\u8bbe\u4e2d')
-      return
-    case 'comment':
-      openCommentDialog()
-      return
-    case 'remind':
-      await handleRemind()
-      return
-    case 'approve':
-      await handleTaskAction('approve')
-      return
-    case 'reject':
-      await handleTaskAction('reject')
-      return
-    case 'prev':
-      await navigateDetail(navigation.value.prevDocumentCode)
-      return
-    case 'next':
-      await navigateDetail(navigation.value.nextDocumentCode)
-      return
-    case 'modify':
-      await openModifyPage()
-      return
-    case 'add-sign':
-    case 'transfer':
-      await openUserActionDialog(action.key)
-      return
-  }
-}
-
-function handlePrint() {
-  const documentCode = detail.value?.documentCode || String(route.params.documentCode || '')
-  if (!documentCode) {
-    ElMessage.warning('\u7f3a\u5c11\u5355\u636e\u7f16\u53f7\uff0c\u65e0\u6cd5\u6253\u5f00\u6253\u5370\u9875')
-    return
-  }
-  const openedWindow = openExpensePrintWindow(buildExpenseDetailPrintHref(router, documentCode))
-  if (!openedWindow) {
-    ElMessage.error('\u672a\u80fd\u6253\u5f00\u6253\u5370\u7a97\u53e3\uff0c\u8bf7\u68c0\u67e5\u6d4f\u89c8\u5668\u5f39\u7a97\u62e6\u622a\u8bbe\u7f6e')
-  }
-}
-
-async function triggerPrint(documentCode: string) {
-  if (!documentCode || lastPrintedDocumentCode === documentCode || !detail.value || printLoadError.value) {
-    return
-  }
-  lastPrintedDocumentCode = documentCode
-  await nextTick()
-  window.print()
-}
-
-async function handleRecall() {
-  if (!detail.value) {
-    return
-  }
-  try {
-    await ElMessageBox.confirm('召回后会回到草稿编辑页，并沿用当前单号重新提交，确认继续吗？', '召回单据', {
-      type: 'warning',
-      confirmButtonText: '确认召回',
-      cancelButtonText: '取消'
-    })
-    await expenseApi.recall(detail.value.documentCode)
-    ElMessage.success('单据已召回，正在进入重提编辑页')
-    await router.push({
-      name: 'expense-document-resubmit',
-      params: { documentCode: detail.value.documentCode },
-      query: buildReturnToQuery()
-    })
-  } catch (error: unknown) {
-    if (error === 'cancel' || String(error).includes('cancel')) {
-      return
-    }
-    ElMessage.error(resolveErrorMessage(error, '召回单据失败'))
-  }
-}
-
-async function handleRemind() {
-  if (!detail.value) {
-    return
-  }
-  try {
-    const { value } = await ElMessageBox.prompt('可选填写催办备注', '催办审批', {
-      inputType: 'textarea',
-      inputPlaceholder: '例如：这笔单据今天需要完成处理',
-      confirmButtonText: '发送催办',
-      cancelButtonText: '取消'
-    })
-    const res = await expenseApi.remind(detail.value.documentCode, { remark: value || '' })
-    await refreshAfterAction(res.data)
-    ElMessage.success('已向当前审批人发送催办')
-  } catch (error: unknown) {
-    if (error === 'cancel' || String(error).includes('cancel')) {
-      return
-    }
-    ElMessage.error(resolveErrorMessage(error, '催办失败'))
-  }
-}
-
-function openCommentDialog() {
-  commentForm.value = {
-    comment: '',
-    attachmentFileNames: []
-  }
-  commentDialogVisible.value = true
-}
-
-async function submitComment() {
-  if (!detail.value) {
-    return
-  }
-  if (!commentForm.value.comment.trim() && commentForm.value.attachmentFileNames.length === 0) {
-    ElMessage.warning('请先输入评论或添加附件名')
-    return
-  }
-  commentSubmitting.value = true
-  try {
-    const res = await expenseApi.comment(detail.value.documentCode, {
-      comment: commentForm.value.comment.trim(),
-      attachmentFileNames: commentForm.value.attachmentFileNames
-    })
-    commentDialogVisible.value = false
-    await refreshAfterAction(res.data)
-    ElMessage.success('评论已发布')
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '发表评论失败'))
-  } finally {
-    commentSubmitting.value = false
-  }
-}
-
-function pickCommentFiles() {
-  commentFileInput.value?.click()
-}
-
-function handleCommentFileChange(event: Event) {
-  const target = event.target as HTMLInputElement
-  const files = Array.from(target.files || [])
-  if (files.length === 0) {
-    return
-  }
-  const merged = new Set([
-    ...commentForm.value.attachmentFileNames,
-    ...files.map((file) => file.name).filter(Boolean)
-  ])
-  commentForm.value.attachmentFileNames = Array.from(merged)
-  target.value = ''
-}
-
-function removeCommentAttachment(name: string) {
-  commentForm.value.attachmentFileNames = commentForm.value.attachmentFileNames.filter((item) => item !== name)
-}
-
-async function openModifyPage() {
-  const task = approvableTasks.value[0]
-  if (!task) {
-    ElMessage.warning('当前没有可修改的待办任务')
-    return
-  }
-  await router.push({
-    name: 'expense-approval-task-modify',
-    params: { taskId: task.id }
-  })
-}
-
-async function openUserActionDialog(actionKey: 'add-sign' | 'transfer') {
-  const task = approvableTasks.value[0]
-  if (!task) {
-    ElMessage.warning('当前没有可处理的待办任务')
-    return
-  }
-  userActionMode.value = actionKey
-  userActionForm.value = {
-    targetUserId: undefined,
-    remark: ''
-  }
-  userActionDialogVisible.value = true
-  await loadActionUsers('')
-}
-
-function closeUserActionDialog() {
-  userActionDialogVisible.value = false
-  userActionMode.value = ''
-  userActionForm.value = {
-    targetUserId: undefined,
-    remark: ''
-  }
-}
-
-async function loadActionUsers(keyword: string) {
-  userOptionsLoading.value = true
-  try {
-    const res = await expenseApprovalApi.listActionUsers(keyword)
-    userOptions.value = res.data
-  } finally {
-    userOptionsLoading.value = false
-  }
-}
-
-async function submitUserAction() {
-  const task = approvableTasks.value[0]
-  if (!task) {
-    ElMessage.warning('当前没有可处理的待办任务')
-    return
-  }
-  if (!userActionForm.value.targetUserId) {
-    ElMessage.warning('请先选择目标处理人')
-    return
-  }
-  userActionSubmitting.value = true
-  try {
-    const mode = userActionMode.value
-    const payload = {
-      targetUserId: userActionForm.value.targetUserId,
-      remark: userActionForm.value.remark.trim()
-    }
-    const res = mode === 'transfer'
-      ? await expenseApprovalApi.transfer(task.id, payload)
-      : await expenseApprovalApi.addSign(task.id, payload)
-    closeUserActionDialog()
-    await refreshAfterAction(res.data)
-    ElMessage.success(mode === 'transfer' ? '审批任务已转交' : '已发起加签')
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, userActionMode.value === 'transfer' ? '转交审批失败' : '加签失败'))
-  } finally {
-    userActionSubmitting.value = false
-  }
-}
-
-async function navigateDetail(documentCode?: string) {
-  if (!documentCode) {
-    ElMessage.warning('已经没有更多单据了')
-    return
-  }
-  await router.push(`/expense/documents/${encodeURIComponent(documentCode)}`)
-}
-
-async function refreshAfterAction(nextDetail?: ExpenseDocumentDetail) {
-  if (nextDetail) {
-    detailLoadError.value = ''
-    detail.value = nextDetail
-    syncBindingPanelExpansion(nextDetail)
-    navigation.value = {}
-    void syncReadonlyPayeeLookups(nextDetail.formSchemaSnapshot)
-    await loadNavigation(nextDetail.documentCode, detailRequestVersion)
-    return
-  }
-  await loadDetail()
-}
-
-function asString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : ''
-}
-
-function formatDetailMoney(value: unknown) {
-  try {
-    return formatMoney(value as string | number | null | undefined)
-  } catch {
-    return '0.00'
-  }
-}
-
-async function openResubmitPage() {
-  const documentCode = detail.value?.documentCode || String(route.params.documentCode || '')
-  if (!documentCode) {
-    ElMessage.warning('缺少单据编码，无法打开编辑页')
-    return
-  }
-  await router.push({
-    path: `/expense/documents/${encodeURIComponent(documentCode)}/resubmit`,
-    query: buildReturnToQuery(detail.value?.status === 'DRAFT' ? { entry: 'draft' } : {})
-  })
-}
-
-function formatBindingMoney(value: unknown) {
-  return `¥ ${formatDetailMoney(value)}`
-}
-
-function writeOffSourceKindLabel(kind?: string) {
-  switch (kind) {
-    case 'LOAN':
-      return '借款单'
-    case 'PREPAY_REPORT':
-      return '预付报销单'
-    default:
-      return '-'
-  }
-}
-
-function formatAttachmentSize(value?: number) {
-  if (!value || Number.isNaN(Number(value))) {
-    return '大小未知'
-  }
-  if (value < 1024) {
-    return `${value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function resolveErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
-}
-
-function resolveExpenseDetailTypeLabel(detailType?: string, fallback?: string) {
-  if (detailType === 'ENTERPRISE_TRANSACTION') return '企业往来'
-  if (detailType === 'NORMAL_REIMBURSEMENT') return '普通报销'
-  return fallback || '费用明细'
-}
 </script>
+
 
 <style scoped>
 .expense-print-page {

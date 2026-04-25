@@ -81,7 +81,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
                         .eq(ProcessDocumentTemplate::getExpenseDetailDesignCode, detailDesign.getDetailCode())
         );
         if (referencedCount != null && referencedCount > 0) {
-            throw new IllegalStateException("\u5f53\u524d\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
+            throw new IllegalStateException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u5df2\u88ab\u6a21\u677f\u5f15\u7528\uff0c\u4e0d\u80fd\u5220\u9664");
         }
         processExpenseDetailDesignMapper.deleteById(id);
         return Boolean.TRUE;
@@ -100,7 +100,7 @@ public class ProcessExpenseDetailDesignServiceImpl implements ProcessExpenseDeta
     public String resolveExpenseDetailDesignCode(String detailCode) {
         String normalizedCode = trimToNull(detailCode);
         if (normalizedCode == null) {
-            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u8868\u5355\u4e0d\u80fd\u4e3a\u7a7a");
+            throw new IllegalArgumentException("\u8d39\u7528\u660e\u7ec6\u8bbe\u8ba1\u7f16\u7801\u4e0d\u80fd\u4e3a\u7a7a");
         }
 
         ProcessExpenseDetailDesign detailDesign = processExpenseDetailDesignMapper.selectOne(

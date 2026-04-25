@@ -171,7 +171,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void attachedRouteContinuesToSharedTailAfterLaneTaskCompletes() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildBranchSnapshot(true, "ATTACHED"));
@@ -183,7 +183,7 @@ class ExpenseWorkflowRuntimeSupportTest {
 
         ProcessDocumentTask firstTask = insertedTasks.get(0);
         firstTask.setId(1L);
-        support.approvePendingTask(instance, firstTask, 101L, "审批人A", "同意");
+        support.approvePendingTask(instance, firstTask, 101L, "approver-A", "agree");
 
         assertEquals(2, insertedTasks.size());
         assertEquals("approval-tail", insertedTasks.get(1).getNodeKey());
@@ -193,7 +193,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void nonAttachedRouteSkipsSharedTailWhenSiblingLaneOwnsIt() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildBranchSnapshot(true, "B"));
@@ -205,7 +205,7 @@ class ExpenseWorkflowRuntimeSupportTest {
 
         ProcessDocumentTask firstTask = insertedTasks.get(0);
         firstTask.setId(1L);
-        support.approvePendingTask(instance, firstTask, 101L, "审批人A", "同意");
+        support.approvePendingTask(instance, firstTask, 101L, "approver-A", "agree");
 
         assertEquals(1, insertedTasks.size());
         assertEquals("COMPLETED", instance.getStatus());
@@ -215,7 +215,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void manualSelectApprovalNodeUsesRuntimeSelectedApprovers() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(201L, "手选审批人")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(201L, "finance-user")));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildManualSelectApprovalSnapshot());
@@ -248,7 +248,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void paymentExecutorSubmitterFallsBackToSubmitterContext() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectById(301L)).thenReturn(createActiveUser(301L, "提单人"));
+        when(userMapper.selectById(301L)).thenReturn(createActiveUser(301L, "submitter"));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildSubmitterPaymentSnapshot());
@@ -265,7 +265,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void submitterDeptBranchMatchesAncestorDepartment() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
         when(systemDepartmentMapper.selectList(any())).thenReturn(buildSubmitterDepartmentTree());
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
@@ -281,7 +281,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void submitterDeptBranchMatchesParentDepartment() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
         when(systemDepartmentMapper.selectList(any())).thenReturn(buildSubmitterDepartmentTree());
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
@@ -297,7 +297,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void submitterDeptBranchSkipsUnrelatedDepartment() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
         when(systemDepartmentMapper.selectList(any())).thenReturn(buildSubmitterDepartmentTree());
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
@@ -313,7 +313,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void submitterDeptNotInDoesNotMatchAncestorDepartment() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
         when(systemDepartmentMapper.selectList(any())).thenReturn(buildSubmitterDepartmentTree());
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
@@ -329,7 +329,7 @@ class ExpenseWorkflowRuntimeSupportTest {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
         when(systemDepartmentMapper.selectList(any())).thenReturn(buildUndertakeDepartmentTree());
-        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "领导A"));
+        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "dept-leader"));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildUndertakeDeptManagerSnapshot("BLOCK_SUBMIT"));
@@ -361,8 +361,8 @@ class ExpenseWorkflowRuntimeSupportTest {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
         when(systemDepartmentMapper.selectList(any())).thenReturn(buildUndertakeDepartmentTree());
-        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "领导L1"));
-        when(userMapper.selectById(701L)).thenReturn(createActiveUser(701L, "领导L2"));
+        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "leader-l1"));
+        when(userMapper.selectById(701L)).thenReturn(createActiveUser(701L, "leader-l2"));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildUndertakeDeptManagerSnapshot("BLOCK_SUBMIT", 2, "OR_SIGN"));
@@ -377,11 +377,11 @@ class ExpenseWorkflowRuntimeSupportTest {
     @Test
     void undertakeDepartmentMultiLevelManagerFailsWhenAnyRequiredLevelIsMissing() throws Exception {
         when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(
-                buildDepartment(3L, "根部门", null, null),
-                buildDepartment(7L, "上级部门", 3L, null),
-                buildDepartment(15L, "承担部门", 7L, 501L)
+                buildDepartment(3L, "root-dept", null, null),
+                buildDepartment(7L, "parent-dept", 3L, null),
+                buildDepartment(15L, "undertake-dept", 7L, 501L)
         ));
-        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "领导L1"));
+        when(userMapper.selectById(501L)).thenReturn(createActiveUser(501L, "leader-l1"));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildUndertakeDeptManagerSnapshot("BLOCK_SUBMIT", 2, "OR_SIGN"));
@@ -398,7 +398,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     void autoPassApprovedBeforeIgnoresPreviousRoundsWithoutCurrentRoundUpstreamApproval() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
         when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
                 actionLog("SUBMIT", null, null),
                 actionLog("APPROVE", "approval-start", 101L),
@@ -418,8 +418,7 @@ class ExpenseWorkflowRuntimeSupportTest {
     @Test
     void autoPassApprovedBeforeStillWorksForCurrentRoundUpstreamApproval() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
-        mockTaskInsertions(insertedTasks);
-        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "审批人A")));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
         when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
                 actionLog("RESUBMIT", null, null),
                 actionLog("APPROVE", "approval-start", 101L)
@@ -436,10 +435,6 @@ class ExpenseWorkflowRuntimeSupportTest {
 
     @Test
     void rejectToAnyNodeRequiresSpecialSettingOnCurrentNode() throws Exception {
-        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
-                actionLog("SUBMIT", null, null),
-                actionLog("APPROVE", "approval-start", 101L)
-        ));
 
         ExpenseWorkflowRuntimeSupport support = newSupport();
         ProcessDocumentInstance instance = createRuntimeInstance(buildRejectWithoutAnyNodeSnapshot());
@@ -447,12 +442,12 @@ class ExpenseWorkflowRuntimeSupportTest {
         task.setId(10L);
         task.setDocumentCode("DOC-001");
         task.setNodeKey("approval-review");
-        task.setNodeName("复核审批");
+        task.setNodeName("review-node");
         task.setStatus("PENDING");
 
         IllegalStateException error = org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalStateException.class,
-                () -> support.rejectPendingTask(instance, task, 101L, "审批人A", "同意", "approval-start")
+                () -> support.rejectPendingTask(instance, task, 101L, "approver-A", "agree", "approval-start")
         );
 
         assertEquals("\u5f53\u524d\u5ba1\u6279\u8282\u70b9\u672a\u5f00\u542f\u9a73\u56de\u81f3\u4efb\u610f\u8282\u70b9", error.getMessage());
@@ -515,7 +510,7 @@ class ExpenseWorkflowRuntimeSupportTest {
         routes.add(new LinkedHashMap<>(Map.of(
                 "routeKey", "route-a",
                 "sourceNodeKey", "branch-1",
-                "routeName", "分支A",
+                "routeName", "route-a",
                 "priority", 1,
                 "attachBelowNodes", branchHasAttachedRoute,
                 "conditionGroups", List.of()
@@ -523,7 +518,7 @@ class ExpenseWorkflowRuntimeSupportTest {
         routes.add(new LinkedHashMap<>(Map.of(
                 "routeKey", "route-b",
                 "sourceNodeKey", "branch-1",
-                "routeName", "分支B",
+                "routeName", "route-b",
                 "priority", 2,
                 "attachBelowNodes", false,
                 "conditionGroups", List.of(routeBGroup)
@@ -546,14 +541,14 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "branch-1",
                                 "nodeType", "BRANCH",
-                                "nodeName", "流程分支",
+                                "nodeName", "branch-node",
                                 "displayOrder", 1,
                                 "config", Map.of()
                         ),
                         Map.of(
                                 "nodeKey", "approval-route-a",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "命中上级部门",
+                                "nodeName", "branch-route-a",
                                 "parentNodeKey", "route-a",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -566,7 +561,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-route-b",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "默认分支",
+                                "nodeName", "branch-route-b",
                                 "parentNodeKey", "route-b",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -579,7 +574,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-tail",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "公共尾部审批",
+                                "nodeName", "branch-tail",
                                 "displayOrder", 2,
                                 "config", Map.of(
                                         "approverType", "DESIGNATED_MEMBER",
@@ -599,7 +594,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-manual",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "手选审批",
+                                "nodeName", "manual-select-node",
                                 "displayOrder", 1,
                                 "config", Map.of(
                                         "approverType", "MANUAL_SELECT",
@@ -618,7 +613,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "payment-1",
                                 "nodeType", "PAYMENT",
-                                "nodeName", "付款处理",
+                                "nodeName", "payment-node",
                                 "displayOrder", 1,
                                 "config", Map.of(
                                         "executorType", "SUBMITTER",
@@ -646,14 +641,14 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "branch-1",
                                 "nodeType", "BRANCH",
-                                "nodeName", "流程分支",
+                                "nodeName", "cc-node",
                                 "displayOrder", 1,
                                 "config", Map.of()
                         ),
                         Map.of(
                                 "nodeKey", "approval-route-a",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "分支A审批",
+                                "nodeName", "cc-route-a",
                                 "parentNodeKey", "route-a",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -666,7 +661,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-route-b",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "分支B审批",
+                                "nodeName", "cc-route-b",
                                 "parentNodeKey", "route-b",
                                 "displayOrder", 1,
                                 "config", Map.of(
@@ -681,7 +676,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "routeKey", "route-a",
                                 "sourceNodeKey", "branch-1",
-                                "routeName", "条件分支1",
+                                "routeName", "route-a",
                                 "priority", 1,
                                 "attachBelowNodes", false,
                                 "conditionGroups", List.of(routeGroup)
@@ -689,7 +684,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "routeKey", "route-b",
                                 "sourceNodeKey", "branch-1",
-                                "routeName", "条件分支2",
+                                "routeName", "route-b",
                                 "priority", 2,
                                 "attachBelowNodes", false,
                                 "conditionGroups", List.of()
@@ -707,7 +702,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-start",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "开始审批",
+                                "nodeName", "start-approval",
                                 "displayOrder", 1,
                                 "config", Map.of(
                                         "approverType", "DESIGNATED_MEMBER",
@@ -719,7 +714,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-review",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "复核审批",
+                                "nodeName", "review-approval",
                                 "displayOrder", 2,
                                 "config", Map.of(
                                         "approverType", "DESIGNATED_MEMBER",
@@ -740,7 +735,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-start",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "开始审批",
+                                "nodeName", "start-approval",
                                 "displayOrder", 1,
                                 "config", Map.of(
                                         "approverType", "DESIGNATED_MEMBER",
@@ -752,7 +747,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                         Map.of(
                                 "nodeKey", "approval-review",
                                 "nodeType", "APPROVAL",
-                                "nodeName", "复核审批",
+                                "nodeName", "review-approval",
                                 "displayOrder", 2,
                                 "config", Map.of(
                                         "approverType", "DESIGNATED_MEMBER",
@@ -793,16 +788,16 @@ class ExpenseWorkflowRuntimeSupportTest {
 
     private List<SystemDepartment> buildUndertakeDepartmentTree() {
         return List.of(
-                buildDepartment(3L, "根部门", null, 801L),
-                buildDepartment(7L, "上级部门", 3L, 701L),
-                buildDepartment(15L, "承担部门", 7L, 501L)
+                buildDepartment(3L, "root-dept", null, 801L),
+                buildDepartment(7L, "parent-dept", 3L, 701L),
+                buildDepartment(15L, "undertake-dept", 7L, 501L)
         );
     }
     private List<SystemDepartment> buildSubmitterDepartmentTree() {
         return List.of(
-                buildDepartment(3L, "上进青年", null),
-                buildDepartment(7L, "人事行政部", 3L),
-                buildDepartment(15L, "人事运营组", 7L)
+                buildDepartment(3L, "submit-root", null),
+                buildDepartment(7L, "submit-parent", 3L),
+                buildDepartment(15L, "submit-dept", 7L)
         );
     }
 

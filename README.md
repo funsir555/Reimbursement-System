@@ -1,15 +1,27 @@
-# FinEx 报销与财务协同系统
+﻿# FinEx 报销与财务协同系统
+
+更新时间：2026-04-24
 
 ## 当前状态
 
-FinEx 当前以 `C:\Users\funsir\Desktop\报销系统\backend\auth-service` 为单体主业务服务，覆盖 `auth / profile / process / async-task / voucher / settings / mvp / finance / expense / fixed-asset / archive-agent` 等子域；`gateway` 提供统一入口，`frontend/admin-web` 提供管理端界面。
+FinEx 当前仓库的真实形态是：
+
+- `backend/auth-service`：单体主服务，承载 `auth / profile / process / async-task / voucher / settings / mvp / finance / expense / fixed-asset / archive-agent` 等子域
+- `backend/gateway`：统一网关入口
+- `frontend/admin-web`：管理端前端
+- `backend/common`：公共基础能力
+- `backend/sql`：初始化、迁移与刷新脚本
 
 当前已验证基线：
 
-- backend：`mvn test` = `303/303`
-- frontend：`npm run test:unit` = `211/211`
+- backend：`mvn test` 通过，`556/556`
+- frontend：`npm run test:unit` 通过，`211/211`
 
-当前治理阶段：4.4 主链路与 residual 第一轮已完成，仓库进入 `backend residual hotspot second-wave`。
+当前治理阶段判断：
+
+- `4.4` 主链路与 residual 第一轮已完成
+- `backend residual hotspot second-wave` 既定四个热点已全部完成收口
+- 下一步不再沿用旧的固定顺位，而是回到全项目 hotspot 扫描与 residual re-rank
 
 ## 环境要求
 
@@ -28,7 +40,7 @@ FinEx 当前以 `C:\Users\funsir\Desktop\报销系统\backend\auth-service` 为�
 - `FINEX_DB_PASSWORD`
 - `FINEX_JWT_SECRET`
 
-建议在本地创建未提交的 `C:\Users\funsir\Desktop\报销系统\backend\.env.local.cmd`：
+推荐在本地创建未提交的 `backend/.env.local.cmd`：
 
 ```bat
 set FINEX_DB_PASSWORD=your-real-db-password
@@ -38,10 +50,10 @@ set FINEX_JWT_SECRET=your-long-random-secret-at-least-32-chars
 说明：
 
 - `start-finex.bat` 会自动加载 `backend/.env.local.cmd`
-- `backend/auth-service` 直接执行 `mvn spring-boot:run` 时，现在也会自动补读该文件
-- 真实系统环境变量或命令行传参优先级更高，不会被本地文件覆盖
+- 直接在 `backend/auth-service` 执行 `mvn spring-boot:run` 时，也会自动补读 `backend/.env.local.cmd`
+- 如果当前 shell 或 JVM 参数里已经显式设置了同名变量，则以显式传入值为准，不会被本地文件覆盖
 
-样例配置文件：
+样例文件：
 
 - `backend/.env.example`
 - `backend/.env.production.example`
@@ -61,7 +73,7 @@ start-finex.bat
 - `backend/gateway`
 - `frontend/admin-web`
 
-### 分模块启动
+### 手动启动
 
 ```bash
 cd backend/common
@@ -77,6 +89,12 @@ cd ../../frontend/admin-web
 npm install
 npm run dev
 ```
+
+默认端口：
+
+- `8081`：`auth-service`
+- `8080`：`gateway`
+- `5173`：`frontend/admin-web`
 
 ## 常用验证命令
 
@@ -95,16 +113,27 @@ cd frontend/admin-web
 npm run build
 ```
 
-## 下一批 residual 优先级
+## 当前治理结论
 
-1. `ProcessFlowDesignServiceImpl`
-2. `ExpensePaymentDomainSupport`
-3. `ExpenseRelationWriteOffService`
-4. `ExpenseSummaryAssembler`
+当前 second-wave 已完成的后端热点：
+
+- `ProcessFlowDesignServiceImpl`
+- `ExpensePaymentDomainSupport`
+- `ExpenseRelationWriteOffService`
+- `ExpenseSummaryAssembler`
+
+当前下一步：
+
+1. 回到全项目 hotspot 扫描与 residual re-rank
+2. 按《项目长期架构治理工作流》决定下一批主目标
+3. 持续同步 README、架构文档、执行记录与启动说明，避免文档再次漂移或乱码回流
 
 ## 相关文档
 
-- `C:\Users\funsir\Desktop\报销系统\当前实现架构图与演进路线图.md`
-- `C:\Users\funsir\Desktop\报销系统\docs\architecture\项目启动与初始化说明.md`
-- `C:\Users\funsir\Desktop\报销系统\docs\architecture\auth-service领域边界说明.md`
-- `C:\Users\funsir\Desktop\报销系统\执行记录\报销系统治理落地方案.md`
+- `当前实现架构图与演进路线图.md`
+- `docs/architecture/系统架构设计.md`
+- `docs/architecture/开发架构与线程分布.md`
+- `docs/architecture/项目启动与初始化说明.md`
+- `docs/architecture/auth-service领域边界说明.md`
+- `执行记录/报销系统治理落地方案.md`
+- `执行记录/2026-04-24_项目长期架构治理工作流.md`
