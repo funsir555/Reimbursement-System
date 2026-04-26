@@ -275,6 +275,15 @@ export const ROUTE_META_REGISTRY = {
     description: '审核总账凭证',
     permissionCode: 'finance:general_ledger:review_voucher:view'
   }),
+  'finance-opening-balance': routeMeta({
+    title: '期初余额',
+    tabTitle: '期初余额',
+    menuTitle: '期初余额',
+    description: '总账期初余额功能建设中',
+    placeholderTitle: '期初余额',
+    placeholderDescription: '总账期初余额功能建设中',
+    permissionCode: 'finance:general_ledger:opening_balance:view'
+  }),
   'finance-post-voucher': routeMeta({
     title: '记账',
     tabTitle: '记账',

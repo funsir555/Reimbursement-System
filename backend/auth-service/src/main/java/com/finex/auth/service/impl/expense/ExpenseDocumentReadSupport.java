@@ -24,6 +24,7 @@ import java.util.Map;
 class ExpenseDocumentReadSupport {
 
     private final AbstractExpenseDocumentSupport support;
+    private final ExpenseDocumentDetailViewSupport detailViewSupport;
     private final ExpenseRelationWriteOffService expenseRelationWriteOffService;
 
     /**
@@ -31,9 +32,11 @@ class ExpenseDocumentReadSupport {
      */
     ExpenseDocumentReadSupport(
             AbstractExpenseDocumentSupport support,
+            ExpenseDocumentDetailViewSupport detailViewSupport,
             ExpenseRelationWriteOffService expenseRelationWriteOffService
     ) {
         this.support = support;
+        this.detailViewSupport = detailViewSupport;
         this.expenseRelationWriteOffService = expenseRelationWriteOffService;
     }
 
@@ -76,7 +79,7 @@ class ExpenseDocumentReadSupport {
      * 组装单据明细。
      */
     ExpenseDocumentDetailVO buildDocumentDetail(ProcessDocumentInstance instance) {
-        ExpenseDocumentDetailVO detail = support.buildDocumentDetail(instance);
+        ExpenseDocumentDetailVO detail = detailViewSupport.buildDocumentDetail(instance);
         String documentCode = instance == null ? null : instance.getDocumentCode();
         detail.setRelatedDocumentBindings(expenseRelationWriteOffService.loadRelatedDocumentBindings(documentCode));
         detail.setWriteOffDocumentBindings(expenseRelationWriteOffService.loadWriteOffDocumentBindings(documentCode));

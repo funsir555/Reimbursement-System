@@ -91,6 +91,7 @@ INSERT INTO tmp_permission_seed (
     ('finance:general_ledger:review_voucher:review', '审核通过', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40131, 1),
     ('finance:general_ledger:review_voucher:unreview', '取消审核', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40132, 1),
     ('finance:general_ledger:review_voucher:mark_error', '标记错误', 'BUTTON', 'finance:general_ledger:review_voucher:view', 'finance', NULL, 40133, 1),
+    ('finance:general_ledger:opening_balance:view', '期初余额', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/opening-balance', 40134, 1),
     ('finance:general_ledger:post_voucher:view', '记账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/post-voucher', 40135, 1),
     ('finance:general_ledger:close_ledger:view', '结账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/close-ledger', 40136, 1),
     ('finance:general_ledger:balance_sheet:view', '余额表', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/balance-sheet', 4014, 1),

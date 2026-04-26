@@ -1,6 +1,6 @@
-// 业务域：报销单录入、流转与查询
-// 文件角色：单据生命周期复用支撑类
-// 风险提醒：改坏后最容易影响单据状态流转、审批路由、金额汇总和重复提交保护。
+// 涓氬姟鍩燂細鎶ラ攢鍗曞綍鍏ャ€佹祦杞笌鏌ヨ
+// 鏂囦欢瑙掕壊锛氬崟鎹敓鍛藉懆鏈熷鐢ㄦ敮鎾戠被
+// 椋庨櫓鎻愰啋锛氭敼鍧忓悗鏈€瀹规槗褰卞搷鍗曟嵁鐘舵€佹祦杞€佸鎵硅矾鐢便€侀噾棰濇眹鎬诲拰閲嶅鎻愪氦淇濇姢銆?
 
 
 package com.finex.auth.service.impl.expense;
@@ -17,33 +17,19 @@ import com.finex.auth.dto.ExpenseBankLinkConfigVO;
 import com.finex.auth.dto.ExpenseBankLinkSaveDTO;
 import com.finex.auth.dto.ExpenseBankLinkSummaryVO;
 import com.finex.auth.dto.ExpenseApprovalLogVO;
-import com.finex.auth.dto.ExpenseApprovalNodeStatusVO;
-import com.finex.auth.dto.ExpenseApprovalPendingItemVO;
 import com.finex.auth.dto.ExpenseApprovalTaskVO;
-import com.finex.auth.dto.ExpenseApprovalTimelineItemVO;
 import com.finex.auth.dto.ExpenseDetailInstanceDTO;
 import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDetailInstanceSummaryVO;
 import com.finex.auth.dto.ExpenseCreatePayeeAccountOptionVO;
 import com.finex.auth.dto.ExpenseCreatePayeeOptionVO;
-import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.ExpenseDocumentBankPaymentVO;
 import com.finex.auth.dto.ExpenseDocumentBankReceiptVO;
-import com.finex.auth.dto.ExpenseDocumentCommentDTO;
-import com.finex.auth.dto.ExpenseDocumentDetailVO;
-import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
-import com.finex.auth.dto.ExpenseDocumentPickerGroupVO;
-import com.finex.auth.dto.ExpenseDocumentPickerItemVO;
-import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
-import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
-import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
-import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
-import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.dto.ExpenseTaskAddSignDTO;
 import com.finex.auth.dto.ExpenseTaskTransferDTO;
 import com.finex.auth.dto.ProcessCustomArchiveDetailVO;
@@ -71,7 +57,6 @@ import com.finex.auth.entity.ProcessExpenseType;
 import com.finex.auth.entity.ProcessFlow;
 import com.finex.auth.entity.ProcessFlowVersion;
 import com.finex.auth.entity.ProcessFormDesign;
-import com.finex.auth.entity.ProcessTemplateScope;
 import com.finex.auth.entity.SystemPermission;
 import com.finex.auth.entity.SystemCompanyBankAccount;
 import com.finex.auth.entity.SystemCompany;
@@ -97,7 +82,6 @@ import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessFlowMapper;
 import com.finex.auth.mapper.ProcessFlowVersionMapper;
 import com.finex.auth.mapper.ProcessFormDesignMapper;
-import com.finex.auth.mapper.ProcessTemplateScopeMapper;
 import com.finex.auth.mapper.SystemPermissionMapper;
 import com.finex.auth.mapper.SystemCompanyBankAccountMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
@@ -134,9 +118,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * 报销单生命周期通用支撑类。
- * 封装报销单录入、编辑、提交流转、关联核销和详情查询等可复用能力。
- * 修改这里时，要特别关注单据状态流转、审批链路、金额口径和重复提交保护。
+ * 鎶ラ攢鍗曠敓鍛藉懆鏈熼€氱敤鏀拺绫汇€?
+ * 灏佽鎶ラ攢鍗曞綍鍏ャ€佺紪杈戙€佹彁浜ゆ祦杞€佸叧鑱旀牳閿€鍜岃鎯呮煡璇㈢瓑鍙鐢ㄨ兘鍔涖€?
+ * 淇敼杩欓噷鏃讹紝瑕佺壒鍒叧娉ㄥ崟鎹姸鎬佹祦杞€佸鎵归摼璺€侀噾棰濆彛寰勫拰閲嶅鎻愪氦淇濇姢銆?
  */
 @Service
 @Slf4j
@@ -158,7 +142,6 @@ class AbstractExpenseDocumentSupport {
     private static final String PAYEE_SOURCE_PERSONAL = "PERSONAL_PRIVATE_PAYEE";
     private static final String CONTROL_TYPE_DATE = "DATE";
     private static final Set<String> PAYMENT_DATE_LABELS = Set.of("\u4ed8\u6b3e\u65e5\u671f", "\u652f\u4ed8\u65e5\u671f");
-    private static final String TEMPLATE_SCOPE_TYPE_TAG_ARCHIVE = "TAG_ARCHIVE";
     private static final String DETAIL_TYPE_NORMAL = "NORMAL_REIMBURSEMENT";
     private static final String DETAIL_TYPE_ENTERPRISE = "ENTERPRISE_TRANSACTION";
     private static final String ENTERPRISE_MODE_PREPAY_UNBILLED = "PREPAY_UNBILLED";
@@ -254,7 +237,7 @@ class AbstractExpenseDocumentSupport {
     private static final String LOG_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
     private static final String LOG_FINISH = "FINISH";
     private static final String LOG_EXCEPTION = "EXCEPTION";
-    private static final String FLOW_FINISH_COMMENT = "审批流程结束";
+    private static final String FLOW_FINISH_COMMENT = "瀹℃壒娴佺▼缁撴潫";
     private static final String ROOT_CONTAINER_KEY = "__ROOT__";
     private static final int NAVIGATION_HISTORY_LIMIT = 200;
 
@@ -265,7 +248,6 @@ class AbstractExpenseDocumentSupport {
     private final ProcessCustomArchiveRuleMapper customArchiveRuleMapper;
     private final ProcessFlowMapper processFlowMapper;
     private final ProcessFlowVersionMapper processFlowVersionMapper;
-    private final ProcessTemplateScopeMapper processTemplateScopeMapper;
     private final FinanceVendorMapper financeVendorMapper;
     private final SystemPermissionMapper systemPermissionMapper;
     private final SystemCompanyBankAccountMapper systemCompanyBankAccountMapper;
@@ -290,576 +272,14 @@ class AbstractExpenseDocumentSupport {
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
-    private final ExpenseApprovalProjectionSupport expenseApprovalProjectionSupport;
     private final ExpenseReadonlyPayeeAccountSnapshotEnhancer readonlyPayeeAccountSnapshotEnhancer;
-    private final ExpenseTemplateCategorySupport expenseTemplateCategorySupport;
+    private final ExpenseDocumentMetadataSupport expenseDocumentMetadataSupport;
+    private final ExpenseDocumentActionLogSupport expenseDocumentActionLogSupport;
+    private final ExpenseDocumentTaskRuntimeSupport expenseDocumentTaskRuntimeSupport;
+
 
     /**
-     * 列出当前可用于新建的模板。
-     */
-    List<ExpenseCreateTemplateSummaryVO> listAvailableTemplates() {
-        Map<String, String> categoryNameMap = expenseTemplateCategorySupport.loadCategoryNameMap();
-        return templateMapper.selectList(
-                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
-                        .eq(ProcessDocumentTemplate::getEnabled, 1)
-                        .orderByAsc(ProcessDocumentTemplate::getSortOrder, ProcessDocumentTemplate::getId)
-        ).stream()
-                .filter(this::isTemplateAvailableForCreate)
-                .map(template -> toTemplateSummary(template, categoryNameMap))
-                .toList();
-    }
-
-    /**
-     * 加载新建或编辑流程使用的模板详情。
-     */
-    ExpenseCreateTemplateDetailVO getTemplateDetail(Long userId, String templateCode) {
-        ProcessDocumentTemplate template = requireTemplate(templateCode);
-        return buildTemplateDetail(userId, template);
-    }
-
-    ExpenseCreateTemplateDetailVO getDocumentTemplateDetail(Long userId, String templateCode) {
-        ProcessDocumentTemplate template = requireTemplateForDocument(templateCode);
-        return buildTemplateDetail(userId, template);
-    }
-
-    /**
-     * 组装前端创建或编辑页使用的模板详情载荷。
-     */
-    private ExpenseCreateTemplateDetailVO buildTemplateDetail(Long userId, ProcessDocumentTemplate template) {
-        ExpenseCreateTemplateDetailVO detail = new ExpenseCreateTemplateDetailVO();
-        detail.setTemplateCode(template.getTemplateCode());
-        detail.setTemplateName(template.getTemplateName());
-        detail.setTemplateType(template.getTemplateType());
-        detail.setTemplateTypeLabel(resolveTemplateTypeLabel(template.getTemplateType(), template.getTemplateTypeLabel()));
-        detail.setCategoryCode(template.getCategoryCode());
-        detail.setTemplateDescription(template.getTemplateDescription());
-        detail.setFormDesignCode(template.getFormDesignCode());
-        detail.setApprovalFlowCode(template.getApprovalFlow());
-        detail.setFlowName(template.getFlowName());
-        detail.setExpenseDetailDesignCode(template.getExpenseDetailDesignCode());
-        detail.setExpenseDetailModeDefault(template.getExpenseDetailModeDefault());
-        detail.setFlowSnapshot(readMap(resolveFlowSnapshotJson(template)));
-
-        ProcessFormDesign formDesign = loadFormDesign(template.getFormDesignCode());
-        if (formDesign != null) {
-            detail.setFormName(formDesign.getFormName());
-            detail.setSchema(readSchema(formDesign.getSchemaJson()));
-            detail.setSharedArchives(loadSharedArchives(detail.getSchema()));
-        } else {
-            detail.setSchema(defaultSchema());
-            detail.setSharedArchives(Collections.emptyList());
-        }
-
-        ProcessExpenseDetailDesign expenseDetailDesign = loadExpenseDetailDesign(template.getExpenseDetailDesignCode());
-        if (expenseDetailDesign != null) {
-            detail.setExpenseDetailDesignName(expenseDetailDesign.getDetailName());
-            detail.setExpenseDetailType(expenseDetailDesign.getDetailType());
-            detail.setExpenseDetailTypeLabel(resolveExpenseDetailTypeLabel(expenseDetailDesign.getDetailType()));
-            detail.setExpenseDetailSchema(expenseDetailSystemFieldSupport.readSchema(expenseDetailDesign.getSchemaJson(), expenseDetailDesign.getDetailType()));
-            detail.setExpenseDetailSharedArchives(loadSharedArchives(detail.getExpenseDetailSchema()));
-        } else {
-            detail.setExpenseDetailType(resolveExpenseDetailType(template, null));
-            detail.setExpenseDetailTypeLabel(resolveExpenseDetailTypeLabel(detail.getExpenseDetailType()));
-            detail.setExpenseDetailSchema(defaultSchema());
-            detail.setExpenseDetailSharedArchives(Collections.emptyList());
-        }
-        detail.setCompanyOptions(loadCompanyOptions());
-        detail.setDepartmentOptions(loadDepartmentOptions());
-        detail.setUserOptions(loadUserOptions(detail.getFlowSnapshot()));
-        detail.setExpenseTypeOptions(expenseDetailSystemFieldSupport.loadExpenseTypeOptions());
-        detail.setExpenseTypeInvoiceFreeModeMap(expenseDetailSystemFieldSupport.loadExpenseTypeInvoiceFreeModeMap());
-        User currentUser = userId == null ? null : userMapper.selectById(userId);
-        if (currentUser != null) {
-            detail.setCurrentUserCompanyId(trimToNull(currentUser.getCompanyId()));
-            if (trimToNull(currentUser.getCompanyId()) != null) {
-                SystemCompany company = systemCompanyMapper.selectById(currentUser.getCompanyId());
-                if (company != null) {
-                    detail.setCurrentUserCompanyName(trimToNull(company.getCompanyName()));
-                }
-            }
-        }
-        if (currentUser != null && currentUser.getDeptId() != null) {
-            detail.setCurrentUserDeptId(String.valueOf(currentUser.getDeptId()));
-            SystemDepartment department = systemDepartmentMapper.selectById(currentUser.getDeptId());
-            if (department != null) {
-                detail.setCurrentUserDeptName(department.getDeptName());
-            }
-        }
-        return detail;
-    }
-
-    /**
-     * 查询选项。
-     */
-    List<ExpenseCreateVendorOptionVO> listVendorOptions(
-            Long userId,
-            String keyword,
-            Boolean includeDisabled,
-            String paymentCompanyId
-    ) {
-        return financeVendorService.listActiveVendorOptions(
-                resolveExpenseCreateCompanyId(userId, paymentCompanyId),
-                keyword,
-                includeDisabled
-        );
-    }
-
-    /**
-     * 查询选项。
-     */
-    List<ExpenseCreatePayeeOptionVO> listPayeeOptions(Long userId, String keyword, Boolean personalOnly) {
-        String normalizedKeyword = trimToNull(keyword);
-        if (Boolean.TRUE.equals(personalOnly)) {
-            return listPersonalPayeeOptions(userId, normalizedKeyword);
-        }
-
-        String currentCompanyId = requireCurrentUserCompanyId(userId);
-        List<ExpenseCreatePayeeOptionVO> options = new ArrayList<>();
-        financeVendorService.listActiveVendorOptions(currentCompanyId, normalizedKeyword, false).forEach(item -> {
-            ExpenseCreatePayeeOptionVO option = new ExpenseCreatePayeeOptionVO();
-            option.setValue("VENDOR:" + item.getCVenCode());
-            option.setLabel(item.getCVenName());
-            option.setSourceType("VENDOR");
-            option.setSourceCode(item.getCVenCode());
-            option.setSecondaryLabel(item.getSecondaryLabel());
-            options.add(option);
-        });
-
-        List<User> users = userMapper.selectList(
-                Wrappers.<User>lambdaQuery()
-                        .eq(User::getStatus, 1)
-                        .orderByAsc(User::getName, User::getId)
-        );
-        users.stream()
-                .filter(user -> matchesKeyword(normalizedKeyword, user.getName(), user.getUsername(), user.getPhone(), user.getEmail()))
-                .forEach(user -> {
-                    ExpenseCreatePayeeOptionVO option = new ExpenseCreatePayeeOptionVO();
-                    option.setValue("USER:" + user.getId());
-                    option.setLabel(user.getName());
-                    option.setSourceType("USER");
-                    option.setSourceCode(String.valueOf(user.getId()));
-                    option.setSecondaryLabel(trimToNull(user.getPhone()) != null ? user.getPhone() : user.getUsername());
-                    options.add(option);
-                });
-        return options;
-    }
-
-    /**
-     * 查询选项。
-     */
-    List<ExpenseCreatePayeeAccountOptionVO> listPayeeAccountOptions(
-            Long userId,
-            String keyword,
-            String linkageMode,
-            String payeeName,
-            String counterpartyCode,
-            String paymentCompanyId
-    ) {
-        String normalizedKeyword = trimToNull(keyword);
-        String normalizedLinkageMode = trimToNull(linkageMode);
-        if ("EMPLOYEE".equalsIgnoreCase(normalizedLinkageMode)) {
-            return listPersonalPayeeAccountOptions(userId, normalizedKeyword, trimToNull(payeeName));
-        }
-        if ("ENTERPRISE".equalsIgnoreCase(normalizedLinkageMode)) {
-            return listCounterpartyPayeeAccountOptions(
-                    userId,
-                    normalizedKeyword,
-                    trimToNull(counterpartyCode),
-                    paymentCompanyId
-            );
-        }
-
-        String currentCompanyId = resolveExpenseCreateCompanyId(userId, paymentCompanyId);
-        List<ExpenseCreatePayeeAccountOptionVO> options = new ArrayList<>();
-
-        QueryWrapper<FinanceVendor> vendorQuery = new QueryWrapper<>();
-        vendorQuery.eq("company_id", currentCompanyId)
-                .isNull("dEndDate")
-                .isNotNull("cVenAccount")
-                .orderByAsc("cVenName", "cVenCode");
-        financeVendorMapper.selectList(vendorQuery).stream()
-                .filter(item -> currentCompanyId.equals(trimToNull(item.getCompanyId())))
-                .filter(item -> trimToNull(item.getCVenAccount()) != null)
-                .filter(item -> matchesKeyword(
-                        normalizedKeyword,
-                        item.getReceiptAccountName(),
-                        item.getCVenName(),
-                        item.getCVenAbbName(),
-                        item.getCVenBank(),
-                        item.getCVenAccount(),
-                        item.getCVenBankNub()
-                ))
-                .forEach(item -> {
-                    String accountName = firstNonBlank(item.getReceiptAccountName(), item.getCVenName());
-                    ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
-                    option.setValue("VENDOR:" + item.getCVenCode());
-                    option.setLabel(buildAccountLabel(accountName, item.getCVenBank()));
-                    option.setSourceType("VENDOR");
-                    option.setOwnerCode(item.getCVenCode());
-                    option.setOwnerName(accountName);
-                    option.setBankName(item.getCVenBank());
-                    option.setAccountName(accountName);
-                    option.setAccountNoMasked(maskAccountNo(item.getCVenAccount()));
-                    option.setSecondaryLabel(buildVendorAccountSecondary(item));
-                    options.add(option);
-                });
-
-        List<User> users = userMapper.selectList(
-                Wrappers.<User>lambdaQuery()
-                        .eq(User::getStatus, 1)
-                        .orderByAsc(User::getName, User::getId)
-        );
-        if (!users.isEmpty()) {
-            Map<Long, User> userMap = users.stream().collect(Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new));
-            List<UserBankAccount> accounts = userBankAccountMapper.selectList(
-                    Wrappers.<UserBankAccount>lambdaQuery()
-                            .eq(UserBankAccount::getStatus, 1)
-                            .in(UserBankAccount::getUserId, userMap.keySet())
-                            .orderByDesc(UserBankAccount::getDefaultAccount)
-                            .orderByAsc(UserBankAccount::getId)
-            );
-            accounts.stream()
-                    .filter(account -> {
-                        User user = userMap.get(account.getUserId());
-                        return user != null && matchesKeyword(
-                                normalizedKeyword,
-                                user.getName(),
-                                user.getUsername(),
-                                account.getBankName(),
-                                account.getAccountName(),
-                                account.getAccountNo()
-                        );
-                    })
-                    .forEach(account -> {
-                        User user = userMap.get(account.getUserId());
-                        ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
-                        option.setValue("USER_ACCOUNT:" + account.getId());
-                        option.setLabel(buildAccountLabel(account.getAccountName(), account.getBankName()));
-                        option.setSourceType("USER");
-                        option.setOwnerCode(String.valueOf(user.getId()));
-                        option.setOwnerName(user.getName());
-                        option.setBankName(account.getBankName());
-                        option.setAccountName(account.getAccountName());
-                        option.setAccountNoMasked(maskAccountNo(account.getAccountNo()));
-                        option.setSecondaryLabel(trimToNull(account.getBranchName()) != null ? account.getBranchName() : user.getUsername());
-                        options.add(option);
-                    });
-        }
-
-        return options;
-    }
-
-    /**
-     * 查询选项。
-     */
-    private List<ExpenseCreatePayeeOptionVO> listPersonalPayeeOptions(Long userId, String normalizedKeyword) {
-        List<UserBankAccount> accounts = userBankAccountMapper.selectList(
-                Wrappers.<UserBankAccount>lambdaQuery()
-                        .eq(UserBankAccount::getUserId, userId)
-                        .eq(UserBankAccount::getStatus, 1)
-                        .orderByDesc(UserBankAccount::getDefaultAccount)
-                        .orderByAsc(UserBankAccount::getId)
-        );
-        LinkedHashMap<String, ExpenseCreatePayeeOptionVO> options = new LinkedHashMap<>();
-        for (UserBankAccount account : accounts) {
-            String accountName = trimToNull(account.getAccountName());
-            if (accountName == null) {
-                continue;
-            }
-            if (!matchesKeyword(normalizedKeyword, accountName, account.getAccountNo(), account.getBankName(), account.getBranchName())) {
-                continue;
-            }
-            options.computeIfAbsent(accountName, key -> {
-                ExpenseCreatePayeeOptionVO option = new ExpenseCreatePayeeOptionVO();
-                option.setValue(PERSONAL_PAYEE_VALUE_PREFIX + key);
-                option.setLabel(key);
-                option.setSourceType(PAYEE_SOURCE_PERSONAL);
-                option.setSourceCode(key);
-                option.setSecondaryLabel("\u672a\u914d\u7f6e\u5f00\u6237\u884c");
-                return option;
-            });
-        }
-        return new ArrayList<>(options.values());
-    }
-
-    /**
-     * 查询选项。
-     */
-    private List<ExpenseCreatePayeeAccountOptionVO> listPersonalPayeeAccountOptions(
-            Long userId,
-            String normalizedKeyword,
-            String payeeName
-    ) {
-        String normalizedPayeeName = normalizePayeeName(payeeName);
-        List<UserBankAccount> accounts = userBankAccountMapper.selectList(
-                Wrappers.<UserBankAccount>lambdaQuery()
-                        .eq(UserBankAccount::getUserId, userId)
-                        .eq(UserBankAccount::getStatus, 1)
-                        .orderByDesc(UserBankAccount::getDefaultAccount)
-                        .orderByAsc(UserBankAccount::getId)
-        );
-        return accounts.stream()
-                .filter(account -> normalizedPayeeName == null || Objects.equals(trimToNull(account.getAccountName()), normalizedPayeeName))
-                .filter(account -> matchesKeyword(
-                        normalizedKeyword,
-                        account.getAccountName(),
-                        account.getAccountNo(),
-                        account.getBankName(),
-                        account.getBranchName()
-                ))
-                .map(account -> {
-                    ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
-                    option.setValue("USER_ACCOUNT:" + account.getId());
-                    option.setLabel(buildAccountLabel(account.getAccountName(), account.getBankName()));
-                    option.setSourceType("USER");
-                    option.setOwnerCode(String.valueOf(userId));
-                    option.setOwnerName(account.getAccountName());
-                    option.setBankName(account.getBankName());
-                    option.setAccountName(account.getAccountName());
-                    option.setAccountNoMasked(maskAccountNo(account.getAccountNo()));
-                    option.setSecondaryLabel(trimToNull(account.getBranchName()) != null ? account.getBranchName() : "\u672a\u914d\u7f6e\u5f00\u6237\u884c");
-                    return option;
-                })
-                .toList();
-    }
-
-    /**
-     * 查询选项。
-     */
-    private List<ExpenseCreatePayeeAccountOptionVO> listCounterpartyPayeeAccountOptions(
-            Long userId,
-            String normalizedKeyword,
-            String counterpartyCode,
-            String paymentCompanyId
-    ) {
-        String normalizedVendorCode = trimToNull(counterpartyCode);
-        if (normalizedVendorCode == null) {
-            return Collections.emptyList();
-        }
-        String currentCompanyId = resolveExpenseCreateCompanyId(userId, paymentCompanyId);
-        FinanceVendor vendor = financeVendorMapper.selectOne(
-                Wrappers.<FinanceVendor>lambdaQuery()
-                        .eq(FinanceVendor::getCompanyId, currentCompanyId)
-                        .eq(FinanceVendor::getCVenCode, normalizedVendorCode)
-                        .last("limit 1")
-        );
-        if (vendor == null || trimToNull(vendor.getCVenAccount()) == null) {
-            return Collections.emptyList();
-        }
-        if (!matchesKeyword(
-                normalizedKeyword,
-                vendor.getReceiptAccountName(),
-                vendor.getCVenName(),
-                vendor.getCVenAbbName(),
-                vendor.getCVenBank(),
-                vendor.getCVenAccount(),
-                vendor.getCVenBankNub()
-        )) {
-            return Collections.emptyList();
-        }
-        String accountName = firstNonBlank(vendor.getReceiptAccountName(), vendor.getCVenName());
-        ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
-        option.setValue("VENDOR:" + vendor.getCVenCode());
-        option.setLabel(buildAccountLabel(accountName, vendor.getCVenBank()));
-        option.setSourceType("VENDOR");
-        option.setOwnerCode(vendor.getCVenCode());
-        option.setOwnerName(accountName);
-        option.setBankName(vendor.getCVenBank());
-        option.setAccountName(accountName);
-        option.setAccountNoMasked(maskAccountNo(vendor.getCVenAccount()));
-        option.setSecondaryLabel(buildVendorAccountSecondary(vendor));
-        return List.of(option);
-    }
-
-    /**
-     * 处理单据。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
-        String templateCode = dto == null ? null : dto.getTemplateCode();
-        String stage = "load-template";
-        String documentCode = null;
-        int expenseDetailCount = 0;
-        log.info("Expense submit stage={} templateCode={} userId={} detailCount={}", stage, templateCode, userId, expenseDetailCount);
-
-        try {
-            ProcessDocumentTemplate template = requireTemplate(templateCode);
-            stage = "load-form-design";
-            ProcessFormDesign formDesign = loadFormDesign(template.getFormDesignCode());
-            stage = "load-expense-detail-design";
-            ProcessExpenseDetailDesign expenseDetailDesign = loadExpenseDetailDesign(template.getExpenseDetailDesignCode());
-            Map<String, Object> formData = dto.getFormData() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(dto.getFormData());
-            List<ExpenseDetailInstanceDTO> expenseDetails = normalizeExpenseDetails(dto.getExpenseDetails());
-            expenseDetailCount = expenseDetails.size();
-            stage = "validate-submit-context";
-            String flowSnapshotJson = validateSubmitContext(template, formDesign, expenseDetailDesign, formData, expenseDetails);
-            User currentUser = userId == null ? null : userMapper.selectById(userId);
-            stage = "build-runtime-context";
-            Map<String, Object> runtimeFlowContext = expenseWorkflowRuntimeSupport.buildRuntimeFlowContext(
-                    currentUser,
-                    template,
-                    formDesign,
-                    formData,
-                    expenseDetailDesign,
-                    expenseDetails
-            );
-            runtimeFlowContext.put("manualApproverSelections", normalizeManualApproverSelections(dto == null ? null : dto.getManualApproverSelections()));
-            String submitterDisplayName = resolveUserDisplayName(currentUser, username);
-            validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
-            validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
-            validatePmNameLength(submitterDisplayName, "\u63d0\u4ea4\u4eba\u59d3\u540d");
-            String documentTitle = resolveDocumentTitle(template, formData, username);
-
-            ProcessDocumentInstance instance = new ProcessDocumentInstance();
-            stage = "persist-document";
-            log.info("Expense submit stage={} templateCode={} userId={} detailCount={}", stage, template.getTemplateCode(), userId, expenseDetailCount);
-            instance.setDocumentCode(buildDocumentCode());
-            documentCode = instance.getDocumentCode();
-            instance.setTemplateCode(template.getTemplateCode());
-            instance.setTemplateName(template.getTemplateName());
-            instance.setTemplateType(template.getTemplateType());
-            instance.setFormDesignCode(template.getFormDesignCode());
-            instance.setApprovalFlowCode(template.getApprovalFlow());
-            instance.setFlowName(template.getFlowName());
-            instance.setSubmitterUserId(userId);
-            instance.setSubmitterName(submitterDisplayName);
-            instance.setDocumentTitle(documentTitle);
-            instance.setDocumentReason(resolveDocumentReason(template, formData));
-            instance.setTotalAmount(resolveTotalAmount(formData, expenseDetails, template.getExpenseDetailModeDefault()));
-            instance.setStatus(DOCUMENT_STATUS_PENDING);
-            instance.setFormDataJson(writeJson(formData));
-            instance.setTemplateSnapshotJson(writeJson(toTemplateSnapshot(template)));
-            instance.setFormSchemaSnapshotJson(formDesign == null ? writeJson(defaultSchema()) : formDesign.getSchemaJson());
-            instance.setFlowSnapshotJson(flowSnapshotJson);
-            instance.setCreatedAt(LocalDateTime.now());
-            instance.setUpdatedAt(LocalDateTime.now());
-            processDocumentInstanceMapper.insert(instance);
-
-            stage = "append-submit-log";
-            appendLog(instance.getDocumentCode(), null, null, LOG_SUBMIT, userId, submitterDisplayName, null, buildSubmitPayload(template));
-            stage = "persist-expense-details";
-            saveExpenseDetailInstances(instance.getDocumentCode(), template, expenseDetailDesign, expenseDetails);
-            stage = "sync-document-relations";
-            syncDocumentBusinessRelations(instance.getDocumentCode(), formDesign, formData);
-            stage = "initialize-runtime";
-            expenseWorkflowRuntimeSupport.initializeRuntime(instance, runtimeFlowContext);
-            if (isEffectiveApprovedStatus(requireDocument(instance.getDocumentCode()).getStatus())) {
-                finalizeEffectiveWriteOffs(instance.getDocumentCode());
-            }
-
-            ExpenseDocumentSubmitResultVO result = new ExpenseDocumentSubmitResultVO();
-            result.setId(instance.getId());
-            result.setDocumentCode(instance.getDocumentCode());
-            result.setStatus(instance.getStatus());
-            log.info(
-                    "Expense submit stage=success templateCode={} userId={} detailCount={} documentCode={} status={}",
-                    template.getTemplateCode(),
-                    userId,
-                    expenseDetailCount,
-                    instance.getDocumentCode(),
-                    instance.getStatus()
-            );
-            return result;
-        } catch (RuntimeException ex) {
-            log.error(
-                    "Expense submit failed stage={} templateCode={} userId={} detailCount={} documentCode={} cause={}",
-                    stage,
-                    templateCode,
-                    userId,
-                    expenseDetailCount,
-                    documentCode,
-                    ex.getClass().getSimpleName(),
-                    ex
-            );
-            throw ex;
-        }
-    }
-
-    /**
-     * 查询汇总。
-     */
-    List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
-        List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
-                        .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
-        );
-        return instances.isEmpty() ? Collections.emptyList() : toExpenseSummaries(instances);
-    }
-
-    /**
-     * 查询汇总。
-     */
-    List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
-        List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .ne(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_DRAFT)
-                        .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
-        );
-        return instances.isEmpty() ? Collections.emptyList() : toExpenseSummaries(instances);
-    }
-
-    /**
-     * 查询单据。
-     */
-    List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
-        String normalizedKind = normalizeDashboardOutstandingKind(kind);
-        String templateType = Objects.equals(normalizedKind, WRITEOFF_SOURCE_LOAN) ? "loan" : "report";
-        List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
-                        .in(ProcessDocumentInstance::getStatus, List.of(
-                                DOCUMENT_STATUS_APPROVED,
-                                DOCUMENT_STATUS_COMPLETED,
-                                DOCUMENT_STATUS_PENDING_PAYMENT,
-                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
-                                DOCUMENT_STATUS_PAYMENT_FINISHED
-                        ))
-                        .eq(ProcessDocumentInstance::getTemplateType, templateType)
-                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
-        );
-        if (instances.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        List<String> documentCodes = instances.stream().map(ProcessDocumentInstance::getDocumentCode).toList();
-        Map<String, BigDecimal> effectiveAmountMap = loadEffectiveWriteOffAmountMap(documentCodes);
-        Map<String, BigDecimal> prepayAmountMap = Objects.equals(normalizedKind, WRITEOFF_SOURCE_PREPAY_REPORT)
-                ? loadPrepayReportAmountMap(documentCodes)
-                : Collections.emptyMap();
-
-        Map<String, BigDecimal> outstandingAmountMap = new LinkedHashMap<>();
-        List<ProcessDocumentInstance> outstandingInstances = instances.stream()
-                .filter(instance -> {
-                    BigDecimal outstandingAmount = resolveOutstandingAmount(instance, normalizedKind, prepayAmountMap, effectiveAmountMap);
-                    if (outstandingAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                        return false;
-                    }
-                    outstandingAmountMap.put(instance.getDocumentCode(), outstandingAmount);
-                    return true;
-                })
-                .toList();
-        if (outstandingInstances.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        return toExpenseSummaries(outstandingInstances).stream()
-                .peek(item -> item.setOutstandingAmount(defaultDecimal(outstandingAmountMap.get(item.getDocumentCode()))))
-                .toList();
-    }
-
-    /**
-     * 获取明细。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    ExpenseDocumentDetailVO getDocumentDetail(Long userId, String documentCode, boolean allowCrossView) {
-        ProcessDocumentInstance instance = requireDocument(documentCode);
-        assertCanViewDocument(instance, userId, allowCrossView);
-        return buildDocumentDetail(instance);
-    }
-
-    /**
-     * 获取明细。
+     * 鏌ヨ姹囨€汇€?
      */
     ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         ProcessDocumentInstance instance = requireDocument(documentCode);
@@ -872,482 +292,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 获取选择器。
-     */
-    ExpenseDocumentPickerVO getDocumentPicker(
-            Long userId,
-            String relationType,
-            List<String> templateTypes,
-            String keyword,
-            Integer page,
-            Integer pageSize,
-            String excludeDocumentCode,
-            boolean allowCrossView
-    ) {
-        String normalizedRelationType = normalizeRelationType(relationType);
-        List<String> normalizedTemplateTypes = normalizePickerTemplateTypes(normalizedRelationType, templateTypes);
-        int safePage = page == null || page < 1 ? 1 : page;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 50);
-        String excludedDocumentCode = trimToNull(excludeDocumentCode);
-        String normalizedKeyword = trimToNull(keyword);
-
-        List<ProcessDocumentInstance> visibleApprovedDocuments = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getStatus, List.of(
-                                DOCUMENT_STATUS_APPROVED,
-                                DOCUMENT_STATUS_COMPLETED,
-                                DOCUMENT_STATUS_PENDING_PAYMENT,
-                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
-                                DOCUMENT_STATUS_PAYMENT_FINISHED
-                        ))
-                        .in(ProcessDocumentInstance::getTemplateType, normalizedTemplateTypes)
-                        .ne(excludedDocumentCode != null, ProcessDocumentInstance::getDocumentCode, excludedDocumentCode)
-                        .eq(!allowCrossView, ProcessDocumentInstance::getSubmitterUserId, userId)
-                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
-        ).stream()
-                .filter(item -> matchesKeyword(
-                        normalizedKeyword,
-                        item.getDocumentCode(),
-                        item.getDocumentTitle(),
-                        item.getTemplateName(),
-                        item.getDocumentReason()
-                ))
-                .toList();
-
-        ExpenseDocumentPickerVO result = new ExpenseDocumentPickerVO();
-        result.setRelationType(normalizedRelationType);
-        if (visibleApprovedDocuments.isEmpty()) {
-            return result;
-        }
-
-        if (Objects.equals(normalizedRelationType, RELATION_TYPE_RELATED)) {
-            for (String templateType : normalizedTemplateTypes) {
-                result.getGroups().add(buildRelatedGroup(templateType, visibleApprovedDocuments, safePage, safePageSize));
-            }
-            return result;
-        }
-
-        for (String templateType : normalizedTemplateTypes) {
-            ExpenseDocumentPickerGroupVO group = buildWriteOffGroup(templateType, visibleApprovedDocuments, safePage, safePageSize);
-            if (group.getTotal() > 0) {
-                result.getGroups().add(group);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 获取选择器。
-     */
-    ExpenseDocumentPickerVO getDashboardWriteOffSourceReportPicker(
-            Long userId,
-            String targetDocumentCode,
-            String keyword,
-            Integer page,
-            Integer pageSize
-    ) {
-        ProcessDocumentInstance target = requireDocument(targetDocumentCode);
-        requireSubmitter(target, userId);
-        ensureDashboardWriteOffTargetSupported(target);
-
-        int safePage = page == null || page < 1 ? 1 : page;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 50);
-        String normalizedKeyword = trimToNull(keyword);
-
-        List<ProcessDocumentInstance> sourceReports = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
-                        .in(ProcessDocumentInstance::getStatus, List.of(
-                                DOCUMENT_STATUS_APPROVED,
-                                DOCUMENT_STATUS_COMPLETED,
-                                DOCUMENT_STATUS_PENDING_PAYMENT,
-                                DOCUMENT_STATUS_PAYMENT_COMPLETED,
-                                DOCUMENT_STATUS_PAYMENT_FINISHED
-                        ))
-                        .eq(ProcessDocumentInstance::getTemplateType, "report")
-                        .ne(ProcessDocumentInstance::getDocumentCode, targetDocumentCode)
-                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
-        ).stream()
-                .filter(item -> matchesKeyword(
-                        normalizedKeyword,
-                        item.getDocumentCode(),
-                        item.getDocumentTitle(),
-                        item.getTemplateName(),
-                        item.getDocumentReason()
-                ))
-                .toList();
-
-        ExpenseDocumentPickerVO result = new ExpenseDocumentPickerVO();
-        result.setRelationType(RELATION_TYPE_WRITEOFF);
-        if (sourceReports.isEmpty()) {
-            return result;
-        }
-
-        Map<String, BigDecimal> sourceEffectiveAmountMap = loadEffectiveSourceWriteOffAmountMap(
-                sourceReports.stream().map(ProcessDocumentInstance::getDocumentCode).toList()
-        );
-        Set<String> boundSourceCodes = processDocumentWriteOffMapper.selectList(
-                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
-                        .eq(ProcessDocumentWriteOff::getTargetDocumentCode, targetDocumentCode)
-                        .eq(ProcessDocumentWriteOff::getStatus, WRITEOFF_STATUS_EFFECTIVE)
-        ).stream()
-                .map(ProcessDocumentWriteOff::getSourceDocumentCode)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        List<ExpenseDocumentPickerItemVO> items = new ArrayList<>();
-        for (ProcessDocumentInstance report : sourceReports) {
-            if (boundSourceCodes.contains(report.getDocumentCode())) {
-                continue;
-            }
-            BigDecimal availableAmount = resolveReportSourceAvailableAmount(report, sourceEffectiveAmountMap);
-            if (availableAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                continue;
-            }
-            ExpenseDocumentPickerItemVO item = toPickerItem(report);
-            item.setAvailableWriteOffAmount(availableAmount);
-            items.add(item);
-        }
-        if (items.isEmpty()) {
-            return result;
-        }
-
-        result.getGroups().add(paginatePickerGroup("report", items, safePage, safePageSize));
-        return result;
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    boolean bindDashboardWriteOff(Long userId, String targetDocumentCode, String sourceReportDocumentCode) {
-        ProcessDocumentInstance target = requireDocument(targetDocumentCode);
-        ProcessDocumentInstance sourceReport = requireDocument(sourceReportDocumentCode);
-        requireSubmitter(target, userId);
-        requireSubmitter(sourceReport, userId);
-        ensureDashboardWriteOffTargetSupported(target);
-        ensureApprovedReportSource(sourceReport);
-        if (Objects.equals(target.getDocumentCode(), sourceReport.getDocumentCode())) {
-            throw new IllegalStateException("\u6838\u9500\u76ee\u6807\u5355\u636e\u4e0e\u6765\u6e90\u62a5\u9500\u5355\u4e0d\u80fd\u662f\u540c\u4e00\u5f20\u5355\u636e");
-        }
-
-        long duplicateCount = processDocumentWriteOffMapper.selectCount(
-                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
-                        .eq(ProcessDocumentWriteOff::getSourceDocumentCode, sourceReportDocumentCode)
-                        .eq(ProcessDocumentWriteOff::getTargetDocumentCode, targetDocumentCode)
-                        .eq(ProcessDocumentWriteOff::getStatus, WRITEOFF_STATUS_EFFECTIVE)
-        );
-        if (duplicateCount > 0) {
-            throw new IllegalStateException("\u8be5\u62a5\u9500\u5355\u5df2\u7ecf\u5173\u8054\u5230\u5f53\u524d\u5355\u636e\uff0c\u4e0d\u80fd\u91cd\u590d\u6838\u9500");
-        }
-
-        Map<String, BigDecimal> prepayAmountMap = loadPrepayReportAmountMap(List.of(targetDocumentCode));
-        String targetKind = resolveWriteOffSourceKind(target, prepayAmountMap);
-        Map<String, BigDecimal> targetEffectiveAmountMap = loadEffectiveWriteOffAmountMap(List.of(targetDocumentCode));
-        BigDecimal targetRemaining = resolveCurrentAvailableWriteOffAmount(target, targetKind, prepayAmountMap, targetEffectiveAmountMap);
-        if (targetRemaining.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("\u76ee\u6807\u5355\u636e\u5df2\u65e0\u53ef\u6838\u9500\u4f59\u989d");
-        }
-
-        Map<String, BigDecimal> sourceEffectiveAmountMap = loadEffectiveSourceWriteOffAmountMap(List.of(sourceReportDocumentCode));
-        BigDecimal sourceRemaining = resolveReportSourceAvailableAmount(sourceReport, sourceEffectiveAmountMap);
-        if (sourceRemaining.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("\u6765\u6e90\u62a5\u9500\u5355\u5df2\u65e0\u53ef\u7528\u6838\u9500\u989d\u5ea6");
-        }
-
-        BigDecimal effectiveAmount = targetRemaining.min(sourceRemaining);
-        if (effectiveAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("\u672c\u6b21\u6838\u9500\u91d1\u989d\u5fc5\u987b\u5927\u4e8e 0");
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        ProcessDocumentWriteOff writeOff = new ProcessDocumentWriteOff();
-        writeOff.setSourceDocumentCode(sourceReportDocumentCode);
-        writeOff.setSourceFieldKey(DASHBOARD_WRITEOFF_SOURCE_FIELD_KEY);
-        writeOff.setTargetDocumentCode(targetDocumentCode);
-        writeOff.setTargetTemplateType(target.getTemplateType());
-        writeOff.setWriteoffSourceKind(targetKind);
-        writeOff.setRequestedAmount(effectiveAmount);
-        writeOff.setEffectiveAmount(effectiveAmount);
-        writeOff.setAvailableSnapshotAmount(targetRemaining);
-        writeOff.setRemainingSnapshotAmount(targetRemaining.subtract(effectiveAmount));
-        writeOff.setSortOrder(1);
-        writeOff.setStatus(WRITEOFF_STATUS_EFFECTIVE);
-        writeOff.setEffectiveAt(now);
-        writeOff.setCreatedAt(now);
-        writeOff.setUpdatedAt(now);
-        processDocumentWriteOffMapper.insert(writeOff);
-        return true;
-    }
-
-    /**
-     * 保存单据。
-     */
-    @Transactional(rollbackFor = Exception.class)
-    ProcessDocumentInstance saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
-        ProcessDocumentInstance instance = requireDocument(documentCode);
-        requireSubmitter(instance, userId);
-        if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u662f\u8349\u7a3f\u72b6\u6001");
-        }
-        DocumentMutationContext mutation = buildMutationContext(instance, dto, false);
-        applyDocumentMutation(instance, mutation, false);
-        return requireDocument(documentCode);
-    }
-
-    @Transactional(rollbackFor = Exception.class)
-    ExpenseDocumentSubmitResultVO resubmitDocument(Long userId, String username, String documentCode, ExpenseDocumentUpdateDTO dto) {
-        ProcessDocumentInstance instance = requireDocument(documentCode);
-        requireSubmitter(instance, userId);
-        String status = trimToNull(instance.getStatus());
-        if (!Objects.equals(status, DOCUMENT_STATUS_DRAFT) && !Objects.equals(status, DOCUMENT_STATUS_REJECTED)) {
-            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u662f\u53ef\u91cd\u63d0\u72b6\u6001");
-        }
-        String submitterDisplayName = resolveUserDisplayName(userId, username);
-        DocumentMutationContext mutation = buildMutationContext(instance, dto, true);
-        instance.setSubmitterName(submitterDisplayName);
-        applyDocumentMutation(instance, mutation, true);
-        appendLog(instance.getDocumentCode(), null, null, LOG_RESUBMIT, userId, submitterDisplayName, null, Map.of(
-                "templateCode", instance.getTemplateCode(),
-                "templateName", instance.getTemplateName()
-        ));
-        syncDocumentBusinessRelations(instance.getDocumentCode(), mutation.formDesign(), mutation.formData());
-        expenseWorkflowRuntimeSupport.initializeRuntime(instance, mutation.runtimeContext());
-        if (isEffectiveApprovedStatus(requireDocument(instance.getDocumentCode()).getStatus())) {
-            finalizeEffectiveWriteOffs(instance.getDocumentCode());
-        }
-        ExpenseDocumentSubmitResultVO result = new ExpenseDocumentSubmitResultVO();
-        result.setId(instance.getId());
-        result.setDocumentCode(instance.getDocumentCode());
-        result.setStatus(instance.getStatus());
-        return result;
-    }
-
-    /**
-     * 构建明细。
-     */
-    ExpenseDocumentDetailVO buildDocumentDetail(ProcessDocumentInstance instance) {
-        long totalStartedAt = System.nanoTime();
-        String documentCode = instance.getDocumentCode();
-        String templateType = trimToNull(instance.getTemplateType());
-        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
-        detail.setDocumentCode(instance.getDocumentCode());
-        detail.setDocumentTitle(instance.getDocumentTitle());
-        detail.setDocumentReason(instance.getDocumentReason());
-        detail.setStatus(instance.getStatus());
-        detail.setStatusLabel(resolveStatusLabel(instance.getStatus()));
-        detail.setTotalAmount(defaultDecimal(instance.getTotalAmount()));
-        detail.setSubmitterUserId(instance.getSubmitterUserId());
-        detail.setSubmitterName(instance.getSubmitterName());
-        detail.setTemplateName(instance.getTemplateName());
-        detail.setTemplateType(instance.getTemplateType());
-        detail.setCurrentNodeKey(instance.getCurrentNodeKey());
-        detail.setCurrentNodeName(instance.getCurrentNodeName());
-        detail.setCurrentTaskType(instance.getCurrentTaskType());
-        detail.setSubmittedAt(formatTime(resolveDisplaySubmittedAt(instance)));
-        detail.setFinishedAt(formatTime(instance.getFinishedAt()));
-        long snapshotStartedAt = System.nanoTime();
-        Map<String, Object> templateSnapshot = readMap(instance.getTemplateSnapshotJson());
-        Map<String, Object> formSchemaSnapshot = readMap(instance.getFormSchemaSnapshotJson());
-        Map<String, Object> formData = readFormData(instance.getFormDataJson());
-        readonlyPayeeAccountSnapshotEnhancer.enhanceFormData(formSchemaSnapshot, formData, null);
-        Map<String, Object> flowSnapshot = readMap(instance.getFlowSnapshotJson());
-        long snapshotElapsedAt = elapsedMillis(snapshotStartedAt);
-        detail.setTemplateSnapshot(templateSnapshot);
-        detail.setFormSchemaSnapshot(formSchemaSnapshot);
-        detail.setFormData(formData);
-        detail.setFlowSnapshot(flowSnapshot);
-
-        long companyOptionsStartedAt = System.nanoTime();
-        List<ProcessFormOptionVO> companyOptions = loadCompanyOptionsForDetail(formSchemaSnapshot, formData);
-        long companyOptionsElapsedAt = elapsedMillis(companyOptionsStartedAt);
-        detail.setCompanyOptions(companyOptions);
-
-        long departmentOptionsStartedAt = System.nanoTime();
-        List<ProcessFormOptionVO> departmentOptions = loadDepartmentOptionsForDetail(formSchemaSnapshot, formData);
-        long departmentOptionsElapsedAt = elapsedMillis(departmentOptionsStartedAt);
-        detail.setDepartmentOptions(departmentOptions);
-
-        long expenseDetailsStartedAt = System.nanoTime();
-        List<ExpenseDetailInstanceSummaryVO> expenseDetails = safeLoadExpenseDetailSummaries(documentCode);
-        long expenseDetailsElapsedAt = elapsedMillis(expenseDetailsStartedAt);
-        detail.setExpenseDetails(expenseDetails);
-
-        long currentTasksStartedAt = System.nanoTime();
-        List<ExpenseApprovalTaskVO> currentTasks = loadPendingTasks(documentCode).stream().map(this::toTaskVO).toList();
-        long currentTasksElapsedAt = elapsedMillis(currentTasksStartedAt);
-        detail.setCurrentTasks(currentTasks);
-
-        long actionLogsStartedAt = System.nanoTime();
-        List<ProcessDocumentActionLog> actionLogEntities = loadActionLogs(documentCode);
-        List<ExpenseApprovalLogVO> actionLogs = actionLogEntities.stream().map(this::toLogVO).toList();
-        long actionLogsElapsedAt = elapsedMillis(actionLogsStartedAt);
-        detail.setActionLogs(actionLogs);
-
-        long approvalProjectionStartedAt = System.nanoTime();
-        List<ProcessDocumentTask> allTasks = loadAllTasks(documentCode);
-        FlowRuntimeSnapshot runtimeSnapshot = readFlowRuntimeSnapshot(instance.getFlowSnapshotJson());
-        Map<String, Object> runtimeContext = expenseWorkflowRuntimeSupport.buildRuntimeContextForInstance(instance);
-        ExpenseApprovalProjectionSupport.ApprovalProjectionResult approvalProjection = expenseApprovalProjectionSupport.build(
-                instance,
-                runtimeSnapshot,
-                runtimeContext,
-                allTasks,
-                actionLogEntities
-        );
-        List<ExpenseApprovalNodeStatusVO> approvalNodeStatuses = approvalProjection.approvalNodeStatuses();
-        List<ExpenseApprovalTimelineItemVO> approvalTimeline = approvalProjection.approvalTimeline();
-        long approvalProjectionElapsedAt = elapsedMillis(approvalProjectionStartedAt);
-        detail.setApprovalNodeStatuses(approvalNodeStatuses);
-        detail.setApprovalTimeline(approvalTimeline);
-        boolean manualApproverSelectionPending = Objects.equals(trimToNull(instance.getCurrentTaskType()), APPROVER_TYPE_MANUAL_SELECT)
-                && trimToNull(instance.getCurrentNodeKey()) != null;
-        detail.setManualApproverSelectionPending(manualApproverSelectionPending);
-        if (manualApproverSelectionPending) {
-            detail.setManualApproverSelectionNodeKey(instance.getCurrentNodeKey());
-            detail.setManualApproverSelectionNodeName(instance.getCurrentNodeName());
-            detail.setManualApproverOptions(loadUserOptions(flowSnapshot));
-        }
-
-        PmBankPaymentRecord bankPaymentRecord = findLatestBankPaymentRecord(documentCode);
-        if (bankPaymentRecord != null) {
-            Map<Long, String> companyBankAccountNameMap = loadCompanyBankAccountNameMap(
-                    bankPaymentRecord.getCompanyBankAccountId() == null
-                            ? Collections.emptySet()
-                            : Set.of(bankPaymentRecord.getCompanyBankAccountId())
-            );
-            detail.setBankPayment(toDetailBankPayment(
-                    bankPaymentRecord,
-                    companyBankAccountNameMap.get(bankPaymentRecord.getCompanyBankAccountId()),
-                    instance.getStatus()
-            ));
-            detail.setBankReceipts(toDetailBankReceipts(bankPaymentRecord));
-        }
-
-        log.info(
-                "Expense detail built documentCode={} templateType={} totalMs={} snapshotMs={} companyOptionsMs={} departmentOptionsMs={} expenseDetailsMs={} pendingTasksMs={} actionLogsMs={} approvalProjectionMs={} expenseDetailCount={} pendingTaskCount={} actionLogCount={} approvalNodeStatusCount={} approvalTimelineCount={}",
-                documentCode,
-                defaultText(templateType, "-"),
-                elapsedMillis(totalStartedAt),
-                snapshotElapsedAt,
-                companyOptionsElapsedAt,
-                departmentOptionsElapsedAt,
-                expenseDetailsElapsedAt,
-                currentTasksElapsedAt,
-                actionLogsElapsedAt,
-                approvalProjectionElapsedAt,
-                expenseDetails.size(),
-                currentTasks.size(),
-                actionLogs.size(),
-                approvalNodeStatuses.size(),
-                approvalTimeline.size()
-        );
-        return detail;
-    }
-
-    /**
-     * 构建分组。
-     */
-    private ExpenseDocumentPickerGroupVO buildRelatedGroup(
-            String templateType,
-            List<ProcessDocumentInstance> documents,
-            int page,
-            int pageSize
-    ) {
-        List<ExpenseDocumentPickerItemVO> items = documents.stream()
-                .filter(item -> Objects.equals(trimToNull(item.getTemplateType()), templateType))
-                .map(this::toPickerItem)
-                .toList();
-        return paginatePickerGroup(templateType, items, page, pageSize);
-    }
-
-    /**
-     * 构建分组。
-     */
-    private ExpenseDocumentPickerGroupVO buildWriteOffGroup(
-            String templateType,
-            List<ProcessDocumentInstance> documents,
-            int page,
-            int pageSize
-    ) {
-        List<ProcessDocumentInstance> typedDocuments = documents.stream()
-                .filter(item -> Objects.equals(trimToNull(item.getTemplateType()), templateType))
-                .toList();
-        if (typedDocuments.isEmpty()) {
-            return paginatePickerGroup(templateType, Collections.emptyList(), page, pageSize);
-        }
-
-        Map<String, BigDecimal> effectiveAmountMap = loadEffectiveWriteOffAmountMap(
-                typedDocuments.stream().map(ProcessDocumentInstance::getDocumentCode).toList()
-        );
-        List<ExpenseDocumentPickerItemVO> items = new ArrayList<>();
-        if (Objects.equals(templateType, "loan")) {
-            for (ProcessDocumentInstance instance : typedDocuments) {
-                BigDecimal totalAmount = defaultDecimal(instance.getTotalAmount());
-                BigDecimal effectiveAmount = defaultDecimal(effectiveAmountMap.get(instance.getDocumentCode()));
-                BigDecimal availableAmount = totalAmount.subtract(effectiveAmount);
-                if (availableAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                    continue;
-                }
-                ExpenseDocumentPickerItemVO item = toPickerItem(instance);
-                item.setAvailableWriteOffAmount(availableAmount);
-                item.setWriteOffSourceKind(WRITEOFF_SOURCE_LOAN);
-                items.add(item);
-            }
-            return paginatePickerGroup(templateType, items, page, pageSize);
-        }
-
-        Map<String, BigDecimal> prepayAmountMap = loadPrepayReportAmountMap(
-                typedDocuments.stream().map(ProcessDocumentInstance::getDocumentCode).toList()
-        );
-        for (ProcessDocumentInstance instance : typedDocuments) {
-            BigDecimal prepayAmount = defaultDecimal(prepayAmountMap.get(instance.getDocumentCode()));
-            if (prepayAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                continue;
-            }
-            BigDecimal effectiveAmount = defaultDecimal(effectiveAmountMap.get(instance.getDocumentCode()));
-            BigDecimal availableAmount = prepayAmount.subtract(effectiveAmount);
-            if (availableAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                continue;
-            }
-            ExpenseDocumentPickerItemVO item = toPickerItem(instance);
-                item.setAvailableWriteOffAmount(availableAmount);
-            item.setWriteOffSourceKind(WRITEOFF_SOURCE_PREPAY_REPORT);
-            items.add(item);
-        }
-        return paginatePickerGroup(templateType, items, page, pageSize);
-    }
-
-    private ExpenseDocumentPickerGroupVO paginatePickerGroup(
-            String templateType,
-            List<ExpenseDocumentPickerItemVO> items,
-            int page,
-            int pageSize
-    ) {
-        ExpenseDocumentPickerGroupVO group = new ExpenseDocumentPickerGroupVO();
-        group.setTemplateType(templateType);
-        group.setTemplateTypeLabel(resolveTemplateTypeLabel(templateType, null));
-        group.setPage(page);
-        group.setPageSize(pageSize);
-        group.setTotal(items.size());
-        int fromIndex = Math.min(Math.max((page - 1) * pageSize, 0), items.size());
-        int toIndex = Math.min(fromIndex + pageSize, items.size());
-        group.setItems(new ArrayList<>(items.subList(fromIndex, toIndex)));
-        return group;
-    }
-
-    private ExpenseDocumentPickerItemVO toPickerItem(ProcessDocumentInstance instance) {
-        ExpenseDocumentPickerItemVO item = new ExpenseDocumentPickerItemVO();
-        item.setDocumentCode(instance.getDocumentCode());
-        item.setDocumentTitle(instance.getDocumentTitle());
-        item.setTemplateType(instance.getTemplateType());
-        item.setTemplateTypeLabel(resolveTemplateTypeLabel(instance.getTemplateType(), null));
-        item.setTemplateName(instance.getTemplateName());
-        item.setStatus(instance.getStatus());
-        item.setStatusLabel(resolveStatusLabel(instance.getStatus()));
-        item.setTotalAmount(defaultDecimal(instance.getTotalAmount()));
-        return item;
-    }
-
-    /**
-     * 加载映射。
+     * 鑾峰彇閫夋嫨鍣ㄣ€?
      */
     private Map<String, BigDecimal> loadPrepayReportAmountMap(List<String> documentCodes) {
         if (documentCodes == null || documentCodes.isEmpty()) {
@@ -1372,7 +317,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载映射。
+     * 鍔犺浇鏄犲皠銆?
      */
     private Map<String, BigDecimal> loadEffectiveWriteOffAmountMap(List<String> targetDocumentCodes) {
         if (targetDocumentCodes == null || targetDocumentCodes.isEmpty()) {
@@ -1394,37 +339,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载映射。
-     */
-    private Map<String, BigDecimal> loadEffectiveSourceWriteOffAmountMap(List<String> sourceDocumentCodes) {
-        if (sourceDocumentCodes == null || sourceDocumentCodes.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return processDocumentWriteOffMapper.selectList(
-                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
-                        .in(ProcessDocumentWriteOff::getSourceDocumentCode, sourceDocumentCodes)
-                        .eq(ProcessDocumentWriteOff::getStatus, WRITEOFF_STATUS_EFFECTIVE)
-        ).stream().collect(Collectors.groupingBy(
-                ProcessDocumentWriteOff::getSourceDocumentCode,
-                LinkedHashMap::new,
-                Collectors.reducing(
-                        BigDecimal.ZERO,
-                        item -> defaultDecimal(item.getEffectiveAmount()),
-                        BigDecimal::add
-                )
-        ));
-    }
-
-    private String normalizeDashboardOutstandingKind(String kind) {
-        String normalizedKind = trimToNull(kind);
-        if (Objects.equals(normalizedKind, WRITEOFF_SOURCE_LOAN) || Objects.equals(normalizedKind, WRITEOFF_SOURCE_PREPAY_REPORT)) {
-            return normalizedKind;
-        }
-        throw new IllegalArgumentException("\u4e0d\u652f\u6301\u7684\u5f85\u6838\u9500\u770b\u677f\u7c7b\u578b\uff1a" + kind);
-    }
-
-    /**
-     * 解析待核销看板展示的剩余金额。
+     * 鍔犺浇鏄犲皠銆?
      */
     private BigDecimal resolveOutstandingAmount(
             ProcessDocumentInstance instance,
@@ -1441,17 +356,8 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析金额。
+     * 瑙ｆ瀽閲戦銆?
      */
-    private BigDecimal resolveReportSourceAvailableAmount(
-            ProcessDocumentInstance sourceReport,
-            Map<String, BigDecimal> sourceEffectiveAmountMap
-    ) {
-        BigDecimal availableAmount = defaultDecimal(sourceReport.getTotalAmount())
-                .subtract(defaultDecimal(sourceEffectiveAmountMap.get(sourceReport.getDocumentCode())));
-        return availableAmount.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : availableAmount;
-    }
-
     private void ensureDashboardWriteOffTargetSupported(ProcessDocumentInstance target) {
         if (!isEffectiveApprovedStatus(target.getStatus())) {
             throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u672a\u5ba1\u6279\u901a\u8fc7\uff0c\u4e0d\u80fd\u53d1\u8d77\u6838\u9500");
@@ -1502,16 +408,16 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 判断相关信息。
+     * 鍒ゆ柇鐩稿叧淇℃伅銆?
      */
-    private boolean isTemplateAvailableForCreate(ProcessDocumentTemplate template) {
+    boolean isTemplateAvailableForCreate(ProcessDocumentTemplate template) {
         if (!Objects.equals(trimToNull(template.getTemplateType()), "report")) {
             return true;
         }
         return trimToNull(template.getExpenseDetailDesignCode()) != null;
     }
 
-    private List<ExpenseDetailInstanceDTO> normalizeExpenseDetails(List<ExpenseDetailInstanceDTO> expenseDetails) {
+    List<ExpenseDetailInstanceDTO> normalizeExpenseDetails(List<ExpenseDetailInstanceDTO> expenseDetails) {
         if (expenseDetails == null || expenseDetails.isEmpty()) {
             return Collections.emptyList();
         }
@@ -1536,9 +442,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 校验明细。
+     * 鏍￠獙鏄庣粏銆?
      */
-    private void validateExpenseDetailSubmission(
+    void validateExpenseDetailSubmission(
             ProcessDocumentTemplate template,
             ProcessExpenseDetailDesign expenseDetailDesign,
             List<ExpenseDetailInstanceDTO> expenseDetails
@@ -1562,9 +468,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 校验上下文。
+     * 鏍￠獙涓婁笅鏂囥€?
      */
-    private String validateSubmitContext(
+    String validateSubmitContext(
             ProcessDocumentTemplate template,
             ProcessFormDesign formDesign,
             ProcessExpenseDetailDesign expenseDetailDesign,
@@ -1822,7 +728,7 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
-    private void syncDocumentBusinessRelations(
+    void syncDocumentBusinessRelations(
             String documentCode,
             ProcessFormDesign formDesign,
             Map<String, Object> formData
@@ -2066,7 +972,7 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
-    private void finalizeEffectiveWriteOffs(String documentCode) {
+    void finalizeEffectiveWriteOffs(String documentCode) {
         List<ProcessDocumentWriteOff> pendingWriteOffs = processDocumentWriteOffMapper.selectList(
                 Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
                         .eq(ProcessDocumentWriteOff::getSourceDocumentCode, documentCode)
@@ -2312,7 +1218,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析相关信息。
+     * 瑙ｆ瀽鐩稿叧淇℃伅銆?
      */
     private String resolveWriteOffSourceKind(
             ProcessDocumentInstance target,
@@ -2330,7 +1236,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析金额。
+     * 瑙ｆ瀽閲戦銆?
      */
     private BigDecimal resolveCurrentAvailableWriteOffAmount(
             ProcessDocumentInstance target,
@@ -2347,7 +1253,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 校验快照。
+     * 鏍￠獙蹇収銆?
      */
     private String validateFlowSnapshotForSubmit(ProcessDocumentTemplate template) {
         String flowCode = trimToNull(template.getApprovalFlow());
@@ -2382,19 +1288,16 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建提交数据。
+     * 鏋勫缓鎻愪氦鏁版嵁銆?
      */
-    private Map<String, Object> buildSubmitPayload(ProcessDocumentTemplate template) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("templateCode", template.getTemplateCode());
-        payload.put("templateName", defaultText(template.getTemplateName(), template.getTemplateCode()));
-        return payload;
+    Map<String, Object> buildSubmitPayload(ProcessDocumentTemplate template) {
+        return expenseDocumentMetadataSupport.buildSubmitPayload(template);
     }
 
     /**
-     * 保存实例。
+     * 淇濆瓨瀹炰緥銆?
      */
-    private void saveExpenseDetailInstances(
+    void saveExpenseDetailInstances(
             String documentCode,
             ProcessDocumentTemplate template,
             ProcessExpenseDetailDesign expenseDetailDesign,
@@ -2467,7 +1370,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载明细。
+     * 鍔犺浇鏄庣粏銆?
      */
     List<ProcessDocumentExpenseDetail> loadExpenseDetails(String documentCode) {
         return processDocumentExpenseDetailMapper.selectList(
@@ -2477,7 +1380,7 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
-    private List<ExpenseDetailInstanceSummaryVO> safeLoadExpenseDetailSummaries(String documentCode) {
+    List<ExpenseDetailInstanceSummaryVO> safeLoadExpenseDetailSummaries(String documentCode) {
         List<ExpenseDetailInstanceSummaryVO> summaries = new ArrayList<>();
         for (ProcessDocumentExpenseDetail expenseDetail : loadExpenseDetails(documentCode)) {
             if (expenseDetail == null) {
@@ -2564,150 +1467,8 @@ class AbstractExpenseDocumentSupport {
         return dto;
     }
 
-    /**
-     * 构建上下文。
-     */
-    private ExpenseDocumentEditContextVO buildEditContext(Long userId, ProcessDocumentInstance instance, Long taskId, String editMode) {
-        ProcessDocumentTemplate template = requireTemplateForDocument(instance.getTemplateCode());
-        ExpenseCreateTemplateDetailVO templateDetail = buildTemplateDetail(userId, template);
-        ExpenseDocumentEditContextVO context = new ExpenseDocumentEditContextVO();
-        context.setEditMode(editMode);
-        context.setDocumentCode(instance.getDocumentCode());
-        context.setTaskId(taskId);
-        copyTemplateDetail(templateDetail, context);
-        context.setFormData(readFormData(instance.getFormDataJson()));
-        context.setExpenseDetails(loadExpenseDetails(instance.getDocumentCode()).stream().map(this::toRuntimeExpenseDetailDTO).toList());
-        return context;
-    }
 
-    /**
-     * 复制明细。
-     */
-    private void copyTemplateDetail(ExpenseCreateTemplateDetailVO source, ExpenseDocumentEditContextVO target) {
-        target.setTemplateCode(source.getTemplateCode());
-        target.setTemplateName(source.getTemplateName());
-        target.setTemplateType(source.getTemplateType());
-        target.setTemplateTypeLabel(source.getTemplateTypeLabel());
-        target.setCategoryCode(source.getCategoryCode());
-        target.setTemplateDescription(source.getTemplateDescription());
-        target.setFormDesignCode(source.getFormDesignCode());
-        target.setApprovalFlowCode(source.getApprovalFlowCode());
-        target.setFlowName(source.getFlowName());
-        target.setFormName(source.getFormName());
-        target.setSchema(source.getSchema());
-        target.setExpenseDetailDesignCode(source.getExpenseDetailDesignCode());
-        target.setExpenseDetailDesignName(source.getExpenseDetailDesignName());
-        target.setExpenseDetailType(source.getExpenseDetailType());
-        target.setExpenseDetailTypeLabel(source.getExpenseDetailTypeLabel());
-        target.setExpenseDetailModeDefault(source.getExpenseDetailModeDefault());
-        target.setExpenseDetailSchema(source.getExpenseDetailSchema());
-        target.setSharedArchives(source.getSharedArchives());
-        target.setExpenseDetailSharedArchives(source.getExpenseDetailSharedArchives());
-        target.setCompanyOptions(source.getCompanyOptions());
-        target.setDepartmentOptions(source.getDepartmentOptions());
-        target.setExpenseTypeOptions(source.getExpenseTypeOptions());
-        target.setExpenseTypeInvoiceFreeModeMap(source.getExpenseTypeInvoiceFreeModeMap());
-        target.setCurrentUserCompanyId(source.getCurrentUserCompanyId());
-        target.setCurrentUserCompanyName(source.getCurrentUserCompanyName());
-        target.setCurrentUserDeptId(source.getCurrentUserDeptId());
-        target.setCurrentUserDeptName(source.getCurrentUserDeptName());
-    }
-
-    /**
-     * 构建上下文。
-     */
-    DocumentMutationContext buildMutationContext(ProcessDocumentInstance instance, ExpenseDocumentUpdateDTO dto, boolean resetRuntime) {
-        ProcessDocumentTemplate template = requireTemplateForDocument(instance.getTemplateCode());
-        ProcessFormDesign formDesign = loadFormDesign(template.getFormDesignCode());
-        ProcessExpenseDetailDesign expenseDetailDesign = loadExpenseDetailDesign(template.getExpenseDetailDesignCode());
-        Map<String, Object> formData = dto == null || dto.getFormData() == null
-                ? new LinkedHashMap<>()
-                : new LinkedHashMap<>(dto.getFormData());
-        List<ExpenseDetailInstanceDTO> expenseDetails = normalizeExpenseDetails(dto == null ? Collections.emptyList() : dto.getExpenseDetails());
-        validateExpenseDetailSubmission(template, expenseDetailDesign, expenseDetails);
-        String flowSnapshotJson = resetRuntime
-                ? validateSubmitContext(template, formDesign, expenseDetailDesign, formData, expenseDetails)
-                : null;
-        User submitter = loadActiveUser(instance.getSubmitterUserId());
-        Map<String, Object> runtimeContext = resetRuntime
-                ? expenseWorkflowRuntimeSupport.buildRuntimeFlowContext(
-                        submitter,
-                        template,
-                        formDesign,
-                        formData,
-                        expenseDetailDesign,
-                        expenseDetails
-                )
-                : Collections.emptyMap();
-        if (resetRuntime) {
-            runtimeContext.put("manualApproverSelections", normalizeManualApproverSelections(dto == null ? null : dto.getManualApproverSelections()));
-            runtimeContext.putAll(resolveRejectRuntimeMetadata(instance));
-        }
-        validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
-        validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
-        validatePmNameLength(instance.getSubmitterName(), "\u63d0\u4ea4\u4eba\u59d3\u540d");
-        String documentTitle = resolveDocumentTitle(template, formData, instance.getSubmitterName());
-        return new DocumentMutationContext(
-                template,
-                formDesign,
-                expenseDetailDesign,
-                formData,
-                expenseDetails,
-                flowSnapshotJson,
-                runtimeContext,
-                documentTitle,
-                resolveDocumentReason(template, formData),
-                resolveTotalAmount(formData, expenseDetails, template.getExpenseDetailModeDefault())
-        );
-    }
-
-    void applyDocumentMutation(ProcessDocumentInstance instance, DocumentMutationContext context, boolean resetRuntime) {
-        LocalDateTime now = LocalDateTime.now();
-        validatePmNameLength(context.template().getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
-        validatePmNameLength(context.template().getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
-        validatePmTitleLength(context.documentTitle(), "\u5355\u636e\u6807\u9898");
-        if (resetRuntime) {
-            cancelOpenTasks(loadOpenTasks(instance.getDocumentCode()), null, now);
-            instance.setStatus(DOCUMENT_STATUS_DRAFT);
-            instance.setCurrentNodeKey(null);
-            instance.setCurrentNodeName(null);
-            instance.setCurrentTaskType(null);
-            instance.setFinishedAt(null);
-            instance.setTemplateName(context.template().getTemplateName());
-            instance.setTemplateType(context.template().getTemplateType());
-            instance.setFormDesignCode(context.template().getFormDesignCode());
-            instance.setApprovalFlowCode(context.template().getApprovalFlow());
-            instance.setFlowName(context.template().getFlowName());
-            instance.setTemplateSnapshotJson(writeJson(toTemplateSnapshot(context.template())));
-            instance.setFormSchemaSnapshotJson(context.formDesign() == null ? writeJson(defaultSchema()) : context.formDesign().getSchemaJson());
-            instance.setFlowSnapshotJson(context.flowSnapshotJson() == null ? resolveFlowSnapshotJson(context.template()) : context.flowSnapshotJson());
-        }
-        instance.setDocumentTitle(context.documentTitle());
-        instance.setDocumentReason(context.documentReason());
-        instance.setTotalAmount(context.totalAmount());
-        instance.setFormDataJson(writeJson(context.formData()));
-        instance.setUpdatedAt(now);
-        processDocumentInstanceMapper.updateById(instance);
-        if (resetRuntime) {
-            persistDocumentRuntimeState(instance, instance.getStatus(), null, null, null, null, now);
-        }
-        replaceExpenseDetailInstances(instance.getDocumentCode(), context.template(), context.expenseDetailDesign(), context.expenseDetails());
-    }
-
-    private void replaceExpenseDetailInstances(
-            String documentCode,
-            ProcessDocumentTemplate template,
-            ProcessExpenseDetailDesign expenseDetailDesign,
-            List<ExpenseDetailInstanceDTO> expenseDetails
-    ) {
-        processDocumentExpenseDetailMapper.delete(
-                Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
-                        .eq(ProcessDocumentExpenseDetail::getDocumentCode, documentCode)
-        );
-        saveExpenseDetailInstances(documentCode, template, expenseDetailDesign, expenseDetails);
-    }
-
-    private ExpenseCreateTemplateSummaryVO toTemplateSummary(ProcessDocumentTemplate template, Map<String, String> categoryNameMap) {
+    ExpenseCreateTemplateSummaryVO toTemplateSummary(ProcessDocumentTemplate template, Map<String, String> categoryNameMap) {
         ExpenseCreateTemplateSummaryVO summary = new ExpenseCreateTemplateSummaryVO();
         summary.setTemplateCode(template.getTemplateCode());
         summary.setTemplateName(template.getTemplateName());
@@ -2717,308 +1478,6 @@ class AbstractExpenseDocumentSupport {
         summary.setCategoryName(categoryNameMap.get(trimToNull(template.getCategoryCode())));
         summary.setFormDesignCode(template.getFormDesignCode());
         return summary;
-    }
-
-    private List<ExpenseSummaryVO> toExpenseSummaries(List<ProcessDocumentInstance> instances) {
-        SummaryEnrichmentData enrichmentData = buildSummaryEnrichment(instances);
-        return instances.stream().map(instance -> toExpenseSummary(instance, enrichmentData)).toList();
-    }
-
-    private ExpenseSummaryVO toExpenseSummary(ProcessDocumentInstance instance, SummaryEnrichmentData enrichmentData) {
-        ExpenseSummaryVO summary = new ExpenseSummaryVO();
-        SummaryMetadata metadata = enrichmentData.metadata(instance.getDocumentCode());
-        String statusLabel = resolveStatusLabel(instance.getStatus());
-        summary.setDocumentCode(instance.getDocumentCode());
-        summary.setNo(instance.getDocumentCode());
-        summary.setType(trimToNull(instance.getTemplateName()) != null ? instance.getTemplateName() : resolveTemplateTypeLabel(instance.getTemplateType(), null));
-        summary.setReason(trimToNull(instance.getDocumentReason()) != null ? instance.getDocumentReason() : defaultReason(instance.getDocumentTitle()));
-        summary.setDocumentTitle(instance.getDocumentTitle());
-        summary.setDocumentReason(instance.getDocumentReason());
-        summary.setSubmitterName(instance.getSubmitterName());
-        summary.setSubmitterDeptName(metadata.submitterDeptName());
-        summary.setTemplateName(instance.getTemplateName());
-        summary.setTemplateType(instance.getTemplateType());
-        summary.setTemplateTypeLabel(resolveTemplateTypeLabel(instance.getTemplateType(), readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel") == null
-                ? null
-                : String.valueOf(readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel"))));
-        summary.setCurrentNodeName(instance.getCurrentNodeName());
-        summary.setDocumentStatus(instance.getStatus());
-        summary.setDocumentStatusLabel(statusLabel);
-        summary.setAmount(defaultDecimal(instance.getTotalAmount()));
-        LocalDateTime displaySubmittedAt = resolveDisplaySubmittedAt(instance);
-        summary.setDate(displaySubmittedAt == null ? "" : displaySubmittedAt.format(DATE_FORMATTER));
-        summary.setStatus(statusLabel);
-        summary.setSubmittedAt(formatTime(displaySubmittedAt));
-        summary.setPaymentDate(metadata.paymentDate());
-        summary.setPaymentCompanyName(metadata.paymentCompanyName());
-        summary.setPayeeName(metadata.payeeName());
-        summary.setCounterpartyName(metadata.counterpartyName());
-        summary.setUndertakeDepartmentNames(metadata.undertakeDepartmentNames());
-        summary.setTagNames(metadata.tagNames());
-        return summary;
-    }
-
-    private ExpenseApprovalPendingItemVO toPendingItem(
-            ProcessDocumentTask task,
-            ProcessDocumentInstance instance,
-            SummaryEnrichmentData enrichmentData
-    ) {
-        ExpenseApprovalPendingItemVO item = new ExpenseApprovalPendingItemVO();
-        SummaryMetadata metadata = instance == null ? SummaryMetadata.empty() : enrichmentData.metadata(task.getDocumentCode());
-        item.setTaskId(task.getId());
-        item.setDocumentCode(task.getDocumentCode());
-        item.setDocumentTitle(instance == null ? "" : instance.getDocumentTitle());
-        item.setDocumentReason(instance == null ? "" : instance.getDocumentReason());
-        item.setTemplateName(instance == null ? "" : instance.getTemplateName());
-        item.setTemplateType(instance == null ? null : instance.getTemplateType());
-        item.setTemplateTypeLabel(instance == null ? null : resolveTemplateTypeLabel(instance.getTemplateType(), readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel") == null
-                ? null
-                : String.valueOf(readMap(instance.getTemplateSnapshotJson()).get("templateTypeLabel"))));
-        item.setSubmitterName(instance == null ? "" : instance.getSubmitterName());
-        item.setSubmitterDeptName(metadata.submitterDeptName());
-        item.setAmount(instance == null ? BigDecimal.ZERO : defaultDecimal(instance.getTotalAmount()));
-        item.setNodeKey(task.getNodeKey());
-        item.setNodeName(task.getNodeName());
-        item.setStatus(task.getStatus());
-        item.setDocumentStatus(instance == null ? null : instance.getStatus());
-        item.setDocumentStatusLabel(instance == null ? null : resolveStatusLabel(instance.getStatus()));
-        item.setSubmittedAt(instance == null ? null : formatTime(resolveDisplaySubmittedAt(instance)));
-        item.setPaymentDate(metadata.paymentDate());
-        item.setPaymentCompanyName(metadata.paymentCompanyName());
-        item.setPayeeName(metadata.payeeName());
-        item.setCounterpartyName(metadata.counterpartyName());
-        item.setUndertakeDepartmentNames(metadata.undertakeDepartmentNames());
-        item.setTagNames(metadata.tagNames());
-        item.setTaskCreatedAt(formatTime(task.getCreatedAt()));
-        return item;
-    }
-
-    /**
-     * 构建汇总。
-     */
-    private SummaryEnrichmentData buildSummaryEnrichment(List<ProcessDocumentInstance> instances) {
-        if (instances == null || instances.isEmpty()) {
-            return SummaryEnrichmentData.empty();
-        }
-
-        List<String> documentCodes = instances.stream()
-                .map(ProcessDocumentInstance::getDocumentCode)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        Map<String, List<ProcessDocumentExpenseDetail>> expenseDetailMap = documentCodes.isEmpty()
-                ? Collections.emptyMap()
-                : processDocumentExpenseDetailMapper.selectList(
-                Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
-                        .in(ProcessDocumentExpenseDetail::getDocumentCode, documentCodes)
-                        .orderByAsc(ProcessDocumentExpenseDetail::getSortOrder, ProcessDocumentExpenseDetail::getId)
-        ).stream().collect(Collectors.groupingBy(
-                ProcessDocumentExpenseDetail::getDocumentCode,
-                LinkedHashMap::new,
-                Collectors.toList()
-        ));
-
-        List<String> templateCodes = instances.stream()
-                .map(ProcessDocumentInstance::getTemplateCode)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        Map<String, ProcessDocumentTemplate> templateMap = templateCodes.isEmpty()
-                ? Collections.emptyMap()
-                : templateMapper.selectList(
-                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
-                        .in(ProcessDocumentTemplate::getTemplateCode, templateCodes)
-        ).stream().collect(Collectors.toMap(
-                ProcessDocumentTemplate::getTemplateCode,
-                item -> item,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        Map<String, String> tagArchiveCodeByTemplateCode = loadTagArchiveCodeByTemplateCode(templateMap);
-
-        Map<String, SummaryDraft> draftMap = new LinkedHashMap<>();
-        Set<Long> userIds = new LinkedHashSet<>();
-        Set<String> companyIds = new LinkedHashSet<>();
-        Set<String> vendorCodes = new LinkedHashSet<>();
-        Set<String> departmentIds = new LinkedHashSet<>();
-        Set<String> archiveCodes = new LinkedHashSet<>();
-
-        for (ProcessDocumentInstance instance : instances) {
-            Map<String, Object> formData = readMap(instance.getFormDataJson());
-            Map<String, Object> schema = readSchema(instance.getFormSchemaSnapshotJson());
-            String documentCode = instance.getDocumentCode();
-            List<ProcessDocumentExpenseDetail> expenseDetails = expenseDetailMap.getOrDefault(documentCode, Collections.emptyList());
-            String tagArchiveCode = tagArchiveCodeByTemplateCode.get(instance.getTemplateCode());
-            SummaryDraft draft = new SummaryDraft();
-            draft.setDocumentCode(documentCode);
-            draft.setPaymentCompanyId(extractFirstBusinessComponentValue(schema, formData, PAYMENT_COMPANY_COMPONENT_CODE));
-            draft.setPayeeValue(extractFirstBusinessComponentValue(schema, formData, PAYEE_COMPONENT_CODE));
-            draft.setCounterpartyValue(extractFirstBusinessComponentValue(schema, formData, COUNTERPARTY_COMPONENT_CODE));
-            draft.setPaymentDate(extractPaymentDate(schema, formData));
-            draft.setUndertakeDepartmentIds(resolveUndertakeDeptIdsFromSnapshots(schema, formData, expenseDetails));
-            draft.setTagArchiveCode(tagArchiveCode);
-            draft.setTagValues(tagArchiveCode == null ? Collections.emptyList() : extractArchiveValues(schema, formData, tagArchiveCode));
-            draftMap.put(documentCode, draft);
-
-            if (instance.getSubmitterUserId() != null) {
-                userIds.add(instance.getSubmitterUserId());
-            }
-            if (draft.getPaymentCompanyId() != null) {
-                companyIds.add(draft.getPaymentCompanyId());
-            }
-            collectPartyLookupIds(draft.getPayeeValue(), userIds, vendorCodes);
-            collectVendorCode(draft.getCounterpartyValue(), vendorCodes);
-            departmentIds.addAll(draft.getUndertakeDepartmentIds());
-            if (tagArchiveCode != null) {
-                archiveCodes.add(tagArchiveCode);
-            }
-        }
-
-        Map<Long, User> userMap = userIds.isEmpty()
-                ? Collections.emptyMap()
-                : userMapper.selectList(
-                Wrappers.<User>lambdaQuery()
-                        .in(User::getId, userIds)
-        ).stream().collect(Collectors.toMap(
-                User::getId,
-                item -> item,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        userMap.values().stream()
-                .map(User::getDeptId)
-                .filter(Objects::nonNull)
-                .map(String::valueOf)
-                .forEach(departmentIds::add);
-
-        Map<String, SystemCompany> companyMap = companyIds.isEmpty()
-                ? Collections.emptyMap()
-                : systemCompanyMapper.selectList(
-                Wrappers.<SystemCompany>lambdaQuery()
-                        .in(SystemCompany::getCompanyId, companyIds)
-        ).stream().collect(Collectors.toMap(
-                SystemCompany::getCompanyId,
-                item -> item,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        Map<String, FinanceVendor> vendorMap = vendorCodes.isEmpty()
-                ? Collections.emptyMap()
-                : financeVendorMapper.selectList(
-                Wrappers.<FinanceVendor>lambdaQuery()
-                        .in(FinanceVendor::getCVenCode, vendorCodes)
-        ).stream().collect(Collectors.toMap(
-                FinanceVendor::getCVenCode,
-                item -> item,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        List<Long> departmentIdValues = departmentIds.stream().map(this::toLong).filter(Objects::nonNull).toList();
-        Map<String, String> departmentNameMap = departmentIdValues.isEmpty()
-                ? Collections.emptyMap()
-                : systemDepartmentMapper.selectList(
-                Wrappers.<SystemDepartment>lambdaQuery()
-                        .in(SystemDepartment::getId, departmentIdValues)
-        ).stream().collect(Collectors.toMap(
-                item -> String.valueOf(item.getId()),
-                SystemDepartment::getDeptName,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        Map<String, Map<String, String>> archiveItemLabelMap = loadArchiveItemLabelMap(archiveCodes);
-
-        Map<String, SummaryMetadata> metadataMap = new LinkedHashMap<>();
-        for (ProcessDocumentInstance instance : instances) {
-            SummaryDraft draft = draftMap.get(instance.getDocumentCode());
-            User submitter = instance.getSubmitterUserId() == null ? null : userMap.get(instance.getSubmitterUserId());
-            SummaryMetadata metadata = new SummaryMetadata(
-                    submitter == null || submitter.getDeptId() == null ? null : departmentNameMap.get(String.valueOf(submitter.getDeptId())),
-                    draft == null ? null : draft.getPaymentCompanyId(),
-                    draft == null ? null : resolvePaymentCompanyName(draft.getPaymentCompanyId(), companyMap),
-                    draft == null ? null : resolvePartyName(draft.getPayeeValue(), userMap, vendorMap),
-                    draft == null ? null : resolveVendorName(draft.getCounterpartyValue(), vendorMap),
-                    draft == null ? null : draft.getPaymentDate(),
-                    draft == null ? Collections.emptyList() : resolveDepartmentNames(draft.getUndertakeDepartmentIds(), departmentNameMap),
-                    draft == null ? Collections.emptyList() : resolveArchiveItemNames(draft.getTagArchiveCode(), draft.getTagValues(), archiveItemLabelMap)
-            );
-            metadataMap.put(instance.getDocumentCode(), metadata);
-        }
-        return new SummaryEnrichmentData(metadataMap);
-    }
-
-    /**
-     * 加载编码。
-     */
-    private Map<String, String> loadTagArchiveCodeByTemplateCode(Map<String, ProcessDocumentTemplate> templateMap) {
-        if (templateMap.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<Long> templateIds = templateMap.values().stream()
-                .map(ProcessDocumentTemplate::getId)
-                .filter(Objects::nonNull)
-                .toList();
-        if (templateIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        Map<Long, String> templateCodeById = templateMap.values().stream()
-                .filter(item -> item.getId() != null && trimToNull(item.getTemplateCode()) != null)
-                .collect(Collectors.toMap(
-                        ProcessDocumentTemplate::getId,
-                        ProcessDocumentTemplate::getTemplateCode,
-                        (left, right) -> left,
-                        LinkedHashMap::new
-                ));
-        return processTemplateScopeMapper.selectList(
-                Wrappers.<ProcessTemplateScope>lambdaQuery()
-                        .in(ProcessTemplateScope::getTemplateId, templateIds)
-                        .eq(ProcessTemplateScope::getOptionType, TEMPLATE_SCOPE_TYPE_TAG_ARCHIVE)
-                        .orderByAsc(ProcessTemplateScope::getSortOrder, ProcessTemplateScope::getId)
-        ).stream()
-                .filter(item -> trimToNull(templateCodeById.get(item.getTemplateId())) != null)
-                .collect(Collectors.toMap(
-                        item -> templateCodeById.get(item.getTemplateId()),
-                        ProcessTemplateScope::getOptionCode,
-                        (left, right) -> left,
-                        LinkedHashMap::new
-                ));
-    }
-
-    /**
-     * 加载映射。
-     */
-    private Map<String, Map<String, String>> loadArchiveItemLabelMap(Set<String> archiveCodes) {
-        if (archiveCodes == null || archiveCodes.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<ProcessCustomArchiveDesign> archives = customArchiveDesignMapper.selectList(
-                Wrappers.<ProcessCustomArchiveDesign>lambdaQuery()
-                        .in(ProcessCustomArchiveDesign::getArchiveCode, archiveCodes)
-        );
-        if (archives.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        Map<Long, String> archiveCodeById = archives.stream().collect(Collectors.toMap(
-                ProcessCustomArchiveDesign::getId,
-                ProcessCustomArchiveDesign::getArchiveCode,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        List<ProcessCustomArchiveItem> items = customArchiveItemMapper.selectList(
-                Wrappers.<ProcessCustomArchiveItem>lambdaQuery()
-                        .in(ProcessCustomArchiveItem::getArchiveId, archiveCodeById.keySet())
-                        .eq(ProcessCustomArchiveItem::getStatus, 1)
-                        .orderByAsc(ProcessCustomArchiveItem::getPriority, ProcessCustomArchiveItem::getId)
-        );
-        Map<String, Map<String, String>> labelMap = new LinkedHashMap<>();
-        for (ProcessCustomArchiveItem item : items) {
-            String archiveCode = archiveCodeById.get(item.getArchiveId());
-            if (archiveCode == null) {
-                continue;
-            }
-            labelMap.computeIfAbsent(archiveCode, ignored -> new LinkedHashMap<>())
-                    .put(trimToNull(item.getItemCode()) == null ? item.getItemName() : item.getItemCode(), item.getItemName());
-        }
-        return labelMap;
     }
 
     private String extractFirstBusinessComponentValue(Map<String, Object> schema, Map<String, Object> formData, String componentCode) {
@@ -3151,7 +1610,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析名称。
+     * 瑙ｆ瀽鍚嶇О銆?
      */
     private String resolvePaymentCompanyName(String companyId, Map<String, SystemCompany> companyMap) {
         String normalized = trimToNull(companyId);
@@ -3163,7 +1622,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析名称。
+     * 瑙ｆ瀽鍚嶇О銆?
      */
     private String resolvePartyName(String value, Map<Long, User> userMap, Map<String, FinanceVendor> vendorMap) {
         String normalized = trimToNull(value);
@@ -3182,7 +1641,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析名称。
+     * 瑙ｆ瀽鍚嶇О銆?
      */
     private String resolveVendorName(String value, Map<String, FinanceVendor> vendorMap) {
         String normalized = trimToNull(value);
@@ -3200,7 +1659,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析名称。
+     * 瑙ｆ瀽鍚嶇О銆?
      */
     private List<String> resolveDepartmentNames(List<String> departmentIds, Map<String, String> departmentNameMap) {
         if (departmentIds == null || departmentIds.isEmpty()) {
@@ -3218,7 +1677,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析名称。
+     * 瑙ｆ瀽鍚嶇О銆?
      */
     private List<String> resolveArchiveItemNames(
             String archiveCode,
@@ -3327,7 +1786,7 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
-    private ExpenseApprovalTaskVO toTaskVO(ProcessDocumentTask task) {
+    ExpenseApprovalTaskVO toTaskVO(ProcessDocumentTask task) {
         ExpenseApprovalTaskVO vo = new ExpenseApprovalTaskVO();
         vo.setId(task.getId());
         vo.setDocumentCode(task.getDocumentCode());
@@ -3347,7 +1806,7 @@ class AbstractExpenseDocumentSupport {
         return vo;
     }
 
-    private ExpenseApprovalLogVO toLogVO(ProcessDocumentActionLog log) {
+    ExpenseApprovalLogVO toLogVO(ProcessDocumentActionLog log) {
         ExpenseApprovalLogVO vo = new ExpenseApprovalLogVO();
         vo.setId(log.getId());
         vo.setDocumentCode(log.getDocumentCode());
@@ -3388,7 +1847,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 清理相关信息。
+     * 娓呯悊鐩稿叧淇℃伅銆?
      */
     private void clearCurrentNode(ProcessDocumentInstance instance) {
         persistDocumentRuntimeState(
@@ -3402,7 +1861,7 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
-    private void persistDocumentRuntimeState(
+    void persistDocumentRuntimeState(
             ProcessDocumentInstance instance,
             String status,
             String currentNodeKey,
@@ -3441,19 +1900,16 @@ class AbstractExpenseDocumentSupport {
             String actionComment,
             Map<String, Object> payload
     ) {
-        validatePmNameLength(nodeName, "\u8282\u70b9\u540d\u79f0");
-        validatePmNameLength(actorName, "\u64cd\u4f5c\u4eba\u59d3\u540d");
-        ProcessDocumentActionLog log = new ProcessDocumentActionLog();
-        log.setDocumentCode(documentCode);
-        log.setNodeKey(nodeKey);
-        log.setNodeName(nodeName);
-        log.setActionType(actionType);
-        log.setActorUserId(actorUserId);
-        log.setActorName(actorName);
-        log.setActionComment(trimToNull(actionComment));
-        log.setPayloadJson(payload == null || payload.isEmpty() ? null : writeJson(payload));
-        log.setCreatedAt(LocalDateTime.now());
-        processDocumentActionLogMapper.insert(log);
+        expenseDocumentActionLogSupport.appendLog(
+                documentCode,
+                nodeKey,
+                nodeName,
+                actionType,
+                actorUserId,
+                actorName,
+                actionComment,
+                payload
+        );
     }
 
     void assertCanViewDocument(ProcessDocumentInstance instance, Long userId, boolean allowCrossView) {
@@ -3465,7 +1921,7 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
-    private LocalDateTime resolveDisplaySubmittedAt(ProcessDocumentInstance instance) {
+    LocalDateTime resolveDisplaySubmittedAt(ProcessDocumentInstance instance) {
         if (instance == null) {
             return null;
         }
@@ -3515,7 +1971,7 @@ class AbstractExpenseDocumentSupport {
         processDocumentTaskMapper.updateById(sourceTask);
     }
 
-    private ProcessDocumentTemplate requireTemplateForDocument(String templateCode) {
+    ProcessDocumentTemplate requireTemplateForDocument(String templateCode) {
         ProcessDocumentTemplate template = loadTemplateByCode(templateCode, false);
         if (template == null) {
             throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u7ed1\u5b9a\u7684\u6a21\u677f\u4e0d\u5b58\u5728\uff0c\u65e0\u6cd5\u7ee7\u7eed\u5904\u7406");
@@ -3524,7 +1980,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载编码。
+     * 鍔犺浇缂栫爜銆?
      */
     private ProcessDocumentTemplate loadTemplateByCode(String templateCode, boolean enabledOnly) {
         String normalizedCode = trimToNull(templateCode);
@@ -3539,13 +1995,13 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
-    private ProcessDocumentTemplate requireTemplate(String templateCode) {
+    ProcessDocumentTemplate requireTemplate(String templateCode) {
         if (trimToNull(templateCode) == null) {
-            throw new IllegalArgumentException("模板编码不能为空");
+            throw new IllegalArgumentException("妯℃澘缂栫爜涓嶈兘涓虹┖");
         }
         ProcessDocumentTemplate template = loadTemplateByCode(templateCode, true);
         if (template == null) {
-            throw new IllegalStateException("未找到可用模板");
+            throw new IllegalStateException("\u672a\u627e\u5230\u53ef\u7528\u6a21\u677f");
         }
         return template;
     }
@@ -3553,7 +2009,7 @@ class AbstractExpenseDocumentSupport {
     ProcessDocumentInstance requireDocument(String documentCode) {
         String normalizedCode = trimToNull(documentCode);
         if (normalizedCode == null) {
-            throw new IllegalArgumentException("单据编码不能为空");
+            throw new IllegalArgumentException("鍗曟嵁缂栫爜涓嶈兘涓虹┖");
         }
         ProcessDocumentInstance instance = processDocumentInstanceMapper.selectOne(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
@@ -3561,7 +2017,7 @@ class AbstractExpenseDocumentSupport {
                         .last("limit 1")
         );
         if (instance == null) {
-            throw new IllegalStateException("未找到对应单据");
+            throw new IllegalStateException("\u672a\u627e\u5230\u5bf9\u5e94\u5355\u636e");
         }
         return instance;
     }
@@ -3569,24 +2025,24 @@ class AbstractExpenseDocumentSupport {
     private ProcessDocumentTask requireOpenPaymentTask(Long taskId, Long userId) {
         ProcessDocumentTask task = processDocumentTaskMapper.selectById(taskId);
         if (task == null) {
-            throw new IllegalStateException("未找到支付任务");
+            throw new IllegalStateException("\u672a\u627e\u5230\u652f\u4ed8\u4efb\u52a1");
         }
         if (!Objects.equals(task.getAssigneeUserId(), userId)) {
-            throw new IllegalStateException("当前用户无权处理该支付任务");
+            throw new IllegalStateException("\u5f53\u524d\u7528\u6237\u65e0\u6743\u5904\u7406\u8be5\u652f\u4ed8\u4efb\u52a1");
         }
         if (!NODE_TYPE_PAYMENT.equals(trimToNull(task.getNodeType()))) {
-            throw new IllegalStateException("当前任务不是支付任务");
+            throw new IllegalStateException("褰撳墠浠诲姟涓嶆槸鏀粯浠诲姟");
         }
         if (!TASK_STATUS_PENDING.equals(task.getStatus()) && !TASK_STATUS_PAUSED.equals(task.getStatus())) {
-            throw new IllegalStateException("支付任务已处理");
+            throw new IllegalStateException("\u652f\u4ed8\u4efb\u52a1\u5df2\u5904\u7406");
         }
         return task;
     }
 
     /**
-     * 加载相关信息。
+     * 鍔犺浇鐩稿叧淇℃伅銆?
      */
-    private ProcessFormDesign loadFormDesign(String formDesignCode) {
+    ProcessFormDesign loadFormDesign(String formDesignCode) {
         String normalizedCode = trimToNull(formDesignCode);
         if (normalizedCode == null) {
             return null;
@@ -3599,9 +2055,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载明细。
+     * 鍔犺浇鏄庣粏銆?
      */
-    private ProcessExpenseDetailDesign loadExpenseDetailDesign(String detailDesignCode) {
+    ProcessExpenseDetailDesign loadExpenseDetailDesign(String detailDesignCode) {
         String normalizedCode = trimToNull(detailDesignCode);
         if (normalizedCode == null) {
             return null;
@@ -3614,7 +2070,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建上下文。
+     * 鏋勫缓涓婁笅鏂囥€?
      */
     private Map<String, Object> buildRuntimeFlowContext(
             User currentUser,
@@ -3651,7 +2107,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析相关信息。
+     * 瑙ｆ瀽鐩稿叧淇℃伅銆?
      */
     private List<String> resolveUndertakeDeptIds(
             ProcessFormDesign formDesign,
@@ -3671,7 +2127,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析相关信息。
+     * 瑙ｆ瀽鐩稿叧淇℃伅銆?
      */
     private List<String> resolveUndertakeDeptIdsFromSnapshots(
             Map<String, Object> mainSchema,
@@ -3722,7 +2178,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 合并相关信息。
+     * 鍚堝苟鐩稿叧淇℃伅銆?
      */
     private Map<String, Object> mergeRuntimeFormData(Map<String, Object> formData, List<ExpenseDetailInstanceDTO> expenseDetails) {
         Map<String, Object> merged = formData == null ? new LinkedHashMap<>() : new LinkedHashMap<>(formData);
@@ -3755,18 +2211,18 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
-    private Map<String, Object> readSchema(String schemaJson) {
+    Map<String, Object> readSchema(String schemaJson) {
         if (trimToNull(schemaJson) == null) {
             return defaultSchema();
         }
         try {
             return objectMapper.readValue(schemaJson, new TypeReference<LinkedHashMap<String, Object>>() {});
         } catch (Exception ex) {
-            throw new IllegalStateException("表单结构解析失败", ex);
+            throw new IllegalStateException("琛ㄥ崟缁撴瀯瑙ｆ瀽澶辫触", ex);
         }
     }
 
-    private Map<String, Object> defaultSchema() {
+    Map<String, Object> defaultSchema() {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("layoutMode", "TWO_COLUMN");
         schema.put("blocks", Collections.emptyList());
@@ -3774,9 +2230,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载相关信息。
+     * 鍔犺浇鐩稿叧淇℃伅銆?
      */
-    private List<ProcessCustomArchiveDetailVO> loadSharedArchives(Map<String, Object> schema) {
+    List<ProcessCustomArchiveDetailVO> loadSharedArchives(Map<String, Object> schema) {
         Set<String> archiveCodes = extractArchiveCodes(schema);
         if (archiveCodes.isEmpty()) {
             return Collections.emptyList();
@@ -3868,7 +2324,7 @@ class AbstractExpenseDocumentSupport {
         return archiveCodes;
     }
 
-    private Map<String, Object> toTemplateSnapshot(ProcessDocumentTemplate template) {
+    Map<String, Object> toTemplateSnapshot(ProcessDocumentTemplate template) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("templateCode", template.getTemplateCode());
         snapshot.put("templateName", template.getTemplateName());
@@ -3885,9 +2341,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析快照。
+     * 瑙ｆ瀽蹇収銆?
      */
-    private String resolveFlowSnapshotJson(ProcessDocumentTemplate template) {
+    String resolveFlowSnapshotJson(ProcessDocumentTemplate template) {
         String flowCode = trimToNull(template.getApprovalFlow());
         if (flowCode == null) {
             return null;
@@ -3910,7 +2366,7 @@ class AbstractExpenseDocumentSupport {
         return version == null ? null : version.getSnapshotJson();
     }
 
-    private List<ProcessFormOptionVO> loadUserOptions(Map<String, Object> flowSnapshot) {
+    List<ProcessFormOptionVO> loadUserOptions(Map<String, Object> flowSnapshot) {
         if (!hasManualSelectApprovalNode(flowSnapshot)) {
             return Collections.emptyList();
         }
@@ -3929,7 +2385,7 @@ class AbstractExpenseDocumentSupport {
         ).stream().map(user -> {
             ProcessFormOptionVO option = new ProcessFormOptionVO();
             String deptName = user.getDeptId() == null ? null : departmentNameMap.get(user.getDeptId());
-        String baseLabel = firstNonBlank(trimToNull(user.getName()), trimToNull(user.getUsername()), "未命名用户");
+            String baseLabel = firstNonBlank(trimToNull(user.getName()), trimToNull(user.getUsername()), "\u672a\u547d\u540d\u7528\u6237");
             option.setLabel(baseLabel + (deptName == null ? "" : " / " + deptName));
             option.setValue(String.valueOf(user.getId()));
             return option;
@@ -3959,7 +2415,7 @@ class AbstractExpenseDocumentSupport {
         return false;
     }
 
-    private Map<String, List<Long>> normalizeManualApproverSelections(Map<String, List<Long>> source) {
+    Map<String, List<Long>> normalizeManualApproverSelections(Map<String, List<Long>> source) {
         Map<String, List<Long>> result = new LinkedHashMap<>();
         if (source == null || source.isEmpty()) {
             return result;
@@ -3980,7 +2436,7 @@ class AbstractExpenseDocumentSupport {
         return result;
     }
 
-    private Map<String, Object> resolveRejectRuntimeMetadata(ProcessDocumentInstance instance) {
+    Map<String, Object> resolveRejectRuntimeMetadata(ProcessDocumentInstance instance) {
         if (instance == null || trimToNull(instance.getDocumentCode()) == null) {
             return Collections.emptyMap();
         }
@@ -4025,7 +2481,7 @@ class AbstractExpenseDocumentSupport {
         return metadata;
     }
 
-    private FlowRuntimeSnapshot readFlowRuntimeSnapshot(String snapshotJson) {
+    FlowRuntimeSnapshot readFlowRuntimeSnapshot(String snapshotJson) {
         if (trimToNull(snapshotJson) == null) {
             return new FlowRuntimeSnapshot(Collections.emptyList(), Collections.emptyList());
         }
@@ -4041,14 +2497,14 @@ class AbstractExpenseDocumentSupport {
             );
             return new FlowRuntimeSnapshot(nodes, routes);
         } catch (Exception ex) {
-            throw new IllegalStateException("流程运行时快照解析失败", ex);
+            throw new IllegalStateException("\u6d41\u7a0b\u8fd0\u884c\u65f6\u5feb\u7167\u89e3\u6790\u5931\u8d25", ex);
         }
     }
 
     /**
-     * 加载选项。
+     * 鍔犺浇閫夐」銆?
      */
-    private List<ProcessFormOptionVO> loadDepartmentOptions() {
+    List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
                         .eq(SystemDepartment::getStatus, 1)
@@ -4062,9 +2518,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载明细。
+     * 鍔犺浇鏄庣粏銆?
      */
-    private List<ProcessFormOptionVO> loadDepartmentOptionsForDetail(Map<String, Object> schema, Map<String, Object> formData) {
+    List<ProcessFormOptionVO> loadDepartmentOptionsForDetail(Map<String, Object> schema, Map<String, Object> formData) {
         List<String> departmentIds = resolveUndertakeDeptIdsFromSnapshots(schema, formData, Collections.emptyList());
         if (departmentIds.isEmpty()) {
             return Collections.emptyList();
@@ -4091,9 +2547,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载选项。
+     * 鍔犺浇閫夐」銆?
      */
-    private List<ProcessFormOptionVO> loadCompanyOptions() {
+    List<ProcessFormOptionVO> loadCompanyOptions() {
         return systemCompanyMapper.selectList(
                 Wrappers.<SystemCompany>lambdaQuery()
                         .eq(SystemCompany::getStatus, 1)
@@ -4107,9 +2563,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载明细。
+     * 鍔犺浇鏄庣粏銆?
      */
-    private List<ProcessFormOptionVO> loadCompanyOptionsForDetail(Map<String, Object> schema, Map<String, Object> formData) {
+    List<ProcessFormOptionVO> loadCompanyOptionsForDetail(Map<String, Object> schema, Map<String, Object> formData) {
         String companyId = extractFirstBusinessComponentValue(schema, formData, PAYMENT_COMPANY_COMPONENT_CODE);
         if (companyId == null) {
             return Collections.emptyList();
@@ -4128,9 +2584,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载任务。
+     * 鍔犺浇浠诲姟銆?
      */
-    private List<ProcessDocumentTask> loadPendingTasks(String documentCode) {
+    List<ProcessDocumentTask> loadPendingTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
                         .eq(ProcessDocumentTask::getDocumentCode, documentCode)
@@ -4139,7 +2595,7 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
-    private List<ProcessDocumentTask> loadAllTasks(String documentCode) {
+    List<ProcessDocumentTask> loadAllTasks(String documentCode) {
         return processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
                         .eq(ProcessDocumentTask::getDocumentCode, documentCode)
@@ -4148,19 +2604,14 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载任务。
+     * 鍔犺浇浠诲姟銆?
      */
-    private List<ProcessDocumentTask> loadOpenTasks(String documentCode) {
-        return processDocumentTaskMapper.selectList(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getDocumentCode, documentCode)
-                        .in(ProcessDocumentTask::getStatus, List.of(TASK_STATUS_PENDING, TASK_STATUS_PAUSED))
-                        .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
-        );
+    List<ProcessDocumentTask> loadOpenTasks(String documentCode) {
+        return expenseDocumentTaskRuntimeSupport.loadOpenTasks(documentCode);
     }
 
     /**
-     * 加载任务。
+     * 鍔犺浇浠诲姟銆?
      */
     private List<ProcessDocumentTask> loadNodeOpenTasks(String documentCode, String nodeKey) {
         return processDocumentTaskMapper.selectList(
@@ -4173,7 +2624,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载任务。
+     * 鍔犺浇浠诲姟銆?
      */
     private List<ProcessDocumentTask> loadNodeBatchTasks(String documentCode, String nodeKey, String batchNo) {
         return processDocumentTaskMapper.selectList(
@@ -4185,63 +2636,35 @@ class AbstractExpenseDocumentSupport {
         );
     }
 
-    private void cancelOpenTasks(List<ProcessDocumentTask> tasks, Long keepTaskId, LocalDateTime handledAt) {
-        for (ProcessDocumentTask task : tasks) {
-            if (Objects.equals(task.getId(), keepTaskId)
-                    || (!TASK_STATUS_PENDING.equals(task.getStatus()) && !TASK_STATUS_PAUSED.equals(task.getStatus()))) {
-                continue;
-            }
-            task.setStatus(TASK_STATUS_CANCELLED);
-            task.setHandledAt(handledAt);
-            processDocumentTaskMapper.updateById(task);
-        }
+    void cancelOpenTasks(List<ProcessDocumentTask> tasks, Long keepTaskId, LocalDateTime handledAt) {
+        expenseDocumentTaskRuntimeSupport.cancelOpenTasks(tasks, keepTaskId, handledAt);
     }
 
     /**
-     * 加载相关信息。
+     * 鍔犺浇鐩稿叧淇℃伅銆?
      */
-    private List<ProcessDocumentActionLog> loadActionLogs(String documentCode) {
-        return processDocumentActionLogMapper.selectList(
-                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
-                        .eq(ProcessDocumentActionLog::getDocumentCode, documentCode)
-                        .orderByAsc(ProcessDocumentActionLog::getCreatedAt, ProcessDocumentActionLog::getId)
-        );
+    List<ProcessDocumentActionLog> loadActionLogs(String documentCode) {
+        return expenseDocumentActionLogSupport.loadActionLogs(documentCode);
     }
 
     /**
-     * 解析标题。
+     * 瑙ｆ瀽鏍囬銆?
      */
-    private String resolveDocumentTitle(ProcessDocumentTemplate template, Map<String, Object> formData, String username) {
-        String title = firstNonBlank(
-                stringValue(formData.get("__documentTitle")),
-                stringValue(formData.get("documentTitle")),
-                stringValue(formData.get("title"))
-        );
-        String resolved = title != null
-                ? title
-                : template.getTemplateName() + "-" + defaultUsername(username) + "-" + LocalDate.now().format(DATE_FORMATTER);
-        validatePmTitleLength(resolved, "\u5355\u636e\u6807\u9898");
-        return resolved;
+    String resolveDocumentTitle(ProcessDocumentTemplate template, Map<String, Object> formData, String username) {
+        return expenseDocumentMetadataSupport.resolveDocumentTitle(template, formData, username);
     }
 
     /**
-     * 解析事由。
+     * 瑙ｆ瀽浜嬬敱銆?
      */
-    private String resolveDocumentReason(ProcessDocumentTemplate template, Map<String, Object> formData) {
-        String reason = firstNonBlank(
-                stringValue(formData.get("__documentReason")),
-                stringValue(formData.get("documentReason")),
-                stringValue(formData.get("reason")),
-                stringValue(formData.get("summary")),
-                stringValue(formData.get("bankPushSummary"))
-        );
-        return reason == null ? defaultReason(template.getTemplateName()) : reason;
+    String resolveDocumentReason(ProcessDocumentTemplate template, Map<String, Object> formData) {
+        return expenseDocumentMetadataSupport.resolveDocumentReason(template, formData);
     }
 
     /**
-     * 解析金额。
+     * 瑙ｆ瀽閲戦銆?
      */
-    private BigDecimal resolveTotalAmount(
+    BigDecimal resolveTotalAmount(
             Map<String, Object> formData,
             List<ExpenseDetailInstanceDTO> expenseDetails,
             String defaultBusinessSceneMode
@@ -4249,11 +2672,11 @@ class AbstractExpenseDocumentSupport {
         return ExpenseAmountResolver.resolveDocumentTotalAmount(formData, expenseDetails, defaultBusinessSceneMode);
     }
 
-    private String writeJson(Object value) {
+    String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (Exception ex) {
-            throw new IllegalStateException("数据序列化失败", ex);
+            throw new IllegalStateException("\u6570\u636e\u5e8f\u5217\u5316\u5931\u8d25", ex);
         }
     }
 
@@ -4268,14 +2691,14 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
-    private Map<String, Object> readMap(String json) {
+    Map<String, Object> readMap(String json) {
         if (trimToNull(json) == null) {
             return new LinkedHashMap<>();
         }
         try {
             return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
         } catch (Exception ex) {
-            throw new IllegalStateException("JSON 映射解析失败", ex);
+            throw new IllegalStateException("JSON 鏄犲皠瑙ｆ瀽澶辫触", ex);
         }
     }
 
@@ -4384,9 +2807,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建编码。
+     * 鏋勫缓缂栫爜銆?
      */
-    private String buildDocumentCode() {
+    String buildDocumentCode() {
         String prefix = "DOC" + LocalDate.now().format(CODE_DATE_FORMATTER);
         Long count = processDocumentInstanceMapper.selectCount(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
@@ -4397,7 +2820,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建相关信息。
+     * 鏋勫缓鐩稿叧淇℃伅銆?
      */
     private String buildReceiptContent(ProcessDocumentInstance instance, PmBankPaymentRecord record, SystemCompanyBankAccount account) {
         List<String> lines = new ArrayList<>();
@@ -4413,14 +2836,14 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建名称。
+     * 鏋勫缓鍚嶇О銆?
      */
     private String buildReceiptFileName(String documentCode) {
         return defaultText(documentCode, "document") + "-\u62db\u5546\u94f6\u884c\u4e91\u76f4\u8fde\u56de\u5355.txt";
     }
 
     /**
-     * 加载映射。
+     * 鍔犺浇鏄犲皠銆?
      */
     private Map<String, PmBankPaymentRecord> loadLatestBankRecordMap(List<String> documentCodes) {
         if (documentCodes == null || documentCodes.isEmpty()) {
@@ -4439,7 +2862,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载账户。
+     * 鍔犺浇璐︽埛銆?
      */
     private Map<Long, PmBankPaymentRecord> loadLatestBankRecordByAccountId(Set<Long> companyBankAccountIds) {
         if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
@@ -4458,9 +2881,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载映射。
+     * 鍔犺浇鏄犲皠銆?
      */
-    private Map<Long, String> loadCompanyBankAccountNameMap(Set<Long> companyBankAccountIds) {
+    Map<Long, String> loadCompanyBankAccountNameMap(Set<Long> companyBankAccountIds) {
         if (companyBankAccountIds == null || companyBankAccountIds.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -4474,7 +2897,7 @@ class AbstractExpenseDocumentSupport {
                 ));
     }
 
-    private ExpenseDocumentBankPaymentVO toDetailBankPayment(
+    ExpenseDocumentBankPaymentVO toDetailBankPayment(
             PmBankPaymentRecord record,
             String companyBankAccountName,
             String documentStatus
@@ -4495,7 +2918,7 @@ class AbstractExpenseDocumentSupport {
         return item;
     }
 
-    private List<ExpenseDocumentBankReceiptVO> toDetailBankReceipts(PmBankPaymentRecord record) {
+    List<ExpenseDocumentBankReceiptVO> toDetailBankReceipts(PmBankPaymentRecord record) {
         if (trimToNull(record.getReceiptAttachmentId()) == null) {
             return Collections.emptyList();
         }
@@ -4511,9 +2934,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 查找银行。
+     * 鏌ユ壘閾惰銆?
      */
-    private PmBankPaymentRecord findLatestBankPaymentRecord(String documentCode) {
+    PmBankPaymentRecord findLatestBankPaymentRecord(String documentCode) {
         if (trimToNull(documentCode) == null) {
             return null;
         }
@@ -4552,7 +2975,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析相关信息。
+     * 瑙ｆ瀽鐩稿叧淇℃伅銆?
      */
     private boolean resolveCallbackSuccess(ExpenseBankCallbackDTO dto) {
         if (dto == null) {
@@ -4566,7 +2989,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析标签。
+     * 瑙ｆ瀽鏍囩銆?
      */
     private String resolveBankLinkStatusLabel(SystemCompanyBankAccount account) {
         if (!isFlagEnabled(account.getDirectConnectEnabled())) {
@@ -4580,7 +3003,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析状态。
+     * 瑙ｆ瀽鐘舵€併€?
      */
     private String resolveBankLinkSyncStatus(SystemCompanyBankAccount account) {
         String status = trimToNull(account.getDirectConnectLastSyncStatus());
@@ -4588,7 +3011,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析标签。
+     * 瑙ｆ瀽鏍囩銆?
      */
     private String resolveReceiptStatusLabel(PmBankPaymentRecord record) {
         if (record == null) {
@@ -4605,7 +3028,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 判断相关信息。
+     * 鍒ゆ柇鐩稿叧淇℃伅銆?
      */
     private boolean isReceiptQueryEnabled(SystemCompanyBankAccount account) {
         if (account == null) {
@@ -4622,7 +3045,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建名称。
+     * 鏋勫缓鍚嶇О銆?
      */
     private String buildCompanyBankAccountName(SystemCompanyBankAccount account) {
         if (account == null) {
@@ -4634,14 +3057,14 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建银行。
+     * 鏋勫缓閾惰銆?
      */
     private String buildBankPushRequestNo(String documentCode) {
         return defaultText(documentCode, "DOC") + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 
     /**
-     * 查找名称。
+     * 鏌ユ壘鍚嶇О銆?
      */
     private String findCompanyName(String companyId) {
         if (trimToNull(companyId) == null) {
@@ -4656,7 +3079,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建公司名称映射。
+     * 鏋勫缓鍏徃鍚嶇О鏄犲皠銆?
      */
     private Map<String, String> buildCompanyNameMap(Set<String> companyIds) {
         if (companyIds == null || companyIds.isEmpty()) {
@@ -4680,7 +3103,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 判断标记是否启用。
+     * 鍒ゆ柇鏍囪鏄惁鍚敤銆?
      */
     private boolean isFlagEnabled(Integer value) {
         return value != null && value == 1;
@@ -4700,30 +3123,30 @@ class AbstractExpenseDocumentSupport {
             try {
                 return LocalDateTime.parse(normalized, formatter);
             } catch (Exception ignored) {
-                // 尝试下一个格式化器
+                // 灏濊瘯涓嬩竴涓牸寮忓寲鍣?
             }
         }
         return defaultValue;
     }
 
     /**
-     * 构建费用明细编号。
+     * 鏋勫缓璐圭敤鏄庣粏缂栧彿銆?
      */
     private String buildExpenseDetailNo(String documentCode, int sortOrder) {
         return documentCode + "-D" + String.format("%02d", sortOrder);
     }
 
     /**
-     * 构建任务批次号。
+     * 鏋勫缓浠诲姟鎵规鍙枫€?
      */
     private String buildTaskBatchNo(String documentCode, String nodeKey) {
         return documentCode + "-" + nodeKey + "-" + System.currentTimeMillis();
     }
 
     /**
-     * 解析模板类型标签。
+     * 瑙ｆ瀽妯℃澘绫诲瀷鏍囩銆?
      */
-    private String resolveTemplateTypeLabel(String templateType, String currentLabel) {
+    String resolveTemplateTypeLabel(String templateType, String currentLabel) {
         if (trimToNull(currentLabel) != null) {
             return currentLabel;
         }
@@ -4736,9 +3159,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 判断是否为有效已审批状态。
+     * 鍒ゆ柇鏄惁涓烘湁鏁堝凡瀹℃壒鐘舵€併€?
      */
-    private boolean isEffectiveApprovedStatus(String status) {
+    boolean isEffectiveApprovedStatus(String status) {
         String normalized = trimToNull(status);
         return DOCUMENT_STATUS_APPROVED.equals(normalized)
                 || DOCUMENT_STATUS_COMPLETED.equals(normalized)
@@ -4756,9 +3179,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析状态标签。
+     * 瑙ｆ瀽鐘舵€佹爣绛俱€?
      */
-    private String resolveStatusLabel(String status) {
+    String resolveStatusLabel(String status) {
         return switch (trimToNull(status) == null ? "" : status.trim()) {
             case DOCUMENT_STATUS_PENDING_PAYMENT -> "\u5f85\u652f\u4ed8";
             case DOCUMENT_STATUS_PAYING -> "\u652f\u4ed8\u4e2d";
@@ -4774,9 +3197,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析明细。
+     * 瑙ｆ瀽鏄庣粏銆?
      */
-    private String resolveExpenseDetailType(ProcessDocumentTemplate template, ProcessExpenseDetailDesign expenseDetailDesign) {
+    String resolveExpenseDetailType(ProcessDocumentTemplate template, ProcessExpenseDetailDesign expenseDetailDesign) {
         if (expenseDetailDesign != null && trimToNull(expenseDetailDesign.getDetailType()) != null) {
             return expenseDetailDesign.getDetailType();
         }
@@ -4784,16 +3207,16 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析标签。
+     * 瑙ｆ瀽鏍囩銆?
      */
-    private String resolveExpenseDetailTypeLabel(String detailType) {
+    String resolveExpenseDetailTypeLabel(String detailType) {
         return Objects.equals(trimToNull(detailType), DETAIL_TYPE_ENTERPRISE)
                 ? "\u4f01\u4e1a\u5f80\u6765"
                 : "\u666e\u901a\u62a5\u9500";
     }
 
     /**
-     * 解析实例。
+     * 瑙ｆ瀽瀹炰緥銆?
      */
     private String resolveEnterpriseModeForInstance(ProcessDocumentTemplate template, ProcessExpenseDetailDesign expenseDetailDesign, String runtimeMode) {
         if (!Objects.equals(resolveExpenseDetailType(template, expenseDetailDesign), DETAIL_TYPE_ENTERPRISE)) {
@@ -4811,7 +3234,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析标签。
+     * 瑙ｆ瀽鏍囩銆?
      */
     private String resolveEnterpriseModeLabel(String enterpriseMode) {
         if (Objects.equals(trimToNull(enterpriseMode), ENTERPRISE_MODE_PREPAY_UNBILLED)) {
@@ -4840,7 +3263,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析实例。
+     * 瑙ｆ瀽瀹炰緥銆?
      */
     private String resolveBusinessSceneModeForInstance(
             String detailType,
@@ -4866,7 +3289,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 解析相关信息。
+     * 瑙ｆ瀽鐩稿叧淇℃伅銆?
      */
     private String resolveBusinessSceneMode(String detailType, Object rawMode, String defaultBusinessSceneMode) {
         if (!Objects.equals(detailType, DETAIL_TYPE_ENTERPRISE)) {
@@ -4907,7 +3330,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建标签。
+     * 鏋勫缓鏍囩銆?
      */
     private String buildAccountLabel(String accountName, String bankName) {
         String left = firstNonBlank(accountName, bankName);
@@ -4916,7 +3339,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 构建供应商账户补充信息。
+     * 鏋勫缓渚涘簲鍟嗚处鎴疯ˉ鍏呬俊鎭€?
      */
     private String buildVendorAccountSecondary(FinanceVendor vendor) {
         List<String> parts = new ArrayList<>();
@@ -4989,7 +3412,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载全部启用部门并按 ID 建立映射。
+     * 鍔犺浇鍏ㄩ儴鍚敤閮ㄩ棬骞舵寜 ID 寤虹珛鏄犲皠銆?
      */
     private Map<Long, SystemDepartment> loadAllDepartmentMap() {
         return systemDepartmentMapper.selectList(
@@ -5025,9 +3448,9 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 加载启用中的用户。
+     * 鍔犺浇鍚敤涓殑鐢ㄦ埛銆?
      */
-    private User loadActiveUser(Long userId) {
+    User loadActiveUser(Long userId) {
         if (userId == null) {
             return null;
         }
@@ -5036,7 +3459,7 @@ class AbstractExpenseDocumentSupport {
     }
 
     /**
-     * 批量加载启用中的用户。
+     * 鎵归噺鍔犺浇鍚敤涓殑鐢ㄦ埛銆?
      */
     private List<User> loadActiveUsers(List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
@@ -5058,24 +3481,37 @@ class AbstractExpenseDocumentSupport {
     }
 
     private String normalizeUserName(User user) {
-        String name = trimToNull(user.getName());
+        if (user == null) {
+            return "\u672a\u547d\u540d\u7528\u6237";
+        }
+        String name = user.getName();
         if (name != null) {
+            name = name.trim();
+        }
+        if (name != null && !name.isEmpty()) {
             return name;
         }
-        return defaultText(asText(user.getUsername()), "\u672a\u547d\u540d\u7528\u6237");
+        String username = user.getUsername();
+        if (username != null) {
+            username = username.trim();
+        }
+        if (username != null && !username.isEmpty()) {
+            return username;
+        }
+        return "\u672a\u547d\u540d\u7528\u6237";
     }
 
     /**
-     * 解析用户展示姓名，优先取真实姓名，缺失时回退账号名。
+     * 瑙ｆ瀽鐢ㄦ埛灞曠ず濮撳悕锛屼紭鍏堝彇鐪熷疄濮撳悕锛岀己澶辨椂鍥為€€璐﹀彿鍚嶃€?
      */
-    private String resolveUserDisplayName(Long userId, String username) {
+    String resolveUserDisplayName(Long userId, String username) {
         return resolveUserDisplayName(loadActiveUser(userId), username);
     }
 
     /**
-     * 解析用户展示姓名，优先取真实姓名，缺失时回退账号名。
+     * 瑙ｆ瀽鐢ㄦ埛灞曠ず濮撳悕锛屼紭鍏堝彇鐪熷疄濮撳悕锛岀己澶辨椂鍥為€€璐﹀彿鍚嶃€?
      */
-    private String resolveUserDisplayName(User user, String username) {
+    String resolveUserDisplayName(User user, String username) {
         String displayName = user != null ? normalizeUserName(user) : defaultUsername(username);
         validatePmNameLength(displayName, "\u63d0\u4ea4\u4eba\u59d3\u540d");
         return displayName;
@@ -5179,14 +3615,14 @@ class AbstractExpenseDocumentSupport {
         return (System.nanoTime() - startedAt) / 1_000_000L;
     }
 
-    private void validatePmNameLength(String value, String label) {
+    void validatePmNameLength(String value, String label) {
         String normalized = trimToNull(value);
         if (normalized != null && normalized.length() > PM_NAME_MAX_LENGTH) {
             throw new IllegalStateException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26");
         }
     }
 
-    private void validatePmTitleLength(String value, String label) {
+    void validatePmTitleLength(String value, String label) {
         String normalized = trimToNull(value);
         if (normalized != null && normalized.length() > PM_TITLE_MAX_LENGTH) {
             throw new IllegalStateException(label + "\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 128 \u4e2a\u5b57\u7b26");
@@ -5203,7 +3639,7 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
-    private String trimToNull(String value) {
+    String trimToNull(String value) {
         if (value == null) {
             return null;
         }
@@ -5255,171 +3691,5 @@ class AbstractExpenseDocumentSupport {
     ) {
     }
 
-    private static final class SummaryEnrichmentData {
-        private static final SummaryEnrichmentData EMPTY = new SummaryEnrichmentData(Collections.emptyMap());
-        private final Map<String, SummaryMetadata> metadataByDocumentCode;
-
-        private SummaryEnrichmentData(Map<String, SummaryMetadata> metadataByDocumentCode) {
-            this.metadataByDocumentCode = metadataByDocumentCode;
-        }
-
-        private static SummaryEnrichmentData empty() {
-            return EMPTY;
-        }
-
-        private SummaryMetadata metadata(String documentCode) {
-            return metadataByDocumentCode.getOrDefault(documentCode, SummaryMetadata.empty());
-        }
-    }
-
-    private static final class SummaryMetadata {
-        private static final SummaryMetadata EMPTY = new SummaryMetadata(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                Collections.emptyList(),
-                Collections.emptyList()
-        );
-
-        private final String submitterDeptName;
-        private final String paymentCompanyId;
-        private final String paymentCompanyName;
-        private final String payeeName;
-        private final String counterpartyName;
-        private final String paymentDate;
-        private final List<String> undertakeDepartmentNames;
-        private final List<String> tagNames;
-
-        private SummaryMetadata(
-                String submitterDeptName,
-                String paymentCompanyId,
-                String paymentCompanyName,
-                String payeeName,
-                String counterpartyName,
-                String paymentDate,
-                List<String> undertakeDepartmentNames,
-                List<String> tagNames
-        ) {
-            this.submitterDeptName = submitterDeptName;
-            this.paymentCompanyId = paymentCompanyId;
-            this.paymentCompanyName = paymentCompanyName;
-            this.payeeName = payeeName;
-            this.counterpartyName = counterpartyName;
-            this.paymentDate = paymentDate;
-            this.undertakeDepartmentNames = undertakeDepartmentNames == null ? Collections.emptyList() : undertakeDepartmentNames;
-            this.tagNames = tagNames == null ? Collections.emptyList() : tagNames;
-        }
-
-        private static SummaryMetadata empty() {
-            return EMPTY;
-        }
-
-        private String submitterDeptName() {
-            return submitterDeptName;
-        }
-
-        private String paymentCompanyId() {
-            return paymentCompanyId;
-        }
-
-        private String paymentCompanyName() {
-            return paymentCompanyName;
-        }
-
-        private String payeeName() {
-            return payeeName;
-        }
-
-        private String counterpartyName() {
-            return counterpartyName;
-        }
-
-        private String paymentDate() {
-            return paymentDate;
-        }
-
-        private List<String> undertakeDepartmentNames() {
-            return undertakeDepartmentNames;
-        }
-
-        private List<String> tagNames() {
-            return tagNames;
-        }
-    }
-
-    private static final class SummaryDraft {
-        private String documentCode;
-        private String paymentCompanyId;
-        private String payeeValue;
-        private String counterpartyValue;
-        private String paymentDate;
-        private List<String> undertakeDepartmentIds = Collections.emptyList();
-        private String tagArchiveCode;
-        private List<String> tagValues = Collections.emptyList();
-
-        private void setDocumentCode(String documentCode) {
-            this.documentCode = documentCode;
-        }
-
-        private void setPaymentCompanyId(String paymentCompanyId) {
-            this.paymentCompanyId = paymentCompanyId;
-        }
-
-        private void setPayeeValue(String payeeValue) {
-            this.payeeValue = payeeValue;
-        }
-
-        private void setCounterpartyValue(String counterpartyValue) {
-            this.counterpartyValue = counterpartyValue;
-        }
-
-        private void setPaymentDate(String paymentDate) {
-            this.paymentDate = paymentDate;
-        }
-
-        private void setUndertakeDepartmentIds(List<String> undertakeDepartmentIds) {
-            this.undertakeDepartmentIds = undertakeDepartmentIds == null ? Collections.emptyList() : undertakeDepartmentIds;
-        }
-
-        private void setTagArchiveCode(String tagArchiveCode) {
-            this.tagArchiveCode = tagArchiveCode;
-        }
-
-        private void setTagValues(List<String> tagValues) {
-            this.tagValues = tagValues == null ? Collections.emptyList() : tagValues;
-        }
-
-        private String getPaymentCompanyId() {
-            return paymentCompanyId;
-        }
-
-        private String getPayeeValue() {
-            return payeeValue;
-        }
-
-        private String getCounterpartyValue() {
-            return counterpartyValue;
-        }
-
-        private String getPaymentDate() {
-            return paymentDate;
-        }
-
-        private List<String> getUndertakeDepartmentIds() {
-            return undertakeDepartmentIds;
-        }
-
-        private String getTagArchiveCode() {
-            return tagArchiveCode;
-        }
-
-        private List<String> getTagValues() {
-            return tagValues;
-        }
-    }
 
 }
-

@@ -31,13 +31,16 @@ class AbstractExpenseDocumentSupportRejectMetadataTest {
     private ProcessDocumentActionLogMapper processDocumentActionLogMapper;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private ExpenseDocumentActionLogSupport expenseDocumentActionLogSupport;
     private AbstractExpenseDocumentSupport support;
 
     @BeforeEach
     void setUp() {
+        expenseDocumentActionLogSupport = new ExpenseDocumentActionLogSupport(processDocumentActionLogMapper, objectMapper);
         support = mock(AbstractExpenseDocumentSupport.class, Answers.CALLS_REAL_METHODS);
         ReflectionTestUtils.setField(support, "objectMapper", objectMapper);
         ReflectionTestUtils.setField(support, "processDocumentActionLogMapper", processDocumentActionLogMapper);
+        ReflectionTestUtils.setField(support, "expenseDocumentActionLogSupport", expenseDocumentActionLogSupport);
     }
 
     @Test

@@ -28,6 +28,8 @@ describe('navigation configuration', () => {
     expect(resolveRouteTabTitle({ tabTitle: '财务系统管理', title: '财务系统管理' })).toBe('财务系统管理')
     expect(resolvePlaceholderTitle(resolveRouteMeta('finance-review-voucher'))).toBe('审核凭证')
     expect(resolvePlaceholderDescription(resolveRouteMeta('finance-review-voucher'))).toBe('审核总账凭证')
+    expect(resolvePlaceholderTitle(resolveRouteMeta('finance-opening-balance'))).toBe('期初余额')
+    expect(resolvePlaceholderDescription(resolveRouteMeta('finance-opening-balance'))).toBe('总账期初余额功能建设中')
     expect(resolvePlaceholderTitle(resolveRouteMeta('finance-post-voucher'))).toBe('记账')
     expect(resolvePlaceholderDescription(resolveRouteMeta('finance-post-voucher'))).toBe('总账记账功能建设中')
     expect(resolvePlaceholderTitle(resolveRouteMeta('finance-close-ledger'))).toBe('结账')
@@ -54,10 +56,11 @@ describe('navigation configuration', () => {
       'finance-new-voucher',
       'finance-query-voucher',
       'finance-review-voucher',
+      'finance-opening-balance',
       'finance-post-voucher',
-      'finance-close-ledger',
-      'finance-ledger-balance-sheet'
+      'finance-close-ledger'
     ])
+    expect(ledgerKeys?.[6]).toBe('finance-ledger-balance-sheet')
   })
 })
 

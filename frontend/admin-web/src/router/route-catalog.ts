@@ -247,6 +247,12 @@ export const routeCatalog: AppRouteDefinition[] = [
         metaKey: 'finance-review-voucher-detail'
       },
       {
+        path: 'finance/general-ledger/opening-balance',
+        name: 'finance-opening-balance',
+        component: placeholderView,
+        metaKey: 'finance-opening-balance'
+      },
+      {
         path: 'finance/general-ledger/post-voucher',
         name: 'finance-post-voucher',
         component: placeholderView,

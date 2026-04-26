@@ -22,16 +22,18 @@ class ExpenseDocumentReadSupportTest {
     @Mock
     private AbstractExpenseDocumentSupport support;
     @Mock
+    private ExpenseDocumentDetailViewSupport detailViewSupport;
+    @Mock
     private ExpenseRelationWriteOffService expenseRelationWriteOffService;
 
     @Test
     void documentReadsDelegateToSharedSupport() {
-        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, expenseRelationWriteOffService);
+        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, detailViewSupport, expenseRelationWriteOffService);
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-1");
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         when(support.requireDocument("DOC-1")).thenReturn(instance);
-        when(support.buildDocumentDetail(instance)).thenReturn(detail);
+        when(detailViewSupport.buildDocumentDetail(instance)).thenReturn(detail);
         when(expenseRelationWriteOffService.loadRelatedDocumentBindings("DOC-1")).thenReturn(List.of());
         when(expenseRelationWriteOffService.loadWriteOffDocumentBindings("DOC-1")).thenReturn(List.of());
 
@@ -46,7 +48,7 @@ class ExpenseDocumentReadSupportTest {
 
     @Test
     void detailAndFormReadsDelegateToSharedSupport() {
-        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, expenseRelationWriteOffService);
+        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, detailViewSupport, expenseRelationWriteOffService);
         ProcessDocumentExpenseDetail detail = new ProcessDocumentExpenseDetail();
         ExpenseDetailInstanceDTO runtimeDetail = new ExpenseDetailInstanceDTO();
         List<ProcessDocumentExpenseDetail> details = List.of(detail);
@@ -64,13 +66,13 @@ class ExpenseDocumentReadSupportTest {
 
     @Test
     void buildDocumentDetailEnrichesBusinessBindings() {
-        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, expenseRelationWriteOffService);
+        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, detailViewSupport, expenseRelationWriteOffService);
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-88");
         ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
         var relatedBindings = List.of(new com.finex.auth.dto.ExpenseDocumentRelationBindingVO());
         var writeOffBindings = List.of(new com.finex.auth.dto.ExpenseDocumentWriteOffBindingVO());
-        when(support.buildDocumentDetail(instance)).thenReturn(detail);
+        when(detailViewSupport.buildDocumentDetail(instance)).thenReturn(detail);
         when(expenseRelationWriteOffService.loadRelatedDocumentBindings("DOC-88")).thenReturn(relatedBindings);
         when(expenseRelationWriteOffService.loadWriteOffDocumentBindings("DOC-88")).thenReturn(writeOffBindings);
 

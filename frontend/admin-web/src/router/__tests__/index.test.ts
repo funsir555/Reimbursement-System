@@ -108,18 +108,22 @@ describe('router process management routes', () => {
   })
 
   it('registers general ledger placeholder routes without changing the balance-sheet path', async () => {
+    const openingRoute = router.getRoutes().find((item) => item.name === 'finance-opening-balance')
     const postRoute = router.getRoutes().find((item) => item.name === 'finance-post-voucher')
     const closeRoute = router.getRoutes().find((item) => item.name === 'finance-close-ledger')
     const balanceRoute = router.getRoutes().find((item) => item.name === 'finance-ledger-balance-sheet')
 
+    expect(openingRoute?.path).toBe('/finance/general-ledger/opening-balance')
     expect(postRoute?.path).toBe('/finance/general-ledger/post-voucher')
     expect(closeRoute?.path).toBe('/finance/general-ledger/close-ledger')
     expect(balanceRoute?.path).toBe('/finance/general-ledger/balance-sheet')
 
+    const openingModule = await (openingRoute?.components?.default as (() => Promise<{ default: unknown }>))()
     const postModule = await (postRoute?.components?.default as (() => Promise<{ default: unknown }>))()
     const closeModule = await (closeRoute?.components?.default as (() => Promise<{ default: unknown }>))()
     const balanceModule = await (balanceRoute?.components?.default as (() => Promise<{ default: unknown }>))()
 
+    expect(openingModule.default).toBe(PlaceholderView)
     expect(postModule.default).toBe(PlaceholderView)
     expect(closeModule.default).toBe(PlaceholderView)
     expect(balanceModule.default).toBe(PlaceholderView)

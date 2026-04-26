@@ -19,20 +19,23 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ExpenseDocumentMutationDomainSupportTest {
 
-    @Mock
-    private AbstractExpenseDocumentSupport support;
+    @Mock private ExpenseDocumentSubmitBootstrapSupport submitBootstrapSupport;
+    @Mock private ExpenseDocumentMutationApplySupport mutationApplySupport;
 
     @Test
     void submitAndResubmitDelegateToSharedSupport() {
-        ExpenseDocumentMutationDomainSupport domainSupport = new ExpenseDocumentMutationDomainSupport(support);
+        ExpenseDocumentMutationDomainSupport domainSupport = new ExpenseDocumentMutationDomainSupport(
+                submitBootstrapSupport,
+                mutationApplySupport
+        );
         ExpenseDocumentSubmitDTO submitDto = new ExpenseDocumentSubmitDTO();
         ExpenseDocumentUpdateDTO updateDto = new ExpenseDocumentUpdateDTO();
         ExpenseDocumentSubmitResultVO submitResult = new ExpenseDocumentSubmitResultVO();
         ExpenseDocumentSubmitResultVO resubmitResult = new ExpenseDocumentSubmitResultVO();
         ProcessDocumentInstance savedDraft = new ProcessDocumentInstance();
-        when(support.submitDocument(1L, "tester", submitDto)).thenReturn(submitResult);
-        when(support.saveDraftDocument(1L, "DOC-1", updateDto)).thenReturn(savedDraft);
-        when(support.resubmitDocument(1L, "tester", "DOC-1", updateDto)).thenReturn(resubmitResult);
+        when(submitBootstrapSupport.submitDocument(1L, "tester", submitDto)).thenReturn(submitResult);
+        when(submitBootstrapSupport.saveDraftDocument(1L, "DOC-1", updateDto)).thenReturn(savedDraft);
+        when(submitBootstrapSupport.resubmitDocument(1L, "tester", "DOC-1", updateDto)).thenReturn(resubmitResult);
 
         assertSame(submitResult, domainSupport.submitDocument(1L, "tester", submitDto));
         assertSame(savedDraft, domainSupport.saveDraftDocument(1L, "DOC-1", updateDto));
@@ -41,16 +44,19 @@ class ExpenseDocumentMutationDomainSupportTest {
 
     @Test
     void mutationContextOperationsDelegateToSharedSupport() {
-        ExpenseDocumentMutationDomainSupport domainSupport = new ExpenseDocumentMutationDomainSupport(support);
+        ExpenseDocumentMutationDomainSupport domainSupport = new ExpenseDocumentMutationDomainSupport(
+                submitBootstrapSupport,
+                mutationApplySupport
+        );
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         ExpenseDocumentUpdateDTO dto = new ExpenseDocumentUpdateDTO();
         AbstractExpenseDocumentSupport.DocumentMutationContext context =
                 new AbstractExpenseDocumentSupport.DocumentMutationContext(null, null, null, Map.of(), List.of(), null, Map.of(), null, null, null);
-        when(support.buildMutationContext(instance, dto, true)).thenReturn(context);
+        when(mutationApplySupport.buildMutationContext(instance, dto, true)).thenReturn(context);
 
         assertSame(context, domainSupport.buildMutationContext(instance, dto, true));
         domainSupport.applyDocumentMutation(instance, context, true);
 
-        verify(support).applyDocumentMutation(instance, context, true);
+        verify(mutationApplySupport).applyDocumentMutation(instance, context, true);
     }
 }

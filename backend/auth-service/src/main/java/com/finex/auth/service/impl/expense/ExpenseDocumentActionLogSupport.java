@@ -5,8 +5,15 @@
 
 package com.finex.auth.service.impl.expense;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.entity.ProcessDocumentActionLog;
+import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -15,17 +22,17 @@ import java.util.Map;
  * 改这里时，要特别关注 单据状态、审批链、金额结果和重复提交是否会被一起带坏。
  */
 @Service
+@RequiredArgsConstructor
 class ExpenseDocumentActionLogSupport {
 
-    private final AbstractExpenseDocumentSupport support;
+    private static final int PM_NAME_MAX_LENGTH = 64;
+
+    private final ProcessDocumentActionLogMapper processDocumentActionLogMapper;
+    private final ObjectMapper objectMapper;
 
     /**
      * 初始化这个类所需的依赖组件。
      */
-    ExpenseDocumentActionLogSupport(AbstractExpenseDocumentSupport support) {
-        this.support = support;
-    }
-
     void appendLog(
             String documentCode,
             String nodeKey,
@@ -36,6 +43,48 @@ class ExpenseDocumentActionLogSupport {
             String actionComment,
             Map<String, Object> payload
     ) {
-        support.appendLog(documentCode, nodeKey, nodeName, actionType, operatorUserId, operatorName, actionComment, payload);
+        validatePmNameLength(nodeName, "节点名称");
+        validatePmNameLength(operatorName, "操作人姓名");
+        ProcessDocumentActionLog log = new ProcessDocumentActionLog();
+        log.setDocumentCode(documentCode);
+        log.setNodeKey(nodeKey);
+        log.setNodeName(nodeName);
+        log.setActionType(actionType);
+        log.setActorUserId(operatorUserId);
+        log.setActorName(operatorName);
+        log.setActionComment(trimToNull(actionComment));
+        log.setPayloadJson(payload == null || payload.isEmpty() ? null : writeJson(payload));
+        log.setCreatedAt(LocalDateTime.now());
+        processDocumentActionLogMapper.insert(log);
+    }
+
+    List<ProcessDocumentActionLog> loadActionLogs(String documentCode) {
+        return processDocumentActionLogMapper.selectList(
+                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
+                        .eq(ProcessDocumentActionLog::getDocumentCode, documentCode)
+                        .orderByAsc(ProcessDocumentActionLog::getCreatedAt, ProcessDocumentActionLog::getId)
+        );
+    }
+
+    private void validatePmNameLength(String value, String fieldName) {
+        if (value != null && value.length() > PM_NAME_MAX_LENGTH) {
+            throw new IllegalArgumentException(fieldName + "长度不能超过" + PM_NAME_MAX_LENGTH + "个字符");
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception ex) {
+            throw new IllegalStateException("数据序列化失败", ex);
+        }
     }
 }

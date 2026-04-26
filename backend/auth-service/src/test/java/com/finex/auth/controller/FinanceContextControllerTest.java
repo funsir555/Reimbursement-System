@@ -80,6 +80,7 @@ class FinanceContextControllerTest {
 
         assertTrue(requiredPermissions.contains("finance:general_ledger:post_voucher:view"));
         assertTrue(requiredPermissions.contains("finance:general_ledger:close_ledger:view"));
+        assertTrue(requiredPermissions.contains("finance:general_ledger:opening_balance:view"));
         assertTrue(requiredPermissions.contains("finance:general_ledger:balance_sheet:view"));
     }
 }

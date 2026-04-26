@@ -264,6 +264,20 @@ describe('MainLayout', () => {
     expect(wrapper.text()).toContain('财务系统管理')
   })
 
+  it('shows general ledger placeholder entries when the user has opening, post, and close permissions', async () => {
+    const wrapper = await mountView([
+      'finance:general_ledger:opening_balance:view',
+      'finance:general_ledger:post_voucher:view',
+      'finance:general_ledger:close_ledger:view'
+    ])
+
+    expect(wrapper.find('[data-submenu="/finance"]').exists()).toBe(true)
+    expect(wrapper.find('[data-submenu="/finance/general-ledger"]').exists()).toBe(true)
+    expect(wrapper.find('[data-index="/finance/general-ledger/opening-balance"]').exists()).toBe(true)
+    expect(wrapper.find('[data-index="/finance/general-ledger/post-voucher"]').exists()).toBe(true)
+    expect(wrapper.find('[data-index="/finance/general-ledger/close-ledger"]').exists()).toBe(true)
+  })
+
   it('shows project archive when the user has the project archive permission', async () => {
     const wrapper = await mountView(['finance:archives:projects:view'])
 

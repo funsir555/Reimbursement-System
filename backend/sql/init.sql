@@ -1,4 +1,4 @@
-﻿CREATE DATABASE IF NOT EXISTS finex_db
+CREATE DATABASE IF NOT EXISTS finex_db
   DEFAULT CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
@@ -360,49 +360,49 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS sys_user_bank_account (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '閾惰璐︽埛ID',
-    user_id BIGINT NOT NULL COMMENT '鐢ㄦ埛ID',
-    bank_name VARCHAR(100) NOT NULL COMMENT '閾惰鍚嶇О',
-    branch_name VARCHAR(100) COMMENT '鏀鍚嶇О',
-    bank_code VARCHAR(64) NULL COMMENT '寮€鎴烽摱琛岀紪鐮?',
-    branch_code VARCHAR(64) NULL COMMENT '鍒嗘敮琛岀紪鐮?',
-    cnaps_code VARCHAR(64) NULL COMMENT '鑱旇鍙?',
-    province VARCHAR(64) NULL COMMENT '寮€鎴风渷',
-    city VARCHAR(64) NULL COMMENT '寮€鎴峰競',
-    account_name VARCHAR(100) NOT NULL COMMENT '璐︽埛鍚?,
-    account_no VARCHAR(50) NOT NULL COMMENT '閾惰鍗″彿',
-    account_type VARCHAR(50) DEFAULT '瀵圭璐︽埛' COMMENT '璐︽埛绫诲瀷',
-    default_account TINYINT DEFAULT 0 COMMENT '鏄惁榛樿璐︽埛',
-    status TINYINT DEFAULT 1 COMMENT '鐘舵€?1鍚敤 0鍋滅敤',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '银行账户ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    bank_name VARCHAR(100) NOT NULL COMMENT '银行名称',
+    branch_name VARCHAR(100) COMMENT '支行名称',
+    bank_code VARCHAR(64) NULL COMMENT '开户银行编码',
+    branch_code VARCHAR(64) NULL COMMENT '分支行编码',
+    cnaps_code VARCHAR(64) NULL COMMENT '联行号',
+    province VARCHAR(64) NULL COMMENT '开户省',
+    city VARCHAR(64) NULL COMMENT '开户市',
+    account_name VARCHAR(100) NOT NULL COMMENT '账户名',
+    account_no VARCHAR(50) NOT NULL COMMENT '银行卡号',
+    account_type VARCHAR(50) DEFAULT '对私账户' COMMENT '账户类型',
+    default_account TINYINT DEFAULT 0 COMMENT '是否默认账户',
+    status TINYINT DEFAULT 1 COMMENT '状态:1启用 0停用',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     KEY idx_user_id (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鐢ㄦ埛鏀舵璐︽埛琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户收款账户表';
 
 CREATE TABLE IF NOT EXISTS sys_download_record (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '涓嬭浇璁板綍ID',
-    user_id BIGINT NOT NULL COMMENT '鐢ㄦ埛ID',
-    file_name VARCHAR(200) NOT NULL COMMENT '鏂囦欢鍚?,
-    business_type VARCHAR(100) NOT NULL COMMENT '涓氬姟绫诲瀷',
-    status VARCHAR(20) NOT NULL COMMENT '鐘舵€?DOWNLOADING/COMPLETED/FAILED',
-    progress INT DEFAULT 0 COMMENT '涓嬭浇杩涘害',
-    file_size VARCHAR(30) COMMENT '鏂囦欢澶у皬',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    finished_at DATETIME NULL COMMENT '瀹屾垚鏃堕棿',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '下载记录ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    file_name VARCHAR(200) NOT NULL COMMENT '文件名',
+    business_type VARCHAR(100) NOT NULL COMMENT '业务类型',
+    status VARCHAR(20) NOT NULL COMMENT '状态:DOWNLOADING/COMPLETED/FAILED',
+    progress INT DEFAULT 0 COMMENT '下载进度',
+    file_size VARCHAR(30) COMMENT '文件大小',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    finished_at DATETIME NULL COMMENT '完成时间',
     KEY idx_user_status (user_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='涓嬭浇璁板綍琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='下载记录表';
 
 CREATE TABLE IF NOT EXISTS pm_template_category (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '鍒嗙被ID',
-    category_code VARCHAR(64) NOT NULL COMMENT '鍒嗙被缂栫爜',
-    category_name VARCHAR(64) NOT NULL COMMENT '鍒嗙被鍚嶇О',
-    category_description VARCHAR(255) COMMENT '鍒嗙被璇存槑',
-    sort_order INT DEFAULT 0 COMMENT '鎺掑簭鍙?,
-    status TINYINT DEFAULT 1 COMMENT '鐘舵€?1鍚敤 0鍋滅敤',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '分类ID',
+    category_code VARCHAR(64) NOT NULL COMMENT '分类编码',
+    category_name VARCHAR(64) NOT NULL COMMENT '分类名称',
+    category_description VARCHAR(255) COMMENT '分类说明',
+    sort_order INT DEFAULT 0 COMMENT '排序号',
+    status TINYINT DEFAULT 1 COMMENT '状态:1启用 0停用',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_category_code (category_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='娴佺▼妯℃澘鍒嗙被琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='流程模板分类表';
 
 CREATE TABLE IF NOT EXISTS pm_custom_archive_design (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自定义档案ID',
@@ -582,34 +582,34 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS pm_document_template (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '妯℃澘ID',
-    template_code VARCHAR(64) NOT NULL COMMENT '妯℃澘缂栫爜',
-    template_name VARCHAR(64) NOT NULL COMMENT '妯℃澘鍚嶇О',
-    template_type VARCHAR(32) NOT NULL COMMENT '妯℃澘绫诲瀷:report/application/loan',
-    template_type_label VARCHAR(32) NOT NULL COMMENT '妯℃澘绫诲瀷涓枃鍚?,
-    category_code VARCHAR(64) NOT NULL COMMENT '鍒嗙被缂栫爜',
-    template_description VARCHAR(500) COMMENT '妯℃澘璇存槑',
-    numbering_rule VARCHAR(64) COMMENT '缂栧彿瑙勫垯',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',
+    template_code VARCHAR(64) NOT NULL COMMENT '模板编码',
+    template_name VARCHAR(64) NOT NULL COMMENT '模板名称',
+    template_type VARCHAR(32) NOT NULL COMMENT '模板类型:report/application/loan',
+    template_type_label VARCHAR(32) NOT NULL COMMENT '模板类型中文名',
+    category_code VARCHAR(64) NOT NULL COMMENT '分类编码',
+    template_description VARCHAR(500) COMMENT '模板说明',
+    numbering_rule VARCHAR(64) COMMENT '编号规则',
     form_design_code VARCHAR(64) COMMENT '表单设计编码',
-    icon_color VARCHAR(32) DEFAULT 'blue' COMMENT '涓婚鑹?,
-    enabled TINYINT DEFAULT 1 COMMENT '鏄惁鍚敤',
-    publish_status VARCHAR(16) DEFAULT 'ENABLED' COMMENT '鍙戝竷鐘舵€?,
-    print_mode VARCHAR(64) COMMENT '鎵撳嵃鏂瑰紡',
-    approval_flow VARCHAR(64) COMMENT '瀹℃壒娴佺▼缂栫爜',
-    flow_name VARCHAR(64) COMMENT '瀹℃壒娴佺▼鍚嶇О',
-    payment_mode VARCHAR(64) COMMENT '浠樻鑱斿姩妯″紡',
-    allocation_form VARCHAR(64) COMMENT '鍒嗘憡琛ㄥ崟',
-    ai_audit_mode VARCHAR(64) DEFAULT 'disabled' COMMENT 'AI瀹℃牳妯″紡',
-    highlights VARCHAR(500) COMMENT '鍗＄墖浜偣锛屼娇鐢▅鍒嗛殧',
-    owner_name VARCHAR(64) COMMENT '缁存姢浜?,
-    sort_order INT DEFAULT 0 COMMENT '鎺掑簭鍙?,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+    icon_color VARCHAR(32) DEFAULT 'blue' COMMENT '主题色',
+    enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+    publish_status VARCHAR(16) DEFAULT 'ENABLED' COMMENT '发布状态',
+    print_mode VARCHAR(64) COMMENT '打印方式',
+    approval_flow VARCHAR(64) COMMENT '审批流程编码',
+    flow_name VARCHAR(64) COMMENT '审批流程名称',
+    payment_mode VARCHAR(64) COMMENT '付款联动模式',
+    allocation_form VARCHAR(64) COMMENT '分摊表单',
+    ai_audit_mode VARCHAR(64) DEFAULT 'disabled' COMMENT 'AI审核模式',
+    highlights VARCHAR(500) COMMENT '卡片亮点，使用|分隔',
+    owner_name VARCHAR(64) COMMENT '维护人',
+    sort_order INT DEFAULT 0 COMMENT '排序号',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_template_code (template_code),
     KEY idx_category_code (category_code),
     KEY idx_template_type (template_type),
     KEY idx_publish_status (publish_status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鍗曟嵁娴佺▼妯℃澘琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单据流程模板表';
 
 SET @sql = IF(
     EXISTS (
@@ -620,7 +620,7 @@ SET @sql = IF(
           AND COLUMN_NAME = 'numbering_rule'
     ),
     'SELECT ''pm_document_template.numbering_rule exists''',
-    'ALTER TABLE pm_document_template ADD COLUMN numbering_rule VARCHAR(64) COMMENT ''缂栧彿瑙勫垯'' AFTER template_description'
+    'ALTER TABLE pm_document_template ADD COLUMN numbering_rule VARCHAR(64) COMMENT ''编号规则'' AFTER template_description'
 );
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -650,7 +650,7 @@ SET @sql = IF(
           AND COLUMN_NAME = 'allocation_form'
     ),
     'SELECT ''pm_document_template.allocation_form exists''',
-    'ALTER TABLE pm_document_template ADD COLUMN allocation_form VARCHAR(64) COMMENT ''鍒嗘憡琛ㄥ崟'' AFTER payment_mode'
+    'ALTER TABLE pm_document_template ADD COLUMN allocation_form VARCHAR(64) COMMENT ''分摊表单'' AFTER payment_mode'
 );
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -732,16 +732,16 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS pm_template_scope (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '鑼冨洿鏄庣粏ID',
-    template_id BIGINT NOT NULL COMMENT '妯℃澘ID',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '范围明细ID',
+    template_id BIGINT NOT NULL COMMENT '模板ID',
     option_type VARCHAR(32) NOT NULL COMMENT '明细类型:SCOPE_DEPARTMENT/SCOPE_EXPENSE_TYPE/SCOPE_AMOUNT_MIN/SCOPE_AMOUNT_MAX/TAG_OPTION/INSTALLMENT_OPTION',
-    option_code VARCHAR(64) NOT NULL COMMENT '閫夐」缂栫爜',
-    option_label VARCHAR(64) NOT NULL COMMENT '閫夐」鍚嶇О',
-    sort_order INT DEFAULT 0 COMMENT '鎺掑簭鍙?,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    option_code VARCHAR(64) NOT NULL COMMENT '选项编码',
+    option_label VARCHAR(64) NOT NULL COMMENT '选项名称',
+    sort_order INT DEFAULT 0 COMMENT '排序号',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     KEY idx_template_id (template_id),
     KEY idx_option_type (option_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='妯℃澘鑼冨洿鏍囩鏄庣粏琛?;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模板范围标签明细表';
 
 INSERT INTO sys_company (
     company_id, company_code, company_name, status
@@ -814,7 +814,7 @@ WHERE u.username = 'lisi';
 INSERT INTO sys_user_bank_account (
     user_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
 )
-SELECT u.id, '鎷涘晢閾惰', '涓婃捣闄嗗鍢存敮琛?, u.name, '6225888888881001', '宸ヨ祫鍗?, 1, 1
+SELECT u.id, '招商银行', '上海陆家嘴支行', u.name, '6225888888881001', '工资卡', 1, 1
 FROM sys_user u
 WHERE u.username = 'admin'
   AND NOT EXISTS (
@@ -825,7 +825,7 @@ WHERE u.username = 'admin'
 INSERT INTO sys_user_bank_account (
     user_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
 )
-SELECT u.id, '寤鸿閾惰', '涓婃捣寮犳睙鏀', u.name, '6217000012345678', '鎶ラ攢鍗?, 1, 1
+SELECT u.id, '建设银行', '上海张江支行', u.name, '6217000012345678', '报销卡', 1, 1
 FROM sys_user u
 WHERE u.username = 'zhangsan'
   AND NOT EXISTS (
@@ -836,7 +836,7 @@ WHERE u.username = 'zhangsan'
 INSERT INTO sys_user_bank_account (
     user_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
 )
-SELECT u.id, '宸ュ晢閾惰', '涓婃捣寰愭眹鏀', u.name, '6222000098765432', '鎶ラ攢鍗?, 1, 1
+SELECT u.id, '工商银行', '上海徐汇支行', u.name, '6222000098765432', '报销卡', 1, 1
 FROM sys_user u
 WHERE u.username = 'lisi'
   AND NOT EXISTS (
@@ -846,9 +846,9 @@ WHERE u.username = 'lisi'
 
 INSERT INTO pm_template_category (category_code, category_name, category_description, sort_order, status)
 VALUES
-    ('enterprise-payment', '浼佷笟寰€鏉ョ被', '閫傜敤浜庡鍏粯娆俱€佸鐢ㄩ噾銆佹娂閲戝拰渚涘簲鍟嗙粨绠楃瓑鍦烘櫙銆?, 10, 1),
-    ('employee-expense', '鍛樺伐璐圭敤绫?, '閫傜敤浜庡憳宸ユ姤閿€銆佸€熸敮鍜屽洟闃熻垂鐢ㄥ綊闆嗐€?, 20, 1),
-    ('business-application', '浜嬮」鐢宠绫?, '閫傜敤浜庨」鐩敵璇枫€佷粯娆捐Е鍙戝拰涓撻」瀹℃壒銆?, 30, 1)
+    ('enterprise-payment', '企业往来类', '适用于对公付款、备用金、押金和供应商结算等场景。', 10, 1),
+    ('employee-expense', '员工费用类', '适用于员工报销、借支和团队费用归集。', 20, 1),
+    ('business-application', '事项申请类', '适用于项目申请、付款触发和专项审批。', 30, 1)
 ON DUPLICATE KEY UPDATE
     category_name = VALUES(category_name),
     category_description = VALUES(category_description),
@@ -990,40 +990,40 @@ INSERT INTO pm_document_template (
 )
 VALUES
     (
-        'PUB-EXP-01', '瀵瑰叕宸梾浠樻', 'report', '鎶ラ攢鍗?, 'enterprise-payment',
-        '閫傜敤浜庝緵搴斿晢鍨粯宸梾璐圭敤鍚庣殑缁熶竴鎶ラ攢涓庝粯娆炬祦杞€?, 'FX_DATE_4SEQ', 'expense-public-form', 'blue', 1, 'ENABLED', 'default-print',
-        'public-payment-flow', '瀵瑰叕浠樻娴佺▼', 'public-payment', 'allocation-default', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐AI 瀹℃牳',
-        '娴佺▼涓績', 10
+        'PUB-EXP-01', '对公差旅付款', 'report', '报销单', 'enterprise-payment',
+        '适用于供应商垫付差旅费用后的统一报销与付款流转。', 'FX_DATE_4SEQ', 'expense-public-form', 'blue', 1, 'ENABLED', 'default-print',
+        'public-payment-flow', '对公付款流程', 'public-payment', 'allocation-default', 'standard', '支持移动端提单|联动付款单|AI审核',
+        '流程中心', 10
     ),
     (
-        'PUB-APP-02', '瀵瑰叕浠樻鐢宠', 'application', '鐢宠鍗?, 'enterprise-payment',
-        '鐢ㄤ簬閲囪喘棰勪粯娆俱€佹湇鍔′粯娆惧拰闃舵灏炬鐨勫鎵广€?, 'FX_DATE_4SEQ', 'application-public-form', 'cyan', 1, 'ENABLED', 'finance-archive',
-        'public-payment-flow', '瀵瑰叕浠樻娴佺▼', 'public-payment', 'allocation-project', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐鏍囧噯瀹℃壒閾捐矾',
-        '璐㈠姟鍏变韩', 20
+        'PUB-APP-02', '对公付款申请', 'application', '申请单', 'enterprise-payment',
+        '适用于采购预付款、服务付款和阶段尾款的审批。', 'FX_DATE_4SEQ', 'application-public-form', 'cyan', 1, 'ENABLED', 'finance-archive',
+        'public-payment-flow', '对公付款流程', 'public-payment', 'allocation-project', 'standard', '支持移动端提单|联动付款单|标准审批链路',
+        '财务共享', 20
     ),
     (
-        'EMP-EXP-11', '鏍囧噯鍛樺伐鎶ラ攢', 'report', '鎶ラ攢鍗?, 'employee-expense',
-        '瑕嗙洊宸梾銆佷氦閫氥€佷綇瀹裤€佸姙鍏瓑甯歌鍛樺伐璐圭敤銆?, 'FX_DATE_4SEQ', 'expense-standard-form', 'blue', 1, 'ENABLED', 'default-print',
-        'normal-expense-flow', '鏍囧噯鎶ラ攢娴佺▼', 'none', 'allocation-default', 'standard', '鏀寔绉诲姩绔彁鍗晐AI 瀹℃牳|鏍囧噯瀹℃壒閾捐矾',
-        '璐圭敤涓績', 10
+        'EMP-EXP-11', '标准员工报销', 'report', '报销单', 'employee-expense',
+        '覆盖差旅、交通、住宿、办公等常见员工费用。', 'FX_DATE_4SEQ', 'expense-standard-form', 'blue', 1, 'ENABLED', 'default-print',
+        'normal-expense-flow', '标准报销流程', 'none', 'allocation-default', 'standard', '支持移动端提单|AI审核|标准审批链路',
+        '费用中心', 10
     ),
     (
-        'EMP-LOAN-13', '鍛樺伐鍊熸鍗?, 'loan', '鍊熸鍗?, 'employee-expense',
-        '閫傜敤浜庝复鏃跺€熸敮銆佸樊鏃呭€熸鍜屽鐢ㄩ噾鏍搁攢銆?, 'FX_DATE_4SEQ', 'loan-standard-form', 'orange', 1, 'ENABLED', 'default-print',
-        'loan-return-flow', '鍊熸涓庡綊杩樻祦绋?, 'private-payment', 'allocation-default', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐鍒嗘湡浠樻',
-        '璐圭敤涓績', 20
+        'EMP-LOAN-13', '员工借款单', 'loan', '借款单', 'employee-expense',
+        '适用于临时借支、差旅借款和备用金核销。', 'FX_DATE_4SEQ', 'loan-standard-form', 'orange', 1, 'ENABLED', 'default-print',
+        'loan-return-flow', '借款与归还流程', 'private-payment', 'allocation-default', 'standard', '支持移动端提单|联动付款单|分期付款',
+        '费用中心', 20
     ),
     (
-        'BIZ-APP-21', '椤圭洰绔嬮」鐢宠', 'application', '鐢宠鍗?, 'business-application',
-        '鐢ㄤ簬椤圭洰绔嬮」銆侀绠楀喕缁撳拰璺ㄩ儴闂ㄥ崗鍚屽鎵广€?, 'FX_DATE_4SEQ', 'application-project-form', 'blue', 1, 'ENABLED', 'finance-archive',
-        'normal-expense-flow', '椤圭洰绔嬮」娴佺▼', 'none', 'allocation-project', 'strict', '鏀寔绉诲姩绔彁鍗晐AI 瀹℃牳|鏍囧噯瀹℃壒閾捐矾',
-        '椤圭洰绠＄悊', 10
+        'BIZ-APP-21', '项目立项申请', 'application', '申请单', 'business-application',
+        '用于项目立项、预算冻结和跨部门协同审批。', 'FX_DATE_4SEQ', 'application-project-form', 'blue', 1, 'ENABLED', 'finance-archive',
+        'normal-expense-flow', '项目立项流程', 'none', 'allocation-project', 'strict', '支持移动端提单|AI审核|标准审批链路',
+        '项目管理', 10
     ),
     (
-        'BIZ-EXP-23', '鍚堝悓浠樻鎶ラ攢', 'report', '鎶ラ攢鍗?, 'business-application',
-        '鐢ㄤ簬鍚堝悓鎵ц涓殑浠樻鎶ラ攢涓庡彴璐﹁褰曘€?, 'FX_DATE_4SEQ', 'expense-public-form', 'blue', 0, 'DRAFT', 'finance-archive',
-        'public-payment-flow', '鍚堝悓浠樻娴佺▼', 'public-payment', 'allocation-project', 'standard', '鏀寔绉诲姩绔彁鍗晐鑱斿姩浠樻鍗晐AI 瀹℃牳',
-        '鍚堝悓绠＄悊', 20
+        'BIZ-EXP-23', '合同付款报销', 'report', '报销单', 'business-application',
+        '用于合同执行中的付款报销与台账记录。', 'FX_DATE_4SEQ', 'expense-public-form', 'blue', 0, 'DRAFT', 'finance-archive',
+        'public-payment-flow', '合同付款流程', 'public-payment', 'allocation-project', 'standard', '支持移动端提单|联动付款单|AI审核',
+        '合同管理', 20
     )
 ON DUPLICATE KEY UPDATE
     template_name = VALUES(template_name),
@@ -1047,7 +1047,7 @@ ON DUPLICATE KEY UPDATE
     sort_order = VALUES(sort_order);
 
 INSERT INTO pm_template_scope (template_id, option_type, option_code, option_label, sort_order)
-SELECT t.id, 'EXPENSE_TYPE', 'travel', '宸梾璐?, 10
+SELECT t.id, 'EXPENSE_TYPE', 'travel', '差旅费', 10
 FROM pm_document_template t
 WHERE t.template_code = 'EMP-EXP-11'
   AND NOT EXISTS (
@@ -1056,7 +1056,7 @@ WHERE t.template_code = 'EMP-EXP-11'
   );
 
 INSERT INTO pm_template_scope (template_id, option_type, option_code, option_label, sort_order)
-SELECT t.id, 'TAG_OPTION', 'ai-audit', 'AI瀹℃牳', 10
+SELECT t.id, 'TAG_OPTION', 'ai-audit', 'AI审核', 10
 FROM pm_document_template t
 WHERE t.template_code = 'EMP-EXP-11'
   AND NOT EXISTS (
@@ -1065,7 +1065,7 @@ WHERE t.template_code = 'EMP-EXP-11'
   );
 
 INSERT INTO pm_template_scope (template_id, option_type, option_code, option_label, sort_order)
-SELECT t.id, 'TAG_OPTION', 'public-payment', '瀵瑰叕涓氬姟', 10
+SELECT t.id, 'TAG_OPTION', 'public-payment', '对公业务', 10
 FROM pm_document_template t
 WHERE t.template_code = 'PUB-APP-02'
   AND NOT EXISTS (
@@ -1074,7 +1074,7 @@ WHERE t.template_code = 'PUB-APP-02'
   );
 
 INSERT INTO pm_template_scope (template_id, option_type, option_code, option_label, sort_order)
-SELECT t.id, 'INSTALLMENT_OPTION', 'milestone-payment', '閲岀▼纰戜粯娆?, 10
+SELECT t.id, 'INSTALLMENT_OPTION', 'milestone-payment', '里程碑付款', 10
 FROM pm_document_template t
 WHERE t.template_code = 'EMP-LOAN-13'
   AND NOT EXISTS (
@@ -1083,7 +1083,7 @@ WHERE t.template_code = 'EMP-LOAN-13'
   );
 
 INSERT INTO pm_template_scope (template_id, option_type, option_code, option_label, sort_order)
-SELECT t.id, 'SCOPE_OPTION', 'department', '闄愬畾閮ㄩ棬浣跨敤', 10
+SELECT t.id, 'SCOPE_OPTION', 'department', '限定部门使用', 10
 FROM pm_document_template t
 WHERE t.template_code = 'BIZ-APP-21'
   AND NOT EXISTS (
@@ -1091,7 +1091,7 @@ WHERE t.template_code = 'BIZ-APP-21'
       WHERE s.template_id = t.id AND s.option_type = 'SCOPE_OPTION' AND s.option_code = 'department'
   );
 
--- 鎵€鏈夊垵濮嬪寲璐﹀彿鐨勫師濮嬪瘑鐮侀兘鏄?123456
+-- 所有初始化账号的原始密码都是 123456
 
 -- FIXED_ASSETS_INIT_BEGIN
 USE finex_db;
@@ -2292,13 +2292,8 @@ ALTER TABLE pm_document_template
     MODIFY COLUMN approval_flow varchar(64) NULL COMMENT '审批流程编码',
     MODIFY COLUMN flow_name varchar(64) NULL COMMENT '审批流程名称',
     MODIFY COLUMN payment_mode varchar(64) NULL COMMENT '付款联动模式',
-    MODIFY COLUMN split_payment tinyint NULL DEFAULT 0 COMMENT '是否支持分期付款:1是 0否',
-    MODIFY COLUMN travel_form varchar(64) NULL COMMENT '出差申请配置',
     MODIFY COLUMN allocation_form varchar(64) NULL COMMENT '分摊表单',
     MODIFY COLUMN ai_audit_mode varchar(64) NULL DEFAULT 'disabled' COMMENT 'AI审核模式',
-    MODIFY COLUMN relation_remark varchar(500) NULL COMMENT '关联规则说明',
-    MODIFY COLUMN validation_remark varchar(500) NULL COMMENT '校验规则说明',
-    MODIFY COLUMN installment_remark varchar(500) NULL COMMENT '分期付款说明',
     MODIFY COLUMN highlights varchar(500) NULL COMMENT '卡片亮点，使用|分隔',
     MODIFY COLUMN owner_name varchar(64) NULL COMMENT '负责人姓名',
     MODIFY COLUMN sort_order int NULL DEFAULT 0 COMMENT '排序号',
