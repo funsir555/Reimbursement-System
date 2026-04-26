@@ -355,7 +355,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleCheckFilled,
   Document,
@@ -363,49 +362,32 @@ import {
   Tickets
 } from '@element-plus/icons-vue'
 import {
-  expenseApi,
-  expenseApprovalApi,
-  expenseCreateApi,
   type ExpenseCreateTemplateDetail,
   type ExpenseCreateTemplateSummary,
   type ExpenseDetailInstance,
   type ExpenseDocumentEditContext,
-  type ExpenseDocumentSubmitResult,
-  type ExpenseDocumentUpdatePayload,
   type ProcessFormDesignBlock,
   type ProcessFormDesignSchema
 } from '@/api'
 import {
   hasPermission,
-  readStoredUser,
-  resolveFirstAccessiblePath
+  readStoredUser
 } from '@/utils/permissions'
-import { formatMoney, normalizeMoneyValue } from '@/utils/money'
+import { formatMoney } from '@/utils/money'
 import { getControlType } from '@/views/process/formDesignerHelper'
 import {
-  buildExpenseDetailAmountValidationMessage,
-  buildExpenseDetailFormData,
-  enrichExpenseDetailInstance,
-  isExpenseDetailBlockReadOnly,
-  isExpenseDetailBlockVisible,
-  resolveBusinessScenario,
-  resolveExpenseDetailAmount,
-  resolveDocumentTotalAmount,
-  validateExpenseDetailAmountRules
+  resolveDocumentTotalAmount
 } from './expenseDetailRuntime'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
-import { validateExpenseRuntimeSchema, validateRuntimeRequiredValues } from '@/views/process/pmValidation'
+import { useExpenseCreateBootstrap } from './composables/useExpenseCreateBootstrap'
+import { useExpenseCreateDraftPersistence } from './composables/useExpenseCreateDraftPersistence'
+import { useExpenseCreateExpenseDetailsOwner } from './composables/useExpenseCreateExpenseDetailsOwner'
+import { useExpenseCreatePageOrchestration } from './composables/useExpenseCreatePageOrchestration'
+import { useExpenseCreatePageUtils } from './composables/useExpenseCreatePageUtils'
+import { useExpenseCreateValidationPayload } from './composables/useExpenseCreateValidationPayload'
 
 type PageMode = 'create' | 'resubmit' | 'modify'
 type AsyncStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error'
-
-type ExpenseCreateDraft = {
-  templateCode: string
-  formValues: Record<string, unknown>
-  expenseDetails: ExpenseDetailInstance[]
-  manualApproverSelections: Record<string, string[]>
-  templateDetail?: ExpenseCreateTemplateDetail
-}
 
 type TemplateGroup = {
   categoryCode: string
@@ -413,7 +395,6 @@ type TemplateGroup = {
   items: ExpenseCreateTemplateSummary[]
 }
 
-const DRAFT_PREFIX = 'expense-create-draft:'
 const TEMPLATE_CATEGORY_GROUP_ORDER: Array<{ categoryCode: string; categoryName: string }> = [
   { categoryCode: 'enterprise-payment', categoryName: '企业往来类' },
   { categoryCode: 'employee-expense', categoryName: '员工费用类' },
@@ -422,12 +403,20 @@ const TEMPLATE_CATEGORY_GROUP_ORDER: Array<{ categoryCode: string; categoryName:
 
 const route = useRoute()
 const router = useRouter()
+const {
+  detailTypeLabel,
+  enterpriseModeLabel,
+  cloneRecord,
+  cloneValue,
+  isKnownTemplateCategory,
+  isRecord,
+  safeMoneyValue,
+  resolveErrorMessage
+} = useExpenseCreatePageUtils(TEMPLATE_CATEGORY_GROUP_ORDER)
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const loading = ref(false)
 const submitting = ref(false)
 const savingDraft = ref(false)
-const isFormHydrating = ref(false)
-const formHydrationVersion = ref(0)
 const templates = ref<ExpenseCreateTemplateSummary[]>([])
 const templateKeyword = ref('')
 const templateListStatus = ref<AsyncStatus>('idle')
@@ -446,13 +435,7 @@ const manualApproverSelections = reactive<Record<string, string[]>>({})
 const allowEditFormModule = ref(false)
 const allowEditPayAccount = ref(false)
 
-let draftPersistTimer: ReturnType<typeof setTimeout> | undefined
-let pageSyncVersion = 0
-let templateListRequestVersion = 0
-let templateListLoadingPromise: Promise<void> | null = null
-let formHydrationToken = 0
 let floatingBarResizeObserver: ResizeObserver | null = null
-let isComponentUnmounted = false
 
 const emptySchema: ProcessFormDesignSchema = { layoutMode: 'TWO_COLUMN', blocks: [] }
 
@@ -672,48 +655,140 @@ const editorStats = computed(() => [
   }
 ])
 
-const submitButtonLabel = computed(() => {
-  if (pageMode.value === 'resubmit') {
-    return isDraftEditEntry.value ? '提交审批单' : '重新提交审批单'
-  }
-  if (pageMode.value === 'modify') {
-    return '保存修改'
-  }
-  return '提交审批单'
-})
-
-const backButtonLabel = computed(() => {
-  if (pageMode.value === 'create') {
-    return '返回我的报销'
-  }
-  return '返回单据详情'
-})
-
-watch(
-  [pageMode, () => route.query.templateCode, () => route.query.draftKey, editingDocumentCode, modifyingTaskId],
-  () => {
-    void syncPageState()
-  },
-  { immediate: true }
-)
-
-watch(
-  [formValues, expenseDetails, manualApproverSelections],
-  () => {
-    schedulePersistDraft()
-  },
-  { deep: true }
-)
-
-watch(
+const {
+  addExpenseDetail,
+  cloneDetail,
+  editExpenseDetail,
+  expenseDetailAmountText,
+  removeExpenseDetail,
+  validateExpenseDetailAmountValues,
+  validateExpenseDetailBusinessScenarios,
+  validateExpenseDetailRequiredValues
+} = useExpenseCreateExpenseDetailsOwner({
+  route,
+  router,
   templateDetail,
-  (nextValue) => {
-    if (!nextValue) {
-      return
-    }
-    persistDraft({ includeTemplateDetail: true })
-  }
-)
+  expenseDetails,
+  currentDraftKey,
+  selectedTemplateCode,
+  emptySchema,
+  isReportTemplate,
+  persistDraft: (options) => persistDraft(options),
+  cloneRecord,
+  isRecord,
+  resolveErrorMessage
+})
+
+const {
+  buildDocumentUpdatePayload,
+  cloneManualApproverSelections
+} = useExpenseCreateValidationPayload({
+  formValues,
+  totalAmount,
+  expenseDetails,
+  manualApproverSelections,
+  cloneRecord,
+  cloneDetail
+})
+
+const {
+  clearDraft,
+  formHydrationVersion,
+  isFormHydrating,
+  persistDraft,
+  readDraft,
+  restoreResubmitDraftState,
+  runWithFormHydration
+} = useExpenseCreateDraftPersistence({
+  currentDraftKey,
+  selectedTemplateCode,
+  templateDetail,
+  formValues,
+  expenseDetails,
+  manualApproverSelections,
+  applyTemplateDetail,
+  restoreManualApproverSelections,
+  cloneDetail,
+  cloneRecord,
+  cloneValue,
+  cloneManualApproverSelections
+})
+
+const {
+  applyEditContextState,
+  chooseTemplate,
+  resetCreateSelectionState,
+  retryLoadTemplates,
+  retryLoadSelectedTemplate
+} = useExpenseCreateBootstrap({
+  route,
+  router,
+  pageMode,
+  editingDocumentCode,
+  modifyingTaskId,
+  emptySchema,
+  loading,
+  templates,
+  templateListStatus,
+  templateListErrorMessage,
+  templateDetailStatus,
+  templateDetailErrorMessage,
+  selectedTemplateCode,
+  templateDetail,
+  currentDraftKey,
+  expenseDetails,
+  formValues,
+  applyEditContextPermissions,
+  applyTemplateDetail,
+  resetFormValues,
+  restoreManualApproverSelections,
+  persistDraft,
+  readDraft,
+  restoreResubmitDraftState,
+  runWithFormHydration,
+  cloneDetail,
+  cloneRecord,
+  resolveErrorMessage
+})
+
+const {
+  backButtonLabel,
+  goBack,
+  goBackToList,
+  reselectTemplate,
+  saveDraftManually,
+  submitButtonLabel,
+  submitDocument
+} = useExpenseCreatePageOrchestration({
+  route,
+  router,
+  pageMode,
+  permissionCodes,
+  currentDraftKey,
+  selectedTemplateCode,
+  templateDetail,
+  editingDocumentCode,
+  modifyingTaskId,
+  emptySchema,
+  runtimeEditorRef,
+  expenseDetailsCount: computed(() => expenseDetails.value.length),
+  isReportTemplate,
+  isDraftEditEntry,
+  useServerDraftSave,
+  savingDraft,
+  submitting,
+  resetCreateSelectionState,
+  clearDraft,
+  persistDraft,
+  buildDocumentUpdatePayload,
+  applyEditContextState,
+  restoreManualApproverSelections,
+  cloneManualApproverSelections,
+  validateExpenseDetailAmountValues,
+  validateExpenseDetailRequiredValues,
+  validateExpenseDetailBusinessScenarios,
+  resolveErrorMessage
+})
 
 watch(
   showFloatingActionBar,
@@ -725,7 +800,6 @@ watch(
 )
 
 onMounted(async () => {
-  isComponentUnmounted = false
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', updateFloatingBarLayout)
   }
@@ -740,409 +814,14 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  isComponentUnmounted = true
-  clearDraftPersistTimer()
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateFloatingBarLayout)
   }
   floatingBarResizeObserver?.disconnect()
   floatingBarResizeObserver = null
 })
-
-async function syncPageState() {
-  const version = ++pageSyncVersion
-  if (pageMode.value === 'create') {
-    await syncCreatePage(version)
-    return
-  }
-  await syncEditPage(version)
-}
-
-async function syncCreatePage(version: number) {
-  void ensureTemplateListLoaded()
-
-  const templateCode = typeof route.query.templateCode === 'string' ? route.query.templateCode : ''
-  const draftKey = typeof route.query.draftKey === 'string' ? route.query.draftKey : ''
-  if (!templateCode || !draftKey) {
-    resetCreateSelectionState()
-    return
-  }
-
-  templateDetailStatus.value = 'loading'
-  templateDetailErrorMessage.value = ''
-  currentDraftKey.value = draftKey
-  selectedTemplateCode.value = templateCode
-  await loadTemplateDetail(templateCode, true, version)
-}
-
-async function syncEditPage(version: number) {
-  loading.value = true
-  templateDetailStatus.value = 'idle'
-  templateDetailErrorMessage.value = ''
-
-  try {
-    const context = await fetchEditContext()
-    if (version !== pageSyncVersion) {
-      return
-    }
-    selectedTemplateCode.value = context.templateCode
-    applyEditContextState(context)
-    if (pageMode.value === 'resubmit') {
-      restoreResubmitDraftState(context.templateCode)
-    } else {
-      restoreManualApproverSelections(readDraft()?.manualApproverSelections)
-    }
-    persistDraft({ includeTemplateDetail: true })
-  } catch (error: unknown) {
-    if (version !== pageSyncVersion) {
-      return
-    }
-    ElMessage.error(resolveErrorMessage(error, '加载审批单页面失败'))
-  } finally {
-    if (version === pageSyncVersion) {
-      loading.value = false
-    }
-  }
-}
-
-async function loadPage() {
-  loading.value = true
-  try {
-    if (pageMode.value === 'create') {
-      const res = await expenseCreateApi.listTemplates()
-      templates.value = res.data
-      await hydrateFromCreateRoute()
-      return
-    }
-    await loadEditContext()
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '加载审批单页面失败'))
-  } finally {
-    loading.value = false
-  }
-}
-
-async function hydrateFromCreateRoute() {
-  const templateCode = typeof route.query.templateCode === 'string' ? route.query.templateCode : ''
-  const draftKey = typeof route.query.draftKey === 'string' ? route.query.draftKey : ''
-  if (!templateCode || !draftKey) {
-    selectedTemplateCode.value = ''
-    currentDraftKey.value = ''
-    templateDetail.value = null
-    expenseDetails.value = []
-    resetFormValues()
-    return
-  }
-
-  currentDraftKey.value = draftKey
-  selectedTemplateCode.value = templateCode
-  await loadTemplateDetail(templateCode, true)
-}
-
-async function chooseTemplate(templateCode: string) {
-  await router.replace({
-    name: 'expense-create',
-    query: { templateCode, draftKey: createDraftKey(templateCode) }
-  })
-}
-
-async function ensureTemplateListLoaded(force = false) {
-  if (templateListLoadingPromise && !force) {
-    return templateListLoadingPromise
-  }
-  if (!force && ['loading', 'success', 'empty'].includes(templateListStatus.value)) {
-    return
-  }
-
-  const requestVersion = ++templateListRequestVersion
-  templateListStatus.value = 'loading'
-  templateListErrorMessage.value = ''
-
-  templateListLoadingPromise = (async () => {
-    try {
-      const res = await expenseCreateApi.listTemplates()
-      if (requestVersion !== templateListRequestVersion) {
-        return
-      }
-      templates.value = res.data
-      templateListStatus.value = res.data.length > 0 ? 'success' : 'empty'
-    } catch (error: unknown) {
-      if (requestVersion !== templateListRequestVersion) {
-        return
-      }
-      templates.value = []
-      templateListStatus.value = 'error'
-      templateListErrorMessage.value = resolveErrorMessage(error, '加载单据模板失败，请稍后重试')
-    } finally {
-      if (requestVersion === templateListRequestVersion) {
-        templateListLoadingPromise = null
-      }
-    }
-  })()
-
-  await templateListLoadingPromise
-}
-
-async function loadTemplateDetail(templateCode: string, useDraft: boolean, version = pageSyncVersion) {
-  loading.value = true
-  templateDetailStatus.value = 'loading'
-  templateDetailErrorMessage.value = ''
-
-  try {
-    const res = await expenseCreateApi.getTemplateDetail(templateCode)
-    if (version !== pageSyncVersion) {
-      return
-    }
-
-    applyTemplateDetail(res.data)
-    applyEditContextPermissions(null)
-    resetFormValues()
-    expenseDetails.value = []
-
-    if (useDraft) {
-      const draft = readDraft()
-      if (draft && draft.templateCode === templateCode) {
-        runWithFormHydration(() => {
-          Object.assign(formValues, draft.formValues || {})
-          expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
-          restoreManualApproverSelections(draft.manualApproverSelections)
-        })
-        if (draft.templateDetail) {
-          applyTemplateDetail(draft.templateDetail)
-        }
-      }
-    }
-
-    templateDetailStatus.value = 'success'
-    persistDraft({ includeTemplateDetail: true })
-  } catch (error: unknown) {
-    if (version !== pageSyncVersion) {
-      return
-    }
-    templateDetail.value = null
-    templateDetailStatus.value = 'error'
-    templateDetailErrorMessage.value = resolveErrorMessage(error, '加载模板详情失败，请稍后重试')
-    expenseDetails.value = []
-    resetFormValues()
-  } finally {
-    if (version === pageSyncVersion) {
-      loading.value = false
-    }
-  }
-}
-
-async function loadEditContext() {
-  const context = await fetchEditContext()
-  applyEditContextState(context)
-  restoreManualApproverSelections(readDraft()?.manualApproverSelections)
-  persistDraft()
-}
-
-async function fetchEditContext() {
-  if (pageMode.value === 'resubmit') {
-    if (!editingDocumentCode.value) {
-      throw new Error('缺少待重提单号')
-    }
-    const res = await expenseApi.getEditContext(editingDocumentCode.value)
-    return res.data
-  }
-  if (!modifyingTaskId.value) {
-    throw new Error('缺少待修改任务')
-  }
-  const res = await expenseApprovalApi.getModifyContext(modifyingTaskId.value)
-  return res.data
-}
-
-function extractTemplateDetail(context: ExpenseDocumentEditContext): ExpenseCreateTemplateDetail {
-  return {
-    templateCode: context.templateCode,
-    templateName: context.templateName,
-    templateType: context.templateType,
-    templateTypeLabel: context.templateTypeLabel,
-    categoryCode: context.categoryCode,
-    templateDescription: context.templateDescription,
-    formDesignCode: context.formDesignCode,
-    approvalFlowCode: context.approvalFlowCode,
-    flowName: context.flowName,
-    formName: context.formName,
-    schema: context.schema || emptySchema,
-    flowSnapshot: context.flowSnapshot || {},
-    sharedArchives: context.sharedArchives || [],
-    expenseDetailDesignCode: context.expenseDetailDesignCode,
-    expenseDetailDesignName: context.expenseDetailDesignName,
-    expenseDetailType: context.expenseDetailType,
-    expenseDetailTypeLabel: context.expenseDetailTypeLabel,
-    expenseDetailModeDefault: context.expenseDetailModeDefault,
-    expenseDetailSchema: context.expenseDetailSchema || emptySchema,
-    expenseDetailSharedArchives: context.expenseDetailSharedArchives || [],
-    companyOptions: context.companyOptions || [],
-    departmentOptions: context.departmentOptions || [],
-    userOptions: context.userOptions || [],
-    currentUserCompanyId: context.currentUserCompanyId,
-    currentUserCompanyName: context.currentUserCompanyName,
-    currentUserDeptId: context.currentUserDeptId,
-    currentUserDeptName: context.currentUserDeptName
-  }
-}
-
-function applyEditContextState(context: ExpenseDocumentEditContext) {
-  selectedTemplateCode.value = context.templateCode
-  currentDraftKey.value = buildEditDraftKey(context)
-  applyTemplateDetail(extractTemplateDetail(context))
-  applyEditContextPermissions(context)
-  runWithFormHydration(() => {
-    resetFormValues()
-    Object.assign(formValues, cloneRecord(context.formData))
-    expenseDetails.value = Array.isArray(context.expenseDetails) ? context.expenseDetails.map(cloneDetail) : []
-  })
-}
-
 function applyTemplateDetail(nextDetail: ExpenseCreateTemplateDetail) {
   templateDetail.value = cloneValue(nextDetail)
-}
-
-function createDraftKey(templateCode: string) {
-  return `${templateCode}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
-}
-
-function buildEditDraftKey(context: ExpenseDocumentEditContext) {
-  if (pageMode.value === 'resubmit') {
-    return `resubmit-${context.documentCode}`
-  }
-  return `modify-${context.taskId || modifyingTaskId.value || context.documentCode}`
-}
-
-function resetCreateSelectionState() {
-  selectedTemplateCode.value = ''
-  currentDraftKey.value = ''
-  templateDetail.value = null
-  templateDetailStatus.value = 'idle'
-  templateDetailErrorMessage.value = ''
-  expenseDetails.value = []
-  resetFormValues()
-}
-
-function retryLoadTemplates() {
-  void ensureTemplateListLoaded(true)
-}
-
-function retryLoadSelectedTemplate() {
-  if (!selectedTemplateCode.value) {
-    return
-  }
-  const version = ++pageSyncVersion
-  void loadTemplateDetail(selectedTemplateCode.value, true, version)
-}
-
-function storageKey() {
-  return `${DRAFT_PREFIX}${currentDraftKey.value}`
-}
-
-function draftStorage() {
-  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
-    return null
-  }
-  return window.sessionStorage
-}
-
-function clearDraftPersistTimer() {
-  if (!draftPersistTimer) {
-    return
-  }
-  clearTimeout(draftPersistTimer)
-  draftPersistTimer = undefined
-}
-
-function readDraft(): ExpenseCreateDraft | null {
-  if (!currentDraftKey.value) {
-    return null
-  }
-  const storage = draftStorage()
-  if (!storage) {
-    return null
-  }
-  const raw = storage.getItem(storageKey())
-  if (!raw) {
-    return null
-  }
-  try {
-    return JSON.parse(raw) as ExpenseCreateDraft
-  } catch {
-    storage.removeItem(storageKey())
-    return null
-  }
-}
-
-function restoreResubmitDraftState(templateCode: string) {
-  const draft = readDraft()
-  if (!draft || draft.templateCode !== templateCode) {
-    restoreManualApproverSelections(undefined)
-    return
-  }
-  if (draft.templateDetail?.templateCode === templateCode) {
-    applyTemplateDetail(draft.templateDetail)
-  }
-  runWithFormHydration(() => {
-    Object.assign(formValues, cloneRecord(draft.formValues || {}))
-    expenseDetails.value = Array.isArray(draft.expenseDetails) ? draft.expenseDetails.map(cloneDetail) : []
-    restoreManualApproverSelections(draft.manualApproverSelections)
-  })
-}
-
-function bumpFormHydrationVersion() {
-  formHydrationVersion.value += 1
-}
-
-function runWithFormHydration(apply: () => void) {
-  const token = ++formHydrationToken
-  isFormHydrating.value = true
-  apply()
-  bumpFormHydrationVersion()
-  void nextTick(() => {
-    if (token === formHydrationToken) {
-      isFormHydrating.value = false
-    }
-  })
-}
-
-function schedulePersistDraft() {
-  if (isComponentUnmounted || !currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
-    return
-  }
-  clearDraftPersistTimer()
-  draftPersistTimer = setTimeout(() => {
-    draftPersistTimer = undefined
-    if (isComponentUnmounted) {
-      return
-    }
-    persistDraft()
-  }, 120)
-}
-
-function persistDraft(options: { includeTemplateDetail?: boolean } = {}) {
-  const storage = draftStorage()
-  if (isComponentUnmounted || !storage || !currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
-    return
-  }
-  const currentDraft = readDraft()
-  const payload: ExpenseCreateDraft = {
-    templateCode: selectedTemplateCode.value,
-    formValues: cloneRecord(formValues),
-    expenseDetails: expenseDetails.value.map(cloneDetail),
-    manualApproverSelections: cloneManualApproverSelections(),
-    templateDetail: options.includeTemplateDetail
-      ? cloneValue(templateDetail.value)
-      : currentDraft?.templateDetail
-  }
-  storage.setItem(storageKey(), JSON.stringify(payload))
-}
-
-function clearDraft() {
-  clearDraftPersistTimer()
-  const storage = draftStorage()
-  if (storage && currentDraftKey.value) {
-    storage.removeItem(storageKey())
-  }
 }
 
 function resetFormValues() {
@@ -1188,40 +867,6 @@ function restoreManualApproverSelections(source?: Record<string, string[]>) {
       .map((item) => String(item || '').trim())
       .filter(Boolean)
   })
-}
-
-function cloneManualApproverSelections() {
-  return Object.fromEntries(
-    Object.entries(manualApproverSelections).map(([nodeKey, userIds]) => [nodeKey, [...userIds]])
-  )
-}
-
-function normalizeManualApproverSelections() {
-  return Object.fromEntries(
-    Object.entries(manualApproverSelections)
-      .map(([nodeKey, userIds]) => [
-        nodeKey,
-        userIds
-          .map((item) => Number(item))
-          .filter((item) => Number.isFinite(item) && item > 0)
-      ] as const)
-      .filter(([, userIds]) => userIds.length > 0)
-  )
-}
-
-function buildDocumentUpdatePayload(): ExpenseDocumentUpdatePayload {
-  const payload: ExpenseDocumentUpdatePayload = {
-    formData: {
-      ...cloneRecord(formValues),
-      __totalAmount: totalAmount.value
-    },
-    expenseDetails: expenseDetails.value.map(cloneDetail)
-  }
-  const manualSelections = normalizeManualApproverSelections()
-  if (Object.keys(manualSelections).length > 0) {
-    payload.manualApproverSelections = manualSelections
-  }
-  return payload
 }
 
 function applyEditContextPermissions(context: ExpenseDocumentEditContext | null) {
@@ -1275,361 +920,6 @@ function controlType(block: ProcessFormDesignBlock) {
   return getControlType(block)
 }
 
-function addExpenseDetail() {
-  if (!templateDetail.value?.expenseDetailDesignCode) {
-    ElMessage.warning('当前模板未绑定费用明细表单')
-    return
-  }
-  if (expenseDetails.value.length >= 10) {
-    ElMessage.warning('费用明细最多只能添加 10 份')
-    return
-  }
-
-  const sortOrder = expenseDetails.value.length + 1
-  const detailNo = `D${String(sortOrder).padStart(3, '0')}`
-  const detail = enrichExpenseDetailInstance({
-    detailNo,
-    detailDesignCode: templateDetail.value.expenseDetailDesignCode,
-    detailType: templateDetail.value.expenseDetailType,
-    enterpriseMode: '',
-    detailTitle: `费用明细 ${sortOrder}`,
-    sortOrder,
-    formData: buildExpenseDetailFormData(
-      templateDetail.value.expenseDetailSchema,
-      templateDetail.value.expenseDetailType,
-      {},
-      templateDetail.value.expenseDetailModeDefault
-    )
-  }, templateDetail.value.expenseDetailModeDefault, templateDetail.value.expenseDetailSchema)
-  expenseDetails.value = [...expenseDetails.value, detail]
-  persistDraft()
-  editExpenseDetail(detailNo)
-}
-
-function editExpenseDetail(detailNo: string) {
-  if (!detailNo || !currentDraftKey.value || !selectedTemplateCode.value) {
-    return
-  }
-  persistDraft({ includeTemplateDetail: true })
-  void router.push({
-    name: 'expense-create-detail-edit',
-    params: { detailNo },
-    query: {
-      draftKey: currentDraftKey.value,
-      templateCode: selectedTemplateCode.value,
-      returnTo: route.fullPath
-    }
-  })
-}
-
-async function removeExpenseDetail(detailNo: string) {
-  const target = expenseDetails.value.find((item) => item.detailNo === detailNo)
-  if (!target) {
-    return
-  }
-  try {
-    await ElMessageBox.confirm(
-      `确认删除“${target.detailTitle || detailNo}”吗？`,
-      '删除费用明细',
-      {
-        type: 'warning',
-        confirmButtonText: '确认删除',
-        cancelButtonText: '取消'
-      }
-    )
-    expenseDetails.value = expenseDetails.value
-      .filter((item) => item.detailNo !== detailNo)
-      .map((item, index) => ({
-        ...item,
-        sortOrder: index + 1
-      }))
-    persistDraft()
-  } catch (error: unknown) {
-    if (error === 'cancel' || String(error).includes('cancel')) {
-      return
-    }
-    ElMessage.error(resolveErrorMessage(error, '删除费用明细失败'))
-  }
-}
-
-function reselectTemplate() {
-  if (!isCreateMode.value) {
-    return
-  }
-  clearDraft()
-  resetCreateSelectionState()
-  void router.replace({ name: 'expense-create', query: {} })
-}
-
-function resolveReturnToPath() {
-  return typeof route.query.returnTo === 'string' && route.query.returnTo.trim() ? route.query.returnTo.trim() : ''
-}
-
-async function navigateBackWithFallback(fallbackPath = '') {
-  const returnTo = resolveReturnToPath()
-  if (returnTo) {
-    await router.push(returnTo)
-    return
-  }
-  if (window.history.length > 1) {
-    await router.back()
-    return
-  }
-  if (fallbackPath) {
-    await router.push(fallbackPath)
-    return
-  }
-  await router.push('/expense/list')
-}
-
-function goBack() {
-  if (pageMode.value === 'create') {
-    reselectTemplate()
-    return
-  }
-  void navigateBackWithFallback(
-    editingDocumentCode.value ? `/expense/documents/${encodeURIComponent(editingDocumentCode.value)}` : ''
-  )
-}
-
-function goBackToList() {
-  if (hasPermission('expense:list:view', permissionCodes.value)) {
-    void router.push('/expense/list')
-    return
-  }
-  const fallbackPath = resolveFirstAccessiblePath(permissionCodes.value)
-  if (fallbackPath && fallbackPath !== '/expense/create') {
-    void router.push(fallbackPath)
-    return
-  }
-  void router.push('/dashboard')
-}
-
-async function saveDraftManually() {
-  if (!currentDraftKey.value || !selectedTemplateCode.value || !templateDetail.value) {
-    ElMessage.warning('当前页面尚未准备好，暂时无法保存草稿')
-    return
-  }
-  const expenseDetailAmountIssue = validateExpenseDetailAmountValues()
-  if (expenseDetailAmountIssue) {
-    ElMessage.warning(expenseDetailAmountIssue)
-    return
-  }
-  persistDraft({ includeTemplateDetail: true })
-  if (!useServerDraftSave.value) {
-    ElMessage.success('草稿已保存')
-    return
-  }
-  savingDraft.value = true
-  try {
-    const manualSelections = cloneManualApproverSelections()
-    const res = await expenseApi.saveDraft(editingDocumentCode.value, buildDocumentUpdatePayload())
-    applyEditContextState(res.data)
-    restoreManualApproverSelections(manualSelections)
-    persistDraft({ includeTemplateDetail: true })
-    ElMessage.success('草稿已保存')
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '保存草稿失败'))
-  } finally {
-    savingDraft.value = false
-  }
-}
-
-async function submitDocument() {
-  if (!selectedTemplateCode.value || !templateDetail.value) {
-    ElMessage.warning('请先选择模板')
-    return
-  }
-  const runtimeSchemaIssues = validateExpenseRuntimeSchema(templateDetail.value.schema || emptySchema)
-  if (runtimeSchemaIssues.length) {
-    ElMessage.warning(runtimeSchemaIssues[0])
-    return
-  }
-  if (runtimeEditorRef.value?.validateBeforeSubmit && !runtimeEditorRef.value.validateBeforeSubmit()) {
-    return
-  }
-  if (isReportTemplate.value) {
-    if (expenseDetails.value.length === 0) {
-      ElMessage.warning('报销单提交前至少需要 1 份费用明细')
-      return
-    }
-    if (expenseDetails.value.length > 10) {
-      ElMessage.warning('费用明细最多只能添加 10 份')
-      return
-    }
-  }
-  const expenseDetailRequiredIssue = validateExpenseDetailRequiredValues()
-  if (expenseDetailRequiredIssue) {
-    ElMessage.warning(expenseDetailRequiredIssue)
-    return
-  }
-  const expenseDetailScenarioIssue = validateExpenseDetailBusinessScenarios()
-  if (expenseDetailScenarioIssue) {
-    ElMessage.warning(expenseDetailScenarioIssue)
-    return
-  }
-  const expenseDetailAmountIssue = validateExpenseDetailAmountValues()
-  if (expenseDetailAmountIssue) {
-    ElMessage.warning(expenseDetailAmountIssue)
-    return
-  }
-
-  submitting.value = true
-  try {
-    const payload = buildDocumentUpdatePayload()
-    if (pageMode.value === 'create') {
-      const res = await expenseCreateApi.submit({
-        templateCode: selectedTemplateCode.value,
-        ...payload
-      })
-      await handleSubmitSuccess(res.data, '审批单已提交')
-      return
-    }
-    if (pageMode.value === 'resubmit') {
-      const res = await expenseApi.resubmit(editingDocumentCode.value, payload)
-      await handleSubmitSuccess(res.data, isDraftEditEntry.value ? '草稿已提交' : '审批单已重新提交')
-      return
-    }
-    const res = await expenseApprovalApi.modify(modifyingTaskId.value, payload)
-    clearDraft()
-    ElMessage.success('审批单已更新')
-    await router.push(`/expense/documents/${encodeURIComponent(res.data.documentCode)}`)
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, submitFailedMessage()))
-  } finally {
-    submitting.value = false
-  }
-}
-
-async function handleSubmitSuccess(result: ExpenseDocumentSubmitResult, message: string) {
-  clearDraft()
-  ElMessage.success(message)
-  await router.push(`/expense/documents/${encodeURIComponent(result.documentCode)}`)
-}
-
-function submitFailedMessage() {
-  if (pageMode.value === 'resubmit') {
-    return isDraftEditEntry.value ? '提交审批单失败' : '重新提交审批单失败'
-  }
-  if (pageMode.value === 'modify') {
-    return '保存审批修改失败'
-  }
-  return '提交审批单失败'
-}
-
-function detailTypeLabel(detailType?: string) {
-  return detailType === 'ENTERPRISE_TRANSACTION' ? '企业往来' : '普通报销'
-}
-
-function enterpriseModeLabel(mode?: string) {
-  if (mode === 'INVOICE_FULL_PAYMENT') {
-    return '到票全部支付'
-  }
-  if (mode === 'PREPAY_UNBILLED') {
-    return '预付未到票'
-  }
-  return ''
-}
-
-function expenseDetailAmountText(detail: ExpenseDetailInstance) {
-  const amount = resolveExpenseDetailAmount(
-    isRecord(detail.formData) ? detail.formData : {},
-    String(detail.detailType || ''),
-    String(detail.businessSceneMode || detail.enterpriseMode || templateDetail.value?.expenseDetailModeDefault || ''),
-    templateDetail.value?.expenseDetailSchema
-  ) || '0.00'
-  return `金额：¥ ${formatMoney(amount)}`
-}
-
-function cloneDetail(detail: ExpenseDetailInstance): ExpenseDetailInstance {
-  return enrichExpenseDetailInstance({
-    ...detail,
-    formData: cloneRecord(detail.formData || {})
-  }, templateDetail.value?.expenseDetailModeDefault, templateDetail.value?.expenseDetailSchema)
-}
-
-function validateExpenseDetailBusinessScenarios() {
-  if (!isReportTemplate.value || templateDetail.value?.expenseDetailType !== 'ENTERPRISE_TRANSACTION') {
-    return ''
-  }
-  for (const detail of expenseDetails.value) {
-    const resolvedScenario = resolveBusinessScenario(
-      isRecord(detail.formData) ? detail.formData : {},
-      templateDetail.value?.expenseDetailType,
-      templateDetail.value?.expenseDetailModeDefault,
-      templateDetail.value?.expenseDetailSchema
-    )
-    if (!resolvedScenario) {
-      return `请先为“${detail.detailTitle || detail.detailNo}”选择业务场景`
-    }
-  }
-  return ''
-}
-
-function validateExpenseDetailAmountValues() {
-  if (!isReportTemplate.value) {
-    return ''
-  }
-  const detailType = templateDetail.value?.expenseDetailType
-  const defaultBusinessScenario = templateDetail.value?.expenseDetailModeDefault
-  const detailSchema = templateDetail.value?.expenseDetailSchema
-  for (const detail of expenseDetails.value) {
-    const detailFormData = isRecord(detail.formData) ? detail.formData : {}
-    const issue = validateExpenseDetailAmountRules(
-      detailFormData,
-      detailType || String(detail.detailType || ''),
-      String(detail.businessSceneMode || detail.enterpriseMode || defaultBusinessScenario || ''),
-      detailSchema
-    )
-    if (issue) {
-      return buildExpenseDetailAmountValidationMessage(issue, detail.detailTitle || detail.detailNo || '未命名明细')
-    }
-  }
-  return ''
-}
-
-function validateExpenseDetailRequiredValues() {
-  const detailSchema = templateDetail.value?.expenseDetailSchema || emptySchema
-  const detailType = templateDetail.value?.expenseDetailType
-  const defaultBusinessScenario = templateDetail.value?.expenseDetailModeDefault
-  for (const detail of expenseDetails.value) {
-    const detailFormData = isRecord(detail.formData) ? detail.formData : {}
-    const issues = validateRuntimeRequiredValues(detailSchema, detailFormData, {
-      shouldValidateBlock: (block) => (
-        isExpenseDetailBlockVisible(block, detailFormData, detailType, defaultBusinessScenario, detailSchema)
-          && !isExpenseDetailBlockReadOnly(block)
-      )
-    })
-    if (issues.length) {
-      return `请先完善费用明细“${detail.detailTitle || detail.detailNo || '未命名明细'}”：${issues[0]}`
-    }
-  }
-  return ''
-}
-
-function cloneRecord(value: Record<string, unknown>) {
-  return JSON.parse(JSON.stringify(value || {})) as Record<string, unknown>
-}
-
-function isKnownTemplateCategory(categoryCode?: string) {
-  return TEMPLATE_CATEGORY_GROUP_ORDER.some((item) => item.categoryCode === categoryCode)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function safeMoneyValue(value: unknown) {
-  try {
-    return normalizeMoneyValue(value as string | number | null | undefined, {
-      allowNegative: true,
-      fallback: '0.00'
-    })
-  } catch {
-    return '0.00'
-  }
-}
-
 function updateFloatingBarLayout() {
   if (!showFloatingActionBar.value || !pageRootRef.value) {
     floatingBarStyle.value = {}
@@ -1643,13 +933,6 @@ function updateFloatingBarLayout() {
   }
 }
 
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
-function resolveErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
-}
 </script>
 
 <style scoped>

@@ -71,6 +71,7 @@ import java.util.stream.Collectors;
 public abstract class AbstractFinanceVoucherSupport {
 
     protected static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+    protected static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     protected static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
     protected static final String DEFAULT_VOUCHER_TYPE = "记";
     protected static final String DEFAULT_CURRENCY = "CNY";
@@ -129,6 +130,11 @@ public abstract class AbstractFinanceVoucherSupport {
         List<User> employees = loadEnabledUsers();
         LocalDate effectiveBillDate = parseDateOrDefault(billDate, LocalDate.now());
         String effectiveVoucherType = normalize(csign, DEFAULT_VOUCHER_TYPE);
+        int effectiveYear = effectiveBillDate.getYear();
+        int effectivePeriod = effectiveBillDate.getMonthValue();
+        int effectiveYearPeriod = buildYearPeriod(effectiveYear, effectivePeriod);
+        String defaultCurrencyCode = DEFAULT_CURRENCY;
+        String defaultCurrencyName = resolveCurrencyName(defaultCurrencyCode);
 
         FinanceVoucherMetaVO meta = new FinanceVoucherMetaVO();
         meta.setCompanyOptions(companies.stream().map(this::toCompanyOption).toList());
@@ -143,13 +149,17 @@ public abstract class AbstractFinanceVoucherSupport {
         meta.setProjectOptions(loadProjectOptions(effectiveCompanyId));
         meta.setCashFlowOptions(loadCashFlowOptions(effectiveCompanyId));
         meta.setDefaultCompanyId(effectiveCompanyId);
+        meta.setDefaultYear(effectiveYear);
+        meta.setDefaultYearPeriod(effectiveYearPeriod);
         meta.setDefaultBillDate(effectiveBillDate.format(DATE_FORMATTER));
-        meta.setDefaultPeriod(effectiveBillDate.getMonthValue());
+        meta.setDefaultPeriod(effectivePeriod);
         meta.setDefaultVoucherType(effectiveVoucherType);
-        meta.setSuggestedVoucherNo(nextVoucherNo(effectiveCompanyId, effectiveBillDate.getMonthValue(), effectiveVoucherType));
+        meta.setSuggestedVoucherNo(nextVoucherNo(effectiveCompanyId, effectiveYear, effectivePeriod, effectiveVoucherType));
         meta.setDefaultMaker(resolveMakerName(currentUser, currentUsername));
         meta.setDefaultAttachedDocCount(0);
-        meta.setDefaultCurrency(DEFAULT_CURRENCY);
+        meta.setDefaultCurrency(defaultCurrencyCode);
+        meta.setDefaultCurrencyCode(defaultCurrencyCode);
+        meta.setDefaultCurrencyName(defaultCurrencyName);
         return meta;
     }
 
@@ -170,6 +180,7 @@ public abstract class AbstractFinanceVoucherSupport {
         List<GlAccvouch> rows = glAccvouchMapper.selectList(
                 Wrappers.<GlAccvouch>lambdaQuery()
                         .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIyear, voucherKey.iyear())
                         .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
                         .eq(GlAccvouch::getCsign, voucherKey.csign())
                         .eq(GlAccvouch::getInoId, voucherKey.inoId())
@@ -183,12 +194,15 @@ public abstract class AbstractFinanceVoucherSupport {
         FinanceVoucherDetailVO detail = new FinanceVoucherDetailVO();
         detail.setVoucherNo(buildVoucherNo(
                 headerRow.getCompanyId(),
+                headerRow.getIyear(),
                 headerRow.getIperiod(),
                 headerRow.getCsign(),
                 headerRow.getInoId()
         ));
         detail.setDisplayVoucherNo(buildDisplayVoucherNo(headerRow.getCsign(), headerRow.getInoId()));
         detail.setCompanyId(headerRow.getCompanyId());
+        detail.setIyear(headerRow.getIyear());
+        detail.setIyperiod(headerRow.getIyperiod());
         detail.setIperiod(headerRow.getIperiod());
         detail.setCsign(headerRow.getCsign());
         detail.setVoucherTypeLabel(resolveVoucherTypeLabel(headerRow.getCsign()));
@@ -197,6 +211,8 @@ public abstract class AbstractFinanceVoucherSupport {
         detail.setIdoc(headerRow.getIdoc());
         detail.setCbill(headerRow.getCbill());
         detail.setCheckerName(trimToNull(headerRow.getCcheck()));
+        detail.setCheckedAt(formatDateTime(headerRow.getCheckedAt()));
+        detail.setPostedAt(formatDateTime(headerRow.getPostedAt()));
         detail.setCtext1(headerRow.getCtext1());
         detail.setCtext2(headerRow.getCtext2());
         detail.setStatus(resolveStatus(headerRow));
@@ -225,7 +241,9 @@ public abstract class AbstractFinanceVoucherSupport {
         }
 
         LocalDate billDate = parseDateOrThrow(dto.getDbillDate());
+        Integer year = resolveVoucherYear(dto, billDate);
         Integer period = normalizePeriod(dto.getIperiod());
+        Integer yearPeriod = resolveVoucherYearPeriod(dto, year, period);
         String voucherType = normalize(dto.getCsign(), DEFAULT_VOUCHER_TYPE);
         List<FinanceVoucherEntryDTO> normalizedEntries = normalizeEntries(dto.getEntries());
 
@@ -238,11 +256,11 @@ public abstract class AbstractFinanceVoucherSupport {
         String makerName = resolveMakerName(currentUser, currentUsername);
         validateHeaderLength(makerName, "\u5236\u5355\u4eba", 64);
         int attachedDocCount = dto.getIdoc() == null ? 0 : Math.max(dto.getIdoc(), 0);
-        String lockKey = companyId + "#" + period + "#" + voucherType;
+        String lockKey = companyId + "#" + year + "#" + period + "#" + voucherType;
         Object lock = voucherNoLocks.computeIfAbsent(lockKey, unused -> new Object());
 
         synchronized (lock) {
-            int nextVoucherNo = nextVoucherNo(companyId, period, voucherType);
+            int nextVoucherNo = nextVoucherNo(companyId, year, period, voucherType);
             int finalVoucherNo = nextVoucherNo;
             if (dto.getInoId() != null && dto.getInoId() >= nextVoucherNo) {
                 finalVoucherNo = dto.getInoId();
@@ -254,6 +272,8 @@ public abstract class AbstractFinanceVoucherSupport {
             for (int index = 0; index < normalizedEntries.size(); index++) {
                 GlAccvouch row = buildVoucherRow(
                         companyId,
+                        year,
+                        yearPeriod,
                         period,
                         voucherType,
                         finalVoucherNo,
@@ -270,11 +290,13 @@ public abstract class AbstractFinanceVoucherSupport {
                 glAccvouchMapper.insert(row);
             }
 
-            postVoucher(companyId, period, voucherType, finalVoucherNo);
+            postVoucher(companyId, year, period, voucherType, finalVoucherNo);
 
             FinanceVoucherSaveResultVO result = new FinanceVoucherSaveResultVO();
-            result.setVoucherNo(buildVoucherNo(companyId, period, voucherType, finalVoucherNo));
+            result.setVoucherNo(buildVoucherNo(companyId, year, period, voucherType, finalVoucherNo));
             result.setCompanyId(companyId);
+            result.setIyear(year);
+            result.setIyperiod(yearPeriod);
             result.setIperiod(period);
             result.setCsign(voucherType);
             result.setInoId(finalVoucherNo);
@@ -282,6 +304,8 @@ public abstract class AbstractFinanceVoucherSupport {
             result.setTotalDebit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMd));
             result.setTotalCredit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMc));
             result.setStatus(STATUS_UNPOSTED);
+            result.setCheckedAt(null);
+            result.setPostedAt(null);
             return result;
         }
     }
@@ -303,6 +327,7 @@ public abstract class AbstractFinanceVoucherSupport {
         List<GlAccvouch> existingRows = glAccvouchMapper.selectList(
                 Wrappers.<GlAccvouch>lambdaQuery()
                         .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIyear, voucherKey.iyear())
                         .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
                         .eq(GlAccvouch::getCsign, voucherKey.csign())
                         .eq(GlAccvouch::getInoId, voucherKey.inoId())
@@ -320,7 +345,7 @@ public abstract class AbstractFinanceVoucherSupport {
 
         validateImmutableHeader(dto, voucherKey);
         LocalDate billDate = parseDateOrThrow(dto.getDbillDate());
-        if (billDate.getMonthValue() != voucherKey.iperiod()) {
+        if (billDate.getYear() != voucherKey.iyear() || billDate.getMonthValue() != voucherKey.iperiod()) {
             throw new IllegalArgumentException("修改后的制单日期必须保持在原会计期间内");
         }
 
@@ -342,6 +367,7 @@ public abstract class AbstractFinanceVoucherSupport {
         glAccvouchMapper.delete(
                 Wrappers.<GlAccvouch>lambdaQuery()
                         .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIyear, voucherKey.iyear())
                         .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
                         .eq(GlAccvouch::getCsign, voucherKey.csign())
                         .eq(GlAccvouch::getInoId, voucherKey.inoId())
@@ -350,6 +376,8 @@ public abstract class AbstractFinanceVoucherSupport {
         for (int index = 0; index < normalizedEntries.size(); index++) {
             GlAccvouch row = buildVoucherRow(
                     voucherKey.companyId(),
+                    voucherKey.iyear(),
+                    voucherKey.iyperiod(),
                     voucherKey.iperiod(),
                     voucherKey.csign(),
                     voucherKey.inoId(),
@@ -367,8 +395,10 @@ public abstract class AbstractFinanceVoucherSupport {
         }
 
         FinanceVoucherSaveResultVO result = new FinanceVoucherSaveResultVO();
-        result.setVoucherNo(buildVoucherNo(voucherKey.companyId(), voucherKey.iperiod(), voucherKey.csign(), voucherKey.inoId()));
+        result.setVoucherNo(buildVoucherNo(voucherKey.companyId(), voucherKey.iyear(), voucherKey.iperiod(), voucherKey.csign(), voucherKey.inoId()));
         result.setCompanyId(voucherKey.companyId());
+        result.setIyear(voucherKey.iyear());
+        result.setIyperiod(voucherKey.iyperiod());
         result.setIperiod(voucherKey.iperiod());
         result.setCsign(voucherKey.csign());
         result.setInoId(voucherKey.inoId());
@@ -376,6 +406,8 @@ public abstract class AbstractFinanceVoucherSupport {
         result.setTotalDebit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMd));
         result.setTotalCredit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMc));
         result.setStatus(STATUS_UNPOSTED);
+        result.setCheckedAt(null);
+        result.setPostedAt(null);
         return result;
     }
 
@@ -482,10 +514,14 @@ public abstract class AbstractFinanceVoucherSupport {
         List<GlAccvouch> refreshedRows = requireVoucherRows(voucherKey);
         FinanceVoucherActionResultVO result = new FinanceVoucherActionResultVO();
         result.setAction(normalizedAction);
-        result.setVoucherNo(buildVoucherNo(voucherKey.companyId(), voucherKey.iperiod(), voucherKey.csign(), voucherKey.inoId()));
+        result.setVoucherNo(buildVoucherNo(voucherKey.companyId(), voucherKey.iyear(), voucherKey.iperiod(), voucherKey.csign(), voucherKey.inoId()));
+        result.setIyear(voucherKey.iyear());
+        result.setIyperiod(voucherKey.iyperiod());
         result.setStatus(resolveStatus(refreshedRows.get(0)));
         result.setStatusLabel(resolveStatusLabel(result.getStatus()));
         result.setCheckerName(trimToNull(refreshedRows.get(0).getCcheck()));
+        result.setCheckedAt(formatDateTime(refreshedRows.get(0).getCheckedAt()));
+        result.setPostedAt(formatDateTime(refreshedRows.get(0).getPostedAt()));
         result.setNextVoucherNo(nextVoucherNo);
         result.setLastVoucherOfMonth(lastVoucherOfMonth);
         return result;
@@ -504,7 +540,7 @@ public abstract class AbstractFinanceVoucherSupport {
             builder.append(csvValue(row.getDisplayVoucherNo())).append(',')
                     .append(csvValue(row.getVoucherTypeLabel())).append(',')
                     .append(csvValue(row.getDbillDate())).append(',')
-                    .append(csvValue(row.getIperiod() == null ? "" : String.valueOf(row.getIperiod()))).append(',')
+                    .append(csvValue(row.getIyperiod() == null ? "" : String.valueOf(row.getIyperiod()))).append(',')
                     .append(csvValue(row.getSummary())).append(',')
                     .append(csvValue(row.getCbill())).append(',')
                     .append(csvValue(row.getIdoc() == null ? "" : String.valueOf(row.getIdoc()))).append(',')
@@ -800,7 +836,7 @@ public abstract class AbstractFinanceVoucherSupport {
 
         Map<VoucherKey, List<GlAccvouch>> grouped = rows.stream()
                 .collect(Collectors.groupingBy(
-                        item -> new VoucherKey(item.getCompanyId(), item.getIperiod(), item.getCsign(), item.getInoId()),
+                        item -> new VoucherKey(item.getCompanyId(), item.getIyear(), item.getIyperiod(), item.getIperiod(), item.getCsign(), item.getInoId()),
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
@@ -817,7 +853,8 @@ public abstract class AbstractFinanceVoucherSupport {
                         || lower(item.getDisplayVoucherNo()).contains(voucherNoKeyword)
                         || lower(item.getVoucherNo()).contains(voucherNoKeyword))
                 .sorted(Comparator
-                        .comparing(FinanceVoucherSummaryVO::getDbillDate, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .comparing(FinanceVoucherSummaryVO::getIyperiod, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(FinanceVoucherSummaryVO::getDbillDate, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(FinanceVoucherSummaryVO::getInoId, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
@@ -829,9 +866,11 @@ public abstract class AbstractFinanceVoucherSupport {
         GlAccvouch headerRow = rows.get(0);
         FinanceVoucherSummaryVO summary = new FinanceVoucherSummaryVO();
         String status = resolveStatus(headerRow);
-        summary.setVoucherNo(buildVoucherNo(headerRow.getCompanyId(), headerRow.getIperiod(), headerRow.getCsign(), headerRow.getInoId()));
+        summary.setVoucherNo(buildVoucherNo(headerRow.getCompanyId(), headerRow.getIyear(), headerRow.getIperiod(), headerRow.getCsign(), headerRow.getInoId()));
         summary.setDisplayVoucherNo(buildDisplayVoucherNo(headerRow.getCsign(), headerRow.getInoId()));
         summary.setCompanyId(headerRow.getCompanyId());
+        summary.setIyear(headerRow.getIyear());
+        summary.setIyperiod(headerRow.getIyperiod());
         summary.setIperiod(headerRow.getIperiod());
         summary.setCsign(headerRow.getCsign());
         summary.setVoucherTypeLabel(resolveVoucherTypeLabel(headerRow.getCsign()));
@@ -840,6 +879,8 @@ public abstract class AbstractFinanceVoucherSupport {
         summary.setSummary(resolveVoucherSummary(rows));
         summary.setCbill(headerRow.getCbill());
         summary.setCheckerName(trimToNull(headerRow.getCcheck()));
+        summary.setCheckedAt(formatDateTime(headerRow.getCheckedAt()));
+        summary.setPostedAt(formatDateTime(headerRow.getPostedAt()));
         summary.setIdoc(headerRow.getIdoc());
         summary.setStatus(status);
         summary.setStatusLabel(resolveStatusLabel(status));
@@ -910,6 +951,7 @@ public abstract class AbstractFinanceVoucherSupport {
         return glAccvouchMapper.selectList(
                 Wrappers.<GlAccvouch>lambdaQuery()
                         .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIyear, voucherKey.iyear())
                         .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
                         .eq(GlAccvouch::getCsign, voucherKey.csign())
                         .eq(GlAccvouch::getInoId, voucherKey.inoId())
@@ -922,10 +964,12 @@ public abstract class AbstractFinanceVoucherSupport {
                 null,
                 Wrappers.<GlAccvouch>lambdaUpdate()
                         .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIyear, voucherKey.iyear())
                         .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
                         .eq(GlAccvouch::getCsign, voucherKey.csign())
                         .eq(GlAccvouch::getInoId, voucherKey.inoId())
                         .set(GlAccvouch::getCcheck, checkerName)
+                        .set(GlAccvouch::getCheckedAt, checkerName == null ? null : LocalDateTime.now())
                         .set(GlAccvouch::getIflag, errorFlag)
         );
     }
@@ -935,6 +979,7 @@ public abstract class AbstractFinanceVoucherSupport {
                 null,
                 Wrappers.<GlAccvouch>lambdaUpdate()
                         .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                        .eq(GlAccvouch::getIyear, voucherKey.iyear())
                         .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
                         .eq(GlAccvouch::getCsign, voucherKey.csign())
                         .eq(GlAccvouch::getInoId, voucherKey.inoId())
@@ -943,30 +988,27 @@ public abstract class AbstractFinanceVoucherSupport {
     }
 
     protected String findNextReviewableVoucherNo(GlAccvouch currentRow) {
-        if (currentRow == null || currentRow.getDbillDate() == null || currentRow.getInoId() == null) {
+        if (currentRow == null || currentRow.getIyear() == null || currentRow.getIperiod() == null || currentRow.getInoId() == null) {
             return null;
         }
-        YearMonth billMonth = YearMonth.from(currentRow.getDbillDate());
-        LocalDateTime monthStart = billMonth.atDay(1).atStartOfDay();
-        LocalDateTime monthEnd = billMonth.plusMonths(1).atDay(1).atStartOfDay();
         List<GlAccvouch> rows = glAccvouchMapper.selectList(
                 Wrappers.<GlAccvouch>lambdaQuery()
                         .eq(GlAccvouch::getCompanyId, currentRow.getCompanyId())
-                        .ge(GlAccvouch::getDbillDate, monthStart)
-                        .lt(GlAccvouch::getDbillDate, monthEnd)
+                        .eq(GlAccvouch::getIyear, currentRow.getIyear())
+                        .eq(GlAccvouch::getIperiod, currentRow.getIperiod())
                         .gt(GlAccvouch::getInoId, currentRow.getInoId())
                         .orderByAsc(GlAccvouch::getInoId, GlAccvouch::getInid, GlAccvouch::getId)
         );
         Map<VoucherKey, List<GlAccvouch>> grouped = rows.stream()
                 .collect(Collectors.groupingBy(
-                        item -> new VoucherKey(item.getCompanyId(), item.getIperiod(), item.getCsign(), item.getInoId()),
+                        item -> new VoucherKey(item.getCompanyId(), item.getIyear(), item.getIyperiod(), item.getIperiod(), item.getCsign(), item.getInoId()),
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
         for (Map.Entry<VoucherKey, List<GlAccvouch>> entry : grouped.entrySet()) {
             if (Objects.equals(resolveStatus(entry.getValue().get(0)), STATUS_UNPOSTED)) {
                 VoucherKey nextKey = entry.getKey();
-                return buildVoucherNo(nextKey.companyId(), nextKey.iperiod(), nextKey.csign(), nextKey.inoId());
+                return buildVoucherNo(nextKey.companyId(), nextKey.iyear(), nextKey.iperiod(), nextKey.csign(), nextKey.inoId());
             }
         }
         return null;
@@ -1120,14 +1162,15 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 处理财务凭证中的这一步。
      */
-    protected int nextVoucherNo(String companyId, Integer period, String voucherType) {
-        if (trimToNull(companyId) == null || period == null || trimToNull(voucherType) == null) {
+    protected int nextVoucherNo(String companyId, Integer year, Integer period, String voucherType) {
+        if (trimToNull(companyId) == null || year == null || period == null || trimToNull(voucherType) == null) {
             return 1;
         }
         List<Object> values = glAccvouchMapper.selectObjs(
                 Wrappers.<GlAccvouch>query()
                         .select("ino_id")
                         .eq("company_id", companyId)
+                        .eq("iyear", year)
                         .eq("iperiod", period)
                         .eq("csign", voucherType)
                         .orderByDesc("ino_id")
@@ -1144,6 +1187,8 @@ public abstract class AbstractFinanceVoucherSupport {
      */
     protected GlAccvouch buildVoucherRow(
             String companyId,
+            Integer year,
+            Integer yearPeriod,
             Integer period,
             String voucherType,
             Integer voucherNo,
@@ -1160,7 +1205,10 @@ public abstract class AbstractFinanceVoucherSupport {
         GlAccvouch row = new GlAccvouch();
         FinanceAccountSubject accountSubject = accountSubjects.get(trimToNull(entry.getCcode()));
         FinanceCashFlowItem cashFlowItem = resolveVoucherCashFlowItem(entry, accountSubject, cashFlowItems);
+        OptionSeed currencySeed = resolveCurrencySeed(entry.getCurrencyCode(), entry.getCexchName());
         row.setCompanyId(companyId);
+        row.setIyear(year);
+        row.setIyperiod(yearPeriod);
         row.setIperiod(period);
         row.setCsign(voucherType);
         row.setIsignseq(signSeq);
@@ -1190,7 +1238,8 @@ public abstract class AbstractFinanceVoucherSupport {
         row.setCitemId(trimToNull(entry.getCitemId()));
         row.setCashFlowItemId(cashFlowItem == null ? null : cashFlowItem.getId());
         row.setCashFlowItemName(cashFlowItem == null ? null : trimToNull(cashFlowItem.getCashFlowName()));
-        row.setCexchName(normalize(entry.getCexchName(), DEFAULT_CURRENCY));
+        row.setCexchName(currencySeed == null ? trimToNull(entry.getCexchName()) : currencySeed.label());
+        row.setCurrencyCode(currencySeed == null ? trimToNull(entry.getCurrencyCode()) : currencySeed.value());
         row.setNfrat(defaultDecimal(entry.getNfrat(), DEFAULT_RATE));
         row.setMd(normalizeAmount(entry.getMd()));
         row.setMc(normalizeAmount(entry.getMc()));
@@ -1210,11 +1259,19 @@ public abstract class AbstractFinanceVoucherSupport {
             throw new IllegalArgumentException("凭证号不能为空");
         }
         String[] parts = normalizedVoucherNo.split(VOUCHER_NO_SEPARATOR);
-        if (parts.length != 4) {
+        if (parts.length != 4 && parts.length != 5) {
             throw new IllegalArgumentException("凭证号格式不正确");
         }
         try {
-            return new VoucherKey(parts[0], Integer.parseInt(parts[1]), parts[2], Integer.parseInt(parts[3]));
+            if (parts.length == 5) {
+                int year = Integer.parseInt(parts[1]);
+                int period = Integer.parseInt(parts[2]);
+                return new VoucherKey(parts[0], year, buildYearPeriod(year, period), period, parts[3], Integer.parseInt(parts[4]));
+            }
+            int period = Integer.parseInt(parts[1]);
+            int inoId = Integer.parseInt(parts[3]);
+            int year = resolveLegacyVoucherYear(parts[0], period, parts[2], inoId);
+            return new VoucherKey(parts[0], year, buildYearPeriod(year, period), period, parts[2], inoId);
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException("凭证号格式不正确");
         }
@@ -1223,8 +1280,8 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 组装凭证No。
      */
-    protected String buildVoucherNo(String companyId, Integer period, String voucherType, Integer inoId) {
-        return companyId + VOUCHER_NO_SEPARATOR + period + VOUCHER_NO_SEPARATOR + voucherType + VOUCHER_NO_SEPARATOR + inoId;
+    protected String buildVoucherNo(String companyId, Integer year, Integer period, String voucherType, Integer inoId) {
+        return companyId + VOUCHER_NO_SEPARATOR + year + VOUCHER_NO_SEPARATOR + period + VOUCHER_NO_SEPARATOR + voucherType + VOUCHER_NO_SEPARATOR + inoId;
     }
 
     /**
@@ -1252,7 +1309,9 @@ public abstract class AbstractFinanceVoucherSupport {
         entry.setCitemId(row.getCitemId());
         entry.setCashFlowItemId(row.getCashFlowItemId());
         entry.setCashFlowItemName(row.getCashFlowItemName());
-        entry.setCexchName(normalize(row.getCexchName(), DEFAULT_CURRENCY));
+        OptionSeed currencySeed = resolveCurrencySeed(row.getCurrencyCode(), row.getCexchName());
+        entry.setCurrencyCode(currencySeed == null ? normalize(row.getCurrencyCode(), DEFAULT_CURRENCY) : currencySeed.value());
+        entry.setCexchName(currencySeed == null ? normalize(row.getCexchName(), resolveCurrencyName(entry.getCurrencyCode())) : currencySeed.label());
         entry.setNfrat(defaultDecimal(row.getNfrat(), DEFAULT_RATE));
         entry.setMd(normalizeAmount(row.getMd()));
         entry.setMc(normalizeAmount(row.getMc()));
@@ -1265,13 +1324,13 @@ public abstract class AbstractFinanceVoucherSupport {
      * 解析Status。
      */
     protected String resolveStatus(GlAccvouch row) {
-        if (Objects.equals(row.getIbook(), 1)) {
+        if (Objects.equals(row.getIbook(), 1) || row.getPostedAt() != null) {
             return STATUS_POSTED;
         }
         if (Objects.equals(row.getIflag(), ERROR_FLAG)) {
             return STATUS_ERROR;
         }
-        if (trimToNull(row.getCcheck()) != null) {
+        if (trimToNull(row.getCcheck()) != null || row.getCheckedAt() != null) {
             return STATUS_REVIEWED;
         }
         return STATUS_UNPOSTED;
@@ -1384,6 +1443,102 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 处理财务凭证中的这一步。
      */
+    protected Integer resolveVoucherYear(FinanceVoucherSaveDTO dto, LocalDate billDate) {
+        int billYear = billDate.getYear();
+        Integer payloadYear = dto == null ? null : dto.getIyear();
+        if (payloadYear != null && !Objects.equals(payloadYear, billYear)) {
+            throw new IllegalArgumentException("会计年度必须与制单日期年份一致");
+        }
+        return billYear;
+    }
+
+    protected Integer resolveVoucherYearPeriod(FinanceVoucherSaveDTO dto, Integer year, Integer period) {
+        Integer computedYearPeriod = buildYearPeriod(year, period);
+        Integer payloadYearPeriod = dto == null ? null : dto.getIyperiod();
+        if (payloadYearPeriod != null && !Objects.equals(payloadYearPeriod, computedYearPeriod)) {
+            throw new IllegalArgumentException("会计年月必须等于会计年度 * 100 + 会计期间");
+        }
+        return computedYearPeriod;
+    }
+
+    protected Integer buildYearPeriod(Integer year, Integer period) {
+        if (year == null || period == null) {
+            return null;
+        }
+        return year * 100 + period;
+    }
+
+    protected int resolveLegacyVoucherYear(String companyId, Integer period, String voucherType, Integer inoId) {
+        List<Object> values = glAccvouchMapper.selectObjs(
+                Wrappers.<GlAccvouch>query()
+                        .select("distinct iyear")
+                        .eq("company_id", companyId)
+                        .eq("iperiod", period)
+                        .eq("csign", voucherType)
+                        .eq("ino_id", inoId)
+        );
+        Set<Integer> years = values.stream()
+                .filter(Objects::nonNull)
+                .map(Number.class::cast)
+                .map(Number::intValue)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (years.isEmpty()) {
+            throw new IllegalStateException("凭证不存在");
+        }
+        if (years.size() > 1) {
+            throw new IllegalArgumentException("旧版凭证号已无法唯一定位，请刷新后重试");
+        }
+        return years.iterator().next();
+    }
+
+    protected OptionSeed resolveCurrencySeed(String currencyCode, String currencyNameOrCode) {
+        String normalizedCode = trimToNull(currencyCode);
+        if (normalizedCode != null) {
+            return findCurrencySeedByCode(normalizedCode);
+        }
+        String normalizedName = trimToNull(currencyNameOrCode);
+        if (normalizedName == null) {
+            return findCurrencySeedByCode(DEFAULT_CURRENCY);
+        }
+        OptionSeed seed = findCurrencySeedByCode(normalizedName);
+        if (seed != null) {
+            return seed;
+        }
+        return findCurrencySeedByLabel(normalizedName);
+    }
+
+    protected OptionSeed findCurrencySeedByCode(String currencyCode) {
+        String normalizedCode = trimToNull(currencyCode);
+        if (normalizedCode == null) {
+            return null;
+        }
+        return CURRENCY_SEEDS.stream()
+                .filter(item -> Objects.equals(item.value(), normalizedCode))
+                .findFirst()
+                .orElse(null);
+    }
+
+    protected OptionSeed findCurrencySeedByLabel(String currencyName) {
+        String normalizedName = trimToNull(currencyName);
+        if (normalizedName == null) {
+            return null;
+        }
+        return CURRENCY_SEEDS.stream()
+                .filter(item -> Objects.equals(item.label(), normalizedName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    protected String resolveCurrencyName(String currencyCode) {
+        OptionSeed seed = findCurrencySeedByCode(currencyCode);
+        return seed == null ? resolveCurrencyFallbackName() : seed.label();
+    }
+
+    protected String resolveCurrencyFallbackName() {
+        OptionSeed defaultSeed = findCurrencySeedByCode(DEFAULT_CURRENCY);
+        return defaultSeed == null ? DEFAULT_CURRENCY : defaultSeed.label();
+    }
+
     protected List<FinanceVoucherEntryDTO> normalizeEntries(List<FinanceVoucherEntryDTO> entries) {
         if (entries == null) {
             return List.of();
@@ -1405,7 +1560,9 @@ public abstract class AbstractFinanceVoucherSupport {
             normalizedEntry.setCitemId(trimToNull(entry.getCitemId()));
             normalizedEntry.setCashFlowItemId(entry.getCashFlowItemId());
             normalizedEntry.setCashFlowItemName(trimToNull(entry.getCashFlowItemName()));
-            normalizedEntry.setCexchName(normalize(entry.getCexchName(), DEFAULT_CURRENCY));
+            OptionSeed currencySeed = resolveCurrencySeed(entry.getCurrencyCode(), entry.getCexchName());
+            normalizedEntry.setCexchName(currencySeed == null ? trimToNull(entry.getCexchName()) : currencySeed.label());
+            normalizedEntry.setCurrencyCode(currencySeed == null ? trimToNull(entry.getCurrencyCode()) : currencySeed.value());
             normalizedEntry.setNfrat(defaultDecimal(entry.getNfrat(), DEFAULT_RATE));
             normalizedEntry.setMd(normalizeNullableAmount(entry.getMd()));
             normalizedEntry.setMc(normalizeNullableAmount(entry.getMc()));
@@ -1430,6 +1587,7 @@ public abstract class AbstractFinanceVoucherSupport {
                 && trimToNull(entry.getCitemId()) == null
                 && entry.getCashFlowItemId() == null
                 && trimToNull(entry.getCashFlowItemName()) == null
+                && trimToNull(entry.getCurrencyCode()) == null
                 && trimToNull(entry.getCexchName()) == null
                 && isNullOrZero(entry.getNfrat())
                 && isNullOrZero(entry.getMd())
@@ -1471,6 +1629,7 @@ public abstract class AbstractFinanceVoucherSupport {
             validateEntryLength(entry.getCsupId(), "\u4f9b\u5e94\u5546\u6807\u8bc6", 64, rowNo);
             validateEntryLength(entry.getCitemClass(), "\u9879\u76ee\u5206\u7c7b", 2, rowNo);
             validateEntryLength(entry.getCitemId(), "\u9879\u76ee\u7f16\u7801", 6, rowNo);
+            validateEntryLength(entry.getCurrencyCode(), "\u5e01\u79cd\u7f16\u7801", 32, rowNo);
             validateEntryLength(entry.getCexchName(), "\u5e01\u79cd\u540d\u79f0", 32, rowNo);
             if (trimToNull(entry.getCdigest()) == null) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6458\u8981\u4e0d\u80fd\u4e3a\u7a7a");
@@ -1489,9 +1648,12 @@ public abstract class AbstractFinanceVoucherSupport {
             validateAuxiliarySelection(entry, subject, rowNo);
             validateProjectSelection(entry, projectClasses, projects, rowNo);
 
-            if (!currencies.contains(normalize(entry.getCexchName(), DEFAULT_CURRENCY))) {
+            OptionSeed currencySeed = resolveCurrencySeed(entry.getCurrencyCode(), entry.getCexchName());
+            if (currencySeed == null || !currencies.contains(currencySeed.value())) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u5e01\u79cd\u4e0d\u5408\u6cd5");
             }
+            entry.setCurrencyCode(currencySeed.value());
+            entry.setCexchName(currencySeed.label());
             if (defaultDecimal(entry.getNfrat(), DEFAULT_RATE).compareTo(BigDecimal.ZERO) <= 0) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6c47\u7387\u5fc5\u987b\u5927\u4e8e 0");
             }
@@ -1733,6 +1895,14 @@ public abstract class AbstractFinanceVoucherSupport {
         if (!Objects.equals(payloadCompanyId, voucherKey.companyId())) {
             throw new IllegalArgumentException("修改时不允许变更公司");
         }
+        Integer payloadYear = dto.getIyear() == null ? voucherKey.iyear() : dto.getIyear();
+        if (!Objects.equals(payloadYear, voucherKey.iyear())) {
+            throw new IllegalArgumentException("修改时不允许变更会计年度");
+        }
+        Integer payloadYearPeriod = dto.getIyperiod() == null ? voucherKey.iyperiod() : dto.getIyperiod();
+        if (!Objects.equals(payloadYearPeriod, voucherKey.iyperiod())) {
+            throw new IllegalArgumentException("修改时不允许变更会计年月");
+        }
         Integer payloadPeriod = dto.getIperiod() == null ? voucherKey.iperiod() : dto.getIperiod();
         if (!Objects.equals(payloadPeriod, voucherKey.iperiod())) {
             throw new IllegalArgumentException("修改时不允许变更会计期间");
@@ -1930,6 +2100,13 @@ public abstract class AbstractFinanceVoucherSupport {
         return value.toLocalDate().format(DATE_FORMATTER);
     }
 
+    protected String formatDateTime(LocalDateTime value) {
+        if (value == null) {
+            return null;
+        }
+        return value.format(DATE_TIME_FORMATTER);
+    }
+
     /**
      * 处理财务凭证中的这一步。
      */
@@ -1944,14 +2121,14 @@ public abstract class AbstractFinanceVoucherSupport {
     /**
      * 处理财务凭证中的这一步。
      */
-    protected void postVoucher(String companyId, Integer period, String voucherType, Integer inoId) {
+    protected void postVoucher(String companyId, Integer year, Integer period, String voucherType, Integer inoId) {
         // Intentionally left blank in phase one.
     }
 
     private record MonthRange(LocalDateTime start, LocalDateTime endExclusive) {
     }
 
-    private record VoucherKey(String companyId, Integer iperiod, String csign, Integer inoId) {
+    private record VoucherKey(String companyId, Integer iyear, Integer iyperiod, Integer iperiod, String csign, Integer inoId) {
     }
 
     private record OptionSeed(String value, String label) {

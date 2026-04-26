@@ -83,13 +83,22 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
         meta.setProjectOptions(loadProjectOptions(effectiveCompanyId));
         meta.setCashFlowOptions(loadCashFlowOptions(effectiveCompanyId));
         meta.setDefaultCompanyId(effectiveCompanyId);
+        meta.setDefaultYear(effectiveBillDate.getYear());
+        meta.setDefaultYearPeriod(buildYearPeriod(effectiveBillDate.getYear(), effectiveBillDate.getMonthValue()));
         meta.setDefaultBillDate(effectiveBillDate.format(DATE_FORMATTER));
         meta.setDefaultPeriod(effectiveBillDate.getMonthValue());
         meta.setDefaultVoucherType(effectiveVoucherType);
-        meta.setSuggestedVoucherNo(nextVoucherNo(effectiveCompanyId, effectiveBillDate.getMonthValue(), effectiveVoucherType));
+        meta.setSuggestedVoucherNo(nextVoucherNo(
+                effectiveCompanyId,
+                effectiveBillDate.getYear(),
+                effectiveBillDate.getMonthValue(),
+                effectiveVoucherType
+        ));
         meta.setDefaultMaker(resolveMakerName(currentUser, currentUsername));
         meta.setDefaultAttachedDocCount(0);
         meta.setDefaultCurrency(DEFAULT_CURRENCY);
+        meta.setDefaultCurrencyCode(DEFAULT_CURRENCY);
+        meta.setDefaultCurrencyName(resolveCurrencyName(DEFAULT_CURRENCY));
         return meta;
     }
 

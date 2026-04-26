@@ -223,29 +223,125 @@ CREATE TABLE IF NOT EXISTS sys_user (
     CONSTRAINT fk_sys_user_dept_id FOREIGN KEY (dept_id) REFERENCES sys_department(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
-ALTER TABLE sys_department
-    ADD COLUMN IF NOT EXISTS stat_department_belong VARCHAR(100) COMMENT '统计部门归属' AFTER sync_enabled;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_department'
+          AND COLUMN_NAME = 'stat_department_belong'
+    ),
+    'SELECT ''sys_department.stat_department_belong exists''',
+    'ALTER TABLE sys_department ADD COLUMN stat_department_belong VARCHAR(100) COMMENT ''统计部门归属'' AFTER sync_enabled'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE sys_department
-    ADD COLUMN IF NOT EXISTS stat_region_belong VARCHAR(100) COMMENT '统计大区归属' AFTER stat_department_belong;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_department'
+          AND COLUMN_NAME = 'stat_region_belong'
+    ),
+    'SELECT ''sys_department.stat_region_belong exists''',
+    'ALTER TABLE sys_department ADD COLUMN stat_region_belong VARCHAR(100) COMMENT ''统计大区归属'' AFTER stat_department_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE sys_department
-    ADD COLUMN IF NOT EXISTS stat_area_belong VARCHAR(100) COMMENT '统计区域归属' AFTER stat_region_belong;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_department'
+          AND COLUMN_NAME = 'stat_area_belong'
+    ),
+    'SELECT ''sys_department.stat_area_belong exists''',
+    'ALTER TABLE sys_department ADD COLUMN stat_area_belong VARCHAR(100) COMMENT ''统计区域归属'' AFTER stat_region_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE sys_user
-    ADD COLUMN IF NOT EXISTS labor_relation_belong VARCHAR(100) COMMENT '劳动关系归属' AFTER position;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'labor_relation_belong'
+    ),
+    'SELECT ''sys_user.labor_relation_belong exists''',
+    'ALTER TABLE sys_user ADD COLUMN labor_relation_belong VARCHAR(100) COMMENT ''劳动关系归属'' AFTER position'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE sys_user
-    ADD COLUMN IF NOT EXISTS stat_department_belong VARCHAR(100) COMMENT '统计部门归属' AFTER labor_relation_belong;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'stat_department_belong'
+    ),
+    'SELECT ''sys_user.stat_department_belong exists''',
+    'ALTER TABLE sys_user ADD COLUMN stat_department_belong VARCHAR(100) COMMENT ''统计部门归属'' AFTER labor_relation_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE sys_user
-    ADD COLUMN IF NOT EXISTS stat_region_belong VARCHAR(100) COMMENT '统计大区归属' AFTER stat_department_belong;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'stat_region_belong'
+    ),
+    'SELECT ''sys_user.stat_region_belong exists''',
+    'ALTER TABLE sys_user ADD COLUMN stat_region_belong VARCHAR(100) COMMENT ''统计大区归属'' AFTER stat_department_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE sys_user
-    ADD COLUMN IF NOT EXISTS stat_area_belong VARCHAR(100) COMMENT '统计区域归属' AFTER stat_region_belong;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'stat_area_belong'
+    ),
+    'SELECT ''sys_user.stat_area_belong exists''',
+    'ALTER TABLE sys_user ADD COLUMN stat_area_belong VARCHAR(100) COMMENT ''统计区域归属'' AFTER stat_region_belong'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE sys_user
-    ADD COLUMN IF NOT EXISTS feishu_user_id VARCHAR(100) COMMENT '飞书用户ID' AFTER dingtalk_user_id;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user'
+          AND COLUMN_NAME = 'feishu_user_id'
+    ),
+    'SELECT ''sys_user.feishu_user_id exists''',
+    'ALTER TABLE sys_user ADD COLUMN feishu_user_id VARCHAR(100) COMMENT ''飞书用户ID'' AFTER dingtalk_user_id'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @sql = IF(
     EXISTS (
@@ -321,14 +417,38 @@ CREATE TABLE IF NOT EXISTS pm_custom_archive_design (
     KEY idx_archive_type (archive_type, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义档案设计表';
 
-ALTER TABLE pm_custom_archive_design
-    ADD COLUMN IF NOT EXISTS archive_description VARCHAR(255) COMMENT '档案说明' AFTER archive_type;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_custom_archive_design'
+          AND COLUMN_NAME = 'archive_description'
+    ),
+    'SELECT ''pm_custom_archive_design.archive_description exists''',
+    'ALTER TABLE pm_custom_archive_design ADD COLUMN archive_description VARCHAR(255) COMMENT ''档案说明'' AFTER archive_type'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 ALTER TABLE pm_custom_archive_design
     MODIFY COLUMN archive_type VARCHAR(32) NOT NULL COMMENT '档案类型:SELECT可选档案/AUTO_RULE自动划分';
 
-ALTER TABLE pm_custom_archive_design
-    DROP COLUMN IF EXISTS sort_order;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_custom_archive_design'
+          AND COLUMN_NAME = 'sort_order'
+    ),
+    'ALTER TABLE pm_custom_archive_design DROP COLUMN sort_order',
+    'SELECT ''pm_custom_archive_design.sort_order missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS pm_custom_archive_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '档案结果项ID',
@@ -343,9 +463,35 @@ CREATE TABLE IF NOT EXISTS pm_custom_archive_item (
     KEY idx_archive_item_status (archive_id, status, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='自定义档案结果项表';
 
-ALTER TABLE pm_custom_archive_item
-    DROP COLUMN IF EXISTS item_value,
-    DROP COLUMN IF EXISTS sort_order;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_custom_archive_item'
+          AND COLUMN_NAME = 'item_value'
+    ),
+    'ALTER TABLE pm_custom_archive_item DROP COLUMN item_value',
+    'SELECT ''pm_custom_archive_item.item_value missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_custom_archive_item'
+          AND COLUMN_NAME = 'sort_order'
+    ),
+    'ALTER TABLE pm_custom_archive_item DROP COLUMN sort_order',
+    'SELECT ''pm_custom_archive_item.sort_order missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS pm_custom_archive_rule (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自动划分规则ID',
@@ -420,8 +566,20 @@ WHERE parent.permission_code = 'settings:api_interfaces:view'
       WHERE permission.permission_code = 'settings:api_interfaces:ocr_test'
   );
 
-ALTER TABLE pm_custom_archive_rule
-    DROP COLUMN IF EXISTS sort_order;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_custom_archive_rule'
+          AND COLUMN_NAME = 'sort_order'
+    ),
+    'ALTER TABLE pm_custom_archive_rule DROP COLUMN sort_order',
+    'SELECT ''pm_custom_archive_rule.sort_order missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS pm_document_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '妯℃澘ID',
@@ -453,21 +611,125 @@ CREATE TABLE IF NOT EXISTS pm_document_template (
     KEY idx_publish_status (publish_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='鍗曟嵁娴佺▼妯℃澘琛?;
 
-ALTER TABLE pm_document_template
-    ADD COLUMN IF NOT EXISTS numbering_rule VARCHAR(64) COMMENT '缂栧彿瑙勫垯' AFTER template_description;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'numbering_rule'
+    ),
+    'SELECT ''pm_document_template.numbering_rule exists''',
+    'ALTER TABLE pm_document_template ADD COLUMN numbering_rule VARCHAR(64) COMMENT ''缂栧彿瑙勫垯'' AFTER template_description'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE pm_document_template
-    ADD COLUMN IF NOT EXISTS form_design_code VARCHAR(64) COMMENT '表单设计编码' AFTER numbering_rule;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'form_design_code'
+    ),
+    'SELECT ''pm_document_template.form_design_code exists''',
+    'ALTER TABLE pm_document_template ADD COLUMN form_design_code VARCHAR(64) COMMENT ''表单设计编码'' AFTER numbering_rule'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE pm_document_template
-    ADD COLUMN IF NOT EXISTS allocation_form VARCHAR(64) COMMENT '鍒嗘憡琛ㄥ崟' AFTER payment_mode;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'allocation_form'
+    ),
+    'SELECT ''pm_document_template.allocation_form exists''',
+    'ALTER TABLE pm_document_template ADD COLUMN allocation_form VARCHAR(64) COMMENT ''鍒嗘憡琛ㄥ崟'' AFTER payment_mode'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
-ALTER TABLE pm_document_template
-    DROP COLUMN IF EXISTS split_payment,
-    DROP COLUMN IF EXISTS travel_form,
-    DROP COLUMN IF EXISTS relation_remark,
-    DROP COLUMN IF EXISTS validation_remark,
-    DROP COLUMN IF EXISTS installment_remark;
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'split_payment'
+    ),
+    'ALTER TABLE pm_document_template DROP COLUMN split_payment',
+    'SELECT ''pm_document_template.split_payment missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'travel_form'
+    ),
+    'ALTER TABLE pm_document_template DROP COLUMN travel_form',
+    'SELECT ''pm_document_template.travel_form missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'relation_remark'
+    ),
+    'ALTER TABLE pm_document_template DROP COLUMN relation_remark',
+    'SELECT ''pm_document_template.relation_remark missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'validation_remark'
+    ),
+    'ALTER TABLE pm_document_template DROP COLUMN validation_remark',
+    'SELECT ''pm_document_template.validation_remark missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pm_document_template'
+          AND COLUMN_NAME = 'installment_remark'
+    ),
+    'ALTER TABLE pm_document_template DROP COLUMN installment_remark',
+    'SELECT ''pm_document_template.installment_remark missing'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS pm_template_scope (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '鑼冨洿鏄庣粏ID',

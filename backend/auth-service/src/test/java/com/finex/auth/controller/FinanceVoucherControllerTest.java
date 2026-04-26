@@ -50,7 +50,10 @@ class FinanceVoucherControllerTest {
 
     private static final String COMPANY_ID = "COMP-001";
     private static final String VOUCHER_TYPE = "\u8bb0";
-    private static final String VOUCHER_NO = "COMP-001~3~\u8bb0~8";
+    private static final int VOUCHER_YEAR = 2026;
+    private static final int VOUCHER_PERIOD = 3;
+    private static final int VOUCHER_YEAR_PERIOD = 202603;
+    private static final String VOUCHER_NO = "COMP-001~2026~3~\u8bb0~8";
     private static final String DISPLAY_VOUCHER_NO = "\u8bb0-0008";
     private static final String DIGEST_TOO_LONG = "\u5206\u5f55\u6458\u8981\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 255 \u4e2a\u5b57\u7b26";
     private static final String UPDATE_SUCCESS = "\u51ed\u8bc1\u4fee\u6539\u6210\u529f";
@@ -82,8 +85,12 @@ class FinanceVoucherControllerTest {
     void metaReturnsVoucherMetaForCurrentUser() throws Exception {
         FinanceVoucherMetaVO meta = new FinanceVoucherMetaVO();
         meta.setDefaultCompanyId(COMPANY_ID);
+        meta.setDefaultYear(VOUCHER_YEAR);
+        meta.setDefaultYearPeriod(VOUCHER_YEAR_PERIOD);
         meta.setDefaultBillDate("2026-03-28");
         meta.setSuggestedVoucherNo(108);
+        meta.setDefaultCurrencyCode("CNY");
+        meta.setDefaultCurrencyName("\u4eba\u6c11\u5e01");
 
         doNothing().when(accessControlService)
                 .requireAnyPermission(
@@ -103,6 +110,10 @@ class FinanceVoucherControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.defaultCompanyId").value(COMPANY_ID))
+                .andExpect(jsonPath("$.data.defaultYear").value(VOUCHER_YEAR))
+                .andExpect(jsonPath("$.data.defaultYearPeriod").value(VOUCHER_YEAR_PERIOD))
+                .andExpect(jsonPath("$.data.defaultCurrencyCode").value("CNY"))
+                .andExpect(jsonPath("$.data.defaultCurrencyName").value("\u4eba\u6c11\u5e01"))
                 .andExpect(jsonPath("$.data.suggestedVoucherNo").value(108));
 
         verify(accessControlService).requireAnyPermission(
@@ -272,7 +283,7 @@ class FinanceVoucherControllerTest {
         result.setStatus("REVIEWED");
         result.setStatusLabel("\u5df2\u5ba1\u6838");
         result.setCheckerName("\u5f20\u4e09");
-        result.setNextVoucherNo("COMP-001~3~\u8bb0~9");
+        result.setNextVoucherNo("COMP-001~2026~3~\u8bb0~9");
         result.setLastVoucherOfMonth(false);
 
         doNothing().when(accessControlService).requirePermission(1L, "finance:general_ledger:review_voucher:review");
@@ -286,7 +297,7 @@ class FinanceVoucherControllerTest {
                 .andExpect(jsonPath("$.message").value("\u51ed\u8bc1\u5ba1\u6838\u6210\u529f"))
                 .andExpect(jsonPath("$.data.status").value("REVIEWED"))
                 .andExpect(jsonPath("$.data.checkerName").value("\u5f20\u4e09"))
-                .andExpect(jsonPath("$.data.nextVoucherNo").value("COMP-001~3~\u8bb0~9"));
+                .andExpect(jsonPath("$.data.nextVoucherNo").value("COMP-001~2026~3~\u8bb0~9"));
     }
 
     @Test
@@ -349,7 +360,7 @@ class FinanceVoucherControllerTest {
         FinanceVoucherBatchActionDTO dto = new FinanceVoucherBatchActionDTO();
         dto.setCompanyId(COMPANY_ID);
         dto.setAction("MARK_ERROR");
-        dto.setVoucherNos(List.of(VOUCHER_NO, "COMP-001~3~\u8bb0~9"));
+        dto.setVoucherNos(List.of(VOUCHER_NO, "COMP-001~2026~3~\u8bb0~9"));
 
         FinanceVoucherBatchActionResultVO result = new FinanceVoucherBatchActionResultVO();
         result.setAction("MARK_ERROR");
@@ -379,7 +390,9 @@ class FinanceVoucherControllerTest {
     private FinanceVoucherSaveDTO buildSaveDto() {
         FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
         dto.setCompanyId(COMPANY_ID);
-        dto.setIperiod(3);
+        dto.setIyear(VOUCHER_YEAR);
+        dto.setIyperiod(VOUCHER_YEAR_PERIOD);
+        dto.setIperiod(VOUCHER_PERIOD);
         dto.setCsign(VOUCHER_TYPE);
         dto.setInoId(8);
         dto.setDbillDate("2026-03-28");
@@ -388,12 +401,16 @@ class FinanceVoucherControllerTest {
         debitEntry.setInid(1);
         debitEntry.setCdigest("\u529e\u516c\u8d39\u7528");
         debitEntry.setCcode("560101");
+        debitEntry.setCexchName("\u4eba\u6c11\u5e01");
+        debitEntry.setCurrencyCode("CNY");
         debitEntry.setMd(new BigDecimal("1280.00"));
 
         FinanceVoucherEntryDTO creditEntry = new FinanceVoucherEntryDTO();
         creditEntry.setInid(2);
         creditEntry.setCdigest("\u94f6\u884c\u4ed8\u6b3e");
         creditEntry.setCcode("100201");
+        creditEntry.setCexchName("\u4eba\u6c11\u5e01");
+        creditEntry.setCurrencyCode("CNY");
         creditEntry.setMc(new BigDecimal("1280.00"));
 
         dto.setEntries(List.of(debitEntry, creditEntry));

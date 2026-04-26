@@ -277,6 +277,7 @@ import {
   useFinanceNewVoucherPageOrchestration,
   type FinanceNewVoucherToolbarActionKey
 } from './composables/useFinanceNewVoucherPageOrchestration'
+import { useFinanceNewVoucherPageUtils } from './composables/useFinanceNewVoucherPageUtils'
 import {
   useFinanceNewVoucherRowOwner,
   type FinanceVoucherEntryRow as VoucherEntryRow
@@ -297,7 +298,7 @@ interface ToolbarAction {
   disabled?: boolean
 }
 
-function createBootstrapEntry(defaultCurrency: string, rowNo: number): VoucherEntryRow {
+function createBootstrapEntry(defaultCurrencyCode: string, defaultCurrencyName: string, rowNo: number): VoucherEntryRow {
   return {
     localId: `bootstrap-entry-${rowNo}`,
     inid: rowNo,
@@ -311,7 +312,8 @@ function createBootstrapEntry(defaultCurrency: string, rowNo: number): VoucherEn
     citemId: '',
     cashFlowItemId: undefined,
     cashFlowItemName: '',
-    cexchName: defaultCurrency,
+    cexchName: defaultCurrencyName,
+    currencyCode: defaultCurrencyCode,
     nfrat: 1,
     md: '',
     mc: '',
@@ -320,14 +322,14 @@ function createBootstrapEntry(defaultCurrency: string, rowNo: number): VoucherEn
   }
 }
 
-function createBootstrapEntries(defaultCurrency: string, minRows: number) {
-  return Array.from({ length: minRows }, (_, index) => createBootstrapEntry(defaultCurrency, index + 1))
+function createBootstrapEntries(defaultCurrencyCode: string, defaultCurrencyName: string, minRows: number) {
+  return Array.from({ length: minRows }, (_, index) => createBootstrapEntry(defaultCurrencyCode, defaultCurrencyName, index + 1))
 }
 
 const DRAFT_STORAGE_KEY = 'finance-new-voucher-draft'
 const MIN_ENTRY_ROWS = 8
 const COMPANY_SWITCH_GUARD_KEY = 'finance-new-voucher'
-const ENTRY_FIELD_MAX_LENGTH: Record<'cdigest' | 'ccode' | 'cdeptId' | 'cpersonId' | 'ccusId' | 'csupId' | 'citemClass' | 'citemId' | 'cexchName', number> = {
+const ENTRY_FIELD_MAX_LENGTH: Record<'cdigest' | 'ccode' | 'cdeptId' | 'cpersonId' | 'ccusId' | 'csupId' | 'citemClass' | 'citemId' | 'cexchName' | 'currencyCode', number> = {
   cdigest: 255,
   ccode: 64,
   cdeptId: 64,
@@ -336,7 +338,8 @@ const ENTRY_FIELD_MAX_LENGTH: Record<'cdigest' | 'ccode' | 'cdeptId' | 'cpersonI
   csupId: 64,
   citemClass: 2,
   citemId: 6,
-  cexchName: 32
+  cexchName: 32,
+  currencyCode: 32
 }
 const ENTRY_FIELD_LABELS: Record<keyof typeof ENTRY_FIELD_MAX_LENGTH, string> = {
   cdigest: '摘要',
@@ -347,7 +350,8 @@ const ENTRY_FIELD_LABELS: Record<keyof typeof ENTRY_FIELD_MAX_LENGTH, string> = 
   csupId: '供应商',
   citemClass: '项目分类',
   citemId: '项目',
-  cexchName: '币种名称'
+  cexchName: '币种名称',
+  currencyCode: '币种编码'
 }
 
 const props = withDefaults(defineProps<{ pageMode?: VoucherPageMode; voucherNo?: string }>(), {
@@ -357,6 +361,12 @@ const props = withDefaults(defineProps<{ pageMode?: VoucherPageMode; voucherNo?:
 const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
 const currentUser = readStoredUser()
+const {
+  resolveErrorMessage,
+  toOptionalMoney,
+  toOptionalString,
+  toOptionalDecimal
+} = useFinanceNewVoucherPageUtils()
 
 const validationErrors = ref<string[]>([])
 const selectedRowIndex = ref(0)
@@ -364,6 +374,8 @@ const lastCommittedSnapshot = ref('')
 
 const form = reactive<VoucherFormState>({
   companyId: '',
+  iyear: undefined,
+  iyperiod: undefined,
   iperiod: 1,
   csign: '记',
   inoId: undefined,
@@ -372,7 +384,7 @@ const form = reactive<VoucherFormState>({
   cbill: '',
   ctext1: '',
   ctext2: '',
-  entries: createBootstrapEntries('CNY', MIN_ENTRY_ROWS)
+  entries: createBootstrapEntries('CNY', '人民币', MIN_ENTRY_ROWS)
 })
 const isDetailRoute = computed(() => props.pageMode === 'detail')
 const isReviewMode = computed(() => props.pageMode === 'review')
@@ -457,6 +469,8 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
 
 const selectedRow = computed(() => form.entries[Math.min(selectedRowIndex.value, Math.max(form.entries.length - 1, 0))] as VoucherEntryRow)
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
+const defaultCurrencyCode = computed(() => voucherMeta.value?.defaultCurrencyCode || voucherMeta.value?.defaultCurrency || 'CNY')
+const defaultCurrencyName = computed(() => voucherMeta.value?.defaultCurrencyName || '人民币')
 const {
   loading,
   initializing,
@@ -532,7 +546,10 @@ const {
   validationErrors,
   entryFieldMaxLength: ENTRY_FIELD_MAX_LENGTH,
   entryFieldLabels: ENTRY_FIELD_LABELS,
-  validateEntrySelection
+  validateEntrySelection,
+  toOptionalString,
+  toOptionalMoney,
+  toOptionalDecimal
 })
 const {
   createEntry,
@@ -552,7 +569,8 @@ const {
   selectedRowIndex,
   effectiveRowCount: computed(() => effectiveRows.value.length),
   isReadonlyMode,
-  defaultCurrency: computed(() => voucherMeta.value?.defaultCurrency || 'CNY'),
+  defaultCurrencyCode,
+  defaultCurrencyName,
   minEntryRows: MIN_ENTRY_ROWS,
   isEntryBlank,
   tryLeaveSubjectField,
@@ -641,6 +659,8 @@ watch(() => form.entries.length, () => {
 
 function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.currentCompanyId) {
   form.companyId = companyId || meta.defaultCompanyId || ''
+  form.iyear = meta.defaultYear ?? new Date(meta.defaultBillDate).getFullYear()
+  form.iyperiod = meta.defaultYearPeriod ?? ((form.iyear || new Date(meta.defaultBillDate).getFullYear()) * 100 + meta.defaultPeriod)
   form.iperiod = meta.defaultPeriod
   form.csign = meta.defaultVoucherType
   form.inoId = meta.suggestedVoucherNo
@@ -649,13 +669,19 @@ function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.
   form.cbill = meta.defaultMaker
   form.ctext1 = ''
   form.ctext2 = ''
-  form.entries = ensureMinimumRows([createEntry(meta.defaultCurrency, 1), createEntry(meta.defaultCurrency, 2)], meta.defaultCurrency)
+  form.entries = ensureMinimumRows(
+    [createEntry(defaultCurrencyCode.value, defaultCurrencyName.value, 1), createEntry(defaultCurrencyCode.value, defaultCurrencyName.value, 2)],
+    defaultCurrencyCode.value,
+    defaultCurrencyName.value
+  )
   resetLeafSubjectHistory(form.entries, meta.accountOptions)
   selectedRowIndex.value = 0
 }
 
 function applyDraft(draft: FinanceVoucherSavePayload, meta: FinanceVoucherMeta, companyId = financeCompany.currentCompanyId) {
   form.companyId = companyId || draft.companyId || meta.defaultCompanyId || ''
+  form.iyear = draft.iyear ?? meta.defaultYear ?? new Date(meta.defaultBillDate).getFullYear()
+  form.iyperiod = draft.iyperiod ?? meta.defaultYearPeriod ?? ((form.iyear || new Date(meta.defaultBillDate).getFullYear()) * 100 + (draft.iperiod || meta.defaultPeriod))
   form.iperiod = draft.iperiod || meta.defaultPeriod
   form.csign = draft.csign || meta.defaultVoucherType
   form.inoId = draft.inoId || meta.suggestedVoucherNo
@@ -664,13 +690,23 @@ function applyDraft(draft: FinanceVoucherSavePayload, meta: FinanceVoucherMeta, 
   form.cbill = draft.cbill || meta.defaultMaker
   form.ctext1 = draft.ctext1 || ''
   form.ctext2 = draft.ctext2 || ''
-  form.entries = ensureMinimumRows((draft.entries?.length ? draft.entries : [createEntry(meta.defaultCurrency, 1), createEntry(meta.defaultCurrency, 2)]).map((item, index) => createEntryFromValue(item, meta.defaultCurrency, index + 1)), meta.defaultCurrency)
+  form.entries = ensureMinimumRows(
+    (
+      draft.entries?.length
+        ? draft.entries
+        : [createEntry(defaultCurrencyCode.value, defaultCurrencyName.value, 1), createEntry(defaultCurrencyCode.value, defaultCurrencyName.value, 2)]
+    ).map((item, index) => createEntryFromValue(item, defaultCurrencyCode.value, defaultCurrencyName.value, index + 1)),
+    defaultCurrencyCode.value,
+    defaultCurrencyName.value
+  )
   resetLeafSubjectHistory(form.entries, meta.accountOptions)
   selectedRowIndex.value = 0
 }
 
 function applyDetail(detail: FinanceVoucherDetail, meta: FinanceVoucherMeta) {
   form.companyId = detail.companyId
+  form.iyear = detail.iyear
+  form.iyperiod = detail.iyperiod
   form.iperiod = detail.iperiod
   form.csign = detail.csign
   form.inoId = detail.inoId
@@ -679,7 +715,12 @@ function applyDetail(detail: FinanceVoucherDetail, meta: FinanceVoucherMeta) {
   form.cbill = detail.cbill
   form.ctext1 = detail.ctext1 || ''
   form.ctext2 = detail.ctext2 || ''
-  form.entries = ensureMinimumRows(detail.entries.map((item, index) => createEntryFromValue(item, meta.defaultCurrency, index + 1)), meta.defaultCurrency, Math.max(detail.entries.length, 2))
+  form.entries = ensureMinimumRows(
+    detail.entries.map((item, index) => createEntryFromValue(item, defaultCurrencyCode.value, defaultCurrencyName.value, index + 1)),
+    defaultCurrencyCode.value,
+    defaultCurrencyName.value,
+    Math.max(detail.entries.length, 2)
+  )
   resetLeafSubjectHistory(form.entries, meta.accountOptions)
   selectedRowIndex.value = 0
 }
@@ -721,11 +762,7 @@ function markCommitted() {
 
 function parseVoucherCompanyId(voucherNo: string) {
   const parts = String(voucherNo || '').split('~')
-  return parts.length === 4 ? parts[0] : ''
-}
-
-function resolveErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback
+  return parts.length === 4 || parts.length === 5 ? parts[0] : ''
 }
 
 function moneyText(value: string) {

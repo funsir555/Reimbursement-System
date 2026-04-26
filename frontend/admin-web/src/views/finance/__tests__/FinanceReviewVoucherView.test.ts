@@ -50,9 +50,13 @@ vi.mock('@/utils/permissions', () => ({
   }))
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 const InputStub = defineComponent({
   props: {
@@ -128,9 +132,11 @@ async function mountView() {
 function buildRows() {
   return [
     {
-      voucherNo: 'COMPANY_A~4~记~12',
+      voucherNo: 'COMPANY_A~2026~4~记~12',
       displayVoucherNo: '记-0012',
       companyId: 'COMPANY_A',
+      iyear: 2026,
+      iyperiod: 202604,
       iperiod: 4,
       csign: '记',
       voucherTypeLabel: '记账凭证',
@@ -138,6 +144,8 @@ function buildRows() {
       summary: '办公用品',
       cbill: '财务制单员',
       checkerName: '',
+      checkedAt: '',
+      postedAt: '',
       idoc: 1,
       status: 'UNPOSTED',
       statusLabel: '未记账',
@@ -147,9 +155,11 @@ function buildRows() {
       totalCredit: '100.00'
     },
     {
-      voucherNo: 'COMPANY_A~4~记~13',
+      voucherNo: 'COMPANY_A~2026~4~记~13',
       displayVoucherNo: '记-0013',
       companyId: 'COMPANY_A',
+      iyear: 2026,
+      iyperiod: 202604,
       iperiod: 4,
       csign: '记',
       voucherTypeLabel: '记账凭证',
@@ -157,6 +167,8 @@ function buildRows() {
       summary: '市场费用',
       cbill: '财务制单员',
       checkerName: '审核人甲',
+      checkedAt: '2026-04-06 09:00:00',
+      postedAt: '',
       idoc: 2,
       status: 'REVIEWED',
       statusLabel: '已审核',
@@ -184,15 +196,15 @@ describe('FinanceReviewVoucherView', () => {
         items: buildRows()
       }
     })
-    mocks.financeApi.reviewVoucher.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~4~记~12' } })
-    mocks.financeApi.unreviewVoucher.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~4~记~13' } })
-    mocks.financeApi.markVoucherError.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~4~记~12' } })
-    mocks.financeApi.clearVoucherError.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~4~记~12' } })
+    mocks.financeApi.reviewVoucher.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~2026~4~记~12' } })
+    mocks.financeApi.unreviewVoucher.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~2026~4~记~13' } })
+    mocks.financeApi.markVoucherError.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~2026~4~记~12' } })
+    mocks.financeApi.clearVoucherError.mockResolvedValue({ data: { voucherNo: 'COMPANY_A~2026~4~记~12' } })
     mocks.financeApi.batchUpdateVoucherState.mockResolvedValue({
       data: {
         action: 'REVIEW',
         successCount: 2,
-        voucherNos: ['COMPANY_A~4~记~12', 'COMPANY_A~4~记~14']
+        voucherNos: ['COMPANY_A~2026~4~记~12', 'COMPANY_A~2026~4~记~14']
       }
     })
   })
@@ -220,13 +232,13 @@ describe('FinanceReviewVoucherView', () => {
     await wrapper.find('.row-dblclick').trigger('dblclick')
     expect(routerPush).toHaveBeenCalledWith({
       name: 'finance-review-voucher-detail',
-      params: { voucherNo: 'COMPANY_A~4~记~12' }
+      params: { voucherNo: 'COMPANY_A~2026~4~记~12' }
     })
 
     vm.openDetail(vm.pager.items[1] as { voucherNo: string })
     expect(routerPush).toHaveBeenLastCalledWith({
       name: 'finance-review-voucher-detail',
-      params: { voucherNo: 'COMPANY_A~4~记~13' }
+      params: { voucherNo: 'COMPANY_A~2026~4~记~13' }
     })
   })
 
@@ -241,13 +253,13 @@ describe('FinanceReviewVoucherView', () => {
 
     vm.currentRow = vm.pager.items[0]
     await vm.handleVoucherStateAction('REVIEW')
-    expect(mocks.financeApi.reviewVoucher).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
+    expect(mocks.financeApi.reviewVoucher).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~2026~4~记~12')
 
     vm.selectedRows = [
       vm.pager.items[0],
       {
         ...vm.pager.items[0],
-        voucherNo: 'COMPANY_A~4~记~14',
+        voucherNo: 'COMPANY_A~2026~4~记~14',
         displayVoucherNo: '记-0014'
       }
     ]
@@ -255,7 +267,7 @@ describe('FinanceReviewVoucherView', () => {
     expect(mocks.financeApi.batchUpdateVoucherState).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       action: 'REVIEW',
-      voucherNos: ['COMPANY_A~4~记~12', 'COMPANY_A~4~记~14']
+      voucherNos: ['COMPANY_A~2026~4~记~12', 'COMPANY_A~2026~4~记~14']
     })
   })
 
@@ -306,6 +318,6 @@ describe('FinanceReviewVoucherView', () => {
     expect(vm.effectiveErrorActionLabel).toBe('取消错误')
 
     await vm.handleVoucherStateAction('TOGGLE_ERROR')
-    expect(mocks.financeApi.clearVoucherError).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~4~记~12')
+    expect(mocks.financeApi.clearVoucherError).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~2026~4~记~12')
   })
 })

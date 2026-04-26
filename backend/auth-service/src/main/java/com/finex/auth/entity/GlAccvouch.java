@@ -15,6 +15,10 @@ public class GlAccvouch {
     @TableId(value = "i_id", type = IdType.AUTO)
     private Integer id;
 
+    private Integer iyear;
+
+    private Integer iyperiod;
+
     private Integer iperiod;
 
     private String csign;
@@ -33,9 +37,13 @@ public class GlAccvouch {
 
     private String ccheck;
 
+    private LocalDateTime checkedAt;
+
     private String cbook;
 
     private Integer ibook;
+
+    private LocalDateTime postedAt;
 
     private Integer iflag;
 
@@ -50,6 +58,8 @@ public class GlAccvouch {
     private String ccodeName;
 
     private String cexchName;
+
+    private String currencyCode;
 
     private BigDecimal md;
 

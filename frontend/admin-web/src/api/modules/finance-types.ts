@@ -34,6 +34,7 @@ export interface FinanceVoucherEntry {
   cashFlowItemId?: number
   cashFlowItemName?: string
   cexchName?: string
+  currencyCode?: string
   nfrat?: number
   md?: MoneyValue
   mc?: MoneyValue
@@ -43,6 +44,8 @@ export interface FinanceVoucherEntry {
 
 export interface FinanceVoucherForm {
   companyId: string
+  iyear?: number
+  iyperiod?: number
   iperiod: number
   csign: string
   inoId?: number
@@ -69,6 +72,8 @@ export interface FinanceVoucherMeta {
   projectOptions: FinanceVoucherOption[]
   cashFlowOptions: FinanceVoucherOption[]
   defaultCompanyId?: string
+  defaultYear?: number
+  defaultYearPeriod?: number
   defaultBillDate: string
   defaultPeriod: number
   defaultVoucherType: string
@@ -76,6 +81,8 @@ export interface FinanceVoucherMeta {
   defaultMaker: string
   defaultAttachedDocCount: number
   defaultCurrency: string
+  defaultCurrencyCode?: string
+  defaultCurrencyName?: string
 }
 
 export interface FinanceVoucherQueryParams {
@@ -96,6 +103,8 @@ export interface FinanceVoucherSummary {
   voucherNo: string
   displayVoucherNo: string
   companyId: string
+  iyear: number
+  iyperiod: number
   iperiod: number
   csign: string
   voucherTypeLabel: string
@@ -103,6 +112,8 @@ export interface FinanceVoucherSummary {
   summary: string
   cbill: string
   checkerName?: string
+  checkedAt?: string
+  postedAt?: string
   idoc: number
   status: string
   statusLabel: string
@@ -116,6 +127,8 @@ export interface FinanceVoucherDetail {
   voucherNo: string
   displayVoucherNo: string
   companyId: string
+  iyear: number
+  iyperiod: number
   iperiod: number
   csign: string
   voucherTypeLabel: string
@@ -124,6 +137,8 @@ export interface FinanceVoucherDetail {
   idoc: number
   cbill: string
   checkerName?: string
+  checkedAt?: string
+  postedAt?: string
   ctext1?: string
   ctext2?: string
   status: string
@@ -137,6 +152,8 @@ export interface FinanceVoucherDetail {
 export interface FinanceVoucherSaveResult {
   voucherNo: string
   companyId: string
+  iyear: number
+  iyperiod: number
   iperiod: number
   csign: string
   inoId: number
@@ -144,14 +161,20 @@ export interface FinanceVoucherSaveResult {
   totalDebit: MoneyValue
   totalCredit: MoneyValue
   status: string
+  checkedAt?: string | null
+  postedAt?: string | null
 }
 
 export interface FinanceVoucherActionResult {
   action: string
   voucherNo: string
+  iyear?: number
+  iyperiod?: number
   status: string
   statusLabel: string
   checkerName?: string
+  checkedAt?: string | null
+  postedAt?: string | null
   nextVoucherNo?: string
   lastVoucherOfMonth?: boolean
 }

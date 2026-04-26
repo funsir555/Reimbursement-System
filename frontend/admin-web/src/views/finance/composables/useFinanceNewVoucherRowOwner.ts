@@ -11,7 +11,8 @@ type UseFinanceNewVoucherRowOwnerOptions = {
   selectedRowIndex: Ref<number>
   effectiveRowCount: ComputedRef<number>
   isReadonlyMode: ComputedRef<boolean>
-  defaultCurrency: ComputedRef<string>
+  defaultCurrencyCode: ComputedRef<string>
+  defaultCurrencyName: ComputedRef<string>
   minEntryRows: number
   isEntryBlank: (row: FinanceVoucherEntryRow) => boolean
   tryLeaveSubjectField: (nextRowIndex?: number) => Promise<boolean>
@@ -21,7 +22,7 @@ type UseFinanceNewVoucherRowOwnerOptions = {
 export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwnerOptions) {
   let entrySeed = 0
 
-  function createEntry(defaultCurrency: string, rowNo: number): FinanceVoucherEntryRow {
+  function createEntry(defaultCurrencyCode: string, defaultCurrencyName: string, rowNo: number): FinanceVoucherEntryRow {
     entrySeed += 1
     return {
       localId: `entry-${Date.now()}-${entrySeed}`,
@@ -36,7 +37,8 @@ export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwn
       citemId: '',
       cashFlowItemId: undefined,
       cashFlowItemName: '',
-      cexchName: defaultCurrency,
+      cexchName: defaultCurrencyName,
+      currencyCode: defaultCurrencyCode,
       nfrat: 1,
       md: '',
       mc: '',
@@ -45,19 +47,30 @@ export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwn
     }
   }
 
-  function createEntryFromValue(entry: FinanceVoucherEntry, defaultCurrency: string, rowNo: number): FinanceVoucherEntryRow {
+  function createEntryFromValue(
+    entry: FinanceVoucherEntry,
+    defaultCurrencyCode: string,
+    defaultCurrencyName: string,
+    rowNo: number
+  ): FinanceVoucherEntryRow {
     return {
-      ...createEntry(defaultCurrency, rowNo),
+      ...createEntry(defaultCurrencyCode, defaultCurrencyName, rowNo),
       ...entry,
       inid: rowNo,
-      cexchName: entry.cexchName || defaultCurrency,
+      cexchName: entry.cexchName || defaultCurrencyName,
+      currencyCode: entry.currencyCode || defaultCurrencyCode,
       nfrat: entry.nfrat ?? 1
     }
   }
 
-  function ensureMinimumRows(entries: FinanceVoucherEntryRow[], defaultCurrency: string, minRows = options.minEntryRows) {
+  function ensureMinimumRows(
+    entries: FinanceVoucherEntryRow[],
+    defaultCurrencyCode: string,
+    defaultCurrencyName: string,
+    minRows = options.minEntryRows
+  ) {
     const nextEntries = [...entries]
-    while (nextEntries.length < minRows) nextEntries.push(createEntry(defaultCurrency, nextEntries.length + 1))
+    while (nextEntries.length < minRows) nextEntries.push(createEntry(defaultCurrencyCode, defaultCurrencyName, nextEntries.length + 1))
     return nextEntries.map((item, index) => ({ ...item, inid: index + 1 }))
   }
 
@@ -73,9 +86,10 @@ export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwn
   function insertEntryAfter(index: number) {
     if (options.isReadonlyMode.value) return
     const entries = [...options.getEntries()]
-    const currency = options.defaultCurrency.value
-    entries.splice(index + 1, 0, createEntry(currency, index + 2))
-    options.setEntries(ensureMinimumRows(entries, currency, Math.max(entries.length, options.minEntryRows)))
+    const currencyCode = options.defaultCurrencyCode.value
+    const currencyName = options.defaultCurrencyName.value
+    entries.splice(index + 1, 0, createEntry(currencyCode, currencyName, index + 2))
+    options.setEntries(ensureMinimumRows(entries, currencyCode, currencyName, Math.max(entries.length, options.minEntryRows)))
     options.resetLeafSubjectHistory(options.getEntries())
     selectRow(index + 1)
   }
@@ -88,7 +102,7 @@ export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwn
     }
     const entries = [...options.getEntries()]
     entries.splice(options.selectedRowIndex.value, 1)
-    options.setEntries(ensureMinimumRows(entries, options.defaultCurrency.value, Math.max(entries.length, 2)))
+    options.setEntries(ensureMinimumRows(entries, options.defaultCurrencyCode.value, options.defaultCurrencyName.value, Math.max(entries.length, 2)))
     options.resetLeafSubjectHistory(options.getEntries())
     selectRow(Math.max(0, options.selectedRowIndex.value - 1))
   }

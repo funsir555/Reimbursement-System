@@ -2,10 +2,12 @@ import { computed, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FinanceVoucherMeta, FinanceVoucherSavePayload } from '@/api'
 import type { FinanceVoucherEntryRow } from './useFinanceNewVoucherRowOwner'
-import { addMoney, isZeroMoney, normalizeMoneyValue } from '@/utils/money'
+import { addMoney, isZeroMoney } from '@/utils/money'
 
 type VoucherFormStateLike = {
   companyId: string
+  iyear?: number
+  iyperiod?: number
   iperiod: number
   csign: string
   inoId?: number
@@ -24,6 +26,9 @@ type UseFinanceNewVoucherValidationPayloadOptions = {
   entryFieldMaxLength: Record<string, number>
   entryFieldLabels: Record<string, string>
   validateEntrySelection: (row: FinanceVoucherEntryRow, rowNo: number, errors: string[]) => void
+  toOptionalString: (value?: string | null) => string | undefined
+  toOptionalMoney: (value?: string | null) => string | undefined
+  toOptionalDecimal: (value?: number | null, precision?: number) => number | undefined
 }
 
 export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVoucherValidationPayloadOptions) {
@@ -33,29 +38,32 @@ export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVouc
   const balanceGap = computed(() => subtractVoucherAmount(totalDebit.value, totalCredit.value))
 
   function buildPayload(includeBlankRows = false): FinanceVoucherSavePayload {
-    const note = String(options.form.ctext2 || options.form.ctext1 || '').trim()
+    const note = options.toOptionalString(options.form.ctext2 || options.form.ctext1) || ''
     const entries = (includeBlankRows ? options.form.entries : effectiveRows.value).map((item, index) => ({
       inid: index + 1,
-      cdigest: (item.cdigest || '').trim(),
+      cdigest: options.toOptionalString(item.cdigest) || '',
       ccode: item.ccode || '',
-      cdeptId: item.cdeptId || undefined,
-      cpersonId: item.cpersonId || undefined,
-      ccusId: item.ccusId || undefined,
-      csupId: item.csupId || undefined,
-      citemClass: item.citemClass || undefined,
-      citemId: item.citemId || undefined,
+      cdeptId: options.toOptionalString(item.cdeptId),
+      cpersonId: options.toOptionalString(item.cpersonId),
+      ccusId: options.toOptionalString(item.ccusId),
+      csupId: options.toOptionalString(item.csupId),
+      citemClass: options.toOptionalString(item.citemClass),
+      citemId: options.toOptionalString(item.citemId),
       cashFlowItemId: item.cashFlowItemId,
-      cashFlowItemName: item.cashFlowItemName || undefined,
-      cexchName: item.cexchName || options.voucherMeta.value?.defaultCurrency || 'CNY',
-      nfrat: normalizeDecimal(item.nfrat),
+      cashFlowItemName: options.toOptionalString(item.cashFlowItemName),
+      cexchName: options.toOptionalString(item.cexchName) || options.voucherMeta.value?.defaultCurrencyName || options.voucherMeta.value?.defaultCurrency || '人民币',
+      currencyCode: options.toOptionalString(item.currencyCode) || options.voucherMeta.value?.defaultCurrencyCode || options.voucherMeta.value?.defaultCurrency || 'CNY',
+      nfrat: options.toOptionalDecimal(item.nfrat, 2),
       md: normalizeMoneyField(item.md),
       mc: normalizeMoneyField(item.mc),
-      ndS: normalizeQuantity(item.ndS),
-      ncS: normalizeQuantity(item.ncS)
+      ndS: options.toOptionalDecimal(item.ndS, 6),
+      ncS: options.toOptionalDecimal(item.ncS, 6)
     }))
 
     return {
       companyId: options.form.companyId,
+      iyear: options.form.iyear,
+      iyperiod: options.form.iyperiod,
       iperiod: options.form.iperiod,
       csign: options.form.csign,
       inoId: options.form.inoId,
@@ -139,24 +147,12 @@ export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVouc
     return rows.reduce((total, row) => addMoney(total, normalizeMoneyField(row[field]) || '0.00'), '0.00')
   }
 
-  function normalizeDecimal(value?: number) {
-    if (value === undefined || value === null || Number.isNaN(Number(value)) || Number(value) === 0) return undefined
-    return Number(Number(value).toFixed(2))
-  }
-
   function normalizeMoneyField(value?: string) {
-    if (!value) return undefined
-    const normalized = normalizeMoneyValue(value, { fallback: '' })
-    return isZeroMoney(normalized) ? undefined : normalized
+    return options.toOptionalMoney(value)
   }
 
   function subtractVoucherAmount(left: string, right: string) {
     return addMoney(left, right ? `-${right}` : '0.00')
-  }
-
-  function normalizeQuantity(value?: number) {
-    if (value === undefined || value === null || Number.isNaN(Number(value)) || Number(value) === 0) return undefined
-    return Number(Number(value).toFixed(6))
   }
 
   return {

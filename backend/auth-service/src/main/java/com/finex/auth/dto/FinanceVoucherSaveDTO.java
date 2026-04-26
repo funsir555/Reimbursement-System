@@ -16,6 +16,10 @@ public class FinanceVoucherSaveDTO {
     @NotBlank(message = "公司主体不能为空")
     private String companyId;
 
+    private Integer iyear;
+
+    private Integer iyperiod;
+
     @NotNull(message = "会计期间不能为空")
     private Integer iperiod;
 

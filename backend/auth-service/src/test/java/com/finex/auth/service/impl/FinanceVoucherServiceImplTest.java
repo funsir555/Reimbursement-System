@@ -169,6 +169,10 @@ class FinanceVoucherServiceImplTest {
 
         FinanceVoucherMetaVO meta = service.getMeta(1L, "alice", "COMP-001", "2026-04-09", "\u8bb0");
 
+        assertEquals(2026, meta.getDefaultYear());
+        assertEquals(202604, meta.getDefaultYearPeriod());
+        assertEquals("CNY", meta.getDefaultCurrencyCode());
+        assertEquals("\u4eba\u6c11\u5e01", meta.getDefaultCurrencyName());
         assertEquals("C00001", meta.getCustomerOptions().get(0).getValue());
         assertEquals("C00001", meta.getCustomerOptions().get(0).getCode());
         assertEquals("\u534e\u5357\u5ba2\u6237", meta.getCustomerOptions().get(0).getName());
@@ -508,6 +512,7 @@ class FinanceVoucherServiceImplTest {
                 buildSaveEntry("\u529e\u516c\u8d39\u7528", "560101", "100.00", null),
                 buildSaveEntry("\u652f\u4ed8\u529e\u516c\u8d39\u7528", "100201", null, "100.00")
         ));
+        dto.getEntries().get(0).setCurrencyCode(null);
         dto.getEntries().get(0).setCexchName("C".repeat(33));
 
         IllegalArgumentException exception = assertThrows(
@@ -547,10 +552,12 @@ class FinanceVoucherServiceImplTest {
                 buildSaveEntry("\u94f6\u884c\u4ed8\u6b3e", "100201", null, "1280.00")
         ));
 
-        FinanceVoucherSaveResultVO result = service.updateVoucher("COMP-001", "COMP-001~3~\u8bb0~8", dto, 1L, "alice");
+        FinanceVoucherSaveResultVO result = service.updateVoucher("COMP-001", "COMP-001~2026~3~\u8bb0~8", dto, 1L, "alice");
 
-        assertEquals("COMP-001~3~\u8bb0~8", result.getVoucherNo());
+        assertEquals("COMP-001~2026~3~\u8bb0~8", result.getVoucherNo());
         assertEquals("COMP-001", result.getCompanyId());
+        assertEquals(2026, result.getIyear());
+        assertEquals(202603, result.getIyperiod());
         assertEquals(3, result.getIperiod());
         assertEquals("\u8bb0", result.getCsign());
         assertEquals(8, result.getInoId());
@@ -575,7 +582,7 @@ class FinanceVoucherServiceImplTest {
         dto.setEntries(List.of());
 
         IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-                service.updateVoucher("COMP-001", "COMP-001~3~\u8bb0~8", dto, 1L, "alice")
+                service.updateVoucher("COMP-001", "COMP-001~2026~3~\u8bb0~8", dto, 1L, "alice")
         );
         assertEquals("\u5f53\u524d\u51ed\u8bc1\u72b6\u6001\u4e0d\u5141\u8bb8\u4fee\u6539", exception.getMessage());
     }
@@ -619,11 +626,13 @@ class FinanceVoucherServiceImplTest {
 
         when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, nextRows, refreshedRows);
 
-        FinanceVoucherActionResultVO result = service.reviewVoucher("COMP-001", "COMP-001~3~\u8bb0~8", 1L, "alice");
+        FinanceVoucherActionResultVO result = service.reviewVoucher("COMP-001", "COMP-001~2026~3~\u8bb0~8", 1L, "alice");
 
         assertEquals("REVIEWED", result.getStatus());
         assertEquals("\u8d22\u52a1\u5c0f\u738b", result.getCheckerName());
-        assertEquals("COMP-001~3~\u8bb0~11", result.getNextVoucherNo());
+        assertEquals(2026, result.getIyear());
+        assertEquals(202603, result.getIyperiod());
+        assertEquals("COMP-001~2026~3~\u8bb0~11", result.getNextVoucherNo());
         assertFalse(Boolean.TRUE.equals(result.getLastVoucherOfMonth()));
 
         ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
@@ -643,7 +652,7 @@ class FinanceVoucherServiceImplTest {
 
         when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, List.of(), refreshedRows);
 
-        FinanceVoucherActionResultVO result = service.reviewVoucher("COMP-001", "COMP-001~3~\u8bb0~8", 1L, "alice");
+        FinanceVoucherActionResultVO result = service.reviewVoucher("COMP-001", "COMP-001~2026~3~\u8bb0~8", 1L, "alice");
 
         assertEquals("REVIEWED", result.getStatus());
         assertNull(result.getNextVoucherNo());
@@ -657,7 +666,7 @@ class FinanceVoucherServiceImplTest {
 
         when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, refreshedRows);
 
-        FinanceVoucherActionResultVO result = service.unreviewVoucher("COMP-001", "COMP-001~3~\u8bb0~8");
+        FinanceVoucherActionResultVO result = service.unreviewVoucher("COMP-001", "COMP-001~2026~3~\u8bb0~8");
 
         assertEquals("UNPOSTED", result.getStatus());
         assertNull(result.getCheckerName());
@@ -674,7 +683,7 @@ class FinanceVoucherServiceImplTest {
 
         when(glAccvouchMapper.selectList(any())).thenReturn(currentRows, refreshedRows);
 
-        FinanceVoucherActionResultVO result = service.markVoucherError("COMP-001", "COMP-001~3~\u8bb0~8");
+        FinanceVoucherActionResultVO result = service.markVoucherError("COMP-001", "COMP-001~2026~3~\u8bb0~8");
 
         assertEquals("ERROR", result.getStatus());
         assertEquals("\u5df2\u6807\u8bb0\u9519\u8bef", result.getStatusLabel());
@@ -693,7 +702,7 @@ class FinanceVoucherServiceImplTest {
 
         when(glAccvouchMapper.selectList(any())).thenReturn(List.of(currentRow), List.of(refreshedRow));
 
-        FinanceVoucherActionResultVO result = service.clearVoucherError("COMP-001", "COMP-001~3~\u8bb0~8");
+        FinanceVoucherActionResultVO result = service.clearVoucherError("COMP-001", "COMP-001~2026~3~\u8bb0~8");
 
         assertEquals("REVIEWED", result.getStatus());
         assertEquals("\u8d22\u52a1\u4e3b\u7ba1", result.getCheckerName());
@@ -707,7 +716,8 @@ class FinanceVoucherServiceImplTest {
         com.finex.auth.dto.FinanceVoucherEntryDTO entry = new com.finex.auth.dto.FinanceVoucherEntryDTO();
         entry.setCdigest(digest);
         entry.setCcode(code);
-        entry.setCexchName("CNY");
+        entry.setCexchName("\u4eba\u6c11\u5e01");
+        entry.setCurrencyCode("CNY");
         entry.setNfrat(BigDecimal.ONE);
         entry.setMd(debit == null ? null : new BigDecimal(debit));
         entry.setMc(credit == null ? null : new BigDecimal(credit));
@@ -842,9 +852,12 @@ class FinanceVoucherServiceImplTest {
 
     private GlAccvouch buildRow(int id, String companyId, int period, String csign, int inoId, int inid, String billDate,
                                 String digest, String code, BigDecimal debit, BigDecimal credit) {
+        int year = Integer.parseInt(billDate.substring(0, 4));
         GlAccvouch row = new GlAccvouch();
         row.setId(id);
         row.setCompanyId(companyId);
+        row.setIyear(year);
+        row.setIyperiod(year * 100 + period);
         row.setIperiod(period);
         row.setCsign(csign);
         row.setInoId(inoId);

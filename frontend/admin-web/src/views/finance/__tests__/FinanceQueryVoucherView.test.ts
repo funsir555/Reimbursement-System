@@ -38,9 +38,13 @@ vi.mock('@/utils/permissions', () => ({
   readStoredUser: vi.fn(() => ({ permissionCodes: ['finance:general_ledger:query_voucher:export'] }))
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 const InputStub = defineComponent({
   props: { modelValue: { type: [String, Number], default: '' }, placeholder: { type: String, default: '' }, disabled: { type: Boolean, default: false } },
@@ -109,15 +113,19 @@ describe('FinanceQueryVoucherView', () => {
         page: 1,
         pageSize: 20,
         items: [{
-          voucherNo: 'COMPANY_A~4~记~12',
+          voucherNo: 'COMPANY_A~2026~4~记~12',
           displayVoucherNo: '记-0012',
           companyId: 'COMPANY_A',
+          iyear: 2026,
+          iyperiod: 202604,
           iperiod: 4,
           csign: '记',
           voucherTypeLabel: '记账凭证',
           dbillDate: '2026-04-05',
           summary: '办公用品',
           cbill: '财务制单员',
+          checkedAt: '',
+          postedAt: '',
           idoc: 1,
           status: 'UNPOSTED',
           statusLabel: '未记账',
@@ -137,6 +145,6 @@ describe('FinanceQueryVoucherView', () => {
     expect(wrapper.text()).toContain('查询凭证')
 
     await wrapper.find('.row-trigger').trigger('dblclick')
-    expect(routerPush).toHaveBeenCalledWith({ name: 'finance-query-voucher-detail', params: { voucherNo: 'COMPANY_A~4~记~12' } })
+    expect(routerPush).toHaveBeenCalledWith({ name: 'finance-query-voucher-detail', params: { voucherNo: 'COMPANY_A~2026~4~记~12' } })
   })
 })

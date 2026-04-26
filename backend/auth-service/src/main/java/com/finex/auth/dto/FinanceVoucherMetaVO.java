@@ -32,6 +32,10 @@ public class FinanceVoucherMetaVO {
 
     private String defaultCompanyId;
 
+    private Integer defaultYear;
+
+    private Integer defaultYearPeriod;
+
     private String defaultBillDate;
 
     private Integer defaultPeriod;
@@ -45,4 +49,8 @@ public class FinanceVoucherMetaVO {
     private Integer defaultAttachedDocCount;
 
     private String defaultCurrency;
+
+    private String defaultCurrencyCode;
+
+    private String defaultCurrencyName;
 }

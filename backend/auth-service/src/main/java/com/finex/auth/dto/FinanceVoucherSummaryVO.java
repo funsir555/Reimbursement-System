@@ -14,6 +14,10 @@ public class FinanceVoucherSummaryVO {
 
     private String companyId;
 
+    private Integer iyear;
+
+    private Integer iyperiod;
+
     private Integer iperiod;
 
     private String csign;
@@ -29,6 +33,10 @@ public class FinanceVoucherSummaryVO {
     private String cbill;
 
     private String checkerName;
+
+    private String checkedAt;
+
+    private String postedAt;
 
     private Integer idoc;
 

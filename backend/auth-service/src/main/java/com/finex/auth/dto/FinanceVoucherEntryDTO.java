@@ -43,6 +43,9 @@ public class FinanceVoucherEntryDTO {
     @Size(max = 32, message = "\u5e01\u79cd\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 32 \u4e2a\u5b57\u7b26")
     private String cexchName;
 
+    @Size(max = 32, message = "\u5e01\u79cd\u7f16\u7801\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 32 \u4e2a\u5b57\u7b26")
+    private String currencyCode;
+
     private BigDecimal nfrat;
 
     @MoneyInput

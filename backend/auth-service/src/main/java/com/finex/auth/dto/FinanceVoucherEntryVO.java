@@ -34,6 +34,8 @@ public class FinanceVoucherEntryVO {
 
     private String cexchName;
 
+    private String currencyCode;
+
     private BigDecimal nfrat;
 
     @MoneyValue

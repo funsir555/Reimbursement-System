@@ -12,6 +12,10 @@ public class FinanceVoucherSaveResultVO {
 
     private String companyId;
 
+    private Integer iyear;
+
+    private Integer iyperiod;
+
     private Integer iperiod;
 
     private String csign;
@@ -27,4 +31,8 @@ public class FinanceVoucherSaveResultVO {
     private BigDecimal totalCredit;
 
     private String status;
+
+    private String checkedAt;
+
+    private String postedAt;
 }
