@@ -59,48 +59,48 @@ public final class ProcessExpenseTypeDomainSupport extends AbstractProcessManage
      * 查询报销单类型Tree列表。
      */
     public List<ProcessExpenseTypeTreeVO> listExpenseTypeTree() {
-        return super.listExpenseTypeTree();
+        return getProcessExpenseTypeLifecycleSupport().listExpenseTypeTree();
     }
 
     /**
      * 获取报销单类型元数据。
      */
     public ProcessExpenseTypeMetaVO getExpenseTypeMeta() {
-        return super.getExpenseTypeMeta();
+        return getProcessExpenseTypeLifecycleSupport().getExpenseTypeMeta();
     }
 
     /**
      * 获取报销单类型明细。
      */
     public ProcessExpenseTypeDetailVO getExpenseTypeDetail(Long id) {
-        return super.getExpenseTypeDetail(id);
+        return getProcessExpenseTypeLifecycleSupport().getExpenseTypeDetail(id);
     }
 
     /**
      * 创建报销单类型。
      */
     public ProcessExpenseTypeDetailVO createExpenseType(ProcessExpenseTypeSaveDTO dto) {
-        return super.createExpenseType(dto);
+        return getProcessExpenseTypeLifecycleSupport().createExpenseType(dto);
     }
 
     /**
      * 更新报销单类型。
      */
     public ProcessExpenseTypeDetailVO updateExpenseType(Long id, ProcessExpenseTypeSaveDTO dto) {
-        return super.updateExpenseType(id, dto);
+        return getProcessExpenseTypeLifecycleSupport().updateExpenseType(id, dto);
     }
 
     /**
      * 更新报销单类型Status。
      */
     public Boolean updateExpenseTypeStatus(Long id, Integer status) {
-        return super.updateExpenseTypeStatus(id, status);
+        return getProcessExpenseTypeLifecycleSupport().updateExpenseTypeStatus(id, status);
     }
 
     /**
      * 删除报销单类型。
      */
     public Boolean deleteExpenseType(Long id) {
-        return super.deleteExpenseType(id);
+        return getProcessExpenseTypeLifecycleSupport().deleteExpenseType(id);
     }
 }

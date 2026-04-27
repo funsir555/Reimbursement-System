@@ -249,7 +249,7 @@ export const routeCatalog: AppRouteDefinition[] = [
       {
         path: 'finance/general-ledger/opening-balance',
         name: 'finance-opening-balance',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceOpeningBalanceView.vue'),
         metaKey: 'finance-opening-balance'
       },
       {

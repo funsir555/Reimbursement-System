@@ -58,20 +58,20 @@ public final class ProcessCenterDomainSupport extends AbstractProcessManagementS
      * 获取Overview。
      */
     public ProcessCenterOverviewVO getOverview() {
-        return super.getOverview();
+        return getProcessCenterMetaSupport().getOverview();
     }
 
     /**
      * 获取模板类型。
      */
     public List<ProcessTemplateTypeVO> getTemplateTypes() {
-        return super.getTemplateTypes();
+        return getProcessCenterMetaSupport().getTemplateTypes();
     }
 
     /**
      * 获取表单选项。
      */
     public ProcessTemplateFormOptionsVO getFormOptions(String templateType) {
-        return super.getFormOptions(templateType);
+        return getProcessCenterMetaSupport().getFormOptions(templateType);
     }
 }

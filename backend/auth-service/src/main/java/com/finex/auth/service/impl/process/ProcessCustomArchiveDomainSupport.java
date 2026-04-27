@@ -61,55 +61,55 @@ public final class ProcessCustomArchiveDomainSupport extends AbstractProcessMana
      * 查询自定义档案列表。
      */
     public List<ProcessCustomArchiveSummaryVO> listCustomArchives() {
-        return super.listCustomArchives();
+        return getProcessCustomArchiveLifecycleSupport().listCustomArchives();
     }
 
     /**
      * 获取自定义档案明细。
      */
     public ProcessCustomArchiveDetailVO getCustomArchiveDetail(Long id) {
-        return super.getCustomArchiveDetail(id);
+        return getProcessCustomArchiveLifecycleSupport().getCustomArchiveDetail(id);
     }
 
     /**
      * 创建自定义档案。
      */
     public ProcessCustomArchiveDetailVO createCustomArchive(ProcessCustomArchiveSaveDTO dto) {
-        return super.createCustomArchive(dto);
+        return getProcessCustomArchiveLifecycleSupport().createCustomArchive(dto);
     }
 
     /**
      * 更新自定义档案。
      */
     public ProcessCustomArchiveDetailVO updateCustomArchive(Long id, ProcessCustomArchiveSaveDTO dto) {
-        return super.updateCustomArchive(id, dto);
+        return getProcessCustomArchiveLifecycleSupport().updateCustomArchive(id, dto);
     }
 
     /**
      * 更新自定义档案Status。
      */
     public Boolean updateCustomArchiveStatus(Long id, Integer status) {
-        return super.updateCustomArchiveStatus(id, status);
+        return getProcessCustomArchiveLifecycleSupport().updateCustomArchiveStatus(id, status);
     }
 
     /**
      * 删除自定义档案。
      */
     public Boolean deleteCustomArchive(Long id) {
-        return super.deleteCustomArchive(id);
+        return getProcessCustomArchiveLifecycleSupport().deleteCustomArchive(id);
     }
 
     /**
      * 获取自定义档案元数据。
      */
     public ProcessCustomArchiveMetaVO getCustomArchiveMeta() {
-        return super.getCustomArchiveMeta();
+        return getProcessCustomArchiveLifecycleSupport().getCustomArchiveMeta();
     }
 
     /**
      * 解析自定义档案。
      */
     public ProcessCustomArchiveResolveResultVO resolveCustomArchive(ProcessCustomArchiveResolveDTO dto) {
-        return super.resolveCustomArchive(dto);
+        return getProcessCustomArchiveLifecycleSupport().resolveCustomArchive(dto);
     }
 }
