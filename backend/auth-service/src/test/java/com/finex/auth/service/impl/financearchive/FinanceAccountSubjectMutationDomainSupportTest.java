@@ -141,6 +141,39 @@ class FinanceAccountSubjectMutationDomainSupportTest {
     }
 
     @Test
+    void createSubjectUsesSubjectCodeAsSortOrder() {
+        SystemCompany company = enabledCompany("COMPANY_A");
+        FinanceAccountSubject parent = subject("COMPANY_A", "1001", null, 1);
+        parent.setSubjectName("库存现金");
+        parent.setSubjectCategory("ASSET");
+        parent.setBalanceDirection("DEBIT");
+        parent.setLeafFlag(1);
+
+        FinanceAccountSubject created = subject("COMPANY_A", "100101", "1001", 2);
+        created.setSubjectName("库存现金-子科目");
+
+        FinanceAccountSubject inserted = new FinanceAccountSubject();
+
+        when(systemCompanyMapper.selectById("COMPANY_A")).thenReturn(company);
+        when(financeAccountSubjectMapper.selectOne(any())).thenReturn(null).thenReturn(created);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(parent)).thenReturn(List.of());
+        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);
+        doAnswer(invocation -> {
+            FinanceAccountSubject payload = invocation.getArgument(0);
+            inserted.setSortOrder(payload.getSortOrder());
+            return 1;
+        }).when(financeAccountSubjectMapper).insert(any(FinanceAccountSubject.class));
+
+        FinanceAccountSubjectSaveDTO dto = new FinanceAccountSubjectSaveDTO();
+        dto.setSubjectCode("100101");
+        dto.setSubjectName("库存现金-子科目");
+
+        support.createSubject("COMPANY_A", dto, "tester");
+
+        assertEquals(100101, inserted.getSortOrder());
+    }
+
+    @Test
     void createSubjectKeepsNormalChineseAndLeavesCodeFieldsUntouched() {
         SystemCompany company = enabledCompany("COMPANY_A");
 

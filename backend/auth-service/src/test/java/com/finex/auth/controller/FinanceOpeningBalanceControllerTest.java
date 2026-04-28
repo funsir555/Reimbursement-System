@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
@@ -87,7 +88,7 @@ class FinanceOpeningBalanceControllerTest {
         result.setMessage("开账任务已提交");
 
         doNothing().when(accessControlService).requirePermission(1L, "finance:general_ledger:opening_balance:view");
-        when(financeOpeningBalanceService.openBook(eq(1L), eq("alice"), org.mockito.ArgumentMatchers.any(OpeningBalanceTaskRequestDTO.class)))
+        when(financeOpeningBalanceService.openBook(eq(1L), eq("alice"), any(OpeningBalanceTaskRequestDTO.class)))
                 .thenReturn(result);
 
         mockMvc.perform(post("/auth/finance/opening-balance/open-book")

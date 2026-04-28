@@ -3,16 +3,22 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FinanceOpeningBalanceView from '@/views/finance/FinanceOpeningBalanceView.vue'
 
+const EXPANDED_STORAGE_KEY = 'finance-opening-balance-expanded-keys'
+
 const financeCompanyStore = reactive({
   currentCompanyId: 'COMPANY_A',
-  currentCompanyName: '测试公司A'
+  currentCompanyName: '测试公司A',
+  registerSwitchGuard: vi.fn(),
+  unregisterSwitchGuard: vi.fn(),
+  applyCurrentCompany: vi.fn()
 })
 
 const financePeriodStore = reactive({
   currentYear: 2026,
   currentPeriod: 6,
   currentYearPeriod: 202606,
-  hasPeriodContext: true
+  hasPeriodContext: true,
+  switchPeriod: vi.fn()
 })
 
 const mocks = vi.hoisted(() => ({
@@ -22,8 +28,10 @@ const mocks = vi.hoisted(() => ({
     saveRows: vi.fn(),
     getAssistBalances: vi.fn(),
     saveAssistBalances: vi.fn(),
+    commit: vi.fn(),
     openBook: vi.fn(),
     carryForward: vi.fn(),
+    carryForwardPreview: vi.fn(),
     trialBalance: vi.fn(),
     reconcile: vi.fn()
   },
@@ -33,7 +41,8 @@ const mocks = vi.hoisted(() => ({
     warning: vi.fn()
   },
   messageBox: {
-    alert: vi.fn(() => Promise.resolve())
+    alert: vi.fn(() => Promise.resolve()),
+    confirm: vi.fn(() => Promise.resolve())
   }
 }))
 
@@ -98,13 +107,7 @@ const TableStub = defineComponent({
   props: {
     data: { type: Array, default: () => [] }
   },
-  template: `
-    <div>
-      <div v-for="row in data" :key="row.subjectCode" class="table-row">
-        <slot name="default" :row="row" />
-      </div>
-    </div>
-  `
+  template: '<div class="table-stub"><slot /><div v-for="row in data" :key="row.subjectCode">{{ row.subjectCode }}</div></div>'
 })
 
 const TableColumnStub = defineComponent({
@@ -140,12 +143,12 @@ function buildMeta(opened = true) {
     employeeOptions: [{ value: '2', label: '员工甲' }],
     customerOptions: [],
     supplierOptions: [],
-    projectClassOptions: [{ value: '97', label: '项目大类1' }],
+    projectClassOptions: [{ value: '97', label: '项目分类1' }],
     projectOptions: [{ value: '2002', label: '项目1', parentValue: '97' }],
     defaultCompanyId: 'COMPANY_A',
     defaultYear: 2026,
-    defaultPeriod: 4,
-    defaultYearPeriod: 202604,
+    defaultPeriod: 6,
+    defaultYearPeriod: 202606,
     status: opened ? 'OPENED' : 'NOT_OPENED',
     statusLabel: opened ? '已开账' : '未开账',
     opened
@@ -158,37 +161,48 @@ function buildRows() {
       subjectCode: '5601',
       subjectName: '管理费用',
       subjectLevel: 1,
+      sortOrder: 5601,
       leafFlag: 0,
+      hasChildren: true,
       editable: false,
       assistRequired: false,
       balanceDirectionLabel: '借',
       cexchName: '人民币',
-      mb: '0.00'
-    },
-    {
-      subjectCode: '560101',
-      subjectName: '广告宣传费',
-      subjectLevel: 2,
-      leafFlag: 1,
-      editable: true,
-      assistRequired: true,
-      bdept: 1,
-      bitem: 1,
-      cassItem: '97',
-      balanceDirectionLabel: '借',
-      cexchName: '人民币',
-      mb: '100.00'
+      mb: '180.00',
+      children: [
+        {
+          subjectCode: '560101',
+          parentSubjectCode: '5601',
+          subjectName: '广告宣传费',
+          subjectLevel: 2,
+          sortOrder: 560101,
+          leafFlag: 1,
+          hasChildren: false,
+          editable: true,
+          assistRequired: true,
+          bdept: 1,
+          bitem: 1,
+          cassItem: '97',
+          balanceDirectionLabel: '借',
+          cexchName: '人民币',
+          mb: '100.00',
+          children: []
+        }
+      ]
     },
     {
       subjectCode: '100201',
       subjectName: '银行存款',
       subjectLevel: 1,
+      sortOrder: 100201,
       leafFlag: 1,
+      hasChildren: false,
       editable: true,
       assistRequired: false,
       balanceDirectionLabel: '借',
       cexchName: '人民币',
-      mb: '80.00'
+      mb: '80.00',
+      children: []
     }
   ]
 }
@@ -196,6 +210,9 @@ function buildRows() {
 describe('FinanceOpeningBalanceView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    financeCompanyStore.currentCompanyId = 'COMPANY_A'
+    financeCompanyStore.currentCompanyName = '测试公司A'
     financePeriodStore.currentYear = 2026
     financePeriodStore.currentPeriod = 6
     financePeriodStore.currentYearPeriod = 202606
@@ -205,10 +222,14 @@ describe('FinanceOpeningBalanceView', () => {
     mocks.openingBalanceApi.getAssistBalances.mockResolvedValue({
       data: [{ cdeptId: '10', citemClass: '97', citemId: '2002', mb: '100.00' }]
     })
-    mocks.openingBalanceApi.saveAssistBalances.mockResolvedValue({ data: [] })
-    mocks.openingBalanceApi.saveRows.mockResolvedValue({ data: buildRows() })
+    mocks.openingBalanceApi.commit.mockResolvedValue({ data: buildRows() })
     mocks.openingBalanceApi.openBook.mockResolvedValue({ data: { message: '开账任务已提交' } })
-    mocks.openingBalanceApi.carryForward.mockResolvedValue({ data: { message: '结转任务已提交' } })
+    mocks.openingBalanceApi.carryForwardPreview.mockResolvedValue({
+      data: {
+        rows: buildRows(),
+        assistLines: [{ subjectCode: '560101', lines: [{ cdeptId: '10', citemClass: '97', citemId: '2002', mb: '100.00' }] }]
+      }
+    })
     mocks.openingBalanceApi.trialBalance.mockResolvedValue({
       data: { balanced: true, totalDebit: '180.00', totalCredit: '180.00', difference: '0.00', abnormalSubjects: [] }
     })
@@ -217,16 +238,13 @@ describe('FinanceOpeningBalanceView', () => {
     })
   })
 
-  it('keeps only the compact summary area and removes the duplicated lower info block', async () => {
+  it('renders compact summary area and top save button', async () => {
     const wrapper = await mountView()
 
     expect(wrapper.find('.ob-summary-card').exists()).toBe(true)
     expect(wrapper.find('.ob-filter-card').exists()).toBe(false)
-    expect(wrapper.findAll('.ob-summary-card__item')).toHaveLength(4)
-    expect(wrapper.findAll('.ob-chip')).toHaveLength(2)
+    expect(wrapper.text()).toContain('保存')
     expect(wrapper.text()).toContain('测试公司A')
-    expect(wrapper.text()).toContain('2026')
-    expect(wrapper.text()).toContain('6 月')
     expect(mocks.openingBalanceApi.listRows).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       iyear: 2026,
@@ -234,30 +252,121 @@ describe('FinanceOpeningBalanceView', () => {
     })
   })
 
-  it('marks assist leaf subjects as assist-required rows', async () => {
+  it('does not save main row immediately on edit and saves through commit instead', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
-      rows: Array<{ subjectCode: string; assistRequired: boolean }>
+      rows: Array<{ subjectCode: string; draftBalance: string; mb: string }>
+      handleRowDraftChange: (row: { subjectCode: string; draftBalance: string; mb: string }, value: string) => void
+      saveAll: () => Promise<void>
     }
 
-    expect(vm.rows.find((item) => item.subjectCode === '560101')?.assistRequired).toBe(true)
+    const bankRow = vm.rows.find((item) => item.subjectCode === '100201')
+    expect(bankRow).toBeTruthy()
+
+    vm.handleRowDraftChange(bankRow!, '99.00')
+    expect(mocks.openingBalanceApi.saveRows).not.toHaveBeenCalled()
+
+    await vm.saveAll()
+    expect(mocks.openingBalanceApi.commit).toHaveBeenCalled()
   })
 
-  it('opens the assist dialog and saves assist lines back through the api', async () => {
+  it('keeps assist dialog changes in local draft and does not call direct assist save api', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
-      openAssistDialog: (row: { subjectCode: string }) => Promise<void>
-      saveAssistDialog: () => Promise<void>
+      rows: Array<{ children?: Array<{ subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string }> }>
+      openAssistDialog: (row: { subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string }) => Promise<void>
+      saveAssistDialog: () => void
+      assistLines: Array<{ mb: string }>
     }
 
-    await vm.openAssistDialog(buildRows()[1] as { subjectCode: string })
-    await vm.saveAssistDialog()
+    await vm.openAssistDialog(vm.rows[0].children?.[0] as { subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string })
+    vm.assistLines[0].mb = '120.00'
+    vm.saveAssistDialog()
 
     expect(mocks.openingBalanceApi.getAssistBalances).toHaveBeenCalledWith('560101', {
       companyId: 'COMPANY_A',
       iyear: 2026,
       iperiod: 6
     })
-    expect(mocks.openingBalanceApi.saveAssistBalances).toHaveBeenCalled()
+    expect(mocks.openingBalanceApi.saveAssistBalances).not.toHaveBeenCalled()
+  })
+
+  it('uses carry-forward preview instead of direct carry-forward task', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      runCarryForwardPreview: () => Promise<void>
+    }
+
+    await vm.runCarryForwardPreview()
+
+    expect(mocks.openingBalanceApi.carryForwardPreview).toHaveBeenCalledWith({
+      companyId: 'COMPANY_A',
+      iyear: 2026,
+      iperiod: 6
+    })
+    expect(mocks.openingBalanceApi.carryForward).not.toHaveBeenCalled()
+  })
+
+  it('blocks trial and reconcile when there are unsaved drafts', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ subjectCode: string; draftBalance: string; mb: string }>
+      handleRowDraftChange: (row: { subjectCode: string; draftBalance: string; mb: string }, value: string) => void
+      runTrial: () => Promise<void>
+      runReconcile: () => Promise<void>
+    }
+
+    const bankRow = vm.rows.find((item) => item.subjectCode === '100201')
+    vm.handleRowDraftChange(bankRow!, '99.00')
+
+    await vm.runTrial()
+    await vm.runReconcile()
+
+    expect(mocks.openingBalanceApi.trialBalance).not.toHaveBeenCalled()
+    expect(mocks.openingBalanceApi.reconcile).not.toHaveBeenCalled()
+    expect(mocks.message.warning).toHaveBeenCalled()
+  })
+
+  it('updates save status after commit success', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ subjectCode: string; draftBalance: string; mb: string }>
+      handleRowDraftChange: (row: { subjectCode: string; draftBalance: string; mb: string }, value: string) => void
+      saveAll: () => Promise<void>
+      saveStatusText: string
+      saveStatusHint: string
+    }
+
+    const bankRow = vm.rows.find((item) => item.subjectCode === '100201')
+    vm.handleRowDraftChange(bankRow!, '99.00')
+    expect(vm.saveStatusText).toBe('期初余额待保存')
+
+    await vm.saveAll()
+
+    expect(vm.saveStatusText).toBe('已保存')
+    expect(vm.saveStatusHint).toContain('最近保存于')
+  })
+
+  it('restores and persists expanded row keys by company and period', async () => {
+    localStorage.setItem(
+      EXPANDED_STORAGE_KEY,
+      JSON.stringify({
+        'COMPANY_A:202606': ['5601']
+      })
+    )
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ subjectCode: string }>
+      expandedRowKeys: string[]
+      handleExpandChange: (row: { subjectCode: string }, expandedRows: Array<{ subjectCode: string }>) => void
+    }
+
+    expect(vm.expandedRowKeys).toEqual(['5601'])
+
+    vm.handleExpandChange(vm.rows[0] as { subjectCode: string }, [])
+
+    const persisted = JSON.parse(localStorage.getItem(EXPANDED_STORAGE_KEY) || '{}')
+    expect(persisted['COMPANY_A:202606']).toEqual([])
   })
 })

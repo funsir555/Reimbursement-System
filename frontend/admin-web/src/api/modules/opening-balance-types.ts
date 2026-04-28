@@ -29,8 +29,11 @@ export interface OpeningBalanceMeta {
 export interface OpeningBalanceRow {
   subjectCode: string
   subjectName: string
+  parentSubjectCode?: string
   subjectLevel?: number
+  sortOrder?: number
   leafFlag?: number
+  hasChildren?: boolean
   editable: boolean
   assistRequired: boolean
   balanceDirection?: string
@@ -44,6 +47,7 @@ export interface OpeningBalanceRow {
   bitem?: number
   cassItem?: string
   mb: MoneyValue
+  children?: OpeningBalanceRow[]
 }
 
 export interface OpeningBalanceRowSavePayload {
@@ -79,6 +83,19 @@ export interface OpeningBalanceAssistSavePayload {
   lines: OpeningAssistBalanceLine[]
 }
 
+export interface OpeningBalanceAssistDraftLine {
+  subjectCode: string
+  lines: OpeningAssistBalanceLine[]
+}
+
+export interface OpeningBalanceCommitPayload {
+  companyId: string
+  iyear: number
+  iperiod: number
+  rows: OpeningBalanceRowSavePayload[]
+  assistLines: OpeningBalanceAssistDraftLine[]
+}
+
 export interface OpeningBalanceTaskRequest {
   companyId: string
   iyear: number
@@ -98,6 +115,11 @@ export interface OpeningBalanceReconcileResult {
   differenceSubjects: OpeningBalanceRow[]
   missingAssistSubjects: OpeningBalanceRow[]
   illegalAssistMessages: string[]
+}
+
+export interface OpeningBalanceCarryForwardPreviewResult {
+  rows: OpeningBalanceRow[]
+  assistLines: OpeningBalanceAssistDraftLine[]
 }
 
 export type OpeningBalanceTaskSubmitResult = AsyncTaskSubmitResult

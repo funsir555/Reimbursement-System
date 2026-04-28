@@ -556,6 +556,15 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         return (maxSortOrder == null ? 0 : maxSortOrder) + 10;
     }
 
+    protected Integer resolveSortOrderFromSubjectCode(String subjectCode) {
+        String normalizedSubjectCode = requireText(subjectCode, "科目编码不能为空");
+        try {
+            return Integer.valueOf(normalizedSubjectCode);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("科目编码必须为可排序的纯数字编码");
+        }
+    }
+
     /**
      * 校验SavePayload。
      */

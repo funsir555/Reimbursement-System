@@ -1,6 +1,8 @@
 package com.finex.auth.dto;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.Data;
 
 @Data
@@ -10,9 +12,15 @@ public class OpeningBalanceRowVO {
 
     private String subjectName;
 
+    private String parentSubjectCode;
+
     private Integer subjectLevel;
 
+    private Integer sortOrder;
+
     private Integer leafFlag;
+
+    private Boolean hasChildren;
 
     private Boolean editable;
 
@@ -39,4 +47,6 @@ public class OpeningBalanceRowVO {
     private String cassItem;
 
     private BigDecimal mb;
+
+    private List<OpeningBalanceRowVO> children = new ArrayList<>();
 }

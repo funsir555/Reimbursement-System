@@ -1,14 +1,16 @@
 package com.finex.auth.controller;
 
 import com.finex.auth.dto.AsyncTaskSubmitResultVO;
+import com.finex.auth.dto.OpeningAssistBalanceLineVO;
 import com.finex.auth.dto.OpeningBalanceAssistSaveDTO;
+import com.finex.auth.dto.OpeningBalanceCommitDTO;
+import com.finex.auth.dto.OpeningBalanceCarryForwardPreviewVO;
 import com.finex.auth.dto.OpeningBalanceMetaVO;
 import com.finex.auth.dto.OpeningBalanceReconcileResultVO;
 import com.finex.auth.dto.OpeningBalanceRowVO;
 import com.finex.auth.dto.OpeningBalanceSaveDTO;
 import com.finex.auth.dto.OpeningBalanceTaskRequestDTO;
 import com.finex.auth.dto.OpeningBalanceTrialResultVO;
-import com.finex.auth.dto.OpeningAssistBalanceLineVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.FinanceOpeningBalanceService;
 import com.finex.common.Result;
@@ -89,6 +91,15 @@ public class FinanceOpeningBalanceController {
         return Result.success("辅助期初保存成功", financeOpeningBalanceService.saveAssistBalances(subjectCode, dto, getCurrentUsername(request)));
     }
 
+    @PutMapping("/commit")
+    public Result<List<OpeningBalanceRowVO>> commit(
+            @Valid @RequestBody OpeningBalanceCommitDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), VIEW);
+        return Result.success("期初余额保存成功", financeOpeningBalanceService.commit(dto, getCurrentUsername(request)));
+    }
+
     @PostMapping("/open-book")
     public Result<AsyncTaskSubmitResultVO> openBook(
             @Valid @RequestBody OpeningBalanceTaskRequestDTO dto,
@@ -107,6 +118,15 @@ public class FinanceOpeningBalanceController {
         Long currentUserId = getCurrentUserId(request);
         accessControlService.requirePermission(currentUserId, VIEW);
         return Result.success("结转任务已提交", financeOpeningBalanceService.carryForward(currentUserId, getCurrentUsername(request), dto));
+    }
+
+    @PostMapping("/carry-forward-preview")
+    public Result<OpeningBalanceCarryForwardPreviewVO> carryForwardPreview(
+            @Valid @RequestBody OpeningBalanceTaskRequestDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), VIEW);
+        return Result.success(financeOpeningBalanceService.carryForwardPreview(dto.getCompanyId(), dto.getIyear(), dto.getIperiod(), getCurrentUsername(request)));
     }
 
     @PostMapping("/trial-balance")

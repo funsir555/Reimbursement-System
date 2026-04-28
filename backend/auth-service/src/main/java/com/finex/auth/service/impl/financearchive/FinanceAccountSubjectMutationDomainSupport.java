@@ -81,7 +81,7 @@ public class FinanceAccountSubjectMutationDomainSupport extends AbstractFinanceA
         subject.setSubjectCode(subjectCode);
         applyDerivedStructure(subject, parent);
         subject.setTemplateCode(null);
-        subject.setSortOrder(resolveNextSortOrder(normalizedCompanyId, parent == null ? null : parent.getSubjectCode()));
+        subject.setSortOrder(resolveSortOrderFromSubjectCode(subjectCode));
         applyMutableFields(subject, dto, true);
         applyDerivedControlledFields(subject, true);
         if (parent != null) {

@@ -1,6 +1,8 @@
 package com.finex.auth.service.impl;
 
+import com.finex.auth.dto.OpeningBalanceCarryForwardPreviewVO;
 import com.finex.auth.dto.OpeningBalanceReconcileResultVO;
+import com.finex.auth.dto.OpeningBalanceRowVO;
 import com.finex.auth.dto.OpeningBalanceTrialResultVO;
 import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.FinanceOpeningBalanceState;
@@ -89,7 +91,7 @@ class FinanceOpeningBalanceServiceImplTest {
         );
 
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
-        when(financeOpeningBalanceStateMapper.selectOne(any())).thenReturn(openedState());
+        lenient().when(financeOpeningBalanceStateMapper.selectOne(any())).thenReturn(openedState());
         lenient().when(financeCustomerMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeVendorMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeProjectClassMapper.selectList(any())).thenReturn(List.of());
@@ -106,8 +108,8 @@ class FinanceOpeningBalanceServiceImplTest {
                 subject("2202", "应付账款", "CREDIT", 1, 0)
         ));
         when(glAccsumMapper.selectList(any())).thenReturn(List.of(
-                sumRow("1001", "100.00"),
-                sumRow("2202", "100.00")
+                periodSumRow("1001", "100.00"),
+                periodSumRow("2202", "100.00")
         ));
 
         OpeningBalanceTrialResultVO result = service.trialBalance("COMP-001", 2026, 4, "alice");
@@ -122,8 +124,9 @@ class FinanceOpeningBalanceServiceImplTest {
     void reconcileDetectsAuxiliaryDifferenceAgainstSubjectTotal() {
         FinanceAccountSubject assistSubject = subject("560101", "广告宣传费", "DEBIT", 1, 1);
         assistSubject.setBdept(1);
+
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(assistSubject));
-        when(glAccsumMapper.selectList(any())).thenReturn(List.of(sumRow("560101", "120.00")));
+        when(glAccsumMapper.selectList(any())).thenReturn(List.of(periodSumRow("560101", "120.00")));
         when(glAccassMapper.selectList(any())).thenReturn(List.of(assistRow("560101", "100.00", "10")));
 
         OpeningBalanceReconcileResultVO result = service.reconcile("COMP-001", 2026, 4, "alice");
@@ -131,6 +134,50 @@ class FinanceOpeningBalanceServiceImplTest {
         assertFalse(result.getMatched());
         assertEquals(1, result.getDifferenceSubjects().size());
         assertEquals("560101", result.getDifferenceSubjects().get(0).getSubjectCode());
+    }
+
+    @Test
+    void listRowsBuildsTreeByParentSubjectCode() {
+        FinanceAccountSubject parent = subject("5601", "管理费用", "DEBIT", 0, 0);
+        parent.setSubjectLevel(1);
+        parent.setSortOrder(5601);
+
+        FinanceAccountSubject child = subject("560101", "广告宣传费", "DEBIT", 1, 0);
+        child.setParentSubjectCode("5601");
+        child.setSubjectLevel(2);
+        child.setSortOrder(560101);
+
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(parent, child));
+        when(glAccsumMapper.selectList(any())).thenReturn(List.of(
+                periodSumRow("5601", "100.00"),
+                periodSumRow("560101", "100.00")
+        ));
+
+        List<OpeningBalanceRowVO> rows = service.listRows("COMP-001", 2026, 4);
+
+        assertEquals(1, rows.size());
+        assertEquals("5601", rows.get(0).getSubjectCode());
+        assertEquals(1, rows.get(0).getChildren().size());
+        assertEquals("560101", rows.get(0).getChildren().get(0).getSubjectCode());
+    }
+
+    @Test
+    void carryForwardPreviewUsesPreviousYearEndingBalance() {
+        FinanceAccountSubject cashSubject = subject("1001", "库存现金", "DEBIT", 1, 0);
+        cashSubject.setSubjectLevel(1);
+        cashSubject.setSortOrder(1001);
+
+        when(financeOpeningBalanceStateMapper.selectOne(any())).thenReturn(null);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(cashSubject));
+        when(glAccsumMapper.selectList(any())).thenReturn(List.of(yearEndSumRow("1001", "88.00")));
+        when(glAccassMapper.selectList(any())).thenReturn(List.of());
+
+        OpeningBalanceCarryForwardPreviewVO preview = service.carryForwardPreview("COMP-001", 2027, 1, "alice");
+
+        assertEquals(1, preview.getRows().size());
+        assertEquals("1001", preview.getRows().get(0).getSubjectCode());
+        assertEquals("88.00", preview.getRows().get(0).getMb().toPlainString());
+        assertTrue(preview.getAssistLines().isEmpty());
     }
 
     private FinanceOpeningBalanceState openedState() {
@@ -164,13 +211,25 @@ class FinanceOpeningBalanceServiceImplTest {
         return subject;
     }
 
-    private GlAccsum sumRow(String code, String mb) {
+    private GlAccsum periodSumRow(String code, String mb) {
         GlAccsum row = new GlAccsum();
         row.setCompanyId("COMP-001");
         row.setIyear(2026);
         row.setIperiod(4);
         row.setCcode(code);
         row.setMb(new BigDecimal(mb));
+        return row;
+    }
+
+    private GlAccsum yearEndSumRow(String code, String me) {
+        GlAccsum row = new GlAccsum();
+        row.setCompanyId("COMP-001");
+        row.setIyear(2026);
+        row.setIperiod(12);
+        row.setCcode(code);
+        row.setMe(new BigDecimal(me));
+        row.setMeF(BigDecimal.ZERO.setScale(2));
+        row.setNeS(BigDecimal.ZERO.setScale(6));
         return row;
     }
 

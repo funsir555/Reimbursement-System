@@ -2,6 +2,8 @@ import request, { buildQueryString } from './core'
 import type {
   OpeningAssistBalanceLine,
   OpeningBalanceAssistSavePayload,
+  OpeningBalanceCarryForwardPreviewResult,
+  OpeningBalanceCommitPayload,
   OpeningBalanceMeta,
   OpeningBalanceReconcileResult,
   OpeningBalanceRow,
@@ -14,6 +16,8 @@ import type {
 export type {
   OpeningAssistBalanceLine,
   OpeningBalanceAssistSavePayload,
+  OpeningBalanceCarryForwardPreviewResult,
+  OpeningBalanceCommitPayload,
   OpeningBalanceMeta,
   OpeningBalanceReconcileResult,
   OpeningBalanceRow,
@@ -40,6 +44,11 @@ export const openingBalanceApi = {
       method: 'PUT',
       body: JSON.stringify(payload)
     }),
+  commit: (payload: OpeningBalanceCommitPayload) =>
+    request<OpeningBalanceRow[]>('/auth/finance/opening-balance/commit', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
   openBook: (payload: OpeningBalanceTaskRequest) =>
     request<OpeningBalanceTaskSubmitResult>('/auth/finance/opening-balance/open-book', {
       method: 'POST',
@@ -47,6 +56,11 @@ export const openingBalanceApi = {
     }),
   carryForward: (payload: OpeningBalanceTaskRequest) =>
     request<OpeningBalanceTaskSubmitResult>('/auth/finance/opening-balance/carry-forward', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  carryForwardPreview: (payload: OpeningBalanceTaskRequest) =>
+    request<OpeningBalanceCarryForwardPreviewResult>('/auth/finance/opening-balance/carry-forward-preview', {
       method: 'POST',
       body: JSON.stringify(payload)
     }),

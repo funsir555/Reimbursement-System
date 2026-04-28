@@ -2,6 +2,8 @@ package com.finex.auth.service;
 
 import com.finex.auth.dto.AsyncTaskSubmitResultVO;
 import com.finex.auth.dto.OpeningBalanceAssistSaveDTO;
+import com.finex.auth.dto.OpeningBalanceCommitDTO;
+import com.finex.auth.dto.OpeningBalanceCarryForwardPreviewVO;
 import com.finex.auth.dto.OpeningBalanceMetaVO;
 import com.finex.auth.dto.OpeningBalanceReconcileResultVO;
 import com.finex.auth.dto.OpeningBalanceRowVO;
@@ -23,9 +25,13 @@ public interface FinanceOpeningBalanceService {
 
     List<OpeningAssistBalanceLineVO> saveAssistBalances(String subjectCode, OpeningBalanceAssistSaveDTO dto, String operatorName);
 
+    List<OpeningBalanceRowVO> commit(OpeningBalanceCommitDTO dto, String operatorName);
+
     AsyncTaskSubmitResultVO openBook(Long currentUserId, String operatorName, OpeningBalanceTaskRequestDTO dto);
 
     AsyncTaskSubmitResultVO carryForward(Long currentUserId, String operatorName, OpeningBalanceTaskRequestDTO dto);
+
+    OpeningBalanceCarryForwardPreviewVO carryForwardPreview(String companyId, Integer iyear, Integer iperiod, String operatorName);
 
     OpeningBalanceTrialResultVO trialBalance(String companyId, Integer iyear, Integer iperiod, String operatorName);
 

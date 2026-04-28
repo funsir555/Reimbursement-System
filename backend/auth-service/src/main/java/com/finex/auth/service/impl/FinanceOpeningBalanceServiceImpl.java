@@ -3,6 +3,8 @@ package com.finex.auth.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.AsyncTaskSubmitResultVO;
 import com.finex.auth.dto.OpeningBalanceAssistSaveDTO;
+import com.finex.auth.dto.OpeningBalanceCommitDTO;
+import com.finex.auth.dto.OpeningBalanceCarryForwardPreviewVO;
 import com.finex.auth.dto.OpeningBalanceMetaVO;
 import com.finex.auth.dto.OpeningBalanceReconcileResultVO;
 import com.finex.auth.dto.OpeningBalanceRowVO;
@@ -107,6 +109,12 @@ public class FinanceOpeningBalanceServiceImpl implements FinanceOpeningBalanceSe
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<OpeningBalanceRowVO> commit(OpeningBalanceCommitDTO dto, String operatorName) {
+        return openingBalanceMutationSupport.commit(dto, operatorName);
+    }
+
+    @Override
     public AsyncTaskSubmitResultVO openBook(Long currentUserId, String operatorName, OpeningBalanceTaskRequestDTO dto) {
         return openingBalanceTaskSupport.openBook(currentUserId, operatorName, dto);
     }
@@ -114,6 +122,11 @@ public class FinanceOpeningBalanceServiceImpl implements FinanceOpeningBalanceSe
     @Override
     public AsyncTaskSubmitResultVO carryForward(Long currentUserId, String operatorName, OpeningBalanceTaskRequestDTO dto) {
         return openingBalanceTaskSupport.carryForward(currentUserId, operatorName, dto);
+    }
+
+    @Override
+    public OpeningBalanceCarryForwardPreviewVO carryForwardPreview(String companyId, Integer iyear, Integer iperiod, String operatorName) {
+        return openingBalanceMutationSupport.carryForwardPreview(companyId, iyear, iperiod, operatorName);
     }
 
     @Override

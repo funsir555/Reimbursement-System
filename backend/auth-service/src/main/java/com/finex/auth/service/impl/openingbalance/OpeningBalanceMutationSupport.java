@@ -1,6 +1,8 @@
 package com.finex.auth.service.impl.openingbalance;
 
 import com.finex.auth.dto.OpeningBalanceAssistSaveDTO;
+import com.finex.auth.dto.OpeningBalanceCommitDTO;
+import com.finex.auth.dto.OpeningBalanceCarryForwardPreviewVO;
 import com.finex.auth.dto.OpeningBalanceSaveDTO;
 import com.finex.auth.dto.OpeningAssistBalanceLineVO;
 import com.finex.auth.dto.OpeningBalanceRowVO;
@@ -20,5 +22,13 @@ public class OpeningBalanceMutationSupport {
 
     public List<OpeningAssistBalanceLineVO> saveAssistBalances(String subjectCode, OpeningBalanceAssistSaveDTO dto, String operatorName) {
         return support.saveAssistLines(subjectCode, dto.getCompanyId(), dto.getIyear(), dto.getIperiod(), dto.getLines());
+    }
+
+    public List<OpeningBalanceRowVO> commit(OpeningBalanceCommitDTO dto, String operatorName) {
+        return support.commitDrafts(dto.getCompanyId(), dto.getIyear(), dto.getIperiod(), dto.getRows(), dto.getAssistLines());
+    }
+
+    public OpeningBalanceCarryForwardPreviewVO carryForwardPreview(String companyId, Integer iyear, Integer iperiod, String operatorName) {
+        return support.previewCarryForward(companyId, iyear, iperiod);
     }
 }

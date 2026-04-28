@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.FinanceVoucherOptionVO;
 import com.finex.auth.dto.OpeningAssistBalanceLineDTO;
 import com.finex.auth.dto.OpeningAssistBalanceLineVO;
+import com.finex.auth.dto.OpeningBalanceAssistDraftLineDTO;
+import com.finex.auth.dto.OpeningBalanceCarryForwardPreviewVO;
 import com.finex.auth.dto.OpeningBalanceMetaVO;
 import com.finex.auth.dto.OpeningBalanceReconcileResultVO;
 import com.finex.auth.dto.OpeningBalanceRowSaveDTO;
@@ -126,10 +128,10 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         String effectiveCompanyId = requireCompanyId(companyId);
         int effectiveYear = normalizeYear(iyear);
         int effectivePeriod = normalizePeriod(iperiod);
-        Map<String, GlAccsum> sumRowMap = loadAccsumMap(effectiveCompanyId, effectiveYear, effectivePeriod);
-        return loadEnabledSubjects(effectiveCompanyId).stream()
-                .map(subject -> toRowVO(subject, sumRowMap.get(subject.getSubjectCode())))
-                .toList();
+        return buildRowsFromSums(
+                loadEnabledSubjects(effectiveCompanyId),
+                loadAccsumMap(effectiveCompanyId, effectiveYear, effectivePeriod)
+        );
     }
 
     protected List<OpeningAssistBalanceLineVO> buildAssistLines(String companyId, Integer iyear, Integer iperiod, String subjectCode) {
@@ -139,6 +141,26 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         return loadAssistRows(companyId, normalizeYear(iyear), normalizePeriod(iperiod), subjectCode).stream()
                 .map(this::toAssistLineVO)
                 .toList();
+    }
+
+    protected List<OpeningBalanceRowVO> buildRowsFromSums(List<FinanceAccountSubject> subjects, Map<String, GlAccsum> sumRowMap) {
+        Map<String, OpeningBalanceRowVO> rowMap = new LinkedHashMap<>();
+        for (FinanceAccountSubject subject : subjects) {
+            rowMap.put(subject.getSubjectCode(), toRowVO(subject, sumRowMap.get(subject.getSubjectCode())));
+        }
+        List<OpeningBalanceRowVO> roots = new ArrayList<>();
+        for (FinanceAccountSubject subject : subjects) {
+            OpeningBalanceRowVO current = rowMap.get(subject.getSubjectCode());
+            String parentSubjectCode = trimToNull(subject.getParentSubjectCode());
+            OpeningBalanceRowVO parent = parentSubjectCode == null ? null : rowMap.get(parentSubjectCode);
+            if (parent == null) {
+                roots.add(current);
+                continue;
+            }
+            parent.getChildren().add(current);
+            parent.setHasChildren(true);
+        }
+        return roots;
     }
 
     protected List<OpeningBalanceRowVO> saveSimpleRows(String companyId, Integer iyear, Integer iperiod, List<OpeningBalanceRowSaveDTO> rows) {
@@ -218,6 +240,110 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         return buildAssistLines(effectiveCompanyId, effectiveYear, effectivePeriod, subjectCode);
     }
 
+    protected List<OpeningBalanceRowVO> commitDrafts(
+            String companyId,
+            Integer iyear,
+            Integer iperiod,
+            List<OpeningBalanceRowSaveDTO> rows,
+            List<OpeningBalanceAssistDraftLineDTO> assistLines
+    ) {
+        String effectiveCompanyId = requireCompanyId(companyId);
+        int effectiveYear = normalizeYear(iyear);
+        int effectivePeriod = normalizePeriod(iperiod);
+        requireOpenedState(effectiveCompanyId, effectiveYear, effectivePeriod);
+        if ((rows == null || rows.isEmpty()) && (assistLines == null || assistLines.isEmpty())) {
+            throw new IllegalArgumentException("没有可保存的期初余额草稿");
+        }
+        Map<String, FinanceAccountSubject> subjectMap = loadEnabledSubjects(effectiveCompanyId).stream()
+                .collect(Collectors.toMap(FinanceAccountSubject::getSubjectCode, item -> item, (left, right) -> left, LinkedHashMap::new));
+
+        if (rows != null) {
+            for (OpeningBalanceRowSaveDTO row : rows) {
+                FinanceAccountSubject subject = subjectMap.get(trimToNull(row.getSubjectCode()));
+                if (subject == null) {
+                    throw new IllegalArgumentException("科目不存在: " + row.getSubjectCode());
+                }
+                requireLeafSubject(subject);
+                if (hasAssist(subject)) {
+                    throw new IllegalArgumentException("科目【" + subject.getSubjectCode() + " " + subject.getSubjectName() + "】启用了辅助核算，请通过辅助核算明细保存");
+                }
+                saveSubjectOpeningSum(
+                        subject,
+                        effectiveCompanyId,
+                        effectiveYear,
+                        effectivePeriod,
+                        sanitizeAmount(row.getMb()),
+                        sanitizeAmount(row.getMbF()),
+                        sanitizeQty(row.getNbS())
+                );
+            }
+        }
+
+        if (assistLines != null) {
+            for (OpeningBalanceAssistDraftLineDTO assistDraft : assistLines) {
+                FinanceAccountSubject subject = subjectMap.get(trimToNull(assistDraft.getSubjectCode()));
+                if (subject == null) {
+                    throw new IllegalArgumentException("科目不存在: " + assistDraft.getSubjectCode());
+                }
+                requireLeafSubject(subject);
+                requireAssistSubject(subject);
+                applyAssistDraft(subject, effectiveCompanyId, effectiveYear, effectivePeriod, assistDraft.getLines());
+            }
+        }
+
+        recalculateAncestorRows(effectiveCompanyId, effectiveYear, effectivePeriod);
+        return buildRows(effectiveCompanyId, effectiveYear, effectivePeriod);
+    }
+
+    protected OpeningBalanceCarryForwardPreviewVO previewCarryForward(String companyId, Integer iyear, Integer iperiod) {
+        String effectiveCompanyId = requireCompanyId(companyId);
+        int effectiveYear = normalizeYear(iyear);
+        int effectivePeriod = normalizePeriod(iperiod);
+        if (effectivePeriod != 1) {
+            throw new IllegalArgumentException("年度期初结转只支持结转到 1 月");
+        }
+        FinanceOpeningBalanceState existing = findState(effectiveCompanyId, effectiveYear, effectivePeriod);
+        if (existing != null && Objects.equals(existing.getStatus(), STATUS_OPENED)) {
+            throw new IllegalStateException("目标年度 1 月已经开账，不能重复结转");
+        }
+
+        int sourceYear = effectiveYear - 1;
+        int sourcePeriod = 12;
+        List<FinanceAccountSubject> subjects = loadEnabledSubjects(effectiveCompanyId);
+        Map<String, FinanceAccountSubject> subjectMap = subjects.stream()
+                .collect(Collectors.toMap(FinanceAccountSubject::getSubjectCode, item -> item, (left, right) -> left, LinkedHashMap::new));
+        Map<String, GlAccsum> previewSumMap = buildCarryForwardPreviewSumMap(
+                subjects,
+                glAccsumMapper.selectList(Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, effectiveCompanyId)
+                        .eq(GlAccsum::getIyear, sourceYear)
+                        .eq(GlAccsum::getIperiod, sourcePeriod))
+        );
+
+        Map<String, List<OpeningAssistBalanceLineDTO>> assistLineMap = new LinkedHashMap<>();
+        for (GlAccass source : glAccassMapper.selectList(Wrappers.<GlAccass>lambdaQuery()
+                .eq(GlAccass::getCompanyId, effectiveCompanyId)
+                .eq(GlAccass::getIyear, sourceYear)
+                .eq(GlAccass::getIperiod, sourcePeriod)
+                .orderByAsc(GlAccass::getId))) {
+            FinanceAccountSubject subject = subjectMap.get(source.getCcode());
+            if (subject == null || !isLeaf(subject) || !hasAssist(subject)) {
+                continue;
+            }
+            assistLineMap.computeIfAbsent(subject.getSubjectCode(), key -> new ArrayList<>()).add(toAssistDraftLineDTO(source));
+        }
+
+        OpeningBalanceCarryForwardPreviewVO preview = new OpeningBalanceCarryForwardPreviewVO();
+        preview.setRows(buildRowsFromSums(subjects, previewSumMap));
+        preview.setAssistLines(assistLineMap.entrySet().stream().map(entry -> {
+            OpeningBalanceAssistDraftLineDTO draft = new OpeningBalanceAssistDraftLineDTO();
+            draft.setSubjectCode(entry.getKey());
+            draft.setLines(entry.getValue());
+            return draft;
+        }).toList());
+        return preview;
+    }
+
     protected OpeningBalanceTrialResultVO buildTrialResult(String companyId, Integer iyear, Integer iperiod) {
         String effectiveCompanyId = requireCompanyId(companyId);
         int effectiveYear = normalizeYear(iyear);
@@ -256,6 +382,112 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         result.setBalanced(result.getDifference().compareTo(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)) == 0 && abnormal.isEmpty());
         result.setAbnormalSubjects(abnormal);
         return result;
+    }
+
+    protected void applyAssistDraft(
+            FinanceAccountSubject subject,
+            String companyId,
+            int iyear,
+            int iperiod,
+            List<OpeningAssistBalanceLineDTO> lines
+    ) {
+        glAccassMapper.delete(Wrappers.<GlAccass>lambdaQuery()
+                .eq(GlAccass::getCompanyId, companyId)
+                .eq(GlAccass::getIyear, iyear)
+                .eq(GlAccass::getIperiod, iperiod)
+                .eq(GlAccass::getCcode, subject.getSubjectCode()));
+
+        BigDecimal totalMb = ZERO;
+        BigDecimal totalMbF = ZERO;
+        BigDecimal totalNbS = ZERO_QTY;
+        if (lines != null) {
+            for (OpeningAssistBalanceLineDTO line : lines) {
+                validateAssistLine(subject, companyId, line);
+                BigDecimal lineMb = sanitizeAmount(line.getMb());
+                BigDecimal lineMbF = sanitizeAmount(line.getMbF());
+                BigDecimal lineNbS = sanitizeQty(line.getNbS());
+                if (isAllZero(lineMb, lineMbF, lineNbS)) {
+                    continue;
+                }
+                GlAccass entity = new GlAccass();
+                entity.setCompanyId(companyId);
+                entity.setIyear(iyear);
+                entity.setIperiod(iperiod);
+                entity.setIyperiod(buildYearPeriod(iyear, iperiod));
+                entity.setCcode(subject.getSubjectCode());
+                entity.setCdeptId(trimToNull(line.getCdeptId()));
+                entity.setCpersonId(trimToNull(line.getCpersonId()));
+                entity.setCcusId(trimToNull(line.getCcusId()));
+                entity.setCsupId(trimToNull(line.getCsupId()));
+                entity.setCitemClass(trimToNull(line.getCitemClass()));
+                entity.setCitemId(trimToNull(line.getCitemId()));
+                fillOpeningAmounts(entity, subject, lineMb, lineMbF, lineNbS, null, null, null);
+                glAccassMapper.insert(entity);
+                totalMb = totalMb.add(lineMb);
+                totalMbF = totalMbF.add(lineMbF);
+                totalNbS = totalNbS.add(lineNbS);
+            }
+        }
+        saveSubjectOpeningSum(subject, companyId, iyear, iperiod, totalMb, totalMbF, totalNbS);
+    }
+
+    protected Map<String, GlAccsum> buildCarryForwardPreviewSumMap(List<FinanceAccountSubject> subjects, List<GlAccsum> sourceSums) {
+        Map<String, GlAccsum> previewMap = new LinkedHashMap<>();
+        Map<String, FinanceAccountSubject> subjectMap = subjects.stream()
+                .collect(Collectors.toMap(FinanceAccountSubject::getSubjectCode, item -> item, (left, right) -> left, LinkedHashMap::new));
+        for (GlAccsum source : sourceSums) {
+            FinanceAccountSubject subject = subjectMap.get(source.getCcode());
+            if (subject == null) {
+                continue;
+            }
+            previewMap.put(subject.getSubjectCode(), createPreviewSum(subject, money(source.getMe()), money(source.getMeF()), qty(source.getNeS())));
+        }
+
+        List<FinanceAccountSubject> ordered = new ArrayList<>(subjects);
+        ordered.sort(Comparator.comparing(FinanceAccountSubject::getSubjectLevel, Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(FinanceAccountSubject::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(FinanceAccountSubject::getSubjectCode));
+        for (FinanceAccountSubject subject : ordered) {
+            if (isLeaf(subject)) {
+                previewMap.computeIfAbsent(subject.getSubjectCode(), key -> createPreviewSum(subject, ZERO, ZERO, ZERO_QTY));
+                continue;
+            }
+            BigDecimal totalMb = ZERO;
+            BigDecimal totalMbF = ZERO;
+            BigDecimal totalNbS = ZERO_QTY;
+            for (FinanceAccountSubject child : subjects) {
+                if (!Objects.equals(trimToNull(child.getParentSubjectCode()), subject.getSubjectCode())) {
+                    continue;
+                }
+                GlAccsum childSum = previewMap.get(child.getSubjectCode());
+                totalMb = totalMb.add(money(childSum == null ? null : childSum.getMb()));
+                totalMbF = totalMbF.add(money(childSum == null ? null : childSum.getMbF()));
+                totalNbS = totalNbS.add(qty(childSum == null ? null : childSum.getNbS()));
+            }
+            previewMap.put(subject.getSubjectCode(), createPreviewSum(subject, totalMb, totalMbF, totalNbS));
+        }
+        return previewMap;
+    }
+
+    protected GlAccsum createPreviewSum(FinanceAccountSubject subject, BigDecimal mb, BigDecimal mbF, BigDecimal nbS) {
+        GlAccsum preview = new GlAccsum();
+        preview.setCcode(subject.getSubjectCode());
+        fillOpeningAmounts(preview, subject, mb, mbF, nbS, null, null, null);
+        return preview;
+    }
+
+    protected OpeningAssistBalanceLineDTO toAssistDraftLineDTO(GlAccass entity) {
+        OpeningAssistBalanceLineDTO dto = new OpeningAssistBalanceLineDTO();
+        dto.setCdeptId(entity.getCdeptId());
+        dto.setCpersonId(entity.getCpersonId());
+        dto.setCcusId(entity.getCcusId());
+        dto.setCsupId(entity.getCsupId());
+        dto.setCitemClass(entity.getCitemClass());
+        dto.setCitemId(entity.getCitemId());
+        dto.setMb(money(entity.getMe()));
+        dto.setMbF(money(entity.getMeF()));
+        dto.setNbS(qty(entity.getNeS()));
+        return dto;
     }
 
     protected OpeningBalanceReconcileResultVO buildReconcileResult(String companyId, Integer iyear, Integer iperiod) {
@@ -716,8 +948,11 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         OpeningBalanceRowVO vo = new OpeningBalanceRowVO();
         vo.setSubjectCode(subject.getSubjectCode());
         vo.setSubjectName(subject.getSubjectName());
+        vo.setParentSubjectCode(subject.getParentSubjectCode());
         vo.setSubjectLevel(subject.getSubjectLevel());
+        vo.setSortOrder(subject.getSortOrder());
         vo.setLeafFlag(subject.getLeafFlag());
+        vo.setHasChildren(!isLeaf(subject));
         vo.setEditable(isLeaf(subject));
         vo.setAssistRequired(hasAssist(subject));
         vo.setBalanceDirection(subject.getBalanceDirection());
