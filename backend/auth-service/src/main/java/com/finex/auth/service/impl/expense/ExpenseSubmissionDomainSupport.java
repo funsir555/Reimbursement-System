@@ -11,6 +11,7 @@ import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
+import com.finex.auth.dto.ExpenseManualApproverPreviewVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -31,6 +32,7 @@ public class ExpenseSubmissionDomainSupport {
 
     private final ExpenseDocumentTemplateDomainSupport expenseDocumentTemplateDomainSupport;
     private final ExpenseDocumentMutationDomainSupport expenseDocumentMutationDomainSupport;
+    private final ExpenseManualApproverPreviewSupport expenseManualApproverPreviewSupport;
 
     /**
      * 查询可用模板列表。
@@ -96,6 +98,19 @@ public class ExpenseSubmissionDomainSupport {
      */
     public ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         return expenseDocumentMutationDomainSupport.submitDocument(userId, username, dto);
+    }
+
+    public ExpenseDocumentEditContextVO createDraftDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
+        ProcessDocumentInstance instance = expenseDocumentMutationDomainSupport.createDraftDocument(userId, username, dto);
+        return expenseDocumentTemplateDomainSupport.buildEditContext(userId, instance, null, "RESUBMIT");
+    }
+
+    public ExpenseManualApproverPreviewVO previewManualApproversForCreate(Long userId, ExpenseDocumentSubmitDTO dto) {
+        return expenseManualApproverPreviewSupport.previewForCreate(userId, dto);
+    }
+
+    public ExpenseManualApproverPreviewVO previewManualApproversForResubmit(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
+        return expenseManualApproverPreviewSupport.previewForResubmit(userId, documentCode, dto);
     }
 
     public ExpenseDocumentEditContextVO saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {

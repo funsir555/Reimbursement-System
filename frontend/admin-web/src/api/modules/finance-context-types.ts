@@ -7,6 +7,12 @@ export interface FinanceCompanyOption {
   companyCode: string
   companyName: string
   hasActiveAccountSet?: boolean
+  enabledYear?: number
+  enabledPeriod?: number
+  periodStartYear?: number
+  periodStartMonth?: number
+  periodEndYear?: number
+  periodEndMonth?: number
   label: string
   value: string
 }

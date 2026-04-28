@@ -579,7 +579,7 @@ describe('ExpenseDocumentDetailView', () => {
     })
   })
 
-  it('renders backend-provided approval node statuses including not reached nodes', async () => {
+  it('does not render approval node status cards after the real-task-status section is removed', async () => {
     mocks.expenseApi.getDetail.mockResolvedValue({
       data: buildDocumentDetail(1880.5, {
         currentTasks: [],
@@ -613,13 +613,8 @@ describe('ExpenseDocumentDetailView', () => {
     })
 
     const wrapper = await mountView()
-    const statusItems = wrapper.findAll('[data-testid="approval-node-status-item"]')
-
-    expect(wrapper.get('[data-testid="approval-node-status-list"]').text()).toContain('直属上级审批')
-    expect(wrapper.get('[data-testid="approval-node-status-list"]').text()).toContain('财务审批')
-    expect(wrapper.get('[data-testid="approval-node-status-list"]').text()).toContain('出纳支付')
-    expect(wrapper.text()).toContain('预计处理人：出纳B')
-    expect(statusItems).toHaveLength(3)
+    expect(wrapper.find('[data-testid="approval-node-status-list"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('真实任务状态')
   })
 
   it('renders backend-provided approval timeline without relying on local actionLogs or currentTasks assembly', async () => {
@@ -1311,7 +1306,7 @@ describe('ExpenseDocumentDetailView', () => {
     })
   })
 
-  it('shows the current manual approver selection card for the submitter and submits the current node selection', async () => {
+  it('does not render the current manual approver selection card on the detail page', async () => {
     mocks.expenseApi.getDetail.mockResolvedValue({
       data: buildDocumentDetail(1880.5, {
         currentTaskType: 'MANUAL_SELECT',
@@ -1332,41 +1327,11 @@ describe('ExpenseDocumentDetailView', () => {
         ]
       })
     })
-    mocks.expenseApi.submitManualApproverSelection.mockResolvedValue({
-      data: buildDocumentDetail(1880.5, {
-        approvalNodeStatuses: [
-          {
-            nodeKey: 'manual-finance',
-            nodeName: '财务复核',
-            nodeType: 'APPROVAL',
-            status: 'PENDING',
-            assigneeNames: ['李四']
-          }
-        ]
-      })
-    })
-
     const wrapper = await mountView()
 
-    expect(wrapper.find('[data-testid="manual-approver-selection-card"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('当前节点手动选择审批人')
-    expect(wrapper.text()).toContain('财务复核')
-
-    ;(wrapper.vm as unknown as {
-      manualApproverForm: { userIds: number[] }
-      submitManualApproverSelection: () => Promise<void>
-    }).manualApproverForm.userIds = [2]
-
-    await (wrapper.vm as unknown as {
-      submitManualApproverSelection: () => Promise<void>
-    }).submitManualApproverSelection()
-    await flushPromises()
-
-    expect(mocks.expenseApi.submitManualApproverSelection).toHaveBeenCalledWith('DOC-001', {
-      nodeKey: 'manual-finance',
-      userIds: [2]
-    })
-    expect(mocks.elMessage.success).toHaveBeenCalledWith('手动审批人已提交')
+    expect(wrapper.find('[data-testid="manual-approver-selection-card"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('当前节点手动选择审批人')
+    expect(mocks.expenseApi.submitManualApproverSelection).not.toHaveBeenCalled()
   })
 
   it('renders detail normally when totalAmount is a money string', async () => {

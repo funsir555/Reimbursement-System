@@ -216,53 +216,14 @@
       </template>
     </el-dialog>
 
-    <el-dialog
-      v-model="bankDialogVisible"
-      :title="bankDialogMode === 'create' ? '新增对私收款账户' : '编辑对私收款账户'"
-      width="760px"
-      destroy-on-close
-    >
-      <el-form label-position="top" class="space-y-5">
-        <SupplierPaymentInfoFields
-          :form-state="bankForm"
-          :required="true"
-          :field-map="bankFieldMap"
-          account-name-label="账户名"
-          business-scope="PRIVATE"
-        />
-
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <el-form-item label="账户类型" class="!mb-0">
-            <el-input v-model="bankForm.accountType" placeholder="默认对私账户" />
-          </el-form-item>
-          <el-form-item label="账户状态" class="!mb-0">
-            <el-switch
-              v-model="bankForm.status"
-              :active-value="1"
-              :inactive-value="0"
-              active-text="启用"
-              inactive-text="停用"
-            />
-          </el-form-item>
-          <el-form-item label="默认账户" class="!mb-0 md:col-span-2">
-            <el-switch
-              v-model="bankForm.defaultAccount"
-              :active-value="1"
-              :inactive-value="0"
-              active-text="设为默认"
-              inactive-text="非默认"
-            />
-          </el-form-item>
-        </div>
-      </el-form>
-
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <el-button @click="closeBankDialog">取消</el-button>
-          <el-button type="primary" :loading="savingBankAccount" @click="submitBankAccount">保存</el-button>
-        </div>
-      </template>
-    </el-dialog>
+    <PersonalBankAccountDialog
+      :model-value="bankDialogVisible"
+      :mode="bankDialogMode"
+      :account="editingBankAccount"
+      :existing-accounts-count="bankAccounts.length"
+      @update:model-value="handleBankDialogVisibleChange"
+      @saved="handleBankAccountSaved"
+    />
   </div>
 </template>
 
@@ -270,12 +231,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
+import PersonalBankAccountDialog from '@/components/profile/PersonalBankAccountDialog.vue'
 import {
   profileApi,
   type PersonalCenterData,
-  type UserBankAccountRecord,
-  type UserBankAccountSavePayload
+  type UserBankAccountRecord
 } from '@/api'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
@@ -287,39 +247,14 @@ const bankAccounts = ref<UserBankAccountRecord[]>([])
 const passwordDialogVisible = ref(false)
 const savingPassword = ref(false)
 const bankDialogVisible = ref(false)
-const savingBankAccount = ref(false)
 const bankDialogMode = ref<'create' | 'edit'>('create')
-const editingBankAccountId = ref<number | null>(null)
+const editingBankAccount = ref<UserBankAccountRecord | null>(null)
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const passwordForm = reactive({
   currentPassword: '',
   newPassword: '',
   confirmPassword: ''
 })
-const bankForm = reactive<UserBankAccountSavePayload>({
-  accountName: '',
-  accountNo: '',
-  accountType: '对私账户',
-  bankName: '',
-  bankCode: '',
-  province: '',
-  city: '',
-  branchName: '',
-  branchCode: '',
-  defaultAccount: 0,
-  status: 1
-})
-
-const bankFieldMap = {
-  accountName: 'accountName',
-  bankCode: 'bankCode',
-  bankName: 'bankName',
-  province: 'province',
-  city: 'city',
-  branchCode: 'branchCode',
-  branchName: 'branchName',
-  accountNo: 'accountNo'
-} as const
 
 const canChangePassword = computed(() => hasPermission('profile:password:update', permissionCodes.value))
 
@@ -370,96 +305,28 @@ function accountLocation(account: UserBankAccountRecord) {
   return [account.province, account.city].filter(Boolean).join(' / ') || '-'
 }
 
-function resetBankForm() {
-  Object.assign(bankForm, {
-    accountName: '',
-    accountNo: '',
-    accountType: '对私账户',
-    bankName: '',
-    bankCode: '',
-    province: '',
-    city: '',
-    branchName: '',
-    branchCode: '',
-    defaultAccount: bankAccounts.value.length === 0 ? 1 : 0,
-    status: 1
-  })
-}
-
 function openCreateBankDialog() {
   bankDialogMode.value = 'create'
-  editingBankAccountId.value = null
-  resetBankForm()
+  editingBankAccount.value = null
   bankDialogVisible.value = true
 }
 
 function openEditBankDialog(account: UserBankAccountRecord) {
   bankDialogMode.value = 'edit'
-  editingBankAccountId.value = account.id
-  Object.assign(bankForm, {
-    accountName: account.accountName || '',
-    accountNo: account.accountNo || '',
-    accountType: account.accountType || '对私账户',
-    bankName: account.bankName || '',
-    bankCode: account.bankCode || '',
-    province: account.province || '',
-    city: account.city || '',
-    branchName: account.branchName || '',
-    branchCode: account.branchCode || '',
-    defaultAccount: account.defaultAccount ? 1 : 0,
-    status: account.status ?? 1
-  })
+  editingBankAccount.value = account
   bankDialogVisible.value = true
 }
 
-function closeBankDialog() {
-  bankDialogVisible.value = false
-  editingBankAccountId.value = null
-  resetBankForm()
+function handleBankDialogVisibleChange(visible: boolean) {
+  bankDialogVisible.value = visible
+  if (!visible) {
+    bankDialogMode.value = 'create'
+    editingBankAccount.value = null
+  }
 }
 
-function validateBankForm() {
-  const incompleteBankDirectoryMessage = '请选择开户银行、开户省、开户市与开户网点后再保存'
-  if (!String(bankForm.accountName || '').trim()) return '请填写账户名'
-  if (!String(bankForm.accountNo || '').trim()) return '请填写银行账号'
-  if (
-    !String(bankForm.bankCode || '').trim()
-    || !String(bankForm.bankName || '').trim()
-    || !String(bankForm.province || '').trim()
-    || !String(bankForm.city || '').trim()
-    || !String(bankForm.branchCode || '').trim()
-    || !String(bankForm.branchName || '').trim()
-  ) {
-    return incompleteBankDirectoryMessage
-  }
-  return ''
-}
-
-async function submitBankAccount() {
-  const validationMessage = validateBankForm()
-  if (validationMessage) {
-    ElMessage.warning(validationMessage)
-    return
-  }
-  if (bankForm.status !== 1) {
-    bankForm.defaultAccount = 0
-  }
-  savingBankAccount.value = true
-  try {
-    if (bankDialogMode.value === 'create') {
-      await profileApi.createBankAccount(bankForm)
-      ElMessage.success('个人银行账户已新增')
-    } else if (editingBankAccountId.value) {
-      await profileApi.updateBankAccount(editingBankAccountId.value, bankForm)
-      ElMessage.success('个人银行账户已更新')
-    }
-    closeBankDialog()
-    await loadBankAccounts()
-  } catch (error: any) {
-    ElMessage.error(error.message || '保存个人银行账户失败')
-  } finally {
-    savingBankAccount.value = false
-  }
+async function handleBankAccountSaved() {
+  await loadBankAccounts()
 }
 
 async function toggleBankAccountStatus(account: UserBankAccountRecord) {

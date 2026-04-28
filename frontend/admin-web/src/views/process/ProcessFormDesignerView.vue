@@ -363,7 +363,7 @@
                   >
                     <div>
                       <p class="text-base font-semibold text-slate-800">业务场景配置</p>
-                      <p class="mt-1 text-sm text-slate-500">固定维护全额付款与预付未到票，至少保留一个开启项。</p>
+                      <p class="mt-1 text-sm text-slate-500">在这里维护可用业务场景与默认值，至少保留一个开启项。</p>
                     </div>
                     <div class="mt-4 space-y-3">
                       <div
@@ -1344,7 +1344,6 @@ function optionItems(block: ProcessFormDesignBlock) {
 
 function usesBusinessScenarioModeEditor(block: ProcessFormDesignBlock) {
   return isExpenseDetailDesigner.value
-    && working.detailType === 'ENTERPRISE_TRANSACTION'
     && isBusinessScenarioBlock(block)
 }
 

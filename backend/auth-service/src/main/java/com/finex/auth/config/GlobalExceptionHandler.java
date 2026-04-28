@@ -210,7 +210,8 @@ public class GlobalExceptionHandler {
         String uri = request.getRequestURI();
         return uri.startsWith("/auth/finance/archives/customers")
                 || uri.startsWith("/auth/finance/archives/suppliers")
-                || uri.startsWith("/auth/finance/vouchers");
+                || uri.startsWith("/auth/finance/vouchers")
+                || uri.startsWith("/auth/finance/post-voucher");
     }
 
     private boolean isPmRequest(HttpServletRequest request) {

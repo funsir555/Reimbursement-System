@@ -94,6 +94,7 @@ INSERT INTO tmp_permission_seed (
     ('finance:general_ledger:opening_balance:view', '期初余额', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/opening-balance', 40134, 1),
     ('finance:general_ledger:post_voucher:view', '记账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/post-voucher', 40135, 1),
     ('finance:general_ledger:close_ledger:view', '结账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/close-ledger', 40136, 1),
+    ('finance:general_ledger:close_ledger:close', '执行结账', 'BUTTON', 'finance:general_ledger:close_ledger:view', 'finance', NULL, 401361, 1),
     ('finance:general_ledger:balance_sheet:view', '余额表', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/balance-sheet', 4014, 1),
     ('finance:general_ledger:balance_sheet:export', '导出余额表', 'BUTTON', 'finance:general_ledger:balance_sheet:view', 'finance', NULL, 40141, 1),
     ('finance:general_ledger:detail_ledger:view', '明细账', 'MENU', 'finance:general_ledger:menu', 'finance', '/finance/general-ledger/detail-ledger', 4015, 1),

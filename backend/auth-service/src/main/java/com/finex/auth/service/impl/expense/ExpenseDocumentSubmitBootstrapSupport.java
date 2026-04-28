@@ -39,6 +39,7 @@ class ExpenseDocumentSubmitBootstrapSupport {
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     private final UserMapper userMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
+    private final ExpenseManualApproverPreviewSupport expenseManualApproverPreviewSupport;
 
     ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         String templateCode = dto == null ? null : dto.getTemplateCode();
@@ -73,6 +74,7 @@ class ExpenseDocumentSubmitBootstrapSupport {
             runtimeFlowContext.put("manualApproverSelections", support.normalizeManualApproverSelections(
                     dto == null ? null : dto.getManualApproverSelections()
             ));
+            expenseManualApproverPreviewSupport.validateBeforeSubmit(flowSnapshotJson, runtimeFlowContext);
             String submitterDisplayName = support.resolveUserDisplayName(currentUser, username);
             support.validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
             support.validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
@@ -153,6 +155,48 @@ class ExpenseDocumentSubmitBootstrapSupport {
         }
     }
 
+    ProcessDocumentInstance createDraftDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
+        String templateCode = dto == null ? null : dto.getTemplateCode();
+        ProcessDocumentTemplate template = support.requireTemplate(templateCode);
+        ProcessFormDesign formDesign = support.loadFormDesign(template.getFormDesignCode());
+        ProcessExpenseDetailDesign expenseDetailDesign = support.loadExpenseDetailDesign(template.getExpenseDetailDesignCode());
+        Map<String, Object> formData = dto != null && dto.getFormData() != null
+                ? new LinkedHashMap<>(dto.getFormData())
+                : new LinkedHashMap<>();
+        List<ExpenseDetailInstanceDTO> expenseDetails = support.normalizeExpenseDetails(dto == null ? null : dto.getExpenseDetails());
+        support.validateExpenseDetailSubmission(template, expenseDetailDesign, expenseDetails);
+        User currentUser = userId == null ? null : userMapper.selectById(userId);
+        String submitterDisplayName = support.resolveUserDisplayName(currentUser, username);
+        support.validatePmNameLength(template.getTemplateName(), "\u5f53\u524d\u6a21\u677f\u540d\u79f0");
+        support.validatePmNameLength(template.getFlowName(), "\u5f53\u524d\u6d41\u7a0b\u540d\u79f0");
+        support.validatePmNameLength(submitterDisplayName, "\u63d0\u4ea4\u4eba\u59d3\u540d");
+        String documentTitle = expenseDocumentMetadataSupport.resolveDocumentTitle(template, formData, username);
+
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode(support.buildDocumentCode());
+        instance.setTemplateCode(template.getTemplateCode());
+        instance.setTemplateName(template.getTemplateName());
+        instance.setTemplateType(template.getTemplateType());
+        instance.setFormDesignCode(template.getFormDesignCode());
+        instance.setApprovalFlowCode(template.getApprovalFlow());
+        instance.setFlowName(template.getFlowName());
+        instance.setSubmitterUserId(userId);
+        instance.setSubmitterName(submitterDisplayName);
+        instance.setDocumentTitle(documentTitle);
+        instance.setDocumentReason(expenseDocumentMetadataSupport.resolveDocumentReason(template, formData));
+        instance.setTotalAmount(support.resolveTotalAmount(formData, expenseDetails, template.getExpenseDetailModeDefault()));
+        instance.setStatus(DOCUMENT_STATUS_DRAFT);
+        instance.setFormDataJson(support.writeJson(formData));
+        instance.setTemplateSnapshotJson(support.writeJson(support.toTemplateSnapshot(template)));
+        instance.setFormSchemaSnapshotJson(formDesign == null ? support.writeJson(support.defaultSchema()) : formDesign.getSchemaJson());
+        instance.setFlowSnapshotJson(support.resolveFlowSnapshotJson(template));
+        instance.setCreatedAt(LocalDateTime.now());
+        instance.setUpdatedAt(LocalDateTime.now());
+        processDocumentInstanceMapper.insert(instance);
+        support.saveExpenseDetailInstances(instance.getDocumentCode(), template, expenseDetailDesign, expenseDetails);
+        return support.requireDocument(instance.getDocumentCode());
+    }
+
     ProcessDocumentInstance saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
         ProcessDocumentInstance instance = support.requireDocument(documentCode);
         support.requireSubmitter(instance, userId);
@@ -175,6 +219,7 @@ class ExpenseDocumentSubmitBootstrapSupport {
         String submitterDisplayName = support.resolveUserDisplayName(userId, username);
         AbstractExpenseDocumentSupport.DocumentMutationContext mutation =
                 mutationApplySupport.buildMutationContext(instance, dto, true);
+        expenseManualApproverPreviewSupport.validateBeforeSubmit(mutation.flowSnapshotJson(), mutation.runtimeContext());
         instance.setSubmitterName(submitterDisplayName);
         mutationApplySupport.applyDocumentMutation(instance, mutation, true);
         expenseDocumentActionLogSupport.appendLog(

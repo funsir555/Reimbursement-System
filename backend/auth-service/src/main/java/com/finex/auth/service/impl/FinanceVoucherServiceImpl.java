@@ -19,6 +19,7 @@ import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
 import com.finex.auth.mapper.FinanceVendorMapper;
@@ -62,9 +63,10 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
             SystemDepartmentMapper systemDepartmentMapper,
             UserMapper userMapper,
             FinanceAccountSetMapper financeAccountSetMapper,
+            FinancePeriodCloseMapper financePeriodCloseMapper,
             UserService userService
     ) {
-        VoucherContextSupport voucherContextSupport = new VoucherContextSupport(systemCompanyMapper, financeAccountSetMapper, userService);
+        VoucherContextSupport voucherContextSupport = new VoucherContextSupport(systemCompanyMapper, financeAccountSetMapper, financePeriodCloseMapper, userService);
         this.voucherMetaSupport = new VoucherMetaSupport(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
@@ -76,6 +78,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 systemCompanyMapper,
                 systemDepartmentMapper,
                 userMapper,
+                financePeriodCloseMapper,
                 voucherContextSupport
         );
         this.voucherQueryDomainSupport = new VoucherQueryDomainSupport(
@@ -88,7 +91,8 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 financeProjectArchiveMapper,
                 systemCompanyMapper,
                 systemDepartmentMapper,
-                userMapper
+                userMapper,
+                financePeriodCloseMapper
         );
         this.voucherMutationDomainSupport = new VoucherMutationDomainSupport(
                 glAccvouchMapper,
@@ -100,7 +104,8 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 financeProjectArchiveMapper,
                 systemCompanyMapper,
                 systemDepartmentMapper,
-                userMapper
+                userMapper,
+                financePeriodCloseMapper
         );
     }
 

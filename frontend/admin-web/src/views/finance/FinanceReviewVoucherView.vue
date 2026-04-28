@@ -97,16 +97,17 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { financeApi, type FinanceVoucherMeta, type FinanceVoucherQueryParams, type FinanceVoucherSummary } from '@/api'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
+import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
 type ReviewAction = 'REVIEW' | 'UNREVIEW' | 'TOGGLE_ERROR'
 type EffectiveReviewAction = 'REVIEW' | 'UNREVIEW' | 'MARK_ERROR' | 'CLEAR_ERROR'
 
 const DEFAULT_STATUS_FILTER = 'UNPOSTED,REVIEWED,ERROR'
-const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
 
 const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
+const financePeriod = useFinancePeriodStore()
 const currentUser = readStoredUser()
 const tableRef = ref<{ clearSelection?: () => void } | null>(null)
 
@@ -124,7 +125,7 @@ const pager = reactive({
 const filters = reactive({
   voucherNo: '',
   csign: '',
-  billMonth: currentMonth,
+  billMonth: '',
   summary: ''
 })
 
@@ -132,6 +133,7 @@ const voucherTypeOptions = computed(() => voucherMeta.value?.voucherTypeOptions 
 const canReview = computed(() => hasPermission('finance:general_ledger:review_voucher:review', currentUser))
 const canUnreview = computed(() => hasPermission('finance:general_ledger:review_voucher:unreview', currentUser))
 const canMarkError = computed(() => hasPermission('finance:general_ledger:review_voucher:mark_error', currentUser))
+const lastInjectedBillMonth = ref('')
 const effectiveErrorActionLabel = computed(() => {
   const targets = resolveActionTargets(false)
   if (!targets.length) {
@@ -141,14 +143,31 @@ const effectiveErrorActionLabel = computed(() => {
   return statuses.size === 1 && statuses.has('ERROR') ? '取消错误' : '标记错误'
 })
 
+function syncGlobalMonthDefault(force = false) {
+  const nextDefault = financePeriod.currentMonthText
+  if (!nextDefault) {
+    return
+  }
+  const shouldApply = force
+    || !filters.billMonth
+    || filters.billMonth === lastInjectedBillMonth.value
+  if (shouldApply) {
+    filters.billMonth = nextDefault
+  }
+  lastInjectedBillMonth.value = nextDefault
+}
+
 watch(
-  () => financeCompany.currentCompanyId,
+  () => [financeCompany.currentCompanyId, financePeriod.currentMonthText] as const,
   async (companyId, previousCompanyId) => {
-    if (!companyId) return
-    if (companyId !== previousCompanyId) {
+    const nextCompanyId = companyId[0]
+    const previousId = previousCompanyId?.[0]
+    if (!nextCompanyId) return
+    if (nextCompanyId !== previousId) {
       currentPage.value = 1
     }
-    await loadVoucherMeta(companyId)
+    syncGlobalMonthDefault(nextCompanyId !== previousId)
+    await loadVoucherMeta(nextCompanyId)
     await loadVouchers()
   },
   { immediate: true }
@@ -208,7 +227,7 @@ function handleSearch() {
 function handleReset() {
   filters.voucherNo = ''
   filters.csign = ''
-  filters.billMonth = currentMonth
+  syncGlobalMonthDefault(true)
   filters.summary = ''
   currentPage.value = 1
   loadVouchers()

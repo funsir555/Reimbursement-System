@@ -40,6 +40,10 @@ class ExpenseDocumentMutationDomainSupport {
         return submitBootstrapSupport.submitDocument(userId, username, dto);
     }
 
+    ProcessDocumentInstance createDraftDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
+        return submitBootstrapSupport.createDraftDocument(userId, username, dto);
+    }
+
     ProcessDocumentInstance saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
         return submitBootstrapSupport.saveDraftDocument(userId, documentCode, dto);
     }

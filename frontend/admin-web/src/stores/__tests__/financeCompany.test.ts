@@ -67,4 +67,29 @@ describe('financeCompany store', () => {
 
     expect(store.currentCompanyId).toBe('COMPANY202603260001')
   })
+
+  it('refreshes context and keeps the current company when it remains valid', async () => {
+    const store = useFinanceCompanyStore()
+    await store.ensureInitialized()
+
+    mocks.financeContextApi.getMeta.mockResolvedValueOnce({
+      data: {
+        ...buildMeta(),
+        companyOptions: buildMeta().companyOptions.map((item) =>
+          item.companyId === 'COMPANY202604050001'
+            ? {
+                ...item,
+                periodEndYear: 2026,
+                periodEndMonth: 5
+              }
+            : item
+        )
+      }
+    })
+
+    await store.refreshContext()
+
+    expect(store.currentCompanyId).toBe('COMPANY202604050001')
+    expect(store.currentCompanyOption?.periodEndMonth).toBe(5)
+  })
 })

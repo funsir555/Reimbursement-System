@@ -422,10 +422,6 @@ export function normalizeBusinessScenarioEnabledModes(
   detailType?: string,
   legacyOptions?: unknown
 ) {
-  if (detailType && detailType !== 'ENTERPRISE_TRANSACTION') {
-    return [BUSINESS_SCENARIO_MODE_FULL]
-  }
-
   const seen = new Set<string>()
   const collected: string[] = []
   const append = (value: unknown) => {
@@ -470,9 +466,6 @@ function sanitizeBusinessScenarioDefaultValue(
   enabledModes: string[],
   detailType?: string
 ) {
-  if (detailType && detailType !== 'ENTERPRISE_TRANSACTION') {
-    return BUSINESS_SCENARIO_MODE_FULL
-  }
   const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
   return enabledModes.includes(normalized) ? normalized : undefined
 }

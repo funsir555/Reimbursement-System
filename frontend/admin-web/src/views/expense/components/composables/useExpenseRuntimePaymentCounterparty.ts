@@ -2,6 +2,7 @@ import { computed, nextTick, reactive, ref, watch, type ComputedRef, type Ref } 
 import { ElMessage } from 'element-plus'
 import {
   expenseCreateApi,
+  type UserBankAccountRecord,
   type ExpenseCreatePayeeAccountOption,
   type ExpenseCreatePayeeOption,
   type ExpenseCreateVendorOption,
@@ -108,6 +109,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
   const payeeOptionsLoading = ref(false)
   const payeeAccountOptions = ref<ExpenseCreatePayeeAccountOption[]>([])
   const payeeAccountOptionsLoading = ref(false)
+  const payeeDropdownVisible = ref(false)
   const payeeAccountDropdownVisible = ref(false)
   const payeeAccountMissingInfoWarned = ref(false)
   const counterpartySelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
@@ -122,6 +124,8 @@ export function useExpenseRuntimePaymentCounterparty(params: {
   const vendorDialogLoading = ref(false)
   const vendorDialogVendorCode = ref('')
   const vendorDraft = reactive<FinanceVendorSavePayload>(emptyVendorDraft())
+  const personalPayeeDialogVisible = ref(false)
+  const personalPayeeFieldKey = ref('')
 
   const paymentCompanyFieldKeys = computed(() => findBusinessFieldKeys('payment-company'))
   const payeeFieldKeys = computed(() => findBusinessFieldKeys('payee'))
@@ -140,6 +144,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
   )
 
   const visibleVendorOptions = computed(() => mergeCurrentVendorOption(vendorOptions.value))
+  const visiblePayeeOptions = computed(() => mergeCurrentPayeeOption(payeeOptions.value))
   const visiblePayeeAccountOptions = computed(() =>
     mergeCurrentPayeeAccountOption(payeeAccountOptions.value)
   )
@@ -167,6 +172,13 @@ export function useExpenseRuntimePaymentCounterparty(params: {
       Boolean(selectedCounterpartyCode.value) &&
       !payeeAccountOptionsLoading.value &&
       payeeAccountOptions.value.length === 0
+  )
+
+  const showPersonalPayeeCreateEntry = computed(
+    () =>
+      payeeDropdownVisible.value &&
+      !payeeOptionsLoading.value &&
+      payeeOptions.value.length === 0
   )
 
   const vendorDialogTitle = computed(() =>
@@ -389,6 +401,49 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     return null
   }
 
+  function resolveCurrentPayeeSnapshot(): RuntimePayeeSnapshot | null {
+    for (const fieldKey of payeeFieldKeys.value) {
+      const rawValue = formData.value[fieldKey]
+      const value = resolveLookupValue(rawValue)
+      if (!value) {
+        continue
+      }
+      if (isRecord(rawValue)) {
+        return {
+          value,
+          label: firstNonEmptyString(rawValue.label, rawValue.sourceCode, rawValue.value) || value,
+          sourceType: firstNonEmptyString(rawValue.sourceType) || '',
+          sourceCode: firstNonEmptyString(rawValue.sourceCode, normalizePayeeName(rawValue)) || ''
+        }
+      }
+      const payeeName = normalizePayeeName(rawValue)
+      return {
+        value,
+        label: payeeName || value,
+        sourceType: '',
+        sourceCode: payeeName || value
+      }
+    }
+    return null
+  }
+
+  function mergeCurrentPayeeOption(options: ExpenseCreatePayeeOption[]) {
+    const current = resolveCurrentPayeeSnapshot()
+    if (!current || options.some((item) => item.value === current.value)) {
+      return options
+    }
+    return [
+      {
+        value: current.value,
+        label: current.label || current.sourceCode || current.value,
+        sourceType: current.sourceType || '',
+        sourceCode: current.sourceCode || current.label || current.value,
+        secondaryLabel: current.sourceType || undefined
+      },
+      ...options
+    ]
+  }
+
   function buildPayeeAccountOptionFromSnapshot(
     snapshot: RuntimePayeeAccountSnapshot
   ): ExpenseCreatePayeeAccountOption {
@@ -605,6 +660,10 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     formData.value[fieldKey] = value || ''
   }
 
+  function handlePayeeDropdownVisibleChange(visible: boolean) {
+    payeeDropdownVisible.value = visible
+  }
+
   function handlePayeeAccountSelection(
     fieldKey: string,
     value: RuntimePayeeAccountSnapshot | '' | null | undefined
@@ -644,6 +703,45 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     } finally {
       payeeOptionsLoading.value = false
     }
+  }
+
+  function openPersonalPayeeDialog(fieldKey: string) {
+    personalPayeeFieldKey.value = fieldKey
+    personalPayeeDialogVisible.value = true
+  }
+
+  function handlePersonalPayeeDialogVisibleChange(visible: boolean) {
+    personalPayeeDialogVisible.value = visible
+    if (!visible) {
+      personalPayeeFieldKey.value = ''
+    }
+  }
+
+  async function handlePersonalPayeeSaved(payload: {
+    accountName: string
+    record: UserBankAccountRecord
+  }) {
+    await loadPayeeOptions(payload.accountName)
+    const normalizedAccountName = String(payload.accountName || '').trim()
+    const matchedOption = payeeOptions.value.find((item) => {
+      const optionName = normalizePayeeName(item.value || item.label || '')
+      return optionName === normalizedAccountName
+    })
+    const snapshot = matchedOption
+      ? buildPayeeSnapshot(matchedOption)
+      : {
+          value: `${PERSONAL_PAYEE_PREFIX}${normalizedAccountName}`,
+          label: normalizedAccountName,
+          sourceType: 'PERSONAL_PRIVATE_PAYEE',
+          sourceCode: normalizedAccountName
+        }
+    const targetFieldKey = personalPayeeFieldKey.value || payeeFieldKeys.value[0] || ''
+    if (targetFieldKey) {
+      formData.value[targetFieldKey] = snapshot
+    }
+    clearPayeeAccountSelections()
+    personalPayeeDialogVisible.value = false
+    personalPayeeFieldKey.value = ''
   }
 
   async function loadPayeeAccountOptions(keyword: string, options?: { settleAfterLoad?: boolean }) {
@@ -910,12 +1008,14 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     selectedCounterpartyCode,
     vendorOptionsLoading,
     payeeOptions,
+    visiblePayeeOptions,
     payeeOptionsLoading,
     payeeAccountOptionsLoading,
     visibleVendorOptions,
     visiblePayeeAccountOptions,
     counterpartyPlaceholder,
     payeeAccountPlaceholder,
+    showPersonalPayeeCreateEntry,
     showVendorAccountMaintenanceEntry,
     vendorDialogVisible,
     vendorDialogTitle,
@@ -928,6 +1028,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     loadVendorOptions,
     loadPayeeOptions,
     loadPayeeAccountOptions,
+    handlePayeeDropdownVisibleChange,
     handlePayeeAccountDropdownVisibleChange,
     buildPayeeSnapshot,
     buildPayeeAccountSnapshot,
@@ -937,6 +1038,10 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     handleCounterpartySelection,
     handlePayeeSelection,
     handlePayeeAccountSelection,
+    personalPayeeDialogVisible,
+    handlePersonalPayeeDialogVisibleChange,
+    openPersonalPayeeDialog,
+    handlePersonalPayeeSaved,
     openVendorDialog,
     closeVendorDialog,
     openVendorAccountDialog,

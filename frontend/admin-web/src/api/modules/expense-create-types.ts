@@ -2,7 +2,7 @@
 // 页面与 API 封装会依赖这些类型来约定字段。
 // 如果改错，最容易影响列表、表单和接口联调。
 
-import type { ExpenseDetailInstance } from './expense-types'
+import type { ExpenseApprovalTimelineItem, ExpenseDetailInstance } from './expense-types'
 import type { ProcessCustomArchiveDetail } from './process-archive-types'
 import type { ProcessFlowNode, ProcessFlowRoute } from './process-flow-types'
 import type { ProcessFormDesignSchema } from './process-form-types'
@@ -127,6 +127,20 @@ export interface ExpenseDocumentSubmitResult {
   id: number
   documentCode: string
   status: string
+}
+
+export interface ExpenseManualApproverPreviewNode {
+  nodeKey: string
+  nodeName?: string
+  nodeType?: string
+  required?: boolean
+  candidateOptions: ProcessFormOption[]
+  selectedUserIds: number[]
+}
+
+export interface ExpenseManualApproverPreview {
+  approvalTimeline: ExpenseApprovalTimelineItem[]
+  manualNodes: ExpenseManualApproverPreviewNode[]
 }
 
 // 这是 ExpenseDocumentUpdatePayload 的数据结构。

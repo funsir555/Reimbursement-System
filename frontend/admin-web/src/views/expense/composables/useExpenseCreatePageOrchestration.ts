@@ -6,8 +6,10 @@ import {
   expenseCreateApi,
   type ExpenseCreateTemplateDetail,
   type ExpenseDocumentEditContext,
+  type ExpenseDocumentSubmitPayload,
   type ExpenseDocumentSubmitResult,
   type ExpenseDocumentUpdatePayload,
+  type ExpenseManualApproverPreview,
   type ProcessFormDesignSchema
 } from '@/api'
 import { hasPermission, resolveFirstAccessiblePath } from '@/utils/permissions'
@@ -21,8 +23,8 @@ type RouteLike = {
 
 type RouterLike = {
   back: () => Promise<unknown> | unknown
-  push: (to: unknown) => Promise<unknown> | unknown
-  replace: (to: unknown) => Promise<unknown> | unknown
+  push: (to: string | Record<string, unknown>) => Promise<unknown> | unknown
+  replace: (to: string | Record<string, unknown>) => Promise<unknown> | unknown
 }
 
 type RuntimeEditorLike = {
@@ -58,6 +60,8 @@ type UseExpenseCreatePageOrchestrationOptions = {
   validateExpenseDetailRequiredValues: () => string
   validateExpenseDetailBusinessScenarios: () => string
   resolveErrorMessage: (error: unknown, fallback: string) => string
+  loadManualApproverPreview: () => Promise<ExpenseManualApproverPreview | null>
+  openManualApproverDialog: (preview: ExpenseManualApproverPreview) => void
 }
 
 export function useExpenseCreatePageOrchestration(options: UseExpenseCreatePageOrchestrationOptions) {
@@ -135,29 +139,64 @@ export function useExpenseCreatePageOrchestration(options: UseExpenseCreatePageO
     void options.router.push('/dashboard')
   }
 
-  async function saveDraftManually() {
+  function validateBeforePersist() {
     if (!options.currentDraftKey.value || !options.selectedTemplateCode.value || !options.templateDetail.value) {
       ElMessage.warning('当前页面尚未准备好，暂时无法保存草稿')
-      return
+      return false
     }
     const expenseDetailAmountIssue = options.validateExpenseDetailAmountValues()
     if (expenseDetailAmountIssue) {
       ElMessage.warning(expenseDetailAmountIssue)
+      return false
+    }
+    return true
+  }
+
+  async function saveDraftManually() {
+    if (!validateBeforePersist()) {
       return
     }
     options.persistDraft({ includeTemplateDetail: true })
+    if (options.pageMode.value === 'create') {
+      await createServerDraft()
+      return
+    }
     if (!options.useServerDraftSave.value) {
       ElMessage.success('草稿已保存')
       return
     }
+    await saveExistingServerDraft()
+  }
+
+  async function createServerDraft() {
+    options.savingDraft.value = true
+    try {
+      const payload: ExpenseDocumentSubmitPayload = {
+        templateCode: options.selectedTemplateCode.value,
+        ...options.buildDocumentUpdatePayload()
+      }
+      const response = await expenseCreateApi.createDraft(payload)
+      options.clearDraft()
+      ElMessage.success('草稿已保存')
+      await options.router.replace(
+        `/expense/documents/${encodeURIComponent(response.data.documentCode)}/resubmit?entry=draft`
+      )
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, '保存草稿失败'))
+    } finally {
+      options.savingDraft.value = false
+    }
+  }
+
+  async function saveExistingServerDraft() {
     options.savingDraft.value = true
     try {
       const manualSelections = options.cloneManualApproverSelections()
-      const res = await expenseApi.saveDraft(
+      const response = await expenseApi.saveDraft(
         options.editingDocumentCode.value,
         options.buildDocumentUpdatePayload()
       )
-      options.applyEditContextState(res.data)
+      options.applyEditContextState(response.data)
       options.restoreManualApproverSelections(manualSelections)
       options.persistDraft({ includeTemplateDetail: true })
       ElMessage.success('草稿已保存')
@@ -168,65 +207,96 @@ export function useExpenseCreatePageOrchestration(options: UseExpenseCreatePageO
     }
   }
 
-  async function submitDocument() {
+  function validateBeforeSubmit() {
     if (!options.selectedTemplateCode.value || !options.templateDetail.value) {
       ElMessage.warning('请先选择模板')
-      return
+      return false
     }
     const runtimeSchemaIssues = validateExpenseRuntimeSchema(options.templateDetail.value.schema || options.emptySchema)
     if (runtimeSchemaIssues.length) {
       ElMessage.warning(runtimeSchemaIssues[0])
-      return
+      return false
     }
     if (options.runtimeEditorRef.value?.validateBeforeSubmit && !options.runtimeEditorRef.value.validateBeforeSubmit()) {
-      return
+      return false
     }
     if (options.isReportTemplate.value) {
       if (options.expenseDetailsCount.value === 0) {
         ElMessage.warning('报销单提交前至少需要 1 份费用明细')
-        return
+        return false
       }
       if (options.expenseDetailsCount.value > 10) {
         ElMessage.warning('费用明细最多只能添加 10 份')
-        return
+        return false
       }
     }
     const expenseDetailRequiredIssue = options.validateExpenseDetailRequiredValues()
     if (expenseDetailRequiredIssue) {
       ElMessage.warning(expenseDetailRequiredIssue)
-      return
+      return false
     }
     const expenseDetailScenarioIssue = options.validateExpenseDetailBusinessScenarios()
     if (expenseDetailScenarioIssue) {
       ElMessage.warning(expenseDetailScenarioIssue)
-      return
+      return false
     }
     const expenseDetailAmountIssue = options.validateExpenseDetailAmountValues()
     if (expenseDetailAmountIssue) {
       ElMessage.warning(expenseDetailAmountIssue)
+      return false
+    }
+    return true
+  }
+
+  async function submitDocument() {
+    if (!validateBeforeSubmit()) {
       return
     }
+    if (options.pageMode.value === 'modify') {
+      await performSubmit()
+      return
+    }
+    try {
+      const preview = await options.loadManualApproverPreview()
+      if (preview?.manualNodes?.length) {
+        options.openManualApproverDialog(preview)
+        return
+      }
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, submitFailedMessage()))
+      return
+    }
+    await performSubmit()
+  }
 
+  async function confirmSubmitAfterManualSelection() {
+    if (!validateBeforeSubmit()) {
+      return
+    }
+    await performSubmit()
+  }
+
+  async function performSubmit() {
     options.submitting.value = true
     try {
       const payload = options.buildDocumentUpdatePayload()
       if (options.pageMode.value === 'create') {
-        const res = await expenseCreateApi.submit({
+        const response = await expenseCreateApi.submit({
           templateCode: options.selectedTemplateCode.value,
           ...payload
         })
-        await handleSubmitSuccess(res.data, '审批单已提交')
+        await handleSubmitSuccess(response.data, '审批单已提交')
         return
       }
       if (options.pageMode.value === 'resubmit') {
-        const res = await expenseApi.resubmit(options.editingDocumentCode.value, payload)
-        await handleSubmitSuccess(res.data, options.isDraftEditEntry.value ? '草稿已提交' : '审批单已重新提交')
+        const response = await expenseApi.resubmit(options.editingDocumentCode.value, payload)
+        await handleSubmitSuccess(response.data, options.isDraftEditEntry.value ? '草稿已提交' : '审批单已重新提交')
         return
       }
-      const res = await expenseApprovalApi.modify(options.modifyingTaskId.value, payload)
+      const response = await expenseApprovalApi.modify(options.modifyingTaskId.value, payload)
       options.clearDraft()
       ElMessage.success('审批单已更新')
-      await options.router.push(`/expense/documents/${encodeURIComponent(res.data.documentCode)}`)
+      await options.router.push(`/expense/documents/${encodeURIComponent(response.data.documentCode)}`)
     } catch (error: unknown) {
       ElMessage.error(options.resolveErrorMessage(error, submitFailedMessage()))
     } finally {
@@ -252,6 +322,7 @@ export function useExpenseCreatePageOrchestration(options: UseExpenseCreatePageO
 
   return {
     backButtonLabel,
+    confirmSubmitAfterManualSelection,
     goBack,
     goBackToList,
     reselectTemplate,

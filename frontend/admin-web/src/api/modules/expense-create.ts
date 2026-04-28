@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { ExpenseAttachmentMeta, ExpenseAttachmentOcrResult, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseCreateVendorOptionsParams, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult } from './expense-create-types'
+import type { ExpenseAttachmentMeta, ExpenseAttachmentOcrResult, ExpenseCreatePayeeAccountOption, ExpenseCreatePayeeAccountOptionsParams, ExpenseCreatePayeeOption, ExpenseCreatePayeeOptionsParams, ExpenseCreateTemplateDetail, ExpenseCreateTemplateSummary, ExpenseCreateVendorOption, ExpenseCreateVendorOptionsParams, ExpenseDocumentEditContext, ExpenseDocumentSubmitPayload, ExpenseDocumentSubmitResult, ExpenseManualApproverPreview } from './expense-create-types'
 import type { FinanceVendorDetail, FinanceVendorSavePayload } from './finance-archive-types'
 
 // 这一组方法供对应页面统一调用。
@@ -54,6 +54,16 @@ export const expenseCreateApi = {
       method: 'POST',
       timeoutMs: 30000,
       timeoutMessage: 'OCR 识别超时，请稍后重试'
+    }),
+  createDraft: (payload: ExpenseDocumentSubmitPayload) =>
+    request<ExpenseDocumentEditContext>('/auth/expenses/create/documents/draft', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  previewManualApprovers: (payload: ExpenseDocumentSubmitPayload) =>
+    request<ExpenseManualApproverPreview>('/auth/expenses/create/documents/manual-approver-preview', {
+      method: 'POST',
+      body: JSON.stringify(payload)
     }),
   submit: (payload: ExpenseDocumentSubmitPayload) =>
     request<ExpenseDocumentSubmitResult>('/auth/expenses/create/documents', {

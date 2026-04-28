@@ -170,11 +170,12 @@ describe('PersonalCenterView', () => {
       return { data: { id: 1 } }
     })
     const wrapper = await mountView()
-    const vm = wrapper.vm as any
+    const dialog = wrapper.findComponent({ name: 'PersonalBankAccountDialog' })
+    const dialogVm = dialog.vm as any
 
-    Object.assign(vm.bankForm, validBankForm())
+    Object.assign(dialogVm.bankForm, validBankForm())
 
-    await vm.submitBankAccount()
+    await dialogVm.submitBankAccount()
     await flushPromises()
 
     expect(capturedPayload).toEqual(expect.objectContaining({
@@ -192,12 +193,16 @@ describe('PersonalCenterView', () => {
     })
     const wrapper = await mountView()
     const vm = wrapper.vm as any
+    const dialog = wrapper.findComponent({ name: 'PersonalBankAccountDialog' })
+    const dialogVm = dialog.vm as any
 
     vm.bankDialogMode = 'edit'
-    vm.editingBankAccountId = 12
-    Object.assign(vm.bankForm, validBankForm())
+    vm.editingBankAccount = { id: 12 }
+    vm.bankDialogVisible = true
+    await flushPromises()
+    Object.assign(dialogVm.bankForm, validBankForm())
 
-    await vm.submitBankAccount()
+    await dialogVm.submitBankAccount()
     await flushPromises()
 
     expect(mocks.profileApi.updateBankAccount).toHaveBeenCalledWith(12, expect.any(Object))
@@ -231,9 +236,10 @@ describe('PersonalCenterView', () => {
 
   it('uses the unified bank directory reminder when validating personal accounts', async () => {
     const wrapper = await mountView()
-    const vm = wrapper.vm as any
+    const dialog = wrapper.findComponent({ name: 'PersonalBankAccountDialog' })
+    const dialogVm = dialog.vm as any
 
-    Object.assign(vm.bankForm, {
+    Object.assign(dialogVm.bankForm, {
       accountName: '张三',
       accountNo: '6222020202020202',
       bankCode: 'BOC',
@@ -244,6 +250,6 @@ describe('PersonalCenterView', () => {
       branchName: ''
     })
 
-    expect(vm.validateBankForm()).toBe('请选择开户银行、开户省、开户市与开户网点后再保存')
+    expect(dialogVm.validateBankForm()).toBe('请选择开户银行、开户省、开户市与开户网点后再保存')
   })
 })

@@ -263,7 +263,7 @@ describe('formDesignerHelper', () => {
     expect(normalized.blocks[0].defaultValue).toBeUndefined()
   })
 
-  it('forces normal reimbursement business-scenario blocks back to full-payment only', () => {
+  it('keeps normal reimbursement business-scenario blocks configurable through enabled modes', () => {
     const normalized = normalizeFormSchema({
       layoutMode: 'TWO_COLUMN',
       blocks: [
@@ -288,11 +288,11 @@ describe('formDesignerHelper', () => {
       detailType: 'NORMAL_REIMBURSEMENT'
     })
 
-    expect(normalized.blocks[0].props.enabledSceneModes).toEqual([BUSINESS_SCENARIO_MODE_FULL])
+    expect(normalized.blocks[0].props.enabledSceneModes).toEqual([BUSINESS_SCENARIO_MODE_PREPAY])
     expect(normalized.blocks[0].props.options).toEqual([
-      { label: '全额付款', value: BUSINESS_SCENARIO_MODE_FULL }
+      { label: '预付未到票', value: BUSINESS_SCENARIO_MODE_PREPAY }
     ])
-    expect(normalized.blocks[0].defaultValue).toBe(BUSINESS_SCENARIO_MODE_FULL)
+    expect(normalized.blocks[0].defaultValue).toBe(BUSINESS_SCENARIO_MODE_PREPAY)
   })
 
   it('derives business-scenario options from enabled modes and legacy options fallback', () => {

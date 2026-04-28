@@ -34,6 +34,8 @@ import ArchiveAgentView from '@/views/archives/ArchiveAgentView.vue'
 import ExpenseDocumentBatchPrintView from '@/views/expense/ExpenseDocumentBatchPrintView.vue'
 import ExpensePaymentOrdersView from '@/views/expense/ExpensePaymentOrdersView.vue'
 import FinanceOpeningBalanceView from '@/views/finance/FinanceOpeningBalanceView.vue'
+import FinanceCloseLedgerView from '@/views/finance/FinanceCloseLedgerView.vue'
+import FinancePostVoucherView from '@/views/finance/FinancePostVoucherView.vue'
 import ProcessManagementView from '@/views/process/ProcessManagementView.vue'
 import ExpenseVoucherGenerationView from '@/views/expense/ExpenseVoucherGenerationView.vue'
 
@@ -108,7 +110,7 @@ describe('router process management routes', () => {
     expect(module.default).toBe(ArchiveAgentView)
   })
 
-  it('registers opening balance as a real view without changing the other general-ledger placeholder routes', async () => {
+  it('registers opening balance, post voucher and close ledger as real views without changing the other general-ledger placeholder routes', async () => {
     const openingRoute = router.getRoutes().find((item) => item.name === 'finance-opening-balance')
     const postRoute = router.getRoutes().find((item) => item.name === 'finance-post-voucher')
     const closeRoute = router.getRoutes().find((item) => item.name === 'finance-close-ledger')
@@ -125,8 +127,8 @@ describe('router process management routes', () => {
     const balanceModule = await (balanceRoute?.components?.default as (() => Promise<{ default: unknown }>))()
 
     expect(openingModule.default).toBe(FinanceOpeningBalanceView)
-    expect(postModule.default).toBe(PlaceholderView)
-    expect(closeModule.default).toBe(PlaceholderView)
+    expect(postModule.default).toBe(FinancePostVoucherView)
+    expect(closeModule.default).toBe(FinanceCloseLedgerView)
     expect(balanceModule.default).toBe(PlaceholderView)
   })
 })

@@ -9,7 +9,6 @@ import type {
   ProcessTemplateFormOptions
 } from '@/api'
 import {
-  BUSINESS_SCENARIO_MODE_FULL,
   getBusinessComponentDefinition,
   getControlType,
   isBusinessScenarioBlock,
@@ -236,15 +235,12 @@ export function validateSchemaFieldKeys(
           options.detailType,
           block.props?.options
         )
-        if (options.detailType === 'ENTERPRISE_TRANSACTION' && Array.isArray(block.props?.enabledSceneModes) && rawEnabledSceneModes.length === 0) {
+        if (Array.isArray(block.props?.enabledSceneModes) && rawEnabledSceneModes.length === 0) {
           issues.push('业务场景至少保留一个开启项')
         }
         const defaultScenario = trimValue(block.defaultValue)
         if (defaultScenario && !enabledSceneModes.includes(defaultScenario)) {
           issues.push('业务场景默认值必须属于当前启用场景')
-        }
-        if (options.detailType && options.detailType !== 'ENTERPRISE_TRANSACTION' && rawEnabledSceneModes.some((item) => item !== BUSINESS_SCENARIO_MODE_FULL)) {
-          issues.push('普通报销只能保留全额付款业务场景')
         }
       }
       return

@@ -115,7 +115,7 @@ describe('pmValidation', () => {
     })).toContain('业务场景默认值必须属于当前启用场景')
   })
 
-  it('forces normal reimbursement details to keep only full-payment scenario', () => {
+  it('allows normal reimbursement details to keep configured business scenarios', () => {
     expect(validateSchemaFieldKeys({
       layoutMode: 'TWO_COLUMN',
       blocks: [
@@ -136,6 +136,6 @@ describe('pmValidation', () => {
     }, '费用明细表单', {
       isExpenseDetail: true,
       detailType: 'NORMAL_REIMBURSEMENT'
-    })).toContain('普通报销只能保留全额付款业务场景')
+    })).not.toContain('普通报销只能保留全额付款业务场景')
   })
 })

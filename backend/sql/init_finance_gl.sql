@@ -6,6 +6,9 @@ DROP TABLE IF EXISTS gl_accvouch;
 DROP TABLE IF EXISTS gl_accsum;
 DROP TABLE IF EXISTS gl_accass;
 DROP TABLE IF EXISTS gl_opening_balance_state;
+DROP TABLE IF EXISTS gl_post_state;
+DROP TABLE IF EXISTS gl_period_close_log;
+DROP TABLE IF EXISTS gl_period_close;
 
 CREATE TABLE gl_accvouch (
     i_id INT NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -30,7 +33,7 @@ CREATE TABLE gl_accvouch (
     ctext2 VARCHAR(255) COMMENT '凭证头自定义项2',
     cdigest VARCHAR(255) COMMENT '摘要',
     ccode VARCHAR(64) COMMENT '科目编码',
-    ccode_name VARCHAR(128) COMMENT '科目名称',
+    ccode_name VARCHAR(128) COMMENT '科目名称快照',
     cexch_name VARCHAR(32) COMMENT '币种名称',
     currency_code VARCHAR(32) COMMENT '币种编码',
     md DECIMAL(18,2) COMMENT '借方金额',
@@ -132,6 +135,7 @@ CREATE TABLE gl_accsum (
     nd_s DECIMAL(18,6) COMMENT '借方数量',
     ne_s DECIMAL(18,6) COMMENT '期末数量余额',
     PRIMARY KEY (i_id),
+    UNIQUE KEY uk_gl_accsum_period_subject_currency (company_id, iyear, iperiod, ccode, currency_code),
     KEY idx_gl_accsum_company_id (company_id),
     KEY idx_gl_accsum_iperiod (iperiod),
     KEY idx_gl_accsum_company_year_period (company_id, iyear, iyperiod),
@@ -178,7 +182,8 @@ CREATE TABLE gl_accass (
     KEY idx_gl_accass_csup_id (csup_id),
     KEY idx_gl_accass_cperson_id (cperson_id),
     KEY idx_gl_accass_cdept_id (cdept_id),
-    KEY idx_gl_accass_citem_id (citem_id)
+    KEY idx_gl_accass_citem_id (citem_id),
+    KEY idx_gl_accass_period_subject_currency_dims (company_id, iyear, iperiod, ccode, currency_code, cdept_id, cperson_id, ccus_id, csup_id, citem_class, citem_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='总账辅助余额表';
 
 CREATE TABLE gl_opening_balance_state (
@@ -199,3 +204,24 @@ CREATE TABLE gl_opening_balance_state (
     UNIQUE KEY uk_gl_opening_balance_state_period (company_id, iyear, iperiod),
     KEY idx_gl_opening_balance_state_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='总账期初余额开账状态表';
+
+CREATE TABLE gl_post_state (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    company_id VARCHAR(64) NOT NULL COMMENT '公司主体编码',
+    iyear INT NOT NULL COMMENT '会计年度',
+    iperiod TINYINT NOT NULL COMMENT '会计期间',
+    iyperiod INT NOT NULL COMMENT '会计年月(YYYYMM)',
+    status VARCHAR(32) NOT NULL COMMENT '记账状态',
+    posted_voucher_count INT NOT NULL DEFAULT 0 COMMENT '已记账凭证数',
+    last_task_no VARCHAR(64) COMMENT '最近任务号',
+    last_task_status VARCHAR(32) COMMENT '最近任务状态',
+    last_error_message VARCHAR(1000) COMMENT '最近失败信息',
+    last_posted_by VARCHAR(64) COMMENT '最近记账人',
+    last_posted_at DATETIME COMMENT '最近记账时间',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_gl_post_state_period (company_id, iyear, iperiod),
+    KEY idx_gl_post_state_status (status),
+    KEY idx_gl_post_state_task_no (last_task_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='总账记账期间状态表';

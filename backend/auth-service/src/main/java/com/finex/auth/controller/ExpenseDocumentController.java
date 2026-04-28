@@ -6,6 +6,8 @@ import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
+import com.finex.auth.dto.ExpenseDocumentEditContextVO;
+import com.finex.auth.dto.ExpenseManualApproverPreviewVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.FinanceVendorDetailVO;
@@ -158,6 +160,29 @@ public class ExpenseDocumentController {
         return Result.success(
                 "提交成功",
                 expenseDocumentService.submitDocument(getCurrentUserId(request), getCurrentUsername(request), dto)
+        );
+    }
+
+    @PostMapping("/documents/draft")
+    public Result<ExpenseDocumentEditContextVO> createDraftDocument(
+            @Valid @RequestBody ExpenseDocumentSubmitDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(
+                "草稿已保存",
+                expenseDocumentService.createDraftDocument(getCurrentUserId(request), getCurrentUsername(request), dto)
+        );
+    }
+
+    @PostMapping("/documents/manual-approver-preview")
+    public Result<ExpenseManualApproverPreviewVO> previewManualApprovers(
+            @Valid @RequestBody ExpenseDocumentSubmitDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requireAnyPermission(getCurrentUserId(request), EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(
+                expenseDocumentService.previewManualApproversForCreate(getCurrentUserId(request), dto)
         );
     }
 

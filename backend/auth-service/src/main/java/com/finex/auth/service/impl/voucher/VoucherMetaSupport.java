@@ -13,6 +13,7 @@ import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
 import com.finex.auth.mapper.FinanceVendorMapper;
@@ -48,9 +49,10 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
             SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
             UserMapper userMapper,
+            FinancePeriodCloseMapper financePeriodCloseMapper,
             VoucherContextSupport voucherContextSupport
     ) {
-        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper);
+        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper);
         this.voucherContextSupport = voucherContextSupport;
     }
 

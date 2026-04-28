@@ -48,10 +48,16 @@ class FinanceContextControllerTest {
         FinanceContextCompanyOptionVO option = new FinanceContextCompanyOptionVO();
         option.setCompanyId("COMPANY_A");
         option.setCompanyCode("COMP_A");
-        option.setCompanyName("广州远智教育科技有限公司");
+        option.setCompanyName("\u5e7f\u5dde\u8fdc\u667a\u6559\u80b2\u79d1\u6280\u6709\u9650\u516c\u53f8");
         option.setHasActiveAccountSet(true);
+        option.setEnabledYear(2026);
+        option.setEnabledPeriod(4);
+        option.setPeriodStartYear(2026);
+        option.setPeriodStartMonth(4);
+        option.setPeriodEndYear(2026);
+        option.setPeriodEndMonth(4);
         option.setValue("COMPANY_A");
-        option.setLabel("COMP_A - 广州远智教育科技有限公司");
+        option.setLabel("COMP_A - \u5e7f\u5dde\u8fdc\u667a\u6559\u80b2\u79d1\u6280\u6709\u9650\u516c\u53f8");
 
         FinanceContextMetaVO meta = new FinanceContextMetaVO();
         meta.getCompanyOptions().add(option);
@@ -65,8 +71,14 @@ class FinanceContextControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.defaultCompanyId").value("COMPANY_A"))
-                .andExpect(jsonPath("$.data.companyOptions[0].companyName").value("广州远智教育科技有限公司"))
-                .andExpect(jsonPath("$.data.companyOptions[0].hasActiveAccountSet").value(true));
+                .andExpect(jsonPath("$.data.companyOptions[0].companyName").value("\u5e7f\u5dde\u8fdc\u667a\u6559\u80b2\u79d1\u6280\u6709\u9650\u516c\u53f8"))
+                .andExpect(jsonPath("$.data.companyOptions[0].hasActiveAccountSet").value(true))
+                .andExpect(jsonPath("$.data.companyOptions[0].enabledYear").value(2026))
+                .andExpect(jsonPath("$.data.companyOptions[0].enabledPeriod").value(4))
+                .andExpect(jsonPath("$.data.companyOptions[0].periodStartYear").value(2026))
+                .andExpect(jsonPath("$.data.companyOptions[0].periodStartMonth").value(4))
+                .andExpect(jsonPath("$.data.companyOptions[0].periodEndYear").value(2026))
+                .andExpect(jsonPath("$.data.companyOptions[0].periodEndMonth").value(4));
 
         verify(financeContextService).getMeta(1L);
         List<String> requiredPermissions = mockingDetails(accessControlService).getInvocations().stream()

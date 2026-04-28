@@ -26,6 +26,7 @@ import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverPreviewVO;
 import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -83,6 +84,12 @@ public interface ExpenseDocumentService {
      * 提交单据。
      */
     ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto);
+
+    ExpenseDocumentEditContextVO createDraftDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto);
+
+    ExpenseManualApproverPreviewVO previewManualApproversForCreate(Long userId, ExpenseDocumentSubmitDTO dto);
+
+    ExpenseManualApproverPreviewVO previewManualApproversForResubmit(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto);
 
     /**
      * 查询报销单Summaries列表。

@@ -8,6 +8,13 @@ const financeCompanyStore = reactive({
   currentCompanyName: '测试公司A'
 })
 
+const financePeriodStore = reactive({
+  currentYear: 2026,
+  currentPeriod: 6,
+  currentYearPeriod: 202606,
+  hasPeriodContext: true
+})
+
 const mocks = vi.hoisted(() => ({
   openingBalanceApi: {
     getMeta: vi.fn(),
@@ -38,6 +45,10 @@ vi.mock('@/stores/financeCompany', () => ({
   useFinanceCompanyStore: () => financeCompanyStore
 }))
 
+vi.mock('@/stores/financePeriod', () => ({
+  useFinancePeriodStore: () => financePeriodStore
+}))
+
 vi.mock('element-plus', async (importOriginal) => {
   const actual = await importOriginal<typeof import('element-plus')>()
   return {
@@ -53,15 +64,8 @@ const InputStub = defineComponent({
     disabled: { type: Boolean, default: false }
   },
   emits: ['update:modelValue', 'blur', 'change'],
-  template: '<input :value="modelValue" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @blur="$emit(\'blur\')" @change="$emit(\'change\', $event.target.value)" />'
-})
-
-const InputNumberStub = defineComponent({
-  props: {
-    modelValue: { type: Number, default: 0 }
-  },
-  emits: ['update:modelValue', 'change'],
-  template: '<input type="number" :value="modelValue" @input="$emit(\'update:modelValue\', Number($event.target.value))" @change="$emit(\'change\', Number($event.target.value))" />'
+  template:
+    '<input :value="modelValue" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @blur="$emit(\'blur\')" @change="$emit(\'change\', $event.target.value)" />'
 })
 
 const SelectStub = defineComponent({
@@ -70,7 +74,8 @@ const SelectStub = defineComponent({
     disabled: { type: Boolean, default: false }
   },
   emits: ['update:modelValue', 'change'],
-  template: '<select :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>'
+  template:
+    '<select :value="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)"><slot /></select>'
 })
 
 const OptionStub = defineComponent({
@@ -115,7 +120,6 @@ async function mountView() {
       stubs: {
         'el-button': ButtonStub,
         'el-input': InputStub,
-        'el-input-number': InputNumberStub,
         'el-select': SelectStub,
         'el-option': OptionStub,
         'el-table': TableStub,
@@ -192,6 +196,10 @@ function buildRows() {
 describe('FinanceOpeningBalanceView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    financePeriodStore.currentYear = 2026
+    financePeriodStore.currentPeriod = 6
+    financePeriodStore.currentYearPeriod = 202606
+    financePeriodStore.hasPeriodContext = true
     mocks.openingBalanceApi.getMeta.mockResolvedValue({ data: buildMeta() })
     mocks.openingBalanceApi.listRows.mockResolvedValue({ data: buildRows() })
     mocks.openingBalanceApi.getAssistBalances.mockResolvedValue({
@@ -209,19 +217,20 @@ describe('FinanceOpeningBalanceView', () => {
     })
   })
 
-  it('renders the four toolbar buttons and current company summary', async () => {
+  it('keeps only the compact summary area and removes the duplicated lower info block', async () => {
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('期初余额')
-    expect(wrapper.text()).toContain('开账')
-    expect(wrapper.text()).toContain('结转')
-    expect(wrapper.text()).toContain('试算')
-    expect(wrapper.text()).toContain('对账')
+    expect(wrapper.find('.ob-summary-card').exists()).toBe(true)
+    expect(wrapper.find('.ob-filter-card').exists()).toBe(false)
+    expect(wrapper.findAll('.ob-summary-card__item')).toHaveLength(4)
+    expect(wrapper.findAll('.ob-chip')).toHaveLength(2)
     expect(wrapper.text()).toContain('测试公司A')
+    expect(wrapper.text()).toContain('2026')
+    expect(wrapper.text()).toContain('6 月')
     expect(mocks.openingBalanceApi.listRows).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       iyear: 2026,
-      iperiod: 4
+      iperiod: 6
     })
   })
 
@@ -237,7 +246,6 @@ describe('FinanceOpeningBalanceView', () => {
   it('opens the assist dialog and saves assist lines back through the api', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
-      rows: Array<{ subjectCode: string }>
       openAssistDialog: (row: { subjectCode: string }) => Promise<void>
       saveAssistDialog: () => Promise<void>
     }
@@ -248,7 +256,7 @@ describe('FinanceOpeningBalanceView', () => {
     expect(mocks.openingBalanceApi.getAssistBalances).toHaveBeenCalledWith('560101', {
       companyId: 'COMPANY_A',
       iyear: 2026,
-      iperiod: 4
+      iperiod: 6
     })
     expect(mocks.openingBalanceApi.saveAssistBalances).toHaveBeenCalled()
   })

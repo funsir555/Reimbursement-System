@@ -422,6 +422,8 @@
 
             v-model="formData[block.fieldKey]"
 
+            :data-testid="`payee-select-${block.fieldKey}`"
+
             value-key="value"
 
             filterable
@@ -444,13 +446,15 @@
 
             :disabled="isReadOnly(block)"
 
+            @visible-change="handlePayeeDropdownVisibleChange"
+
             @change="handlePayeeSelection(block.fieldKey, $event)"
 
           >
 
             <el-option
 
-              v-for="item in payeeOptions"
+              v-for="item in visiblePayeeOptions"
 
               :key="item.value"
 
@@ -469,6 +473,22 @@
               </div>
 
             </el-option>
+
+            <template v-if="showPersonalPayeeCreateEntry && !isReadOnly(block)" #empty>
+              <div class="space-y-3 px-3 py-4 text-center">
+                <p class="text-sm text-slate-500">
+                  未维护收款人信息，请先新增收款人
+                </p>
+                <button
+                  type="button"
+                  :data-testid="`payee-create-personal-${block.fieldKey}`"
+                  class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                  @click.stop="openPersonalPayeeDialog(block.fieldKey)"
+                >
+                  增加收款人
+                </button>
+              </div>
+            </template>
 
           </el-select>
 
@@ -1023,6 +1043,13 @@
       </template>
     </el-dialog>
 
+    <PersonalBankAccountDialog
+      :model-value="personalPayeeDialogVisible"
+      mode="create"
+      @update:model-value="handlePersonalPayeeDialogVisibleChange"
+      @saved="handlePersonalPayeeSaved"
+    />
+
   </div>
 
 </template>
@@ -1037,6 +1064,7 @@ import {
 } from '@/api'
 import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import PersonalBankAccountDialog from '@/components/profile/PersonalBankAccountDialog.vue'
 import { useExpenseRuntimeAttachmentOcr } from '@/views/expense/components/composables/useExpenseRuntimeAttachmentOcr'
 import { useExpenseRuntimeBlockRuntime } from '@/views/expense/components/composables/useExpenseRuntimeBlockRuntime'
 import { useExpenseRuntimeDocumentPicker } from '@/views/expense/components/composables/useExpenseRuntimeDocumentPicker'
@@ -1139,13 +1167,16 @@ const {
   selectedCounterpartyCode,
   vendorOptionsLoading,
   payeeOptions,
+  visiblePayeeOptions,
   payeeOptionsLoading,
   payeeAccountOptionsLoading,
   visibleVendorOptions,
   visiblePayeeAccountOptions,
   counterpartyPlaceholder,
   payeeAccountPlaceholder,
+  showPersonalPayeeCreateEntry,
   showVendorAccountMaintenanceEntry,
+  personalPayeeDialogVisible,
   vendorDialogVisible,
   vendorDialogTitle,
   vendorDialogSubmitText,
@@ -1157,6 +1188,7 @@ const {
   loadVendorOptions,
   loadPayeeOptions,
   loadPayeeAccountOptions,
+  handlePayeeDropdownVisibleChange,
   handlePayeeAccountDropdownVisibleChange,
   buildPayeeSnapshot,
   buildPayeeAccountSnapshot,
@@ -1166,6 +1198,9 @@ const {
   handleCounterpartySelection,
   handlePayeeSelection,
   handlePayeeAccountSelection,
+  handlePersonalPayeeDialogVisibleChange,
+  openPersonalPayeeDialog,
+  handlePersonalPayeeSaved,
   openVendorDialog,
   closeVendorDialog,
   openVendorAccountDialog,
@@ -1297,4 +1332,3 @@ const {
 }
 
 </style>
-

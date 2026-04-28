@@ -9,6 +9,10 @@ const financeCompanyStore = reactive({
   currentCompanyName: '广州远智教育科技有限公司'
 })
 
+const financePeriodStore = reactive({
+  currentMonthText: '2026-06'
+})
+
 const mocks = vi.hoisted(() => ({
   financeApi: {
     getVoucherMeta: vi.fn(),
@@ -27,6 +31,10 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/stores/financeCompany', () => ({
   useFinanceCompanyStore: () => financeCompanyStore
+}))
+
+vi.mock('@/stores/financePeriod', () => ({
+  useFinancePeriodStore: () => financePeriodStore
 }))
 
 vi.mock('vue-router', () => ({
@@ -141,7 +149,12 @@ describe('FinanceQueryVoucherView', () => {
   it('loads vouchers with current finance company and opens detail on row dblclick', async () => {
     const wrapper = await mountView()
 
-    expect(mocks.financeApi.listVouchers).toHaveBeenCalledWith(expect.objectContaining({ companyId: 'COMPANY_A', page: 1, pageSize: 20 }))
+    expect(mocks.financeApi.listVouchers).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: 'COMPANY_A',
+      billMonth: '2026-06',
+      page: 1,
+      pageSize: 20
+    }))
     expect(wrapper.text()).toContain('查询凭证')
 
     await wrapper.find('.row-trigger').trigger('dblclick')

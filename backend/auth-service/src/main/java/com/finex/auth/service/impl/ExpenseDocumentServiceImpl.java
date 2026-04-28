@@ -27,6 +27,7 @@ import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverPreviewVO;
 import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
@@ -125,6 +126,22 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     @Transactional(rollbackFor = Exception.class)
     public ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         return expenseDocumentSubmissionService.submitDocument(userId, username, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExpenseDocumentEditContextVO createDraftDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
+        return expenseDocumentSubmissionService.createDraftDocument(userId, username, dto);
+    }
+
+    @Override
+    public ExpenseManualApproverPreviewVO previewManualApproversForCreate(Long userId, ExpenseDocumentSubmitDTO dto) {
+        return expenseDocumentSubmissionService.previewManualApproversForCreate(userId, dto);
+    }
+
+    @Override
+    public ExpenseManualApproverPreviewVO previewManualApproversForResubmit(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
+        return expenseDocumentSubmissionService.previewManualApproversForResubmit(userId, documentCode, dto);
     }
 
     /**

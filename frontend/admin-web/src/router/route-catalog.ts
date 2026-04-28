@@ -255,13 +255,13 @@ export const routeCatalog: AppRouteDefinition[] = [
       {
         path: 'finance/general-ledger/post-voucher',
         name: 'finance-post-voucher',
-        component: placeholderView,
+        component: () => import('../views/finance/FinancePostVoucherView.vue'),
         metaKey: 'finance-post-voucher'
       },
       {
         path: 'finance/general-ledger/close-ledger',
         name: 'finance-close-ledger',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceCloseLedgerView.vue'),
         metaKey: 'finance-close-ledger'
       },
       {

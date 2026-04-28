@@ -54,10 +54,7 @@ export const useFinanceCompanyStore = defineStore('financeCompany', {
 
       this.loading = true
       initPromise = (async () => {
-        const res = await financeContextApi.getMeta()
-        this.companyOptions = res.data.companyOptions || []
-        this.currentUserCompanyId = normalizeText(res.data.currentUserCompanyId)
-        this.defaultCompanyId = normalizeText(res.data.defaultCompanyId)
+        await this.loadContextMeta()
         this.applyCurrentCompany(this.resolveInitialCompanyId(preferredCompanyId))
         this.initialized = true
       })()
@@ -66,6 +63,16 @@ export const useFinanceCompanyStore = defineStore('financeCompany', {
         await initPromise
       } finally {
         initPromise = null
+        this.loading = false
+      }
+    },
+    async refreshContext(preferredCompanyId?: string) {
+      this.loading = true
+      try {
+        await this.loadContextMeta()
+        this.applyCurrentCompany(this.resolveInitialCompanyId(preferredCompanyId || this.currentCompanyId))
+        this.initialized = true
+      } finally {
         this.loading = false
       }
     },
@@ -134,6 +141,12 @@ export const useFinanceCompanyStore = defineStore('financeCompany', {
       } else {
         localStorage.removeItem(STORAGE_KEY)
       }
+    },
+    async loadContextMeta() {
+      const res = await financeContextApi.getMeta()
+      this.companyOptions = res.data.companyOptions || []
+      this.currentUserCompanyId = normalizeText(res.data.currentUserCompanyId)
+      this.defaultCompanyId = normalizeText(res.data.defaultCompanyId)
     }
   }
 })

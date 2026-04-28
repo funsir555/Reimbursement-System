@@ -1,5 +1,8 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 import type {
+  ExpenseCreatePayeeAccountOption,
+  ExpenseCreatePayeeOption,
+  ExpenseCreateVendorOption,
   ExpenseDetailInstanceDetail,
   ExpenseDocumentDetail,
   ProcessFormDesignSchema
@@ -10,7 +13,9 @@ import type {
   ExpenseDocumentWriteOffBinding
 } from '@/api/modules/expense-types'
 
-type OptionMap = Record<string, unknown>
+type VendorOptionMap = Record<string, ExpenseCreateVendorOption>
+type PayeeOptionMap = Record<string, ExpenseCreatePayeeOption>
+type PayeeAccountOptionMap = Record<string, ExpenseCreatePayeeAccountOption>
 
 export type BindingPanelItem = {
   key: string
@@ -69,9 +74,9 @@ export type BankReceiptDisplay = {
 
 type UseExpenseDocumentDetailDisplayOwnerOptions = {
   detail: Ref<ExpenseDocumentDetail | null>
-  vendorOptionMap: Ref<OptionMap>
-  payeeOptionMap: Ref<OptionMap>
-  payeeAccountOptionMap: Ref<OptionMap>
+  vendorOptionMap: Ref<VendorOptionMap>
+  payeeOptionMap: Ref<PayeeOptionMap>
+  payeeAccountOptionMap: Ref<PayeeAccountOptionMap>
   relatedBindingsExpanded: Ref<boolean>
   writeOffBindingsExpanded: Ref<boolean>
   activeExpenseDetailNo: Ref<string>

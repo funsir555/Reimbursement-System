@@ -349,6 +349,19 @@
         </div>
       </div>
     </div>
+
+    <ExpenseManualApproverSubmitDialog
+      v-model="manualApproverDialogVisible"
+      :approval-timeline-items="manualApproverPreviewTimelineItems"
+      :manual-nodes="manualApproverPreviewNodes"
+      :selections="manualApproverSelections"
+      :can-confirm="canConfirmManualApproverSubmit"
+      :submitting="submitting"
+      :saving-draft="savingDraft"
+      @update-selection="updateManualApproverNodeSelection"
+      @confirm-submit="confirmSubmitAfterManualSelection"
+      @save-draft="saveDraftManually"
+    />
   </div>
 </template>
 
@@ -378,10 +391,12 @@ import { getControlType } from '@/views/process/formDesignerHelper'
 import {
   resolveDocumentTotalAmount
 } from './expenseDetailRuntime'
+import ExpenseManualApproverSubmitDialog from './components/ExpenseManualApproverSubmitDialog.vue'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
 import { useExpenseCreateBootstrap } from './composables/useExpenseCreateBootstrap'
 import { useExpenseCreateDraftPersistence } from './composables/useExpenseCreateDraftPersistence'
 import { useExpenseCreateExpenseDetailsOwner } from './composables/useExpenseCreateExpenseDetailsOwner'
+import { useExpenseCreateManualApproverPreview } from './composables/useExpenseCreateManualApproverPreview'
 import { useExpenseCreatePageOrchestration } from './composables/useExpenseCreatePageOrchestration'
 import { useExpenseCreatePageUtils } from './composables/useExpenseCreatePageUtils'
 import { useExpenseCreateValidationPayload } from './composables/useExpenseCreateValidationPayload'
@@ -692,6 +707,23 @@ const {
 })
 
 const {
+  dialogVisible: manualApproverDialogVisible,
+  approvalTimelineItems: manualApproverPreviewTimelineItems,
+  manualNodes: manualApproverPreviewNodes,
+  canConfirmSubmit: canConfirmManualApproverSubmit,
+  loadPreview: loadManualApproverPreview,
+  openDialog: openManualApproverDialog,
+  closeDialog: closeManualApproverDialog,
+  updateNodeSelection: updateManualApproverNodeSelection
+} = useExpenseCreateManualApproverPreview({
+  pageMode,
+  selectedTemplateCode: computed(() => selectedTemplateCode.value),
+  editingDocumentCode,
+  manualApproverSelections,
+  buildDocumentUpdatePayload
+})
+
+const {
   clearDraft,
   formHydrationVersion,
   isFormHydrating,
@@ -753,6 +785,7 @@ const {
 
 const {
   backButtonLabel,
+  confirmSubmitAfterManualSelection,
   goBack,
   goBackToList,
   reselectTemplate,
@@ -787,8 +820,17 @@ const {
   validateExpenseDetailAmountValues,
   validateExpenseDetailRequiredValues,
   validateExpenseDetailBusinessScenarios,
-  resolveErrorMessage
+  resolveErrorMessage,
+  loadManualApproverPreview,
+  openManualApproverDialog
 })
+
+watch(
+  () => route.fullPath,
+  () => {
+    closeManualApproverDialog()
+  }
+)
 
 watch(
   showFloatingActionBar,

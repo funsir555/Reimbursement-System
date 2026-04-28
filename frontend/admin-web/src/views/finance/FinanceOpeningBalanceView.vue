@@ -1,10 +1,6 @@
 <template>
   <div class="opening-balance-page">
     <section class="ob-toolbar">
-      <div class="ob-toolbar__title">
-        <h1>期初余额</h1>
-        <p>负责开账、年度期初结转、试算平衡、辅助核算对账与期初余额录入。</p>
-      </div>
       <div class="ob-toolbar__actions">
         <el-button type="primary" :loading="taskLoading.openBook" @click="runOpenBook">开账</el-button>
         <el-button :loading="taskLoading.carryForward" @click="runCarryForward">结转</el-button>
@@ -31,8 +27,6 @@
           <span>开账状态</span>
           <strong>{{ meta?.statusLabel || '未开账' }}</strong>
         </div>
-      </div>
-      <div class="ob-summary-card__side">
         <div class="ob-chip">
           <span>末级科目</span>
           <strong>{{ editableLeafCount }}</strong>
@@ -42,25 +36,6 @@
           <strong>{{ assistLeafCount }}</strong>
         </div>
       </div>
-    </section>
-
-    <section class="ob-filter-card">
-      <label>
-        <span>公司</span>
-        <div class="ob-static-field">{{ currentCompanyName || '未设置' }}</div>
-      </label>
-      <label>
-        <span>年度</span>
-        <el-input-number v-model="filters.iyear" :controls="false" :min="2000" :max="2099" @change="handleFilterChange" />
-      </label>
-      <label>
-        <span>期间</span>
-        <el-input-number v-model="filters.iperiod" :controls="false" :min="1" :max="12" @change="handleFilterChange" />
-      </label>
-      <label>
-        <span>状态</span>
-        <div class="ob-static-field">{{ meta?.statusLabel || '未开账' }}</div>
-      </label>
     </section>
 
     <section class="ob-table-card">
@@ -147,9 +122,15 @@
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column v-if="activeAssistConfig.bitem" label="项目分类" min-width="150">
+        <el-table-column v-if="activeAssistConfig.bitem" label="项目大类" min-width="150">
           <template #default="{ row }">
-            <el-select v-model="row.citemClass" :disabled="Boolean(activeAssistRow?.cassItem)" filterable clearable @change="handleAssistProjectClassChange(row)">
+            <el-select
+              v-model="row.citemClass"
+              :disabled="Boolean(activeAssistRow?.cassItem)"
+              filterable
+              clearable
+              @change="handleAssistProjectClassChange(row)"
+            >
               <el-option v-for="item in projectClassOptionsForRow(row)" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </template>
@@ -183,9 +164,17 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { openingBalanceApi, type OpeningAssistBalanceLine, type OpeningBalanceMeta, type OpeningBalanceReconcileResult, type OpeningBalanceRow, type OpeningBalanceTrialResult } from '@/api'
+import {
+  openingBalanceApi,
+  type OpeningAssistBalanceLine,
+  type OpeningBalanceMeta,
+  type OpeningBalanceReconcileResult,
+  type OpeningBalanceRow,
+  type OpeningBalanceTrialResult
+} from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
+import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 
 type OpeningBalanceTableRow = OpeningBalanceRow & {
@@ -198,14 +187,15 @@ type AssistDialogLine = OpeningAssistBalanceLine & {
 }
 
 const financeCompany = useFinanceCompanyStore()
+const financePeriod = useFinancePeriodStore()
 const meta = ref<OpeningBalanceMeta | null>(null)
 const rows = ref<OpeningBalanceTableRow[]>([])
 const loading = reactive({ meta: false, rows: false })
 const taskLoading = reactive({ openBook: false, carryForward: false, trial: false, reconcile: false })
 const filters = reactive({
   companyId: '',
-  iyear: new Date().getFullYear(),
-  iperiod: new Date().getMonth() + 1
+  iyear: 0,
+  iperiod: 0
 })
 const trialResult = ref<OpeningBalanceTrialResult | null>(null)
 const reconcileResult = ref<OpeningBalanceReconcileResult | null>(null)
@@ -228,10 +218,12 @@ const activeAssistConfig = computed(() => ({
 }))
 
 watch(
-  () => financeCompany.currentCompanyId,
-  async (companyId) => {
-    if (!companyId) return
+  () => [financeCompany.currentCompanyId, financePeriod.currentYearPeriod] as const,
+  async ([companyId]) => {
+    if (!companyId || !financePeriod.hasPeriodContext) return
     filters.companyId = companyId
+    filters.iyear = financePeriod.currentYear
+    filters.iperiod = financePeriod.currentPeriod
     await loadMeta()
     await loadRows()
   },
@@ -248,8 +240,6 @@ async function loadMeta() {
       iperiod: filters.iperiod
     })
     meta.value = res.data
-    filters.iyear = res.data.defaultYear
-    filters.iperiod = res.data.defaultPeriod
   } catch (error: unknown) {
     ElMessage.error(error instanceof Error ? error.message : '加载期初余额元数据失败')
   } finally {
@@ -275,11 +265,6 @@ async function loadRows() {
   } finally {
     loading.rows = false
   }
-}
-
-async function handleFilterChange() {
-  await loadMeta()
-  await loadRows()
 }
 
 async function saveSingleRow(row: OpeningBalanceTableRow) {
@@ -359,7 +344,7 @@ function handleAssistProjectClassChange(line: AssistDialogLine) {
   line.citemId = ''
 }
 
-function projectClassOptionsForRow(row: AssistDialogLine) {
+function projectClassOptionsForRow(_row: AssistDialogLine) {
   if (activeAssistRow.value?.cassItem) {
     return (meta.value?.projectClassOptions || []).filter((item) => item.value === activeAssistRow.value?.cassItem)
   }
@@ -471,7 +456,7 @@ async function runReconcile() {
         `差异科目 ${res.data.differenceSubjects.length} 条`,
         `缺失辅助 ${res.data.missingAssistSubjects.length} 条`,
         `非法辅助 ${res.data.illegalAssistMessages.length} 条`
-      ].join('；'),
+      ].join('，'),
       '对账结果',
       { type: 'warning' }
     )
@@ -502,7 +487,6 @@ function moneyText(value?: string | number) {
 
 .ob-toolbar,
 .ob-summary-card,
-.ob-filter-card,
 .ob-table-card,
 .ob-result-card {
   background: #fff;
@@ -514,94 +498,55 @@ function moneyText(value?: string | number) {
 .ob-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 20px 24px;
-}
-
-.ob-toolbar__title h1 {
-  margin: 0;
-  font-size: 24px;
-  color: #15304d;
-}
-
-.ob-toolbar__title p {
-  margin: 6px 0 0;
-  color: #607086;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px 12px;
 }
 
 .ob-toolbar__actions {
   display: flex;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .ob-summary-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 20px;
-  padding: 20px 24px;
+  padding: 10px 14px;
   background: linear-gradient(135deg, #f7fbff, #ffffff);
 }
 
 .ob-summary-card__main {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .ob-summary-card__item,
 .ob-chip {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: 14px;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 12px;
   background: rgba(242, 247, 255, 0.95);
 }
 
 .ob-summary-card__item span,
 .ob-chip span {
   font-size: 12px;
+  line-height: 1;
   color: #6d7a8c;
+  white-space: nowrap;
 }
 
 .ob-summary-card__item strong,
 .ob-chip strong {
   color: #19324d;
-  font-size: 16px;
-}
-
-.ob-summary-card__side {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.ob-filter-card {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-  padding: 18px 24px;
-}
-
-.ob-filter-card label {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: #526172;
-  font-size: 13px;
-}
-
-.ob-static-field {
-  min-height: 40px;
-  padding: 0 14px;
-  display: flex;
-  align-items: center;
-  border-radius: 12px;
-  border: 1px solid #d9e2ef;
-  background: #f8fbff;
-  color: #18324b;
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .ob-table-card,
@@ -656,27 +601,24 @@ function moneyText(value?: string | number) {
   margin-bottom: 12px;
 }
 
+@media (max-width: 1200px) {
+  .ob-summary-card__main {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1100px) {
-  .ob-summary-card,
-  .ob-filter-card,
   .ob-result-card {
     grid-template-columns: 1fr;
-  }
-
-  .ob-summary-card__main {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
   .ob-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    padding: 8px 10px;
   }
 
-  .ob-summary-card__main,
-  .ob-summary-card__side,
-  .ob-filter-card {
+  .ob-summary-card__main {
     grid-template-columns: 1fr;
   }
 }

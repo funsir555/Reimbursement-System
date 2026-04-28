@@ -183,6 +183,20 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleIllegalStateReturnsChineseMessageDirectlyForPostVoucherRequests() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("\u9996\u671f\u8bb0\u8d26\u524d\u5fc5\u987b\u5148\u5b8c\u6210\u671f\u521d\u5f00\u8d26");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("GET", "/auth/finance/post-voucher/meta")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("\u9996\u671f\u8bb0\u8d26\u524d\u5fc5\u987b\u5148\u5b8c\u6210\u671f\u521d\u5f00\u8d26", result.getMessage());
+    }
+
+    @Test
     void handleIllegalStateReturnsChineseMessageDirectlyForExpenseResubmitPath() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         IllegalStateException exception = new IllegalStateException("\u8282\u70b9\u3010\u9886\u5bfc\u5ba1\u6279\u3011\u627e\u4e0d\u5230\u5ba1\u6279\u4eba\uff0c\u5f53\u524d\u914d\u7f6e\u4e0d\u5141\u8bb8\u63d0\u4ea4");

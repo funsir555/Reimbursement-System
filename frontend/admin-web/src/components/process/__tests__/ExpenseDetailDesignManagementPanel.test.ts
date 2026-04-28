@@ -29,18 +29,26 @@ vi.mock('@/api', () => ({
   processApi: mocks.processApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
-vi.mock('@element-plus/icons-vue', () => ({
-  CircleCheckFilled: { template: '<span />' },
-  Document: { template: '<span />' },
-  Files: { template: '<span />' },
-  Plus: { template: '<span />' },
-  Search: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@element-plus/icons-vue')>()
+  return {
+    ...actual,
+    CircleCheckFilled: { template: '<span />' },
+    Document: { template: '<span />' },
+    Files: { template: '<span />' },
+    Plus: { template: '<span />' },
+    Search: { template: '<span />' }
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="header" /><slot /><slot name="footer" /></div>'
@@ -139,15 +147,15 @@ describe('ExpenseDetailDesignManagementPanel', () => {
   it('renders compact toolbar copy and prefers local detail type labels on cards', async () => {
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('筛选与搜索')
-    expect(wrapper.text()).toContain('新建费用明细表单')
+    expect(wrapper.text()).toContain('费用明细表单')
+    expect(wrapper.text()).toContain('增加费用明细表单')
     expect(wrapper.text()).toContain('全部设计')
     expect(wrapper.text()).toContain('普通报销')
     expect(wrapper.text()).toContain('企业往来')
     expect(wrapper.text()).not.toContain('乱码占位')
 
     const summaryGrid = wrapper.get('[data-testid="expense-detail-summary-grid"]')
-    expect(summaryGrid.classes()).toContain('expense-wb-stat-grid--compact')
+    expect(summaryGrid.classes()).toContain('xl:grid-cols-4')
     expect(summaryGrid.text()).toContain('2')
   })
 

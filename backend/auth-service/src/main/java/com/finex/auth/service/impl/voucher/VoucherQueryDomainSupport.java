@@ -12,6 +12,7 @@ import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
 import com.finex.auth.mapper.FinanceVendorMapper;
@@ -40,9 +41,10 @@ public final class VoucherQueryDomainSupport extends AbstractFinanceVoucherSuppo
             FinanceProjectArchiveMapper financeProjectArchiveMapper,
             SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinancePeriodCloseMapper financePeriodCloseMapper
     ) {
-        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper);
+        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper);
     }
 
     /**

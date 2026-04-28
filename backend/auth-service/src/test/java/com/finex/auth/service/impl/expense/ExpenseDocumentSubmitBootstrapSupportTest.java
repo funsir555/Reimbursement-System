@@ -30,6 +30,7 @@ class ExpenseDocumentSubmitBootstrapSupportTest {
     @Mock private ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     @Mock private UserMapper userMapper;
     @Mock private ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
+    @Mock private ExpenseManualApproverPreviewSupport expenseManualApproverPreviewSupport;
 
     @Test
     void saveDraftDocumentUsesMutationApplyOwnerAndReloadsDocument() {
@@ -40,7 +41,8 @@ class ExpenseDocumentSubmitBootstrapSupportTest {
                 mutationApplySupport,
                 processDocumentInstanceMapper,
                 userMapper,
-                expenseWorkflowRuntimeSupport
+                expenseWorkflowRuntimeSupport,
+                expenseManualApproverPreviewSupport
         );
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-1");
@@ -68,7 +70,8 @@ class ExpenseDocumentSubmitBootstrapSupportTest {
                 mutationApplySupport,
                 processDocumentInstanceMapper,
                 userMapper,
-                expenseWorkflowRuntimeSupport
+                expenseWorkflowRuntimeSupport,
+                expenseManualApproverPreviewSupport
         );
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setId(10L);

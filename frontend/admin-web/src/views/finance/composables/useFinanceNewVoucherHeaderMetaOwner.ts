@@ -115,13 +115,8 @@ export function useFinanceNewVoucherHeaderMetaOwner(options: UseFinanceNewVouche
     }
   })
 
-  watch(() => options.form.dbillDate, (value) => {
+  watch(() => options.form.dbillDate, () => {
     if (options.initializing.value || options.voucherHeaderLocked.value) return
-    const nextYear = inferYear(value)
-    const nextPeriod = inferPeriod(value)
-    if (nextYear) options.form.iyear = nextYear
-    if (nextYear && nextPeriod) options.form.iyperiod = buildYearPeriod(nextYear, nextPeriod)
-    if (nextPeriod) options.form.iperiod = nextPeriod
   })
 
   watch(() => [options.form.dbillDate, options.form.csign] as const, async () => {
@@ -137,8 +132,6 @@ export function useFinanceNewVoucherHeaderMetaOwner(options: UseFinanceNewVouche
       options.resetLeafSubjectHistory(options.form.entries, res.data.accountOptions)
       options.form.companyId = companyId || ''
       options.form.inoId = res.data.suggestedVoucherNo
-      options.form.iyear = res.data.defaultYear ?? inferYear(options.form.dbillDate)
-      options.form.iyperiod = res.data.defaultYearPeriod ?? buildYearPeriod(options.form.iyear || inferYear(options.form.dbillDate) || new Date().getFullYear(), options.form.iperiod)
       if (!options.form.cbill) options.form.cbill = res.data.defaultMaker
     } catch (error: unknown) {
       ElMessage.error(options.resolveErrorMessage(error, '刷新凭证编号失败'))
@@ -149,20 +142,6 @@ export function useFinanceNewVoucherHeaderMetaOwner(options: UseFinanceNewVouche
     if (!companyId) return '未设置'
     const matched = options.voucherMeta.value?.companyOptions.find((item) => item.value === companyId)
     return matched?.name || companyId
-  }
-
-  function inferPeriod(value: string) {
-    const month = Number(value?.split('-')?.[1])
-    return Number.isFinite(month) && month >= 1 && month <= 12 ? month : undefined
-  }
-
-  function inferYear(value: string) {
-    const year = Number(value?.split('-')?.[0])
-    return Number.isFinite(year) && year > 1900 ? year : undefined
-  }
-
-  function buildYearPeriod(year: number, period: number) {
-    return year * 100 + period
   }
 
   return {

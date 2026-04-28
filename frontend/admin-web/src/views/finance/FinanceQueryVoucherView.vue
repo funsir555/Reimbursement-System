@@ -96,10 +96,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { financeApi, type FinanceVoucherMeta, type FinanceVoucherQueryParams, type FinanceVoucherSummary } from '@/api'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
+import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
 const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
+const financePeriod = useFinancePeriodStore()
 
 const loading = ref(false)
 const exporting = ref(false)
@@ -122,15 +124,33 @@ const filters = reactive({
 
 const canExport = computed(() => hasPermission('finance:general_ledger:query_voucher:export', readStoredUser()))
 const voucherTypeOptions = computed(() => voucherMeta.value?.voucherTypeOptions || [])
+const lastInjectedBillMonth = ref('')
+
+function syncGlobalMonthDefault(force = false) {
+  const nextDefault = financePeriod.currentMonthText
+  if (!nextDefault) {
+    return
+  }
+  const shouldApply = force
+    || !filters.billMonth
+    || filters.billMonth === lastInjectedBillMonth.value
+  if (shouldApply) {
+    filters.billMonth = nextDefault
+  }
+  lastInjectedBillMonth.value = nextDefault
+}
 
 watch(
-  () => financeCompany.currentCompanyId,
+  () => [financeCompany.currentCompanyId, financePeriod.currentMonthText] as const,
   async (companyId, previousCompanyId) => {
-    if (!companyId) return
-    if (companyId !== previousCompanyId) {
+    const nextCompanyId = companyId[0]
+    const previousId = previousCompanyId?.[0]
+    if (!nextCompanyId) return
+    if (nextCompanyId !== previousId) {
       currentPage.value = 1
     }
-    await loadVoucherMeta(companyId)
+    syncGlobalMonthDefault(nextCompanyId !== previousId)
+    await loadVoucherMeta(nextCompanyId)
     await loadVouchers()
   },
   { immediate: true }
@@ -194,7 +214,7 @@ function handleSearch() {
 function handleReset() {
   filters.voucherNo = ''
   filters.csign = ''
-  filters.billMonth = ''
+  syncGlobalMonthDefault(true)
   filters.billMonthFrom = ''
   filters.billMonthTo = ''
   filters.summary = ''

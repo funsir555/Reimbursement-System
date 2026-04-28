@@ -28,6 +28,12 @@ const mocks = vi.hoisted(() => ({
     registerSwitchGuard: vi.fn(),
     unregisterSwitchGuard: vi.fn()
   },
+  financePeriod: {
+    currentYear: 2026,
+    currentPeriod: 6,
+    currentYearPeriod: 202606,
+    hasPeriodContext: true
+  },
   router: {
     push: vi.fn(),
     replace: vi.fn()
@@ -44,6 +50,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 const financeCompanyStore = reactive(mocks.financeCompany)
+const financePeriodStore = reactive(mocks.financePeriod)
 const mountedWrappers: Array<{ unmount: () => void }> = []
 
 vi.mock('@/api', () => ({
@@ -52,6 +59,10 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/stores/financeCompany', () => ({
   useFinanceCompanyStore: () => financeCompanyStore
+}))
+
+vi.mock('@/stores/financePeriod', () => ({
+  useFinancePeriodStore: () => financePeriodStore
 }))
 
 vi.mock('vue-router', () => ({
@@ -329,6 +340,10 @@ describe('FinanceNewVoucherView', () => {
     financeCompanyStore.currentCompanyName = '广州远智教育科技有限公司'
     financeCompanyStore.currentCompanyLabel = '001  广州远智教育科技有限公司'
     financeCompanyStore.currentCompanyHasActiveAccountSet = true
+    financePeriodStore.currentYear = 2026
+    financePeriodStore.currentPeriod = 6
+    financePeriodStore.currentYearPeriod = 202606
+    financePeriodStore.hasPeriodContext = true
     mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: buildMeta() })
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: buildDetail() })
     mocks.financeApi.reviewVoucher.mockResolvedValue({
@@ -371,10 +386,16 @@ describe('FinanceNewVoucherView', () => {
 
   it('loads voucher meta with the finance company context', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { iyear?: number; iperiod?: number; iyperiod?: number }
+    }
 
     expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })
     expect(wrapper.text()).toContain('凭证编号')
     expect(wrapper.text()).toContain('备注')
+    expect(vm.form.iyear).toBe(2026)
+    expect(vm.form.iperiod).toBe(6)
+    expect(vm.form.iyperiod).toBe(202606)
   })
 
   it('renders a compact document card without redundant section headings and shows company name only', async () => {
@@ -523,9 +544,13 @@ describe('FinanceNewVoucherView', () => {
     mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: meta })
 
     const wrapper = await mountView({ pageMode: 'detail', voucherNo: 'COMPANY_A~2026~4~记~12' })
+    const vm = wrapper.vm as unknown as {
+      form: { iperiod?: number }
+    }
 
     expect(mocks.financeApi.getVoucherDetail).toHaveBeenCalledWith('COMPANY_A', 'COMPANY_A~2026~4~记~12')
     expect(wrapper.text()).toContain('100201  银行存款')
+    expect(vm.form.iperiod).toBe(4)
     expect(wrapper.find('.voucher-ledger-header').exists()).toBe(false)
     expect(wrapper.find('.voucher-section-head').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('凭证明细')
@@ -657,6 +682,9 @@ describe('FinanceNewVoucherView', () => {
     financeCompanyStore.currentCompanyId = 'COMPANY_B'
     financeCompanyStore.currentCompanyName = '深圳测试公司'
     financeCompanyStore.currentCompanyLabel = '002  深圳测试公司'
+    financePeriodStore.currentYear = 2026
+    financePeriodStore.currentPeriod = 7
+    financePeriodStore.currentYearPeriod = 202607
     await flushPromises()
 
     expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })

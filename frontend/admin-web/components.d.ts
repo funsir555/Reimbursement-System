@@ -75,6 +75,7 @@ declare module 'vue' {
     MoneyInput: typeof import('./src/components/inputs/MoneyInput.vue')['default']
     NewExpenseDialog: typeof import('./src/components/NewExpenseDialog.vue')['default']
     NotificationCenterDrawer: typeof import('./src/components/NotificationCenterDrawer.vue')['default']
+    PersonalBankAccountDialog: typeof import('./src/components/profile/PersonalBankAccountDialog.vue')['default']
     PixelDuckBotIcon: typeof import('./src/components/icons/PixelDuckBotIcon.vue')['default']
     PixelWhaleBrandIcon: typeof import('./src/components/icons/PixelWhaleBrandIcon.vue')['default']
     ProcessFlowCanvasRenderer: typeof import('./src/components/process/ProcessFlowCanvasRenderer.vue')['default']

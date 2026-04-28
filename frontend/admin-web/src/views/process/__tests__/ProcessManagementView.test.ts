@@ -363,6 +363,7 @@ describe('ProcessManagementView', () => {
     )
 
     expect(wrapper.get('[data-testid="process-form-section"]').text()).toContain('费用表单')
+    expect(wrapper.get('[data-testid="process-form-summary-grid"]').text()).toContain('表单总数')
     expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('差旅报销表单')
     expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('FD-001')
     expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('报销单')
@@ -376,6 +377,20 @@ describe('ProcessManagementView', () => {
     expect(mocks.router.push).toHaveBeenCalledWith({
       name: 'expense-workbench-process-form-edit',
       params: { id: 66 }
+    })
+  })
+
+  it('adds a create button to the form design section', async () => {
+    mocks.route.query = { section: 'form-design' }
+    const wrapper = await mountView(
+      [buildTemplate()],
+      { forms: [buildFormSummary()] }
+    )
+
+    await wrapper.get('[data-testid="process-form-create"]').trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-workbench-process-form-create'
     })
   })
 
@@ -394,6 +409,7 @@ describe('ProcessManagementView', () => {
     )
 
     expect(wrapper.get('[data-testid="process-flow-section"]').text()).toContain('审批流程')
+    expect(wrapper.get('[data-testid="process-flow-summary-grid"]').text()).toContain('流程总数')
     expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('差旅审批流程')
     expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('FLOW-001')
     expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('已启用')
@@ -407,6 +423,20 @@ describe('ProcessManagementView', () => {
     expect(mocks.router.push).toHaveBeenCalledWith({
       name: 'expense-workbench-process-flow-edit',
       params: { id: 88 }
+    })
+  })
+
+  it('adds a create button to the approval flow section', async () => {
+    mocks.route.query = { section: 'approval-flow' }
+    const wrapper = await mountView(
+      [buildTemplate()],
+      { flows: [buildFlowSummary()] }
+    )
+
+    await wrapper.get('[data-testid="process-flow-create"]').trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-workbench-process-flow-create'
     })
   })
 

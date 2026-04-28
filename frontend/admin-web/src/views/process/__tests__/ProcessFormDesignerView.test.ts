@@ -706,6 +706,45 @@ describe('ProcessFormDesignerView', () => {
     expect(wrapper.text()).not.toContain('静态选项会直接保存到 schema')
   })
 
+  it('renders the same business-scenario configuration block for normal reimbursement details', async () => {
+    mocks.route.name = 'expense-workbench-process-expense-detail-edit'
+    mocks.route.params = { id: '9' }
+
+    const wrapper = await mountView({
+      expenseDetailDesignDetail: {
+        detailType: 'NORMAL_REIMBURSEMENT',
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-business-scenario',
+              fieldKey: 'businessScenario',
+              label: '业务场景',
+              kind: 'CONTROL',
+              span: 1,
+              required: true,
+              defaultValue: 'INVOICE_FULL_PAYMENT',
+              helpText: '',
+              props: {
+                controlType: 'SELECT',
+                locked: true,
+                systemFieldCode: 'BUSINESS_SCENARIO',
+                enabledSceneModes: ['INVOICE_FULL_PAYMENT'],
+                options: [
+                  { label: '全额付款', value: 'INVOICE_FULL_PAYMENT' }
+                ]
+              },
+              permission: { fixedStages: {}, sceneOverrides: [] }
+            }
+          ]
+        }
+      }
+    })
+
+    expect(wrapper.find('[data-testid="business-scenario-config"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('全额付款')
+    expect(wrapper.text()).toContain('预付未到票')
+  })
+
   it('blocks disabling the last enabled business scenario', async () => {
     mocks.route.name = 'expense-workbench-process-expense-detail-edit'
     mocks.route.params = { id: '9' }

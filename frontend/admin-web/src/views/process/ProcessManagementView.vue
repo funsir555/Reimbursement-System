@@ -169,25 +169,57 @@
 
       <template v-else-if="activeSection === 'form-design'">
         <section class="space-y-6" data-testid="process-form-section">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-slate-800">费用表单</h2>
-              <p class="mt-1 text-sm text-slate-400">统一维护模板绑定的业务表单，延续单据与流程的卡片风格与修改入口。</p>
+          <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="process-form-summary-grid">
+            <el-card v-for="stat in formSummaryCards" :key="stat.label" class="stat-card stat-card--compact !rounded-3xl !shadow-sm">
+              <div class="stat-card__content">
+                <div>
+                  <p class="text-sm text-slate-500">{{ stat.label }}</p>
+                  <p class="mt-1.5 text-3xl font-bold leading-none text-slate-800">{{ stat.value }}</p>
+                </div>
+                <div class="stat-card__icon" :style="{ background: stat.bg }">
+                  <el-icon :size="22" class="text-white">
+                    <component :is="stat.icon" />
+                  </el-icon>
+                </div>
+              </div>
+            </el-card>
+          </section>
+
+          <el-card class="!rounded-3xl !shadow-sm">
+            <div class="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+              <div class="flex flex-wrap gap-3">
+                <el-button
+                  v-if="canCreateTemplates"
+                  type="primary"
+                  :icon="Plus"
+                  data-testid="process-form-create"
+                  @click="openFormDesignCreate"
+                >
+                  增加费用表单
+                </el-button>
+              </div>
+
+              <div class="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
+                <el-input
+                  v-model="formSearchKeyword"
+                  placeholder="搜索费用表单名称、编码或模板类型"
+                  class="w-full sm:w-80"
+                  :prefix-icon="Search"
+                  clearable
+                />
+              </div>
             </div>
-            <span class="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-500">
-              {{ formDesignSummaries.length }} 个表单
-            </span>
-          </div>
+          </el-card>
 
           <div
-            v-if="formDesignSummaries.length"
+            v-if="filteredFormDesignSummaries.length"
             class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             data-testid="process-form-grid"
           >
             <el-card
-              v-for="form in formDesignSummaries"
+              v-for="form in filteredFormDesignSummaries"
               :key="form.id"
-              class="resource-card !rounded-3xl !shadow-sm"
+              class="template-card resource-card !rounded-3xl !shadow-sm"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -222,7 +254,7 @@
 
           <el-card v-else class="!rounded-3xl !shadow-sm">
             <div class="flex min-h-[220px] items-center justify-center text-sm text-slate-400" data-testid="process-form-empty">
-              暂无费用表单
+              {{ formDesignSummaries.length ? '暂无匹配费用表单' : '暂无费用表单' }}
             </div>
           </el-card>
         </section>
@@ -230,25 +262,57 @@
 
       <template v-else-if="activeSection === 'approval-flow'">
         <section class="space-y-6" data-testid="process-flow-section">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-slate-800">审批流程</h2>
-              <p class="mt-1 text-sm text-slate-400">集中展示流程卡片与状态信息，点击修改直接进入现有流程设计器。</p>
+          <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="process-flow-summary-grid">
+            <el-card v-for="stat in flowSummaryCards" :key="stat.label" class="stat-card stat-card--compact !rounded-3xl !shadow-sm">
+              <div class="stat-card__content">
+                <div>
+                  <p class="text-sm text-slate-500">{{ stat.label }}</p>
+                  <p class="mt-1.5 text-3xl font-bold leading-none text-slate-800">{{ stat.value }}</p>
+                </div>
+                <div class="stat-card__icon" :style="{ background: stat.bg }">
+                  <el-icon :size="22" class="text-white">
+                    <component :is="stat.icon" />
+                  </el-icon>
+                </div>
+              </div>
+            </el-card>
+          </section>
+
+          <el-card class="!rounded-3xl !shadow-sm">
+            <div class="flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+              <div class="flex flex-wrap gap-3">
+                <el-button
+                  v-if="canCreateTemplates"
+                  type="primary"
+                  :icon="Plus"
+                  data-testid="process-flow-create"
+                  @click="openFlowCreate"
+                >
+                  增加审批流程
+                </el-button>
+              </div>
+
+              <div class="flex w-full flex-col gap-3 sm:flex-row xl:w-auto">
+                <el-input
+                  v-model="flowSearchKeyword"
+                  placeholder="搜索审批流程名称、编码或状态"
+                  class="w-full sm:w-80"
+                  :prefix-icon="Search"
+                  clearable
+                />
+              </div>
             </div>
-            <span class="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-500">
-              {{ flowSummaries.length }} 个流程
-            </span>
-          </div>
+          </el-card>
 
           <div
-            v-if="flowSummaries.length"
+            v-if="filteredFlowSummaries.length"
             class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             data-testid="process-flow-grid"
           >
             <el-card
-              v-for="flow in flowSummaries"
+              v-for="flow in filteredFlowSummaries"
               :key="flow.id"
-              class="resource-card !rounded-3xl !shadow-sm"
+              class="template-card resource-card !rounded-3xl !shadow-sm"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -293,7 +357,7 @@
 
           <el-card v-else class="!rounded-3xl !shadow-sm">
             <div class="flex min-h-[220px] items-center justify-center text-sm text-slate-400" data-testid="process-flow-empty">
-              暂无审批流程
+              {{ flowSummaries.length ? '暂无匹配审批流程' : '暂无审批流程' }}
             </div>
           </el-card>
         </section>
@@ -373,6 +437,8 @@ const templateTypes = ref<ProcessTemplateTypeOption[]>([])
 const templateDialogVisible = ref(false)
 const searchKeyword = ref('')
 const activeCategory = ref('all')
+const formSearchKeyword = ref('')
+const flowSearchKeyword = ref('')
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const copyingTemplateIds = ref<number[]>([])
 
@@ -395,6 +461,30 @@ const formIdMap = computed(() => new Map(formDesignSummaries.value.map((item) =>
 const expenseDetailDesignIdMap = computed(() =>
   new Map(expenseDetailDesignSummaries.value.map((item) => [item.detailCode, item.id]))
 )
+const filteredFormDesignSummaries = computed(() => {
+  const keyword = formSearchKeyword.value.trim()
+  if (!keyword) {
+    return formDesignSummaries.value
+  }
+  return formDesignSummaries.value.filter((item) => (
+    item.formName.includes(keyword)
+    || item.formCode.includes(keyword)
+    || item.templateTypeLabel.includes(keyword)
+    || (item.formDescription || '').includes(keyword)
+  ))
+})
+const filteredFlowSummaries = computed(() => {
+  const keyword = flowSearchKeyword.value.trim()
+  if (!keyword) {
+    return flowSummaries.value
+  }
+  return flowSummaries.value.filter((item) => (
+    item.flowName.includes(keyword)
+    || item.flowCode.includes(keyword)
+    || item.statusLabel.includes(keyword)
+    || (item.flowDescription || '').includes(keyword)
+  ))
+})
 const summaryCards = computed(() => {
   if (!overview.value) {
     return []
@@ -430,6 +520,58 @@ const summaryCards = computed(() => {
     }
   ]
 })
+const formSummaryCards = computed(() => [
+  {
+    label: '表单总数',
+    value: formDesignSummaries.value.length,
+    icon: Files,
+    bg: 'linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)'
+  },
+  {
+    label: '报销单表单',
+    value: formDesignSummaries.value.filter((item) => item.templateType === 'report').length,
+    icon: Document,
+    bg: 'linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%)'
+  },
+  {
+    label: '最近更新',
+    value: formDesignSummaries.value.filter((item) => Boolean(item.updatedAt)).length,
+    icon: CircleCheckFilled,
+    bg: 'linear-gradient(135deg, #ea580c 0%, #fdba74 100%)'
+  },
+  {
+    label: '当前筛选',
+    value: filteredFormDesignSummaries.value.length,
+    icon: Search,
+    bg: 'linear-gradient(135deg, #7c3aed 0%, #c4b5fd 100%)'
+  }
+])
+const flowSummaryCards = computed(() => [
+  {
+    label: '流程总数',
+    value: flowSummaries.value.length,
+    icon: Files,
+    bg: 'linear-gradient(135deg, #2563eb 0%, #60a5fa 100%)'
+  },
+  {
+    label: '已启用流程',
+    value: flowSummaries.value.filter((item) => item.status === 'ENABLED').length,
+    icon: CircleCheckFilled,
+    bg: 'linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%)'
+  },
+  {
+    label: '草稿/停用',
+    value: flowSummaries.value.filter((item) => item.status !== 'ENABLED').length,
+    icon: Document,
+    bg: 'linear-gradient(135deg, #ea580c 0%, #fdba74 100%)'
+  },
+  {
+    label: '当前筛选',
+    value: filteredFlowSummaries.value.length,
+    icon: Search,
+    bg: 'linear-gradient(135deg, #7c3aed 0%, #c4b5fd 100%)'
+  }
+])
 const filteredCategories = computed(() => {
   if (!overview.value) {
     return []
@@ -591,6 +733,12 @@ const openFormDesignEditor = (id: number) => {
   })
 }
 
+const openFormDesignCreate = () => {
+  router.push({
+    name: 'expense-workbench-process-form-create'
+  })
+}
+
 const copyFormDesign = (form: ProcessFormDesignSummary) => {
   router.push({
     name: 'expense-workbench-process-form-create',
@@ -605,6 +753,12 @@ const openFlowEditor = (id: number) => {
   router.push({
     name: 'expense-workbench-process-flow-edit',
     params: { id }
+  })
+}
+
+const openFlowCreate = () => {
+  router.push({
+    name: 'expense-workbench-process-flow-create'
   })
 }
 

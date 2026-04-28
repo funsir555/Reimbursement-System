@@ -24,13 +24,16 @@ class ExpenseSubmissionDomainSupportTest {
     private ExpenseDocumentTemplateDomainSupport expenseDocumentTemplateDomainSupport;
     @Mock
     private ExpenseDocumentMutationDomainSupport expenseDocumentMutationDomainSupport;
+    @Mock
+    private ExpenseManualApproverPreviewSupport expenseManualApproverPreviewSupport;
 
     @Test
     void templateReadsUseTemplateDomainSupport() {
         List<ExpenseCreateTemplateSummaryVO> expected = List.of(new ExpenseCreateTemplateSummaryVO());
         ExpenseSubmissionDomainSupport support = new ExpenseSubmissionDomainSupport(
                 expenseDocumentTemplateDomainSupport,
-                expenseDocumentMutationDomainSupport
+                expenseDocumentMutationDomainSupport,
+                expenseManualApproverPreviewSupport
         );
         when(expenseDocumentTemplateDomainSupport.listAvailableTemplates()).thenReturn(expected);
 
@@ -46,7 +49,8 @@ class ExpenseSubmissionDomainSupportTest {
         ExpenseDocumentSubmitResultVO expected = new ExpenseDocumentSubmitResultVO();
         ExpenseSubmissionDomainSupport support = new ExpenseSubmissionDomainSupport(
                 expenseDocumentTemplateDomainSupport,
-                expenseDocumentMutationDomainSupport
+                expenseDocumentMutationDomainSupport,
+                expenseManualApproverPreviewSupport
         );
         when(expenseDocumentMutationDomainSupport.submitDocument(1L, "tester", dto)).thenReturn(expected);
 
@@ -63,7 +67,8 @@ class ExpenseSubmissionDomainSupportTest {
         ExpenseDocumentEditContextVO expected = new ExpenseDocumentEditContextVO();
         ExpenseSubmissionDomainSupport support = new ExpenseSubmissionDomainSupport(
                 expenseDocumentTemplateDomainSupport,
-                expenseDocumentMutationDomainSupport
+                expenseDocumentMutationDomainSupport,
+                expenseManualApproverPreviewSupport
         );
         when(expenseDocumentMutationDomainSupport.saveDraftDocument(1L, "DOC-1", dto)).thenReturn(instance);
         when(expenseDocumentTemplateDomainSupport.buildEditContext(1L, instance, null, "RESUBMIT")).thenReturn(expected);

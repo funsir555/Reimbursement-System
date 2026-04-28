@@ -6,127 +6,166 @@
         :key="tab.path"
         type="button"
         class="finance-tab"
-        :class="tab.path === activePath ? 'finance-tab-active' : ''"
+        :class="{ 'finance-tab-active': tab.path === activePath }"
         @click="$emit('select', tab.path)"
       >
         <span class="finance-tab-title">{{ tab.title }}</span>
-        <el-button
+        <span
           v-if="tabs.length > 1"
-          circle
-          text
           class="finance-tab-close"
+          role="button"
+          tabindex="0"
+          aria-label="关闭页签"
           @click.stop="$emit('close', tab.path)"
+          @keydown.enter.stop="$emit('close', tab.path)"
         >
-          <el-icon><Close /></el-icon>
-        </el-button>
+          ×
+        </span>
       </button>
     </div>
 
     <div class="finance-tabs-tools">
-      <label v-if="(companyOptions || []).length" class="finance-company-switcher">
-        <span>当前公司</span>
+      <div class="finance-tool-inline-group finance-period-group">
+        <span class="finance-tools-label">会计期间</span>
+        <div class="finance-period-controls">
+          <el-select
+            :model-value="periodYearValue"
+            placeholder="年"
+            :disabled="periodDisabled"
+            class="finance-period-select finance-period-select-year"
+            data-testid="period-year-select"
+            :style="{ '--finance-period-select-width': PERIOD_YEAR_WIDTH }"
+            @update:model-value="handleYearChange"
+          >
+            <el-option
+              v-for="year in periodYearOptions"
+              :key="year"
+              :label="String(year)"
+              :value="year"
+            />
+          </el-select>
+          <span class="finance-period-separator">年</span>
+          <el-select
+            :model-value="periodMonthValue"
+            placeholder="月"
+            :disabled="periodDisabled"
+            class="finance-period-select finance-period-select-month"
+            data-testid="period-month-select"
+            :style="{ '--finance-period-select-width': PERIOD_MONTH_WIDTH }"
+            @update:model-value="handleMonthChange"
+          >
+            <el-option
+              v-for="month in periodMonthOptions"
+              :key="month"
+              :label="String(month).padStart(2, '0')"
+              :value="month"
+            />
+          </el-select>
+          <span class="finance-period-separator">月</span>
+          <el-tooltip v-if="periodHint" :content="periodHint" placement="bottom">
+            <span class="finance-tools-help" data-testid="period-tooltip" aria-label="期间提示">!</span>
+          </el-tooltip>
+        </div>
+      </div>
+
+      <div class="finance-tool-inline-group finance-company-group">
+        <span class="finance-tools-label">当前公司</span>
         <el-select
           :model-value="currentCompanyId"
-          class="finance-company-select"
-          :style="companySelectStyle"
           filterable
           :filter-method="handleCompanyFilter"
           :loading="companyLoading || companySwitching"
           :disabled="companyLoading || companySwitching"
+          class="finance-company-select"
+          data-testid="company-select"
           placeholder="请选择公司"
-          @visible-change="handleCompanyDropdownVisibleChange"
+          :style="{ '--finance-company-select-width': COMPANY_SELECT_WIDTH }"
           @update:model-value="handleCompanyChange"
+          @visible-change="handleCompanyDropdownVisibleChange"
         >
           <el-option
             v-for="item in filteredCompanyOptions"
             :key="item.companyId"
-            :label="formatCompanyOptionLabel(item)"
+            :label="item.companyName"
             :value="item.companyId"
           />
         </el-select>
-      </label>
-
-      <el-dropdown trigger="click" @command="handleCommand">
-        <button type="button" class="finance-tabs-actions">
-          <el-icon><Operation /></el-icon>
-          <span>页签</span>
-        </button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="close-current">关闭当前</el-dropdown-item>
-            <el-dropdown-item command="close-others">关闭其他</el-dropdown-item>
-            <el-dropdown-item command="close-right">关闭右侧</el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Close, Operation } from '@element-plus/icons-vue'
-import type { FinanceWorkspaceTab } from '@/stores/financeWorkspace'
-import type { FinanceCompanyOption } from '@/api'
 
-const COMPANY_SELECT_WIDTH = '390px'
+type FinanceTabItem = {
+  path: string
+  title: string
+}
 
-const props = defineProps<{
-  tabs: FinanceWorkspaceTab[]
+type FinanceCompanyOption = {
+  companyId: string
+  companyCode?: string
+  companyName: string
+  label?: string
+  value?: string
+}
+
+const COMPANY_SELECT_WIDTH = '292px'
+const PERIOD_YEAR_WIDTH = '74px'
+const PERIOD_MONTH_WIDTH = '60px'
+
+const props = withDefaults(defineProps<{
+  tabs: FinanceTabItem[]
   activePath: string
-  companyOptions?: FinanceCompanyOption[]
+  companyOptions: FinanceCompanyOption[]
   currentCompanyId?: string
   companyLoading?: boolean
   companySwitching?: boolean
-}>()
+  periodYear?: number
+  periodMonth?: number
+  periodYearOptions?: number[]
+  periodMonthOptions?: number[]
+  periodDisabled?: boolean
+  periodHint?: string
+}>(), {
+  currentCompanyId: '',
+  companyLoading: false,
+  companySwitching: false,
+  periodYear: 0,
+  periodMonth: 0,
+  periodYearOptions: () => [],
+  periodMonthOptions: () => [],
+  periodDisabled: false,
+  periodHint: ''
+})
 
 const emit = defineEmits<{
-  select: [path: string]
-  close: [path: string]
-  closeOthers: [path: string]
-  closeRight: [path: string]
-  changeCompany: [companyId: string]
+  (event: 'select', path: string): void
+  (event: 'close', path: string): void
+  (event: 'changeCompany', companyId: string): void
+  (event: 'changePeriod', payload: { year: number; month: number }): void
 }>()
 
 const companyKeyword = ref('')
-const companySelectStyle = { '--finance-company-select-width': COMPANY_SELECT_WIDTH }
+
 const filteredCompanyOptions = computed(() => {
-  const options = props.companyOptions || []
-  const keyword = normalizeText(companyKeyword.value).toLowerCase()
+  const keyword = companyKeyword.value.trim().toLowerCase()
   if (!keyword) {
-    return options
+    return props.companyOptions
   }
-  return options.filter((item) =>
-    [item.companyName, item.companyCode, item.label, item.companyId]
-      .filter((value): value is string => Boolean(value))
-      .some((value) => value.toLowerCase().includes(keyword))
-  )
+  return props.companyOptions.filter((item) => {
+    const name = String(item.companyName || '').toLowerCase()
+    const code = String(item.companyCode || '').toLowerCase()
+    return name.includes(keyword) || code.includes(keyword)
+  })
 })
 
-function handleCommand(command: string) {
-  if (!props.activePath) {
-    return
-  }
-
-  if (command === 'close-current') {
-    emit('close', props.activePath)
-    return
-  }
-  if (command === 'close-others') {
-    emit('closeOthers', props.activePath)
-    return
-  }
-  if (command === 'close-right') {
-    emit('closeRight', props.activePath)
-  }
-}
-
-function handleCompanyChange(companyId: string) {
-  emit('changeCompany', companyId)
-}
+const periodYearValue = computed(() => (props.periodYear > 0 ? props.periodYear : undefined))
+const periodMonthValue = computed(() => (props.periodMonth > 0 ? props.periodMonth : undefined))
 
 function handleCompanyFilter(query: string) {
-  companyKeyword.value = normalizeText(query)
+  companyKeyword.value = String(query || '')
 }
 
 function handleCompanyDropdownVisibleChange(visible: boolean) {
@@ -135,12 +174,26 @@ function handleCompanyDropdownVisibleChange(visible: boolean) {
   }
 }
 
-function formatCompanyOptionLabel(item: FinanceCompanyOption) {
-  return item.companyName || item.label || item.companyId
+function handleCompanyChange(companyId: string | number) {
+  emit('changeCompany', String(companyId || ''))
 }
 
-function normalizeText(value?: string | null) {
-  return String(value || '').trim()
+function handleYearChange(year: string | number) {
+  const nextYear = Number(year || 0)
+  const nextMonth = props.periodMonthOptions.includes(props.periodMonth)
+    ? props.periodMonth
+    : (props.periodMonthOptions[0] || 0)
+  if (nextYear > 0 && nextMonth > 0) {
+    emit('changePeriod', { year: nextYear, month: nextMonth })
+  }
+}
+
+function handleMonthChange(month: string | number) {
+  const nextMonth = Number(month || 0)
+  const nextYear = props.periodYear || props.periodYearOptions[0] || 0
+  if (nextYear > 0 && nextMonth > 0) {
+    emit('changePeriod', { year: nextYear, month: nextMonth })
+  }
 }
 </script>
 
@@ -167,8 +220,64 @@ function normalizeText(value?: string | null) {
 .finance-tabs-tools {
   display: flex;
   align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.finance-tool-inline-group {
+  display: inline-flex;
+  align-items: center;
   gap: 10px;
+  min-width: 0;
+  border: 1px solid #d5dde9;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 6px 10px;
+}
+
+.finance-tools-label {
   flex-shrink: 0;
+  color: #4d6179;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.finance-period-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.finance-period-select {
+  width: var(--finance-period-select-width);
+}
+
+.finance-period-separator {
+  color: #6b7f97;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.finance-tools-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f7e7bb;
+  color: #8a5a12;
+  cursor: help;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.finance-company-select {
+  width: var(--finance-company-select-width);
 }
 
 .finance-tab {
@@ -180,8 +289,10 @@ function normalizeText(value?: string | null) {
   border: 1px solid #d5dde9;
   border-radius: 12px 12px 0 0;
   background: #edf2f9;
-  padding: 8px 10px 7px 12px;
   color: #516174;
+  cursor: pointer;
+  flex: 0 0 auto;
+  padding: 8px 10px 7px 12px;
   transition: all 0.18s ease;
 }
 
@@ -195,8 +306,8 @@ function normalizeText(value?: string | null) {
   border-color: #b8cce6;
   border-bottom-color: #f8fbff;
   background: #f8fbff;
-  color: #1f3c63;
   box-shadow: 0 -1px 0 #e7effa inset;
+  color: #1f3c63;
 }
 
 .finance-tab-title {
@@ -210,50 +321,29 @@ function normalizeText(value?: string | null) {
 }
 
 .finance-tab-close {
-  height: 20px;
-  width: 20px;
-  color: inherit;
-}
-
-.finance-tabs-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid #d5dde9;
-  border-radius: 10px;
-  background: #fff;
-  padding: 7px 10px;
-  font-size: 12px;
-  color: #4d6179;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
 }
 
-.finance-company-switcher {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid #d5dde9;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 6px 10px;
-}
-
-.finance-company-switcher span {
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #4d6179;
-}
-
-.finance-company-select {
-  width: var(--finance-company-select-width, 390px);
-}
-
-:deep(.finance-company-select .el-select__wrapper) {
+:deep(.finance-company-select .el-select__wrapper),
+:deep(.finance-period-select .el-select__wrapper) {
+  min-height: 34px;
   border-radius: 10px;
   box-shadow: 0 0 0 1px #d8e2f0 inset;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
   .finance-tabs-wrap {
     flex-direction: column;
     align-items: stretch;
@@ -270,13 +360,24 @@ function normalizeText(value?: string | null) {
     align-items: stretch;
   }
 
-  .finance-company-switcher {
+  .finance-tool-inline-group {
     width: 100%;
     justify-content: space-between;
   }
 
-  .finance-company-select {
+  .finance-period-controls {
+    flex: 1;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .finance-company-select,
+  .finance-period-select {
     width: 100%;
+  }
+
+  .finance-period-controls .finance-period-separator {
+    display: none;
   }
 }
 </style>

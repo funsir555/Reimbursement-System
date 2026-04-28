@@ -11,6 +11,7 @@ import com.finex.auth.dto.ExpenseCreateTemplateDetailVO;
 import com.finex.auth.dto.ExpenseCreateTemplateSummaryVO;
 import com.finex.auth.dto.ExpenseCreateVendorOptionVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
+import com.finex.auth.dto.ExpenseManualApproverPreviewVO;
 import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -90,6 +91,18 @@ public class ExpenseDocumentSubmissionService {
      */
     public ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         return expenseSubmissionDomainSupport.submitDocument(userId, username, dto);
+    }
+
+    public ExpenseDocumentEditContextVO createDraftDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
+        return expenseSubmissionDomainSupport.createDraftDocument(userId, username, dto);
+    }
+
+    public ExpenseManualApproverPreviewVO previewManualApproversForCreate(Long userId, ExpenseDocumentSubmitDTO dto) {
+        return expenseSubmissionDomainSupport.previewManualApproversForCreate(userId, dto);
+    }
+
+    public ExpenseManualApproverPreviewVO previewManualApproversForResubmit(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {
+        return expenseSubmissionDomainSupport.previewManualApproversForResubmit(userId, documentCode, dto);
     }
 
     public ExpenseDocumentEditContextVO saveDraftDocument(Long userId, String documentCode, ExpenseDocumentUpdateDTO dto) {

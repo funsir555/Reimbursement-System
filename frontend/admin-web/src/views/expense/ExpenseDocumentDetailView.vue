@@ -68,18 +68,8 @@
 
         <ExpenseDocumentApprovalPanel
           :summary-items="approvalSummaryItems"
-          :is-manual-approver-selection-pending="isManualApproverSelectionPending"
-          :manual-approver-node-name="detail.manualApproverSelectionNodeName || detail.manualApproverSelectionNodeKey || ''"
-          :can-submit-manual-approver-selection="canSubmitManualApproverSelection"
-          :manual-approver-user-ids="manualApproverForm.userIds"
-          :manual-approver-options="manualApproverOptions"
-          :manual-approver-submitting="manualApproverSubmitting"
-          :approval-node-statuses="approvalNodeStatuses"
           :approval-timeline-items="approvalTimelineItems"
           :approval-status-tag-type="approvalStatusTagType"
-          :approval-status-label="approvalStatusLabel"
-          @update:manual-approver-user-ids="manualApproverForm.userIds = $event"
-          @submit-manual-approver-selection="submitManualApproverSelection"
         />
       </template>
 
@@ -428,17 +418,11 @@ const approvalRuntime = useExpenseDocumentDetailApprovalRuntime({
 const {
   approvableTasks,
   rejectTargetOptions,
-  isSubmitter,
-  isManualApproverSelectionPending,
-  canSubmitManualApproverSelection,
-  manualApproverOptions,
-  approvalNodeStatuses,
   approvalTimelineItems,
   actionItems,
   secondaryActionItems,
   primaryActionItems,
   disabledActionHint,
-  approvalStatusLabel,
   approvalStatusTagType
 } = approvalRuntime
 
@@ -465,8 +449,6 @@ const {
   taskActionMode,
   taskActionSubmitting,
   taskActionForm,
-  manualApproverSubmitting,
-  manualApproverForm,
   userActionDialogVisible,
   userActionMode,
   userActionSubmitting,
@@ -482,7 +464,6 @@ const {
   userActionDialogPlaceholder,
   closeTaskActionDialog,
   closeUserActionDialog,
-  submitManualApproverSelection,
   handleActionClick,
   submitTaskAction,
   submitComment,

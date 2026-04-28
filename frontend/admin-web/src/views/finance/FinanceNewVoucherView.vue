@@ -51,7 +51,7 @@
               </label>
               <label class="voucher-info-field voucher-info-period">
                 <span class="voucher-field-label">期间</span>
-                <el-input-number v-model="form.iperiod" :min="1" :max="12" :controls="false" :disabled="voucherHeaderLocked" />
+                <el-input-number v-model="form.iperiod" :min="1" :max="12" :controls="false" :disabled="periodFieldLocked" />
               </label>
               <label class="voucher-info-field voucher-info-maker">
                 <span class="voucher-field-label">制单人</span>
@@ -270,6 +270,7 @@ import {
 } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
+import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { useFinanceNewVoucherAssistCashflowOwner } from './composables/useFinanceNewVoucherAssistCashflowOwner'
 import { useFinanceNewVoucherBootstrap } from './composables/useFinanceNewVoucherBootstrap'
 import { useFinanceNewVoucherHeaderMetaOwner } from './composables/useFinanceNewVoucherHeaderMetaOwner'
@@ -360,6 +361,7 @@ const props = withDefaults(defineProps<{ pageMode?: VoucherPageMode; voucherNo?:
 })
 const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
+const financePeriod = useFinancePeriodStore()
 const currentUser = readStoredUser()
 const {
   resolveErrorMessage,
@@ -395,6 +397,7 @@ const canUnreviewVoucher = computed(() => hasPermission('finance:general_ledger:
 const canMarkVoucherError = computed(() => hasPermission('finance:general_ledger:review_voucher:mark_error', currentUser))
 const isReadonlyMode = computed(() => isReviewMode.value || (isDetailRoute.value && !editingExisting.value))
 const voucherHeaderLocked = computed(() => isReviewMode.value || isDetailRoute.value)
+const periodFieldLocked = computed(() => props.pageMode === 'create' || voucherHeaderLocked.value)
 const backToListRouteName = computed(() => (isReviewMode.value ? 'finance-review-voucher' : 'finance-query-voucher'))
 const pageTitle = computed(() => {
   if (isReviewMode.value) return '审核凭证'
@@ -657,11 +660,34 @@ watch(() => form.entries.length, () => {
   }
 })
 
+watch(
+  () => [props.pageMode, financePeriod.currentYearPeriod] as const,
+  () => {
+    if (props.pageMode !== 'create') {
+      return
+    }
+    syncFormPeriodFromGlobal()
+  },
+  { immediate: true }
+)
+
+function syncFormPeriodFromGlobal() {
+  if (!financePeriod.hasPeriodContext) {
+    return false
+  }
+  form.iyear = financePeriod.currentYear
+  form.iperiod = financePeriod.currentPeriod
+  form.iyperiod = financePeriod.currentYearPeriod
+  return true
+}
+
 function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.currentCompanyId) {
   form.companyId = companyId || meta.defaultCompanyId || ''
-  form.iyear = meta.defaultYear ?? new Date(meta.defaultBillDate).getFullYear()
-  form.iyperiod = meta.defaultYearPeriod ?? ((form.iyear || new Date(meta.defaultBillDate).getFullYear()) * 100 + meta.defaultPeriod)
-  form.iperiod = meta.defaultPeriod
+  if (!syncFormPeriodFromGlobal()) {
+    form.iyear = meta.defaultYear ?? new Date(meta.defaultBillDate).getFullYear()
+    form.iyperiod = meta.defaultYearPeriod ?? ((form.iyear || new Date(meta.defaultBillDate).getFullYear()) * 100 + meta.defaultPeriod)
+    form.iperiod = meta.defaultPeriod
+  }
   form.csign = meta.defaultVoucherType
   form.inoId = meta.suggestedVoucherNo
   form.dbillDate = meta.defaultBillDate
@@ -680,9 +706,11 @@ function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.
 
 function applyDraft(draft: FinanceVoucherSavePayload, meta: FinanceVoucherMeta, companyId = financeCompany.currentCompanyId) {
   form.companyId = companyId || draft.companyId || meta.defaultCompanyId || ''
-  form.iyear = draft.iyear ?? meta.defaultYear ?? new Date(meta.defaultBillDate).getFullYear()
-  form.iyperiod = draft.iyperiod ?? meta.defaultYearPeriod ?? ((form.iyear || new Date(meta.defaultBillDate).getFullYear()) * 100 + (draft.iperiod || meta.defaultPeriod))
-  form.iperiod = draft.iperiod || meta.defaultPeriod
+  if (!syncFormPeriodFromGlobal()) {
+    form.iyear = draft.iyear ?? meta.defaultYear ?? new Date(meta.defaultBillDate).getFullYear()
+    form.iyperiod = draft.iyperiod ?? meta.defaultYearPeriod ?? ((form.iyear || new Date(meta.defaultBillDate).getFullYear()) * 100 + (draft.iperiod || meta.defaultPeriod))
+    form.iperiod = draft.iperiod || meta.defaultPeriod
+  }
   form.csign = draft.csign || meta.defaultVoucherType
   form.inoId = draft.inoId || meta.suggestedVoucherNo
   form.dbillDate = draft.dbillDate || meta.defaultBillDate

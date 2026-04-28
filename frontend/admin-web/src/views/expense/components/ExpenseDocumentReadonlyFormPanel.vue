@@ -25,7 +25,13 @@
 </template>
 
 <script setup lang="ts">
-import type { ProcessFormDesignSchema, ProcessFormOption } from '@/api'
+import type {
+  ExpenseCreatePayeeAccountOption,
+  ExpenseCreatePayeeOption,
+  ExpenseCreateVendorOption,
+  ProcessFormDesignSchema,
+  ProcessFormOption
+} from '@/api'
 import ExpenseFormReadonlyRenderer from './ExpenseFormReadonlyRenderer.vue'
 
 type ReadonlyFormDisplay = {
@@ -33,9 +39,9 @@ type ReadonlyFormDisplay = {
   formData: Record<string, unknown>
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
-  vendorOptionMap: Record<string, unknown>
-  payeeOptionMap: Record<string, unknown>
-  payeeAccountOptionMap: Record<string, unknown>
+  vendorOptionMap: Record<string, ExpenseCreateVendorOption>
+  payeeOptionMap: Record<string, ExpenseCreatePayeeOption>
+  payeeAccountOptionMap: Record<string, ExpenseCreatePayeeAccountOption>
 }
 
 defineProps<{

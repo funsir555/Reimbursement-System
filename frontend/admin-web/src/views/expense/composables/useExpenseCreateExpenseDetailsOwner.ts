@@ -24,7 +24,7 @@ type RouteLike = {
 }
 
 type RouterLike = {
-  push: (to: unknown) => Promise<unknown> | unknown
+  push: (to: string | Record<string, unknown>) => Promise<unknown> | unknown
 }
 
 type UseExpenseCreateExpenseDetailsOwnerOptions = {

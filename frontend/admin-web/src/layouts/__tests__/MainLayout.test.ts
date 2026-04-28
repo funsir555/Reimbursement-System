@@ -40,6 +40,18 @@ const mocks = vi.hoisted(() => ({
     switchCompany: vi.fn(),
     reset: vi.fn()
   },
+  financePeriod: {
+    currentYear: 2026,
+    currentPeriod: 4,
+    currentYearPeriod: 202604,
+    yearOptions: [2026] as number[],
+    monthOptions: [4] as number[],
+    hasAvailableRange: true,
+    ensureInitialized: vi.fn(),
+    syncWithCompany: vi.fn(),
+    switchPeriod: vi.fn(),
+    reset: vi.fn()
+  },
   elMessage: {
     success: vi.fn()
   },
@@ -66,6 +78,10 @@ vi.mock('@/stores/financeWorkspace', () => ({
 
 vi.mock('@/stores/financeCompany', () => ({
   useFinanceCompanyStore: () => mocks.financeCompany
+}))
+
+vi.mock('@/stores/financePeriod', () => ({
+  useFinancePeriodStore: () => mocks.financePeriod
 }))
 
 vi.mock('@/utils/permissions', () => ({
@@ -160,12 +176,21 @@ const FinanceWorkspaceTabsStub = defineComponent({
     currentCompanyId: {
       type: String,
       default: ''
+    },
+    periodYear: {
+      type: Number,
+      default: 0
+    },
+    periodMonth: {
+      type: Number,
+      default: 0
     }
   },
-  emits: ['change-company'],
+  emits: ['change-company', 'change-period'],
   template: `
-    <div data-testid="finance-workspace-tabs" :data-company-id="currentCompanyId">
+    <div data-testid="finance-workspace-tabs" :data-company-id="currentCompanyId" :data-period="periodYear + '-' + periodMonth">
       <button type="button" data-testid="company-switch" @click="$emit('change-company', 'COMPANY_B')">切换公司</button>
+      <button type="button" data-testid="period-switch" @click="$emit('change-period', { year: 2026, month: 5 })">切换期间</button>
     </div>
   `
 })
@@ -236,6 +261,12 @@ describe('MainLayout', () => {
     mocks.financeWorkspace.isFinancePath = vi.fn(() => false)
     mocks.financeCompany.companyOptions = []
     mocks.financeCompany.currentCompanyId = ''
+    mocks.financePeriod.currentYear = 2026
+    mocks.financePeriod.currentPeriod = 4
+    mocks.financePeriod.currentYearPeriod = 202604
+    mocks.financePeriod.yearOptions = [2026]
+    mocks.financePeriod.monthOptions = [4]
+    mocks.financePeriod.hasAvailableRange = true
     mocks.downloadApi.getCenter.mockResolvedValue({ data: { inProgress: [{ id: 1 }] } })
     mocks.notificationApi.getSummary.mockResolvedValue({ data: { unreadCount: 2 } })
   })
@@ -352,5 +383,20 @@ describe('MainLayout', () => {
     expect(wrapper.find('[data-testid="finance-workspace-tabs"]').attributes('data-company-id')).toBe('COMPANY_A')
     await wrapper.find('[data-testid="company-switch"]').trigger('click')
     expect(mocks.financeCompany.switchCompany).toHaveBeenCalledWith('COMPANY_B')
+  })
+
+  it('passes finance period state to workspace tabs and forwards period switch events', async () => {
+    routeState.path = '/finance/general-ledger/new-voucher'
+    routeState.fullPath = '/finance/general-ledger/new-voucher'
+    mocks.financeWorkspace.tabs = [{ path: '/finance/general-ledger/new-voucher' }]
+    mocks.financeWorkspace.activePath = '/finance/general-ledger/new-voucher'
+    mocks.financeWorkspace.isFinancePath = vi.fn(() => true)
+    mocks.financeCompany.currentCompanyId = 'COMPANY_A'
+
+    const wrapper = await mountView(['finance:general_ledger:new_voucher:view'])
+
+    expect(wrapper.find('[data-testid="finance-workspace-tabs"]').attributes('data-period')).toBe('2026-4')
+    await wrapper.find('[data-testid="period-switch"]').trigger('click')
+    expect(mocks.financePeriod.switchPeriod).toHaveBeenCalledWith(2026, 5)
   })
 })

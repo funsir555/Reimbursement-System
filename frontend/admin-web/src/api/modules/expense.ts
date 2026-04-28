@@ -1,6 +1,7 @@
 import request, { buildQueryString, requestBinary, type BinaryFileResponse } from './core'
 import type {
   ExpenseDocumentEditContext,
+  ExpenseManualApproverPreview,
   ExpenseDocumentSubmitResult,
   ExpenseDocumentUpdatePayload
 } from './expense-create-types'
@@ -116,6 +117,11 @@ export const expenseApi = {
     }),
   getEditContext: (documentCode: string) =>
     request<ExpenseDocumentEditContext>(`/auth/expenses/${encodeURIComponent(documentCode)}/edit-context`),
+  previewManualApprovers: (documentCode: string, payload: ExpenseDocumentUpdatePayload) =>
+    request<ExpenseManualApproverPreview>(`/auth/expenses/${encodeURIComponent(documentCode)}/manual-approver-preview`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
   saveDraft: (documentCode: string, payload: ExpenseDocumentUpdatePayload) =>
     request<ExpenseDocumentEditContext>(`/auth/expenses/${encodeURIComponent(documentCode)}/draft`, {
       method: 'PUT',

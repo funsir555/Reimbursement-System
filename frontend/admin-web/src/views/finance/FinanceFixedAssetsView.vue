@@ -31,8 +31,8 @@
     <section class="fa-filter-card">
       <label><span>公司</span><div class="fa-static-field">{{ currentCompanyName || '未设置' }}</div></label>
       <label><span>账簿</span><el-select v-model="filters.bookCode" @change="refreshAll"><el-option v-for="item in meta?.bookOptions || []" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
-      <label><span>年度</span><el-input-number v-model="filters.fiscalYear" :controls="false" :min="2000" :max="2099" @change="refreshAll" /></label>
-      <label><span>期间</span><el-input-number v-model="filters.fiscalPeriod" :controls="false" :min="1" :max="12" @change="refreshAll" /></label>
+      <label><span>年度</span><el-input-number v-model="filters.fiscalYear" :controls="false" :min="2000" :max="2099" disabled /></label>
+      <label><span>期间</span><el-input-number v-model="filters.fiscalPeriod" :controls="false" :min="1" :max="12" disabled /></label>
       <label><span>资产类别</span><el-select v-model="filters.categoryId" clearable filterable @change="loadCards"><el-option v-for="item in meta?.categoryOptions || []" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select></label>
       <label><span>状态</span><el-select v-model="filters.status" clearable @change="loadCards"><el-option v-for="item in meta?.cardStatusOptions || []" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
       <label class="search"><span>关键字</span><el-input v-model="filters.keyword" clearable placeholder="资产编码 / 资产名称" @keyup.enter="loadCards" /></label>
@@ -266,6 +266,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { fixedAssetApi, type FixedAssetCard, type FixedAssetCardPayload, type FixedAssetCategory, type FixedAssetCategoryPayload, type FixedAssetChangeBill, type FixedAssetChangeBillPayload, type FixedAssetChangeLinePayload, type FixedAssetDeprPreviewPayload, type FixedAssetDeprRun, type FixedAssetDisposalBill, type FixedAssetDisposalBillPayload, type FixedAssetDisposalLinePayload, type FixedAssetMeta, type FixedAssetOpeningImportResult, type FixedAssetOpeningImportRow } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
+import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 
@@ -287,8 +288,7 @@ const selectedCardId = ref<number | null>(null)
 const selectedCategoryId = ref<number | null>(null)
 const loading = reactive({ cards: false, categories: false, changeBills: false, depreciation: false, disposalBills: false })
 const saving = ref(false)
-const now = new Date()
-const filters = reactive({ companyId: '', bookCode: 'FINANCE', fiscalYear: now.getFullYear(), fiscalPeriod: now.getMonth() + 1, keyword: '', categoryId: undefined as number | undefined, status: '' })
+const filters = reactive({ companyId: '', bookCode: 'FINANCE', fiscalYear: 0, fiscalPeriod: 0, keyword: '', categoryId: undefined as number | undefined, status: '' })
 const cardDialogVisible = ref(false)
 const categoryDialogVisible = ref(false)
 const changeDialogVisible = ref(false)
@@ -300,6 +300,7 @@ const categoryForm = reactive<FixedAssetCategoryPayload>(createCategoryPayload()
 const changeForm = reactive<FixedAssetChangeBillPayload>(createChangePayload())
 const disposalForm = reactive<FixedAssetDisposalBillPayload>(createDisposalPayload())
 const financeCompany = useFinanceCompanyStore()
+const financePeriod = useFinancePeriodStore()
 const COMPANY_SWITCH_GUARD_KEY = 'finance-fixed-assets'
 let guardRegistered = false
 const selectedCard = computed(() => cards.value.find((item) => item.id === selectedCardId.value) || null)
@@ -322,10 +323,13 @@ onActivated(registerCompanySwitchGuard)
 onDeactivated(unregisterCompanySwitchGuard)
 
 watch(
-  () => financeCompany.currentCompanyId,
-  async (companyId, previousCompanyId) => {
-    if (!companyId) return
+  () => [financeCompany.currentCompanyId, financePeriod.currentYearPeriod] as const,
+  async ([companyId], previousValue) => {
+    const previousCompanyId = previousValue?.[0]
+    if (!companyId || !financePeriod.hasPeriodContext) return
     filters.companyId = companyId
+    filters.fiscalYear = financePeriod.currentYear
+    filters.fiscalPeriod = financePeriod.currentPeriod
     if (companyId !== previousCompanyId) {
       closeDialogs()
       filters.categoryId = undefined
@@ -356,14 +360,12 @@ function unregisterCompanySwitchGuard() {
 }
 
 async function refreshAll() {
-  if (!financeCompany.currentCompanyId) return
+  if (!financeCompany.currentCompanyId || !financePeriod.hasPeriodContext) return
   try {
     const res = await fixedAssetApi.getMeta({ companyId: financeCompany.currentCompanyId, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })
     meta.value = res.data
     filters.companyId = financeCompany.currentCompanyId
     filters.bookCode = res.data.defaultBookCode || filters.bookCode
-    filters.fiscalYear = res.data.defaultFiscalYear || filters.fiscalYear
-    filters.fiscalPeriod = res.data.defaultFiscalPeriod || filters.fiscalPeriod
     syncForms()
     if (!filters.companyId) return
     await Promise.all([loadCategories(), loadCards(), loadChangeBills(), loadDepreciationRuns(), loadDisposalBills()])

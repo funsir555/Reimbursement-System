@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
     uploadAttachment: vi.fn(),
     recognizeAttachmentOcr: vi.fn()
   },
+  profileApi: {
+    createBankAccount: vi.fn(),
+    updateBankAccount: vi.fn()
+  },
   elMessage: {
     error: vi.fn(),
     warning: vi.fn(),
@@ -29,12 +33,17 @@ vi.mock('@/api', async () => {
   return {
     ...actual,
     expenseApi: mocks.expenseApi,
-    expenseCreateApi: mocks.expenseCreateApi
+    expenseCreateApi: mocks.expenseCreateApi,
+    profileApi: mocks.profileApi
   }
 })
 
 vi.mock('element-plus', async () => ({
   ElMessage: mocks.elMessage,
+  ElForm: {
+    name: 'ElForm',
+    template: '<div><slot /><slot name="footer" /></div>'
+  },
   ElFormItem: {
     name: 'ElFormItem',
     template: '<div><slot /><slot name="tip" /><slot name="footer" /></div>'
@@ -390,6 +399,22 @@ function createManagedSelectDouble() {
   }
 }
 
+function validPersonalBankForm() {
+  return {
+    accountName: '张三',
+    accountNo: '6222020202020202',
+    accountType: '对私账户',
+    bankCode: 'BOC',
+    bankName: '中国银行',
+    province: '上海市',
+    city: '上海市',
+    branchCode: 'BOC-SH',
+    branchName: '中国银行上海分行',
+    defaultAccount: 0,
+    status: 1
+  }
+}
+
 describe('ExpenseRuntimeFormEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -439,6 +464,29 @@ describe('ExpenseRuntimeFormEditor', () => {
         totalAmount: 188.5,
         taxAmount: 10.68,
         message: '识别成功'
+      }
+    })
+    mocks.profileApi.createBankAccount.mockResolvedValue({
+      data: {
+        id: 101,
+        accountName: '张三',
+        accountNo: '6222020202020202',
+        accountNoMasked: '6222 **** 0202',
+        accountType: '对私账户',
+        bankName: '中国银行',
+        bankCode: 'BOC',
+        province: '上海市',
+        city: '上海市',
+        branchCode: 'BOC-SH',
+        branchName: '中国银行上海分行',
+        defaultAccount: false,
+        status: 1,
+        statusLabel: '启用'
+      }
+    })
+    mocks.profileApi.updateBankAccount.mockResolvedValue({
+      data: {
+        id: 101
       }
     })
   })
@@ -622,6 +670,79 @@ describe('ExpenseRuntimeFormEditor', () => {
       keyword: '',
       linkageMode: 'EMPLOYEE',
       payeeName: undefined,
+      counterpartyCode: undefined,
+      paymentCompanyId: undefined
+    })
+  })
+
+  it('shows the add personal payee entry when no personal payee is maintained', async () => {
+    const { wrapper } = mountEditor({ payee: '', payeeAccount: '' }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const payeeSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-select-payee')
+    expect(payeeSelect).toBeTruthy()
+
+    payeeSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="payee-create-personal-payee"]').text()).toContain('增加收款人')
+  })
+
+  it('creates a personal payee in place and refreshes the employee payee chain', async () => {
+    mocks.expenseCreateApi.listPayeeOptions
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [{
+          value: 'PERSONAL_PAYEE:张三',
+          label: '张三',
+          sourceType: 'PERSONAL_PRIVATE_PAYEE',
+          sourceCode: '张三',
+          secondaryLabel: '个人对私账户'
+        }]
+      })
+
+    const { wrapper, model } = mountEditor({ payee: '', payeeAccount: '' }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const payeeSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-select-payee')
+    expect(payeeSelect).toBeTruthy()
+
+    payeeSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+    await wrapper.get('[data-testid="payee-create-personal-payee"]').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.findComponent({ name: 'PersonalBankAccountDialog' })
+    expect(dialog.exists()).toBe(true)
+    Object.assign((dialog.vm as any).bankForm, validPersonalBankForm())
+
+    await (dialog.vm as any).submitBankAccount()
+    await flushPromises()
+    await flushPromises()
+
+    expect(mocks.profileApi.createBankAccount).toHaveBeenCalledWith(expect.objectContaining({
+      accountName: '张三',
+      branchName: '中国银行上海分行'
+    }))
+    expect(model.value.payee).toEqual(expect.objectContaining({
+      value: 'PERSONAL_PAYEE:张三',
+      label: '张三'
+    }))
+    expect(model.value.payeeAccount).toBe('')
+    expect(mocks.expenseCreateApi.listPayeeAccountOptions).toHaveBeenLastCalledWith({
+      keyword: '',
+      linkageMode: 'EMPLOYEE',
+      payeeName: '张三',
       counterpartyCode: undefined,
       paymentCompanyId: undefined
     })

@@ -21,6 +21,7 @@ import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
@@ -95,6 +96,9 @@ class FinanceVoucherServiceImplTest {
     private FinanceAccountSetMapper financeAccountSetMapper;
 
     @Mock
+    private FinancePeriodCloseMapper financePeriodCloseMapper;
+
+    @Mock
     private UserService userService;
 
     private FinanceVoucherServiceImpl service;
@@ -115,6 +119,7 @@ class FinanceVoucherServiceImplTest {
                 systemDepartmentMapper,
                 userMapper,
                 financeAccountSetMapper,
+                financePeriodCloseMapper,
                 userService
         );
 

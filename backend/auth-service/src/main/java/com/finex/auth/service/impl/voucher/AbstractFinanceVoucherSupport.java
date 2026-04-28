@@ -22,6 +22,7 @@ import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.FinanceCashFlowItem;
 import com.finex.auth.entity.FinanceCustomer;
+import com.finex.auth.entity.FinancePeriodClose;
 import com.finex.auth.entity.FinanceProjectArchive;
 import com.finex.auth.entity.FinanceProjectClass;
 import com.finex.auth.entity.FinanceVendor;
@@ -32,6 +33,7 @@ import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
 import com.finex.auth.mapper.FinanceProjectClassMapper;
 import com.finex.auth.mapper.FinanceVendorMapper;
@@ -110,6 +112,7 @@ public abstract class AbstractFinanceVoucherSupport {
     private final SystemCompanyMapper systemCompanyMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
+    private final FinancePeriodCloseMapper financePeriodCloseMapper;
 
     protected final ConcurrentHashMap<String, Object> voucherNoLocks = new ConcurrentHashMap<>();
 
@@ -248,6 +251,7 @@ public abstract class AbstractFinanceVoucherSupport {
         List<FinanceVoucherEntryDTO> normalizedEntries = normalizeEntries(dto.getEntries());
 
         validateCompany(companyId);
+        ensurePeriodNotClosed(companyId, year, period);
         validateVoucherType(voucherType);
         validateEntries(companyId, normalizedEntries);
         Map<String, FinanceAccountSubject> accountSubjects = loadSelectableAccountMap(companyId);
@@ -338,6 +342,7 @@ public abstract class AbstractFinanceVoucherSupport {
         }
 
         GlAccvouch headerRow = existingRows.get(0);
+        ensurePeriodNotClosed(voucherKey.companyId(), voucherKey.iyear(), voucherKey.iperiod());
         String status = resolveStatus(headerRow);
         if (!isEditableStatus(status)) {
             throw new IllegalStateException("当前凭证状态不允许修改");
@@ -467,6 +472,7 @@ public abstract class AbstractFinanceVoucherSupport {
     ) {
         VoucherKey voucherKey = parseVoucherNo(voucherNo);
         validateVoucherCompany(companyId, voucherKey);
+        ensurePeriodNotClosed(voucherKey.companyId(), voucherKey.iyear(), voucherKey.iperiod());
         String normalizedAction = normalizeVoucherAction(action);
         List<GlAccvouch> existingRows = requireVoucherRows(voucherKey);
         GlAccvouch headerRow = existingRows.get(0);
@@ -2123,6 +2129,20 @@ public abstract class AbstractFinanceVoucherSupport {
      */
     protected void postVoucher(String companyId, Integer year, Integer period, String voucherType, Integer inoId) {
         // Intentionally left blank in phase one.
+    }
+
+    protected void ensurePeriodNotClosed(String companyId, Integer iyear, Integer iperiod) {
+        FinancePeriodClose close = financePeriodCloseMapper.selectOne(
+                Wrappers.<FinancePeriodClose>lambdaQuery()
+                        .eq(FinancePeriodClose::getCompanyId, companyId)
+                        .eq(FinancePeriodClose::getIyear, iyear)
+                        .eq(FinancePeriodClose::getIperiod, iperiod)
+                        .eq(FinancePeriodClose::getStatus, "CLOSED")
+                        .last("limit 1")
+        );
+        if (close != null) {
+            throw new IllegalStateException("当前期间已结账，不能继续执行总账写操作");
+        }
     }
 
     private record MonthRange(LocalDateTime start, LocalDateTime endExclusive) {

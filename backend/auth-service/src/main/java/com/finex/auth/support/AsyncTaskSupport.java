@@ -12,6 +12,7 @@ public final class AsyncTaskSupport {
     public static final String TASK_TYPE_FINANCE_ACCOUNT_SET_CREATE = "FINANCE_ACCOUNT_SET_CREATE";
     public static final String TASK_TYPE_FINANCE_OPENING_BALANCE_OPEN_BOOK = "FINANCE_OPENING_BALANCE_OPEN_BOOK";
     public static final String TASK_TYPE_FINANCE_OPENING_BALANCE_CARRY_FORWARD = "FINANCE_OPENING_BALANCE_CARRY_FORWARD";
+    public static final String TASK_TYPE_FINANCE_POST_VOUCHER_RUN = "FINANCE_POST_VOUCHER_RUN";
 
     public static final String TASK_STATUS_PENDING = "PENDING";
     public static final String TASK_STATUS_RUNNING = "RUNNING";
@@ -49,6 +50,7 @@ public final class AsyncTaskSupport {
             case TASK_TYPE_FINANCE_ACCOUNT_SET_CREATE -> "FAS";
             case TASK_TYPE_FINANCE_OPENING_BALANCE_OPEN_BOOK -> "FOB";
             case TASK_TYPE_FINANCE_OPENING_BALANCE_CARRY_FORWARD -> "FCF";
+            case TASK_TYPE_FINANCE_POST_VOUCHER_RUN -> "FPV";
             default -> "EXP";
         };
         return prefix

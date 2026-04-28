@@ -3,110 +3,127 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import FinanceWorkspaceTabs from '@/components/finance/FinanceWorkspaceTabs.vue'
 
-const ButtonStub = defineComponent({
-  emits: ['click'],
-  template: '<button type="button" @click="$emit(\'click\', $event)"><slot /></button>'
-})
-
 const SelectStub = defineComponent({
   inheritAttrs: false,
   props: {
-    modelValue: { type: String, default: '' },
+    modelValue: { type: [String, Number], default: '' },
     filterMethod: { type: Function, default: undefined },
     loading: { type: Boolean, default: false },
     disabled: { type: Boolean, default: false }
   },
   emits: ['update:modelValue', 'visible-change'],
-  template: '<div data-testid="company-select" v-bind="$attrs"><slot /></div>'
+  template: '<div v-bind="$attrs"><slot /></div>'
 })
 
 const OptionStub = defineComponent({
   props: {
     label: { type: String, default: '' },
-    value: { type: String, default: '' }
+    value: { type: [String, Number], default: '' }
   },
   template: '<div class="company-option" :data-value="value">{{ label }}</div>'
 })
 
-const ContainerStub = defineComponent({
-  template: '<div><slot /></div>'
+const TooltipStub = defineComponent({
+  props: {
+    content: { type: String, default: '' }
+  },
+  template: '<div class="tooltip-stub" :data-content="content"><slot /></div>'
 })
 
-function mountView() {
+function mountView(extraProps: Record<string, unknown> = {}) {
   return mount(FinanceWorkspaceTabs, {
     props: {
-      tabs: [{ path: '/finance/general-ledger/new-voucher', title: 'New Voucher' }],
+      tabs: [
+        { path: '/finance/general-ledger/new-voucher', title: '新建凭证' },
+        { path: '/finance/general-ledger/opening-balance', title: '期初余额' }
+      ],
       activePath: '/finance/general-ledger/new-voucher',
       companyOptions: [
         {
           companyId: 'COMPANY_A',
           companyCode: 'COMP202604050001',
-          companyName: 'Guangzhou Finance Company',
-          label: 'COMP202604050001 - Guangzhou Finance Company',
+          companyName: '广州财务公司',
+          label: 'COMP202604050001 - 广州财务公司',
           value: 'COMPANY_A'
         },
         {
           companyId: 'COMPANY_B',
           companyCode: 'COMP202603260001',
-          companyName: 'Yuanzhi Education Company',
-          label: 'COMP202603260001 - Yuanzhi Education Company',
+          companyName: '远志教育公司',
+          label: 'COMP202603260001 - 远志教育公司',
           value: 'COMPANY_B'
         }
       ],
-      currentCompanyId: 'COMPANY_A'
+      currentCompanyId: 'COMPANY_A',
+      periodYear: 2026,
+      periodMonth: 4,
+      periodYearOptions: [2026],
+      periodMonthOptions: [4],
+      ...extraProps
     },
     global: {
       stubs: {
-        'el-button': ButtonStub,
         'el-select': SelectStub,
         'el-option': OptionStub,
-        'el-dropdown': ContainerStub,
-        'el-dropdown-menu': ContainerStub,
-        'el-dropdown-item': ContainerStub,
-        'el-icon': true
+        'el-tooltip': TooltipStub
       }
     }
   })
 }
 
 describe('FinanceWorkspaceTabs', () => {
-  it('renders company names only and applies the widened selector width', () => {
-    const wrapper = mountView()
-    const optionTexts = wrapper.findAll('.company-option').map((item) => item.text())
-    const select = wrapper.get('[data-testid="company-select"]')
+  it('renders flat tabs, keeps tools on one row, and narrows the period selectors', () => {
+    const wrapper = mountView({ periodHint: '当前公司未创建账套' })
 
-    expect(optionTexts).toEqual(['Guangzhou Finance Company', 'Yuanzhi Education Company'])
-    expect(wrapper.text()).not.toContain('COMP202604050001 - Guangzhou Finance Company')
-    expect(select.attributes('style')).toContain('--finance-company-select-width: 390px')
+    expect(wrapper.find('.finance-tabs-wrap').exists()).toBe(true)
+    expect(wrapper.find('.finance-tab').exists()).toBe(true)
+    expect(wrapper.find('.finance-tab-active').exists()).toBe(true)
+    expect(wrapper.find('.finance-tool-inline-group.finance-period-group').exists()).toBe(true)
+    expect(wrapper.find('.finance-tool-inline-group.finance-company-group').exists()).toBe(true)
+    expect(wrapper.text()).toContain('会计期间')
+    expect(wrapper.text()).toContain('当前公司')
+    expect(wrapper.text()).not.toContain('页签')
+    expect(wrapper.find('[data-testid="period-year-select"]').attributes('style')).toContain('--finance-period-select-width: 74px')
+    expect(wrapper.find('[data-testid="period-month-select"]').attributes('style')).toContain('--finance-period-select-width: 60px')
+    expect(wrapper.get('[data-testid="company-select"]').attributes('style')).toContain('--finance-company-select-width: 292px')
+    expect(wrapper.find('[data-testid="period-tooltip"]').exists()).toBe(true)
+    expect(wrapper.find('.tooltip-stub').attributes('data-content')).toBe('当前公司未创建账套')
+    expect(wrapper.text()).not.toContain('当前公司未创建账套')
   })
 
-  it('keeps company filtering usable for both company name and company code', async () => {
+  it('shows company names only and keeps company filtering usable for name and code', async () => {
     const wrapper = mountView()
-    const select = wrapper.getComponent(SelectStub)
-    const filterMethod = select.props('filterMethod') as ((query: string) => void) | undefined
+    const companySelect = wrapper.get('[data-testid="company-select"]')
+    const filterMethod = wrapper.findAllComponents(SelectStub)[2]?.props('filterMethod') as ((query: string) => void) | undefined
+
+    expect(companySelect.findAll('.company-option').map((item) => item.text())).toEqual(['广州财务公司', '远志教育公司'])
+    expect(wrapper.text()).not.toContain('COMP202604050001 - 广州财务公司')
 
     filterMethod?.('20260405')
     await nextTick()
-    expect(wrapper.findAll('.company-option').map((item) => item.text())).toEqual(['Guangzhou Finance Company'])
+    expect(companySelect.findAll('.company-option').map((item) => item.text())).toEqual(['广州财务公司'])
 
-    filterMethod?.('Yuanzhi')
+    filterMethod?.('远志')
     await nextTick()
-    expect(wrapper.findAll('.company-option').map((item) => item.text())).toEqual(['Yuanzhi Education Company'])
+    expect(companySelect.findAll('.company-option').map((item) => item.text())).toEqual(['远志教育公司'])
 
-    await select.vm.$emit('visible-change', false)
+    await wrapper.findAllComponents(SelectStub)[2]?.vm.$emit('visible-change', false)
     await nextTick()
-    expect(wrapper.findAll('.company-option').map((item) => item.text())).toEqual([
-      'Guangzhou Finance Company',
-      'Yuanzhi Education Company'
-    ])
+    expect(companySelect.findAll('.company-option').map((item) => item.text())).toEqual(['广州财务公司', '远志教育公司'])
   })
 
-  it('still emits company switch events after the display changes', async () => {
+  it('still emits company switch and period switch events', async () => {
     const wrapper = mountView()
-    const select = wrapper.getComponent(SelectStub)
+    const selects = wrapper.findAllComponents(SelectStub)
 
-    await select.vm.$emit('update:modelValue', 'COMPANY_B')
+    await selects[2]?.vm.$emit('update:modelValue', 'COMPANY_B')
+    await selects[0]?.vm.$emit('update:modelValue', 2026)
+    await selects[1]?.vm.$emit('update:modelValue', 4)
 
     expect(wrapper.emitted('changeCompany')).toEqual([['COMPANY_B']])
+    expect(wrapper.emitted('changePeriod')).toEqual([
+      [{ year: 2026, month: 4 }],
+      [{ year: 2026, month: 4 }]
+    ])
   })
 })

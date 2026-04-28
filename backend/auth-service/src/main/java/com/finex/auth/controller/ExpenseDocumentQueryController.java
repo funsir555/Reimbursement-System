@@ -11,6 +11,7 @@ import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentPickerVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
+import com.finex.auth.dto.ExpenseManualApproverPreviewVO;
 import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
@@ -281,6 +282,19 @@ public class ExpenseDocumentQueryController {
         return Result.success(
                 "审批单已重新提交",
                 expenseDocumentService.resubmitDocument(userId, getCurrentUsername(request), documentCode, dto)
+        );
+    }
+
+    @PostMapping("/{documentCode}/manual-approver-preview")
+    public Result<ExpenseManualApproverPreviewVO> previewManualApprovers(
+            @PathVariable String documentCode,
+            @Valid @RequestBody ExpenseDocumentUpdateDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_CREATE_CREATE, EXPENSE_CREATE_SUBMIT);
+        return Result.success(
+                expenseDocumentService.previewManualApproversForResubmit(userId, documentCode, dto)
         );
     }
 

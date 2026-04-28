@@ -1,11 +1,9 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 import type {
-  ExpenseApprovalNodeStatus,
   ExpenseApprovalTimelineItem,
   ExpenseDocumentDetail,
   ExpenseDocumentNavigation,
-  ProcessFlowNode,
-  ProcessFormOption
+  ProcessFlowNode
 } from '@/api'
 import {
   resolveDisabledExpenseDetailActionHint,
@@ -97,20 +95,13 @@ export function useExpenseDocumentDetailApprovalRuntime(
   const isSubmitter = computed(
     () => options.detail.value?.submitterUserId === options.currentUserId.value
   )
-  const isManualApproverSelectionPending = computed(() =>
-    Boolean(options.detail.value?.manualApproverSelectionPending)
-  )
-  const canSubmitManualApproverSelection = computed(
-    () => isSubmitter.value && isManualApproverSelectionPending.value
-  )
-  const manualApproverOptions = computed<ProcessFormOption[]>(
-    () => options.detail.value?.manualApproverOptions || []
-  )
+
   const isActiveApprover = computed(() => approvableTasks.value.length > 0)
   const canResubmitEdit = computed(() => {
     const status = options.detail.value?.status || ''
     return isSubmitter.value && (status === 'DRAFT' || status === 'REJECTED')
   })
+
   const isFlowParticipant = computed(() => {
     if (!options.detail.value) {
       return false
@@ -129,6 +120,7 @@ export function useExpenseDocumentDetailApprovalRuntime(
       return approverUserIds.some((item) => Number(item) === userId)
     })
   })
+
   const canComment = computed(() => isSubmitter.value || isFlowParticipant.value)
 
   const statusBucket = computed<'pending' | 'exception' | 'terminal' | 'other'>(() => {
@@ -154,12 +146,10 @@ export function useExpenseDocumentDetailApprovalRuntime(
     return 'other'
   })
 
-  const approvalNodeStatuses = computed<ExpenseApprovalNodeStatus[]>(
-    () => options.detail.value?.approvalNodeStatuses || []
-  )
   const approvalTimelineItems = computed<ExpenseApprovalTimelineItem[]>(
     () => options.detail.value?.approvalTimeline || []
   )
+
   const actionItems = computed<ExpenseDetailActionItem[]>(() => {
     if (!options.detail.value) {
       return []
@@ -181,22 +171,6 @@ export function useExpenseDocumentDetailApprovalRuntime(
   const secondaryActionItems = computed(() => actionItems.value.filter((item) => !item.primary))
   const primaryActionItems = computed(() => actionItems.value.filter((item) => item.primary))
   const disabledActionHint = computed(() => resolveDisabledExpenseDetailActionHint(actionItems.value))
-
-  function approvalStatusLabel(status?: string) {
-    const labels: Record<string, string> = {
-      NOT_REACHED: '未到达',
-      PENDING: '审批中',
-      MANUAL_SELECTION_PENDING: '待手动选择审批人',
-      APPROVED: '已通过',
-      REJECTED: '已驳回',
-      AUTO_SKIPPED: '已自动跳过',
-      EXCEPTION: '异常',
-      PAYMENT_PENDING: '待支付',
-      PAYMENT_COMPLETED: '已支付',
-      PAYMENT_EXCEPTION: '支付异常'
-    }
-    return labels[status || ''] || '处理中'
-  }
 
   function approvalStatusTagType(status?: string) {
     switch (status) {
@@ -221,17 +195,11 @@ export function useExpenseDocumentDetailApprovalRuntime(
   return {
     approvableTasks,
     rejectTargetOptions,
-    isSubmitter,
-    isManualApproverSelectionPending,
-    canSubmitManualApproverSelection,
-    manualApproverOptions,
-    approvalNodeStatuses,
     approvalTimelineItems,
     actionItems,
     secondaryActionItems,
     primaryActionItems,
     disabledActionHint,
-    approvalStatusLabel,
     approvalStatusTagType
   }
 }

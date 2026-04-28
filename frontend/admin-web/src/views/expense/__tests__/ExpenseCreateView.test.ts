@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   expenseApi: {
     getEditContext: vi.fn(),
+    previewManualApprovers: vi.fn(),
     saveDraft: vi.fn(),
     resubmit: vi.fn()
   },
@@ -27,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   expenseCreateApi: {
     listTemplates: vi.fn(),
     getTemplateDetail: vi.fn(),
+    createDraft: vi.fn(),
+    previewManualApprovers: vi.fn(),
     submit: vi.fn()
   },
   elMessage: {
@@ -386,8 +389,26 @@ describe('ExpenseCreateView', () => {
     mocks.router.back.mockResolvedValue(undefined)
     mocks.expenseCreateApi.listTemplates.mockResolvedValue({ data: [buildTemplateSummary()] })
     mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({ data: null })
+    mocks.expenseCreateApi.createDraft.mockResolvedValue({
+      data: {
+        documentCode: 'DOC-DRAFT-001',
+        ...buildTemplateDetail()
+      }
+    })
+    mocks.expenseCreateApi.previewManualApprovers.mockResolvedValue({
+      data: {
+        approvalTimeline: [],
+        manualNodes: []
+      }
+    })
     mocks.expenseCreateApi.submit.mockResolvedValue({ data: { documentCode: 'DOC-001' } })
     mocks.expenseApi.getEditContext.mockResolvedValue({ data: null })
+    mocks.expenseApi.previewManualApprovers.mockResolvedValue({
+      data: {
+        approvalTimeline: [],
+        manualNodes: []
+      }
+    })
     mocks.expenseApi.resubmit.mockResolvedValue({ data: { documentCode: 'DOC-002' } })
     mocks.expenseApprovalApi.getModifyContext.mockResolvedValue({ data: null })
     mocks.expenseApprovalApi.modify.mockResolvedValue({ data: { documentCode: 'DOC-003' } })
@@ -545,7 +566,7 @@ describe('ExpenseCreateView', () => {
     expect(window.sessionStorage.getItem('expense-create-draft:draft-001')).toBeNull()
   })
 
-  it('manually saves draft from the floating action bar without triggering submit', async () => {
+  it('manually saves draft from the floating action bar to a server draft without triggering submit', async () => {
     mocks.route.query = { templateCode: 'TPL-001', draftKey: 'draft-001' }
     mocks.route.fullPath = '/expense/create?templateCode=TPL-001&draftKey=draft-001'
     mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
@@ -562,11 +583,18 @@ describe('ExpenseCreateView', () => {
     await flushPromises()
 
     expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
+    expect(mocks.expenseCreateApi.createDraft).toHaveBeenCalledWith({
+      templateCode: 'TPL-001',
+      formData: {
+        __totalAmount: '0.00'
+      },
+      expenseDetails: []
+    })
     expect(mocks.elMessage.success).toHaveBeenCalledWith('草稿已保存')
+    expect(mocks.router.replace).toHaveBeenCalledWith('/expense/documents/DOC-DRAFT-001/resubmit?entry=draft')
 
     const storedDraft = JSON.parse(window.sessionStorage.getItem('expense-create-draft:draft-001') || '{}')
-    expect(storedDraft.templateCode).toBe('TPL-001')
-    expect(storedDraft.templateDetail?.templateName).toBe('差旅报销模板')
+    expect(storedDraft).toEqual({})
   })
 
   it('persists draft edits to the backend for server-side draft documents', async () => {
@@ -1448,7 +1476,7 @@ describe('ExpenseCreateView', () => {
     expect(wrapper.get('[data-testid="expense-runtime-form-editor"]').attributes('data-current-user-company-id')).toBe('COMPANY_CTX')
   })
 
-  it('does not render pre-submit manual approver selection even when the flow contains manual select nodes', async () => {
+  it('opens the pre-submit manual approver dialog when the preview contains manual select nodes', async () => {
     mocks.route.query = { templateCode: 'TPL-007B', draftKey: 'draft-manual-approver' }
     mocks.route.fullPath = '/expense/create?templateCode=TPL-007B&draftKey=draft-manual-approver'
     mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
@@ -1474,22 +1502,49 @@ describe('ExpenseCreateView', () => {
         ]
       }
     })
+    mocks.expenseCreateApi.previewManualApprovers.mockResolvedValue({
+      data: {
+        approvalTimeline: [
+          {
+            key: 'submit',
+            title: '张三 提交单据',
+            status: 'APPROVED',
+            statusLabel: '已完成',
+            timestamp: '2026-04-01 10:00:00'
+          }
+        ],
+        manualNodes: [
+          {
+            nodeKey: 'manual-finance',
+            nodeName: '财务复核',
+            required: true,
+            candidateOptions: [
+              { value: 2, label: '李四' },
+              { value: 3, label: '王五' }
+            ],
+            selectedUserIds: []
+          }
+        ]
+      }
+    })
 
     const wrapper = await mountView()
 
-    expect(wrapper.text()).not.toContain('手动选择审批人')
-    expect(wrapper.find('[data-testid="expense-manual-approver-card"]').exists()).toBe(false)
     const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
     await submitButton!.trigger('click')
     await flushPromises()
 
-    expect(mocks.expenseCreateApi.submit).toHaveBeenCalledWith({
+    expect(mocks.expenseCreateApi.previewManualApprovers).toHaveBeenCalledWith({
       templateCode: 'TPL-007B',
       formData: {
         __totalAmount: '0.00'
       },
       expenseDetails: []
     })
+    expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="expense-manual-approver-dialog"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('提交前手动选择审批人')
+    expect(wrapper.text()).toContain('财务复核')
   })
 
   it('passes modify permission flags to the runtime editor and locks expense detail editing in approval modify mode', async () => {

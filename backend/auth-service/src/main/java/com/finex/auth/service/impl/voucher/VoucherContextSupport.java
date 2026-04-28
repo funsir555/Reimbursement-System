@@ -9,15 +9,18 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.FinanceContextCompanyOptionVO;
 import com.finex.auth.dto.FinanceContextMetaVO;
 import com.finex.auth.entity.FinanceAccountSet;
+import com.finex.auth.entity.FinancePeriodClose;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.service.UserService;
 
-import java.util.LinkedHashSet;
+import java.time.YearMonth;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +34,7 @@ public final class VoucherContextSupport {
 
     private final SystemCompanyMapper systemCompanyMapper;
     private final FinanceAccountSetMapper financeAccountSetMapper;
+    private final FinancePeriodCloseMapper financePeriodCloseMapper;
     private final UserService userService;
 
     /**
@@ -39,10 +43,12 @@ public final class VoucherContextSupport {
     public VoucherContextSupport(
             SystemCompanyMapper systemCompanyMapper,
             FinanceAccountSetMapper financeAccountSetMapper,
+            FinancePeriodCloseMapper financePeriodCloseMapper,
             UserService userService
     ) {
         this.systemCompanyMapper = systemCompanyMapper;
         this.financeAccountSetMapper = financeAccountSetMapper;
+        this.financePeriodCloseMapper = financePeriodCloseMapper;
         this.userService = userService;
     }
 
@@ -51,11 +57,11 @@ public final class VoucherContextSupport {
      */
     public FinanceContextMetaVO getMeta(Long currentUserId) {
         List<SystemCompany> companies = loadEnabledCompanies();
-        Set<String> activeAccountSetCompanyIds = loadActiveAccountSetCompanyIds();
+        Map<String, FinanceAccountSet> activeAccountSets = loadActiveAccountSets();
 
         FinanceContextMetaVO meta = new FinanceContextMetaVO();
         meta.setCompanyOptions(companies.stream()
-                .map(company -> toOption(company, activeAccountSetCompanyIds.contains(company.getCompanyId())))
+                .map(company -> toOption(company, activeAccountSets.get(company.getCompanyId())))
                 .toList());
 
         User currentUser = currentUserId == null ? null : userService.getById(currentUserId);
@@ -91,28 +97,55 @@ public final class VoucherContextSupport {
     /**
      * 加载Active账户Set公司Ids。
      */
-    private Set<String> loadActiveAccountSetCompanyIds() {
+    private Map<String, FinanceAccountSet> loadActiveAccountSets() {
         return financeAccountSetMapper.selectList(
                         Wrappers.<FinanceAccountSet>lambdaQuery()
                                 .eq(FinanceAccountSet::getStatus, ACCOUNT_SET_STATUS_ACTIVE)
                                 .orderByAsc(FinanceAccountSet::getCompanyId)
                 ).stream()
-                .map(FinanceAccountSet::getCompanyId)
-                .filter(item -> normalize(item) != null)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                .filter(item -> normalize(item.getCompanyId()) != null)
+                .collect(Collectors.toMap(
+                        FinanceAccountSet::getCompanyId,
+                        Function.identity(),
+                        (left, right) -> left,
+                        java.util.LinkedHashMap::new
+                ));
     }
 
-    private FinanceContextCompanyOptionVO toOption(SystemCompany company, boolean hasActiveAccountSet) {
+    private FinanceContextCompanyOptionVO toOption(SystemCompany company, FinanceAccountSet accountSet) {
         FinanceContextCompanyOptionVO option = new FinanceContextCompanyOptionVO();
         option.setCompanyId(company.getCompanyId());
         option.setCompanyCode(company.getCompanyCode());
         option.setCompanyName(company.getCompanyName());
-        option.setHasActiveAccountSet(hasActiveAccountSet);
+        option.setHasActiveAccountSet(accountSet != null);
+        if (accountSet != null) {
+            YearMonth periodEnd = resolvePeriodEnd(company.getCompanyId(), accountSet);
+            option.setEnabledYear(accountSet.getEnabledYear());
+            option.setEnabledPeriod(accountSet.getEnabledPeriod());
+            option.setPeriodStartYear(accountSet.getEnabledYear());
+            option.setPeriodStartMonth(accountSet.getEnabledPeriod());
+            option.setPeriodEndYear(periodEnd.getYear());
+            option.setPeriodEndMonth(periodEnd.getMonthValue());
+        }
         option.setValue(company.getCompanyId());
         option.setLabel(normalize(company.getCompanyCode()) == null
                 ? company.getCompanyName()
                 : company.getCompanyCode() + " - " + company.getCompanyName());
         return option;
+    }
+
+    private YearMonth resolvePeriodEnd(String companyId, FinanceAccountSet accountSet) {
+        FinancePeriodClose latestClose = financePeriodCloseMapper.selectOne(
+                Wrappers.<FinancePeriodClose>lambdaQuery()
+                        .eq(FinancePeriodClose::getCompanyId, companyId)
+                        .eq(FinancePeriodClose::getStatus, "CLOSED")
+                        .orderByDesc(FinancePeriodClose::getIyperiod)
+                        .last("limit 1")
+        );
+        if (latestClose == null) {
+            return YearMonth.of(accountSet.getEnabledYear(), accountSet.getEnabledPeriod());
+        }
+        return YearMonth.of(latestClose.getIyear(), latestClose.getIperiod()).plusMonths(1);
     }
 
     private String normalize(String value) {

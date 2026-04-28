@@ -145,11 +145,16 @@
             :current-company-id="financeCompany.currentCompanyId"
             :company-loading="financeCompany.loading"
             :company-switching="financeCompany.switching"
+            :period-year="financePeriod.currentYear"
+            :period-month="financePeriod.currentPeriod"
+            :period-year-options="financePeriod.yearOptions"
+            :period-month-options="financePeriod.monthOptions"
+            :period-disabled="!financePeriod.hasAvailableRange"
+            :period-hint="financePeriodHint"
             @select="handleFinanceTabSelect"
             @close="handleFinanceTabClose"
-            @close-others="handleFinanceCloseOthers"
-            @close-right="handleFinanceCloseRight"
             @change-company="handleFinanceCompanyChange"
+            @change-period="handleFinancePeriodChange"
           />
 
           <div class="min-h-0 flex-1 overflow-auto p-6">
@@ -195,6 +200,7 @@ import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import PixelWhaleBrandIcon from '@/components/icons/PixelWhaleBrandIcon.vue'
 import FinanceWorkspaceTabs from '@/components/finance/FinanceWorkspaceTabs.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
+import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
 import { onDownloadCenterOpen } from '@/utils/downloadCenter'
 import { EXPENSE_CREATE_ENTRY_PERMISSION_CODES, hasAnyPermission } from '@/utils/permissions'
@@ -219,6 +225,7 @@ import {
 const route = useRoute()
 const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
+const financePeriod = useFinancePeriodStore()
 const financeWorkspace = useFinanceWorkspaceStore()
 
 const searchQuery = ref('')
@@ -250,6 +257,18 @@ const canAny = (codes: string[]) => hasAnyPermission(codes, permissionCodes.valu
 const canViewProfile = computed(() => canAny(PROFILE_MENU_PERMISSION_CODES))
 const canOpenSettings = computed(() => canAny(SETTINGS_MENU_PERMISSION_CODES))
 const showFinanceTabs = computed(() => isFinancePath(route.path) && financeWorkspace.tabs.length > 0)
+const financePeriodHint = computed(() => {
+  if (!financeCompany.currentCompanyId) {
+    return '请先选择公司'
+  }
+  if (!financeCompany.currentCompanyHasActiveAccountSet) {
+    return '当前公司未创建账套'
+  }
+  if (!financePeriod.hasAvailableRange) {
+    return '当前账套未维护启用年月'
+  }
+  return ''
+})
 
 const loadCurrentUser = async () => {
   const cachedUser = localStorage.getItem('user')
@@ -325,7 +344,10 @@ watch(
     if (!isFinancePath(path)) {
       return
     }
-    void financeCompany.ensureInitialized(companyId)
+    void (async () => {
+      await financeCompany.ensureInitialized(companyId)
+      financePeriod.ensureInitialized(true)
+    })()
   },
   { immediate: true }
 )
@@ -334,6 +356,7 @@ const logout = () => {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
   financeCompany.reset()
+  financePeriod.reset()
   ElMessage.success('已退出登录')
   void router.push('/login')
 }
@@ -397,22 +420,15 @@ function handleFinanceTabClose(path: string) {
   }
 }
 
-function handleFinanceCloseOthers(path: string) {
-  financeWorkspace.closeOthers(path)
-  if (route.fullPath !== path) {
-    void router.push(path)
-  }
-}
-
-function handleFinanceCloseRight(path: string) {
-  financeWorkspace.closeToRight(path)
-  if (!financeWorkspace.tabs.some((item) => item.path === route.fullPath)) {
-    void router.push(path)
-  }
-}
-
 async function handleFinanceCompanyChange(companyId: string) {
-  await financeCompany.switchCompany(companyId)
+  const switched = await financeCompany.switchCompany(companyId)
+  if (switched) {
+    financePeriod.syncWithCompany(companyId, false)
+  }
+}
+
+function handleFinancePeriodChange(payload: { year: number; month: number }) {
+  financePeriod.switchPeriod(payload.year, payload.month)
 }
 </script>
 

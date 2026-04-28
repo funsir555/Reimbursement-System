@@ -20,7 +20,7 @@ type RouteLike = {
 }
 
 type RouterLike = {
-  replace: (to: unknown) => Promise<unknown> | unknown
+  replace: (to: string | Record<string, unknown>) => Promise<unknown> | unknown
 }
 
 type UseExpenseCreateBootstrapOptions = {
