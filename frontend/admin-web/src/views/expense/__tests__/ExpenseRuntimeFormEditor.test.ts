@@ -1818,7 +1818,7 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(writeoffDocs).toHaveLength(1)
     expect(writeoffDocs[0]?.documentCode).toBe('DOC-WO-001')
     expect(writeoffDocs[0]?.writeOffSourceKind).toBe('LOAN')
-    expect(writeoffDocs[0]?.writeOffAmount).toBe('120.00')
+    expect(writeoffDocs[0]?.writeOffAmount).toBe('120')
   })
 
   it('applies the unified runtime control class to representative fill controls', async () => {
@@ -2020,6 +2020,45 @@ describe('ExpenseRuntimeFormEditor', () => {
 
     expect(model.value.invoiceAmount).toBe('120.50')
     expect(model.value.actualPaymentAmount).toBe('120.50')
+  })
+
+  it('keeps invoiceAmount draft text editable while syncing actualPaymentAmount in full-payment mode', async () => {
+    const { wrapper, model } = mountEditor({
+      businessScenario: 'INVOICE_FULL_PAYMENT',
+      invoiceAmount: '',
+      actualPaymentAmount: ''
+    }, [
+      createControlBlock('invoiceAmount', '发票金额', 'AMOUNT', {
+        systemFieldCode: 'INVOICE_AMOUNT'
+      }),
+      createControlBlock('actualPaymentAmount', '实际支付金额', 'AMOUNT', {
+        systemFieldCode: 'ACTUAL_PAYMENT_AMOUNT'
+      })
+    ], {
+      detailType: 'ENTERPRISE_TRANSACTION',
+      defaultBusinessScenario: 'INVOICE_FULL_PAYMENT'
+    })
+
+    await flushPromises()
+
+    const [invoiceInput] = wrapper.findAll('input')
+    await invoiceInput!.setValue('12.')
+    await flushPromises()
+
+    expect(model.value.invoiceAmount).toBe('12.')
+    expect(model.value.actualPaymentAmount).toBe('12.')
+
+    await invoiceInput!.setValue('12.3')
+    await flushPromises()
+
+    expect(model.value.invoiceAmount).toBe('12.3')
+    expect(model.value.actualPaymentAmount).toBe('12.3')
+
+    await invoiceInput!.setValue('')
+    await flushPromises()
+
+    expect(model.value.invoiceAmount).toBe('')
+    expect(model.value.actualPaymentAmount).toBe('')
   })
 
   it('validateBeforeSubmit blocks prepay details when amount and actualPaymentAmount differ', async () => {

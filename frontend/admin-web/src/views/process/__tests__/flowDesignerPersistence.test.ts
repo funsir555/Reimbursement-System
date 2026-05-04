@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ProcessFlowDetail, ProcessFlowSavePayload } from '@/api'
 import { persistFlowDraft, publishFlowAfterPersist } from '@/views/process/flowDesignerPersistence'
+import { PROCESS_FLOW_SUBMITTER_MEMBER_VALUE } from '@/views/process/processFlowDesignatedMembers'
 
 function buildPayload(): ProcessFlowSavePayload {
   return {
@@ -16,7 +17,7 @@ function buildPayload(): ProcessFlowSavePayload {
           approverType: 'DESIGNATED_MEMBER',
           managerConfig: {},
           designatedMemberConfig: {
-            userIds: [101, 202]
+            userIds: [PROCESS_FLOW_SUBMITTER_MEMBER_VALUE, 101, 202]
           },
           manualSelectConfig: {
             candidateScope: 'ALL_ACTIVE_USERS'
@@ -53,7 +54,11 @@ describe('flowDesignerPersistence', () => {
     await persistFlowDraft(api, 9, payload)
 
     expect(api.updateFlow).toHaveBeenCalledWith(9, payload)
-    expect(api.updateFlow.mock.calls[0][1].nodes[0].config.designatedMemberConfig.userIds).toEqual([101, 202])
+    expect(api.updateFlow.mock.calls[0][1].nodes[0].config.designatedMemberConfig.userIds).toEqual([
+      PROCESS_FLOW_SUBMITTER_MEMBER_VALUE,
+      101,
+      202
+    ])
     expect(api.createFlow).not.toHaveBeenCalled()
   })
 
@@ -119,5 +124,58 @@ describe('flowDesignerPersistence', () => {
 
     await expect(publishFlowAfterPersist(api, 9, payload)).rejects.toThrow('save failed')
     expect(api.publishFlow).not.toHaveBeenCalled()
+  })
+
+  it('keeps approval-style payment and cc configs intact when persisting a draft', async () => {
+    const payload: ProcessFlowSavePayload = {
+      flowName: 'Flow Payment Cc',
+      flowDescription: 'desc',
+      nodes: [
+        {
+          nodeKey: 'payment-1',
+          nodeType: 'PAYMENT',
+          nodeName: 'Payment Node 1',
+          displayOrder: 1,
+          config: {
+            approverType: 'DESIGNATED_USER_GROUP',
+            designatedMemberConfig: { userIds: [] },
+            designatedUserGroupConfig: { groupId: 2001 },
+            manualSelectConfig: { candidateScope: 'ALL_ACTIVE_USERS' },
+            missingHandler: 'AUTO_SKIP',
+            approvalMode: 'AND_SIGN',
+            opinionDefaults: ['通过', '拒绝'],
+            specialSettings: ['ALLOW_RETRY'],
+            paymentAction: 'GENERATE_PAYMENT'
+          }
+        },
+        {
+          nodeKey: 'cc-1',
+          nodeType: 'CC',
+          nodeName: 'Cc Node 1',
+          displayOrder: 2,
+          config: {
+            approverType: 'MANUAL_SELECT',
+            designatedMemberConfig: { userIds: [] },
+            designatedUserGroupConfig: {},
+            manualSelectConfig: { candidateScope: 'ALL_ACTIVE_USERS' },
+            missingHandler: 'BLOCK_SUBMIT',
+            timing: 'ON_ENTER',
+            receiverType: 'DEPT_MANAGER',
+            receiverUserIds: [88]
+          }
+        }
+      ],
+      routes: []
+    }
+    const api = {
+      createFlow: vi.fn(),
+      updateFlow: vi.fn().mockResolvedValue({ data: buildDetail(9) }),
+      publishFlow: vi.fn()
+    }
+
+    await persistFlowDraft(api, 9, payload)
+
+    expect(api.updateFlow).toHaveBeenCalledWith(9, payload)
+    expect(api.updateFlow.mock.calls[0][1].nodes).toEqual(payload.nodes)
   })
 })

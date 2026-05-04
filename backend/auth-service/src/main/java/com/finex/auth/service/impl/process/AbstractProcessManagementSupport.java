@@ -109,10 +109,6 @@ abstract class AbstractProcessManagementSupport {
     protected static final String DEFAULT_TAG_ARCHIVE_CODE = "PROCESS_TAG_OPTIONS";
     protected static final String DEFAULT_INSTALLMENT_ARCHIVE_CODE = "PROCESS_INSTALLMENT_OPTIONS";
 
-    private static final String FIELD_VALUE_TYPE_TEXT = "text";
-    private static final String FIELD_VALUE_TYPE_NUMBER = "number";
-    private static final String FIELD_VALUE_TYPE_DEPARTMENT = "department";
-
     protected static final String EXPENSE_TYPE_INVOICE_FREE = "FREE";
     protected static final String EXPENSE_TYPE_INVOICE_REQUIRED = "NOT_FREE";
     protected static final String EXPENSE_TYPE_TAX_DEFAULT = "DEFAULT";
@@ -156,16 +152,8 @@ abstract class AbstractProcessManagementSupport {
             Map.entry("CONTAINS", "\u5305\u542b")
     );
 
-    protected static final List<RuleFieldDefinition> RULE_FIELD_DEFINITIONS = List.of(
-            new RuleFieldDefinition("submitterDeptId", "\u63d0\u5355\u4eba\u90e8\u95e8", FIELD_VALUE_TYPE_DEPARTMENT, List.of("EQ", "NE", "IN", "NOT_IN")),
-            new RuleFieldDefinition("submitterPosition", "\u63d0\u5355\u4eba\u5c97\u4f4d", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN", "CONTAINS")),
-            new RuleFieldDefinition("laborRelationBelong", "\u52b3\u52a8\u5173\u7cfb\u5f52\u5c5e", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN", "CONTAINS")),
-            new RuleFieldDefinition("documentType", "\u5355\u636e\u7c7b\u578b", FIELD_VALUE_TYPE_TEXT, List.of("EQ", "NE", "IN", "NOT_IN")),
-            new RuleFieldDefinition("amount", "\u91d1\u989d", FIELD_VALUE_TYPE_NUMBER, List.of("EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN"))
-    );
-
-    protected static final Map<String, RuleFieldDefinition> RULE_FIELD_MAP = RULE_FIELD_DEFINITIONS.stream()
-            .collect(Collectors.toMap(RuleFieldDefinition::key, Function.identity()));
+    protected static final Map<String, ProcessExpenseConditionFieldSupport.ConditionFieldDefinition> CUSTOM_ARCHIVE_RULE_FIELD_MAP =
+            ProcessExpenseConditionFieldSupport.buildCustomArchiveRuleFieldMap();
 
     private final ProcessTemplateCategoryMapper categoryMapper;
     private final ProcessDocumentTemplateMapper templateMapper;
@@ -644,11 +632,4 @@ abstract class AbstractProcessManagementSupport {
         return normalizedName != null ? normalizedName : normalizedCode != null ? normalizedCode : fallback;
     }
 
-    protected record RuleFieldDefinition(
-            String key,
-            String label,
-            String valueType,
-            List<String> operatorKeys
-    ) {
-    }
 }

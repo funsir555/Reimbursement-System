@@ -50,7 +50,7 @@ export interface ProcessFlowManagerConfig {
 }
 
 export interface ProcessFlowDesignatedMemberConfig {
-  userIds?: unknown
+  userIds?: Array<string | number>
 }
 
 export interface ProcessFlowDesignatedUserGroupConfig {
@@ -148,6 +148,7 @@ export interface ProcessFlowMeta {
   paymentSpecialOptions: ProcessFlowConfigOption[]
   branchOperatorOptions: ProcessFormOption[]
   branchConditionFields: ProcessFlowConditionField[]
+  branchConditionValueOptions?: Record<string, ProcessFormOption[]>
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
   userOptions: ProcessFormOption[]

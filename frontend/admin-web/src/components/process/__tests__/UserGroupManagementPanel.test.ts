@@ -157,6 +157,20 @@ const TreeStub = defineComponent({
 })
 
 const ConditionEditorStub = defineComponent({
+  props: {
+    fields: {
+      type: Array,
+      default: () => []
+    },
+    optionSources: {
+      type: Object,
+      default: () => ({})
+    },
+    groups: {
+      type: Array,
+      default: () => []
+    }
+  },
   template: '<div data-testid="condition-editor">condition-editor</div>'
 })
 
@@ -233,9 +247,27 @@ const details = {
 const meta = {
   scopeConditionFields: [
     {
+      key: 'submitterDeptIdWithChildren',
+      label: '提单人部门（含下级）',
+      valueType: 'department',
+      operatorKeys: ['IN', 'NOT_IN']
+    },
+    {
+      key: 'submitterDeptIdExact',
+      label: '提单人部门（不含下级）',
+      valueType: 'department',
+      operatorKeys: ['IN', 'NOT_IN']
+    },
+    {
       key: 'paymentCompanyId',
       label: '公司抬头',
       valueType: 'company',
+      operatorKeys: ['IN', 'NOT_IN']
+    },
+    {
+      key: 'actualPaymentAmount',
+      label: '实际支付金额',
+      valueType: 'number',
       operatorKeys: ['IN', 'NOT_IN']
     }
   ],
@@ -246,7 +278,9 @@ const meta = {
   companyOptions: [
     { label: 'A公司', value: 'A_COMPANY' }
   ],
-  departmentOptions: [],
+  departmentOptions: [
+    { label: '行政中心', value: '1' }
+  ],
   userOptions: [
     { label: '张三', value: '101' },
     { label: '李四', value: '102' }
@@ -373,6 +407,29 @@ describe('UserGroupManagementPanel', () => {
       groupName: '新的一级组',
       memberUserIds: [],
       scopeConditionGroups: []
+    })
+  })
+
+  it('passes the standardized submitter department scope fields into the shared editor', async () => {
+    const wrapper = await mountPanel()
+
+    await wrapper.get('[data-testid="tree-node-3"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="user-group-scope-trigger"]').trigger('click')
+    await flushPromises()
+
+    const editor = wrapper.getComponent(ConditionEditorStub)
+    expect(editor.props('fields')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'submitterDeptIdWithChildren', label: '提单人部门（含下级）', valueType: 'department' }),
+      expect.objectContaining({ key: 'submitterDeptIdExact', label: '提单人部门（不含下级）', valueType: 'department' })
+    ]))
+    expect(editor.props('optionSources')).toMatchObject({
+      company: [{ label: 'A公司', value: 'A_COMPANY' }],
+      department: [{ label: '行政中心', value: '1' }],
+      user: [
+        { label: '张三', value: '101' },
+        { label: '李四', value: '102' }
+      ]
     })
   })
 })

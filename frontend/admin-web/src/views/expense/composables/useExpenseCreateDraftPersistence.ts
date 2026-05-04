@@ -1,5 +1,6 @@
 import { nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import type { ExpenseCreateTemplateDetail, ExpenseDetailInstance } from '@/api'
+import { normalizeRuntimeAmountControlValues } from '../expenseDetailRuntime'
 
 export type ExpenseCreateDraft = {
   templateCode: string
@@ -160,7 +161,10 @@ export function useExpenseCreateDraftPersistence(options: UseExpenseCreateDraftP
     const currentDraft = readDraft()
     const payload: ExpenseCreateDraft = {
       templateCode: options.selectedTemplateCode.value,
-      formValues: options.cloneRecord(options.formValues),
+      formValues: normalizeRuntimeAmountControlValues(
+        options.templateDetail.value?.schema?.blocks || [],
+        options.cloneRecord(options.formValues)
+      ),
       expenseDetails: options.expenseDetails.value.map(options.cloneDetail),
       manualApproverSelections: options.cloneManualApproverSelections(),
       templateDetail: persistOptions.includeTemplateDetail

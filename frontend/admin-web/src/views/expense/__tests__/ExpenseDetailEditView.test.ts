@@ -126,7 +126,44 @@ function buildDraft(detailFormData: Record<string, unknown>) {
       expenseDetailModeDefault: '',
       expenseDetailSchema: {
         layoutMode: 'TWO_COLUMN',
-        blocks: []
+        blocks: [
+          {
+            blockId: 'amount',
+            fieldKey: 'amount',
+            kind: 'CONTROL',
+            label: '金额',
+            span: 1,
+            required: false,
+            helpText: '',
+            props: {
+              controlType: 'AMOUNT'
+            }
+          },
+          {
+            blockId: 'invoiceAmount',
+            fieldKey: 'invoiceAmount',
+            kind: 'CONTROL',
+            label: '发票金额',
+            span: 1,
+            required: false,
+            helpText: '',
+            props: {
+              controlType: 'AMOUNT'
+            }
+          },
+          {
+            blockId: 'actualPaymentAmount',
+            fieldKey: 'actualPaymentAmount',
+            kind: 'CONTROL',
+            label: '实际支付金额',
+            span: 1,
+            required: false,
+            helpText: '',
+            props: {
+              controlType: 'AMOUNT'
+            }
+          }
+        ]
       },
       expenseDetailSharedArchives: [],
       departmentOptions: []
@@ -272,8 +309,9 @@ describe('ExpenseDetailEditView', () => {
     expect(wrapper.get('[data-testid="expense-detail-edit-floating-amount"]').text()).toContain('金额：¥ 66.80')
   })
 
-  it('keeps save behavior unchanged and normalizes actualPaymentAmount before saving', async () => {
+  it('keeps save behavior unchanged and normalizes amount controls before saving', async () => {
     const wrapper = await mountView({
+      invoiceAmount: '88.',
       actualPaymentAmount: '120.5',
       invoiceAttachments: []
     })
@@ -287,6 +325,7 @@ describe('ExpenseDetailEditView', () => {
     await flushPromises()
 
     const savedDraft = JSON.parse(window.sessionStorage.getItem('expense-create-draft:draft-001') || '{}')
+    expect(savedDraft.expenseDetails[0].formData.invoiceAmount).toBe('88.00')
     expect(savedDraft.expenseDetails[0].formData.actualPaymentAmount).toBe('120.50')
     expect(mocks.elMessage.success).toHaveBeenCalledWith('费用明细已保存')
     expect(mocks.router.push).toHaveBeenCalled()

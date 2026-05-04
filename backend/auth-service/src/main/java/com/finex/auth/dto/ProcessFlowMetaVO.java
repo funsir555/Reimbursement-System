@@ -3,7 +3,9 @@ package com.finex.auth.dto;
 import lombok.Data;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class ProcessFlowMetaVO {
@@ -47,6 +49,8 @@ public class ProcessFlowMetaVO {
     private List<ProcessFormOptionVO> branchOperatorOptions = new ArrayList<>();
 
     private List<ProcessFlowConditionFieldVO> branchConditionFields = new ArrayList<>();
+
+    private Map<String, List<ProcessFormOptionVO>> branchConditionValueOptions = new LinkedHashMap<>();
 
     private List<ProcessFormOptionVO> companyOptions = new ArrayList<>();
 

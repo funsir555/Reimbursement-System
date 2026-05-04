@@ -32,6 +32,32 @@ export function normalizeMoneyValue(value: MoneyInputValue, options: { allowNega
   return centsToMoney(toMoneyCents(text))
 }
 
+export function sanitizeMoneyDraftValue(
+  value: MoneyInputValue,
+  options: { allowNegative?: boolean; fallback?: string } = {}
+) {
+  const { allowNegative = false, fallback = '' } = options
+  const text = normalizeRaw(value)
+  if (!text) {
+    return fallback
+  }
+
+  const hasNegativePrefix = allowNegative && text.startsWith('-')
+  const negativePrefix = hasNegativePrefix ? '-' : ''
+  const pure = text.replace(/^-/, '').replace(/[^\d.]/g, '')
+  const hasDot = pure.includes('.')
+  const [wholePart = '', ...decimalParts] = pure.split('.')
+  const decimalPart = decimalParts.join('').slice(0, 2)
+  const normalizedWhole = wholePart.replace(/^0+(?=\d)/, '')
+
+  if (!normalizedWhole && !hasDot) {
+    return negativePrefix || fallback
+  }
+
+  const whole = normalizedWhole || '0'
+  return hasDot ? `${negativePrefix}${whole}.${decimalPart}` : `${negativePrefix}${whole}`
+}
+
 export function toMoneyCents(value: MoneyInputValue) {
   const text = normalizeRaw(value)
   if (!text) {

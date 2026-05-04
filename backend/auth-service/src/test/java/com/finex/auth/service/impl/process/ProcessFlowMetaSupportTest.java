@@ -5,6 +5,7 @@ import com.finex.auth.dto.ProcessFlowMetaVO;
 import com.finex.auth.entity.ProcessFlow;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
+import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessFlowMapper;
@@ -43,6 +44,7 @@ class ProcessFlowMetaSupportTest {
     @Mock private UserMapper userMapper;
     @Mock private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
+    @Mock private ProcessCustomArchiveItemMapper processCustomArchiveItemMapper;
     @Mock private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
     @Mock private ProcessUserGroupResolverSupport userGroupResolverSupport;
 
@@ -62,6 +64,7 @@ class ProcessFlowMetaSupportTest {
                 userMapper,
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
+                processCustomArchiveItemMapper,
                 processDocumentTemplateMapper,
                 new ObjectMapper(),
                 userGroupResolverSupport

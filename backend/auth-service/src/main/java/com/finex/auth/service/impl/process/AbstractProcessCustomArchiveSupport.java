@@ -192,7 +192,7 @@ abstract class AbstractProcessCustomArchiveSupport extends AbstractProcessManage
             }
             String fieldKey = trimToNull(rule.getFieldKey());
             validateFieldKeyLength(fieldKey, "\u89c4\u5219\u5b57\u6bb5");
-            RuleFieldDefinition definition = RULE_FIELD_MAP.get(fieldKey);
+            ProcessExpenseConditionFieldSupport.ConditionFieldDefinition definition = CUSTOM_ARCHIVE_RULE_FIELD_MAP.get(fieldKey);
             if (definition == null) {
                 throw new IllegalArgumentException("\u4e0d\u652f\u6301\u7684\u89c4\u5219\u5b57\u6bb5: " + rule.getFieldKey());
             }

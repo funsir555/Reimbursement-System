@@ -137,68 +137,54 @@ class ExpenseApprovalProjectionSupport {
             String containerKey,
             int startIndex
     ) {
-        List<ProcessFlowNodeDTO> result = collectContainer(instance, snapshot, runtimeContext, routeHitsByBranchNode, containerKey, startIndex);
-        ProcessFlowRouteDTO currentRoute = snapshot.routeByKey(containerKey);
-        if (currentRoute == null) {
-            return result;
+        List<ProcessFlowNodeDTO> result = new ArrayList<>();
+        List<TraversalFrame> frames = new ArrayList<>();
+        frames.add(new TraversalFrame(FlowRuntimeSnapshot.normalizeContainerKey(containerKey), Math.max(startIndex, 0)));
+        while (!frames.isEmpty()) {
+            TraversalFrame frame = frames.remove(frames.size() - 1);
+            List<ProcessFlowNodeDTO> children = snapshot.children(frame.containerKey());
+            boolean descended = false;
+            for (int index = Math.max(frame.startIndex(), 0); index < children.size(); index++) {
+                ProcessFlowNodeDTO node = children.get(index);
+                String nodeType = defaultText(node.getNodeType(), "");
+                if (NODE_TYPE_BRANCH.equals(nodeType)) {
+                    ProcessFlowRouteDTO matchedRoute = resolveMatchedRoute(instance, snapshot, runtimeContext, routeHitsByBranchNode, node);
+                    if (matchedRoute == null) {
+                        return result;
+                    }
+                    int resumeIndex = resolveContinuationIndex(snapshot, frame.containerKey(), index, node, matchedRoute);
+                    if (resumeIndex < children.size()) {
+                        frames.add(new TraversalFrame(frame.containerKey(), resumeIndex));
+                    }
+                    frames.add(new TraversalFrame(matchedRoute.getRouteKey(), 0));
+                    descended = true;
+                    break;
+                }
+                if (isBusinessNode(nodeType)) {
+                    result.add(node);
+                }
+            }
+            if (!descended) {
+                continue;
+            }
         }
-
-        ProcessFlowNodeDTO branchNode = snapshot.node(currentRoute.getSourceNodeKey());
-        if (branchNode == null) {
-            return result;
-        }
-
-        boolean hasAttachedRoute = snapshot.routes(currentRoute.getSourceNodeKey()).stream()
-                .anyMatch(item -> Boolean.TRUE.equals(item.getAttachBelowNodes()));
-        if (!hasAttachedRoute || Boolean.TRUE.equals(currentRoute.getAttachBelowNodes())) {
-            result.addAll(collectFromPosition(
-                    instance,
-                    snapshot,
-                    runtimeContext,
-                    routeHitsByBranchNode,
-                    branchNode.getParentNodeKey(),
-                    snapshot.indexInContainer(branchNode.getParentNodeKey(), branchNode.getNodeKey()) + 1
-            ));
-            return result;
-        }
-
-        result.addAll(collectFromPosition(
-                instance,
-                snapshot,
-                runtimeContext,
-                routeHitsByBranchNode,
-                branchNode.getParentNodeKey(),
-                snapshot.children(branchNode.getParentNodeKey()).size()
-        ));
         return result;
     }
 
-    private List<ProcessFlowNodeDTO> collectContainer(
-            ProcessDocumentInstance instance,
+    private int resolveContinuationIndex(
             FlowRuntimeSnapshot snapshot,
-            Map<String, Object> runtimeContext,
-            Map<String, String> routeHitsByBranchNode,
             String containerKey,
-            int startIndex
+            int branchIndex,
+            ProcessFlowNodeDTO branchNode,
+            ProcessFlowRouteDTO matchedRoute
     ) {
-        List<ProcessFlowNodeDTO> result = new ArrayList<>();
-        List<ProcessFlowNodeDTO> children = snapshot.children(containerKey);
-        for (int index = Math.max(startIndex, 0); index < children.size(); index++) {
-            ProcessFlowNodeDTO node = children.get(index);
-            String nodeType = defaultText(node.getNodeType(), "");
-            if (NODE_TYPE_BRANCH.equals(nodeType)) {
-                ProcessFlowRouteDTO matchedRoute = resolveMatchedRoute(instance, snapshot, runtimeContext, routeHitsByBranchNode, node);
-                if (matchedRoute == null) {
-                    return result;
-                }
-                result.addAll(collectFromPosition(instance, snapshot, runtimeContext, routeHitsByBranchNode, matchedRoute.getRouteKey(), 0));
-                return result;
-            }
-            if (isBusinessNode(nodeType)) {
-                result.add(node);
-            }
+        List<ProcessFlowNodeDTO> siblings = snapshot.children(containerKey);
+        boolean hasAttachedRoute = snapshot.routes(branchNode.getNodeKey()).stream()
+                .anyMatch(item -> Boolean.TRUE.equals(item.getAttachBelowNodes()));
+        if (hasAttachedRoute && !Boolean.TRUE.equals(matchedRoute.getAttachBelowNodes())) {
+            return siblings.size();
         }
-        return result;
+        return branchIndex + 1;
     }
 
     private ProcessFlowRouteDTO resolveMatchedRoute(
@@ -309,7 +295,7 @@ class ExpenseApprovalProjectionSupport {
         LogEntry exceptionLog = lastLog(logs, LOG_EXCEPTION);
         if (exceptionLog != null) {
             status.setStatus(STATUS_EXCEPTION);
-            status.setStatusLabel("寮傚父");
+            status.setStatusLabel("异常");
             status.setOccurredAt(formatTime(exceptionLog.log().getCreatedAt()));
             status.setDescription(trimToNull(exceptionLog.log().getActionComment()));
             return;
@@ -351,7 +337,7 @@ class ExpenseApprovalProjectionSupport {
         LogEntry exceptionLog = lastLog(logs, LOG_EXCEPTION);
         if (exceptionLog != null) {
             status.setStatus(STATUS_EXCEPTION);
-            status.setStatusLabel("寮傚父");
+            status.setStatusLabel("异常");
             status.setOccurredAt(formatTime(exceptionLog.log().getCreatedAt()));
             status.setDescription(trimToNull(exceptionLog.log().getActionComment()));
             return;
@@ -407,7 +393,7 @@ class ExpenseApprovalProjectionSupport {
         LogEntry exceptionLog = lastLog(logs, LOG_EXCEPTION);
         if (exceptionLog != null) {
             status.setStatus(STATUS_EXCEPTION);
-            status.setStatusLabel("寮傚父");
+            status.setStatusLabel("异常");
             status.setOccurredAt(formatTime(exceptionLog.log().getCreatedAt()));
             status.setDescription(trimToNull(exceptionLog.log().getActionComment()));
             return;
@@ -805,6 +791,8 @@ class ExpenseApprovalProjectionSupport {
             List<ExpenseApprovalNodeStatusVO> approvalNodeStatuses,
             List<ExpenseApprovalTimelineItemVO> approvalTimeline
     ) {}
+
+    private record TraversalFrame(String containerKey, int startIndex) {}
 
     private record LogEntry(ProcessDocumentActionLog log, Map<String, Object> payload) {}
 }

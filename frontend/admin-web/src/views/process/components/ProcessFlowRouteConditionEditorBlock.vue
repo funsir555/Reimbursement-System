@@ -99,6 +99,7 @@ const props = defineProps({
       userOptions: ProcessFlowMeta['userOptions']
       expenseTypeOptions: ProcessFlowMeta['expenseTypeOptions']
       archiveOptions: ProcessFlowMeta['archiveOptions']
+      branchConditionValueOptions?: ProcessFlowMeta['branchConditionValueOptions']
     }>,
     required: true
   },
@@ -123,7 +124,8 @@ const optionSources = computed(() => ({
   department: props.meta.departmentOptions || [],
   user: props.meta.userOptions || [],
   expenseType: props.meta.expenseTypeOptions || [],
-  archive: props.meta.archiveOptions || []
+  archive: props.meta.archiveOptions || [],
+  ...(props.meta.branchConditionValueOptions || {})
 }))
 
 const conditionHandlers = {

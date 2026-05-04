@@ -267,16 +267,16 @@
                           <department-tree-select
                             v-if="isDepartmentField(rule) && isMultipleRule(rule)"
                             v-model="rule.compareValue"
-                            :options="meta?.departmentOptions || []"
+                            :options="conditionValueOptions(rule)"
                             multiple
-                            placeholder="请选择部门"
+                            :placeholder="multiValuePlaceholder(rule)"
                           />
 
                           <department-tree-select
                             v-else-if="isDepartmentField(rule)"
                             v-model="rule.compareValue"
-                            :options="meta?.departmentOptions || []"
-                            placeholder="请选择部门"
+                            :options="conditionValueOptions(rule)"
+                            :placeholder="singleValuePlaceholder(rule)"
                           />
 
                           <div
@@ -311,15 +311,37 @@
                             v-model="rule.compareValue"
                             multiple
                             filterable v-bind="globalFilterableSelectProps"
-                            allow-create
+                            :allow-create="!usesOptionSelect(rule)"
                             default-first-option
                             collapse-tags
                             collapse-tags-tooltip
                             :tag-tooltip="globalCollapseTagTooltipProps"
-                            placeholder="请输入或选择多个值"
-                          />
+                            :placeholder="multiValuePlaceholder(rule)"
+                          >
+                            <el-option
+                              v-for="item in conditionValueOptions(rule)"
+                              :key="item.value"
+                              :label="item.label"
+                              :value="item.value"
+                            />
+                          </el-select>
 
-                          <el-input v-else v-model="rule.compareValue" placeholder="请输入比较值" />
+                          <el-select
+                            v-else-if="usesOptionSelect(rule)"
+                            v-model="rule.compareValue"
+                            filterable
+                            clearable
+                            :placeholder="singleValuePlaceholder(rule)"
+                          >
+                            <el-option
+                              v-for="item in conditionValueOptions(rule)"
+                              :key="item.value"
+                              :label="item.label"
+                              :value="item.value"
+                            />
+                          </el-select>
+
+                          <el-input v-else v-model="rule.compareValue" :placeholder="singleValuePlaceholder(rule)" />
 
                           <el-button type="danger" plain @click="removeRule(item, rule)">删除</el-button>
                         </div>
@@ -468,6 +490,14 @@ const archiveTypeDescription = computed(() => {
 })
 
 const archiveCodeDisplay = computed(() => form.value?.archiveCode || '保存后自动生成：CA + 年月日 + 4位流水')
+
+const optionSources = computed(() => ({
+  company: meta.value?.companyOptions || [],
+  department: meta.value?.departmentOptions || [],
+  user: meta.value?.userOptions || [],
+  expenseType: meta.value?.expenseTypeOptions || [],
+  archive: meta.value?.archiveOptions || []
+}))
 
 const statusSwitch = computed({
   get: () => (form.value?.status ?? 1) === 1,
@@ -662,6 +692,40 @@ function handleOperatorChange(rule: ProcessCustomArchiveRule) {
 
 function fieldType(rule: ProcessCustomArchiveRule) {
   return meta.value?.ruleFields.find((field) => field.key === rule.fieldKey)?.valueType || 'text'
+}
+
+function conditionValueOptions(rule: ProcessCustomArchiveRule) {
+  return optionSources.value[fieldType(rule) as keyof typeof optionSources.value] || []
+}
+
+function usesOptionSelect(rule: ProcessCustomArchiveRule) {
+  const type = fieldType(rule)
+  return type === 'company' || type === 'user' || type === 'expenseType' || type === 'archive'
+}
+
+function singleValuePlaceholder(rule: ProcessCustomArchiveRule) {
+  const field = meta.value?.ruleFields.find((item) => item.key === rule.fieldKey)
+  if (!field) {
+    return '请输入比较值'
+  }
+  if (field.valueType === 'number') {
+    return '请输入数值'
+  }
+  if (usesOptionSelect(rule) || field.valueType === 'department') {
+    return `请选择${field.label}`
+  }
+  return `请输入${field.label}`
+}
+
+function multiValuePlaceholder(rule: ProcessCustomArchiveRule) {
+  const field = meta.value?.ruleFields.find((item) => item.key === rule.fieldKey)
+  if (!field) {
+    return '请输入多个比较值'
+  }
+  if (usesOptionSelect(rule) || field.valueType === 'department') {
+    return `请选择多个${field.label}`
+  }
+  return `请输入多个${field.label}`
 }
 
 function defaultCompareValue(fieldKey: string, operator: string) {

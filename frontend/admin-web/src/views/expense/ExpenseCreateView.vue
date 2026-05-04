@@ -699,6 +699,7 @@ const {
   cloneManualApproverSelections
 } = useExpenseCreateValidationPayload({
   formValues,
+  blocks,
   totalAmount,
   expenseDetails,
   manualApproverSelections,

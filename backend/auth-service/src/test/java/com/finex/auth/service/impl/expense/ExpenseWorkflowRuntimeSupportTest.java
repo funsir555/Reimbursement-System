@@ -266,6 +266,25 @@ class ExpenseWorkflowRuntimeSupportTest {
         assertEquals(201L, insertedTasks.get(0).getAssigneeUserId());
     }
 
+    @Test
+    void manualSelectPaymentNodeUsesRuntimeSelectedApprovers() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(301L, "cashier-user")));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildManualSelectPaymentSnapshot());
+
+        support.initializeRuntime(instance, Map.of(
+                "manualApproverSelections", Map.of("payment-manual", List.of(301L))
+        ));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("payment-manual", insertedTasks.get(0).getNodeKey());
+        assertEquals(301L, insertedTasks.get(0).getAssigneeUserId());
+        assertEquals("PENDING_PAYMENT", instance.getStatus());
+    }
+
 
     @Test
     void manualSelectApprovalNodePausesRuntimeUntilSubmitterSelectsApprover() throws Exception {
@@ -281,6 +300,21 @@ class ExpenseWorkflowRuntimeSupportTest {
         assertEquals("approval-manual", instance.getCurrentNodeKey());
         assertEquals("MANUAL_SELECT", instance.getCurrentTaskType());
     }
+
+    @Test
+    void manualSelectCcNodePausesRuntimeUntilSubmitterSelectsRecipient() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildManualSelectCcSnapshot());
+
+        support.initializeRuntime(instance, Map.of());
+
+        assertTrue(insertedTasks.isEmpty());
+        assertEquals("cc-manual", instance.getCurrentNodeKey());
+        assertEquals("MANUAL_SELECT", instance.getCurrentTaskType());
+    }
+
     @Test
     void paymentExecutorSubmitterFallsBackToSubmitterContext() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
@@ -296,6 +330,23 @@ class ExpenseWorkflowRuntimeSupportTest {
         assertEquals("payment-1", insertedTasks.get(0).getNodeKey());
         assertEquals(301L, insertedTasks.get(0).getAssigneeUserId());
         assertEquals("PENDING_PAYMENT", instance.getStatus());
+    }
+
+    @Test
+    void designatedMemberSubmitterFallsBackToSubmitterContext() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectById(301L)).thenReturn(createActiveUser(301L, "submitter"));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildSubmitterDesignatedApprovalSnapshot());
+
+        support.initializeRuntime(instance, Map.of("submitterUserId", 301L));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-submitter", insertedTasks.get(0).getNodeKey());
+        assertEquals(301L, insertedTasks.get(0).getAssigneeUserId());
+        assertEquals("PENDING_APPROVAL", instance.getStatus());
     }
 
     @Test
@@ -333,6 +384,44 @@ class ExpenseWorkflowRuntimeSupportTest {
         assertEquals(2, insertedTasks.size());
         assertEquals(List.of(501L, 502L), insertedTasks.stream().map(ProcessDocumentTask::getAssigneeUserId).toList());
         assertTrue(insertedTasks.stream().allMatch(item -> "AND_SIGN".equals(item.getApprovalMode())));
+    }
+
+    @Test
+    void designatedUserGroupPaymentResolvesMatchedMembersAsAndSignTasks() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+
+        ProcessUserGroup secondLevelGroup = new ProcessUserGroup();
+        secondLevelGroup.setId(200L);
+        secondLevelGroup.setCodeLevel(2);
+        secondLevelGroup.setGroupName("二级分配组");
+
+        ProcessUserGroup thirdLevelGroup = new ProcessUserGroup();
+        thirdLevelGroup.setId(201L);
+        thirdLevelGroup.setParentId(200L);
+        thirdLevelGroup.setCodeLevel(3);
+        thirdLevelGroup.setGroupName("三级功能组");
+        thirdLevelGroup.setMemberUserIdsJson("[\"501\",\"502\"]");
+        thirdLevelGroup.setScopeConditionGroupsJson("""
+                [{"groupNo":1,"conditions":[{"fieldKey":"paymentCompanyId","operator":"IN","compareValue":["COMPANY_A"]}]}]
+                """);
+
+        when(processUserGroupMapper.selectById(200L)).thenReturn(secondLevelGroup);
+        when(processUserGroupMapper.selectList(any())).thenReturn(List.of(secondLevelGroup, thirdLevelGroup));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(
+                createActiveUser(501L, "group-user-a"),
+                createActiveUser(502L, "group-user-b")
+        ));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildUserGroupPaymentSnapshot());
+
+        support.initializeRuntime(instance, Map.of("paymentCompanyId", "COMPANY_A"));
+
+        assertEquals(2, insertedTasks.size());
+        assertEquals(List.of(501L, 502L), insertedTasks.stream().map(ProcessDocumentTask::getAssigneeUserId).toList());
+        assertTrue(insertedTasks.stream().allMatch(item -> "AND_SIGN".equals(item.getApprovalMode())));
+        assertEquals("PENDING_PAYMENT", instance.getStatus());
     }
 
     @Test
@@ -757,6 +846,47 @@ class ExpenseWorkflowRuntimeSupportTest {
         ));
     }
 
+    private String buildManualSelectPaymentSnapshot() throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "payment-manual",
+                                "nodeType", "PAYMENT",
+                                "nodeName", "payment-manual-node",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "MANUAL_SELECT",
+                                        "missingHandler", "BLOCK_SUBMIT",
+                                        "approvalMode", "OR_SIGN",
+                                        "manualSelectConfig", Map.of("candidateScope", "ALL_ACTIVE_USERS"),
+                                        "paymentAction", "GENERATE_PAYMENT"
+                                )
+                        )
+                ),
+                "routes", List.of()
+        ));
+    }
+
+    private String buildManualSelectCcSnapshot() throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "cc-manual",
+                                "nodeType", "CC",
+                                "nodeName", "cc-manual-node",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "MANUAL_SELECT",
+                                        "missingHandler", "BLOCK_SUBMIT",
+                                        "manualSelectConfig", Map.of("candidateScope", "ALL_ACTIVE_USERS"),
+                                        "timing", "ON_ENTER"
+                                )
+                        )
+                ),
+                "routes", List.of()
+        ));
+    }
+
     private String buildSubmitterPaymentSnapshot() throws Exception {
         return new ObjectMapper().writeValueAsString(Map.of(
                 "nodes", List.of(
@@ -768,6 +898,27 @@ class ExpenseWorkflowRuntimeSupportTest {
                                 "config", Map.of(
                                         "executorType", "SUBMITTER",
                                         "missingHandler", "AUTO_TRANSFER"
+                                )
+                        )
+                ),
+                "routes", List.of()
+        ));
+    }
+
+    private String buildUserGroupPaymentSnapshot() throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "payment-user-group",
+                                "nodeType", "PAYMENT",
+                                "nodeName", "payment-user-group-node",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_USER_GROUP",
+                                        "designatedUserGroupConfig", Map.of("groupId", 200L),
+                                        "missingHandler", "BLOCK_SUBMIT",
+                                        "approvalMode", "OR_SIGN",
+                                        "paymentAction", "GENERATE_PAYMENT"
                                 )
                         )
                 ),
@@ -860,6 +1011,26 @@ class ExpenseWorkflowRuntimeSupportTest {
                                 "conditionGroups", List.of()
                         )
                 )
+        ));
+    }
+
+    private String buildSubmitterDesignatedApprovalSnapshot() throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "approval-submitter",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "submitter-approval",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of("SUBMITTER")),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        )
+                ),
+                "routes", List.of()
         ));
     }
 

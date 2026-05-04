@@ -137,6 +137,16 @@ const FormItemStub = defineComponent({
   template: '<label><span>{{ label }}</span><slot /></label>'
 })
 
+const OptionStub = defineComponent({
+  props: {
+    label: {
+      type: String,
+      default: ''
+    }
+  },
+  template: '<div><span>{{ label }}</span><slot /></div>'
+})
+
 const TagStub = defineComponent({
   template: '<span data-testid="tag"><slot /></span>'
 })
@@ -160,6 +170,12 @@ const ProcessFlowCanvasRendererStub = defineComponent({
       </button>
       <button type="button" data-testid="select-approval-root" @click="$emit('select-node', 'approval-root')">
         select approval root
+      </button>
+      <button type="button" data-testid="select-payment" @click="$emit('select-node', 'payment-1')">
+        select payment
+      </button>
+      <button type="button" data-testid="select-cc" @click="$emit('select-node', 'cc-1')">
+        select cc
       </button>
       <button type="button" data-testid="select-route" @click="$emit('select-route', 'route-1')">
         select route
@@ -198,22 +214,45 @@ const ProcessFlowCanvasRendererStub = defineComponent({
 function buildFlowMeta() {
   return {
     nodeTypeOptions: [],
-    sceneOptions: [{ id: 1, sceneName: 'Default Scene', sceneDescription: '', status: 1 }],
-    approvalApproverTypeOptions: [],
+    sceneOptions: [
+      { id: 1, sceneName: 'Default Scene', sceneDescription: '', status: 1 },
+      { id: 2, sceneName: '出纳支付', sceneDescription: '', status: 1 }
+    ],
+    approvalApproverTypeOptions: [
+      { label: '主管', value: 'MANAGER' },
+      { label: '指定成员', value: 'DESIGNATED_MEMBER' },
+      { label: '指定用户组', value: 'DESIGNATED_USER_GROUP' },
+      { label: '手动选择', value: 'MANUAL_SELECT' }
+    ],
     approvalManagerRuleModeOptions: [],
     approvalManagerDeptSourceOptions: [],
     approvalManagerLevelOptions: [],
     approvalManagerLookupLevelOptions: [],
-    approvalManualCandidateScopeOptions: [],
-    ccReceiverTypeOptions: [],
-    paymentExecutorTypeOptions: [],
-    missingHandlerOptions: [],
-    approvalModeOptions: [],
-    defaultApprovalOpinions: [],
-    approvalSpecialOptions: [],
-    ccTimingOptions: [],
+    approvalManualCandidateScopeOptions: [{ label: '全体有效成员', value: 'ALL_ACTIVE_USERS' }],
+    ccReceiverTypeOptions: [
+      { label: '部门主管', value: 'DEPT_MANAGER' }
+    ],
+    paymentExecutorTypeOptions: [
+      { label: '财务角色', value: 'FINANCE_ROLE' },
+      { label: '提单人', value: 'SUBMITTER' }
+    ],
+    missingHandlerOptions: [
+      { label: '自动跳过', value: 'AUTO_SKIP' },
+      { label: '提单时找不到审批人不允许提交', value: 'BLOCK_SUBMIT' }
+    ],
+    approvalModeOptions: [
+      { label: '或签', value: 'OR_SIGN' },
+      { label: '会签', value: 'AND_SIGN' }
+    ],
+    defaultApprovalOpinions: ['通过', '拒绝', '加签', '转交'],
+    approvalSpecialOptions: [
+      { label: '允许支付后重试', value: 'ALLOW_RETRY' },
+      { label: '审批人与提单人重复时自动通过', value: 'AUTO_PASS_IF_APPOVER_IS_SUBMITTER' },
+      { label: '审批人已在前面节点审批过时自动通过', value: 'AUTO_PASS_IF_APPROVED_BEFORE' }
+    ],
+    ccTimingOptions: [{ label: '进入节点时', value: 'ON_ENTER' }],
     ccSpecialOptions: [],
-    paymentActionOptions: [],
+    paymentActionOptions: [{ label: '生成支付单', value: 'GENERATE_PAYMENT' }],
     paymentSpecialOptions: [],
     branchOperatorOptions: [
       { value: 'EQ', label: '等于' },
@@ -222,14 +261,23 @@ function buildFlowMeta() {
       { value: 'NOT_IN', label: '不属于' }
     ],
     branchConditionFields: [
+      { key: 'submitterDeptId', label: '提单人部门（含下级）', valueType: 'department', operatorKeys: ['EQ', 'NE', 'IN', 'NOT_IN'] },
+      { key: 'submitterDeptIds', label: '提单人部门（不含下级）', valueType: 'department', operatorKeys: ['EQ', 'NE', 'IN', 'NOT_IN'] },
       { key: 'paymentCompanyId', label: '公司抬头', valueType: 'company', operatorKeys: ['IN', 'NOT_IN'] },
-      { key: 'undertakeDeptIdWithChildren', label: '承担部门(含下级部门)', valueType: 'department', operatorKeys: ['IN', 'NOT_IN'] },
-      { key: 'undertakeDeptIdExact', label: '承担部门(不含下级部门)', valueType: 'department', operatorKeys: ['IN', 'NOT_IN'] }
+      { key: 'undertakeDeptIdWithChildren', label: '承担部门（含下级）', valueType: 'department', operatorKeys: ['IN', 'NOT_IN'] },
+      { key: 'undertakeDeptIdExact', label: '承担部门（不含下级）', valueType: 'department', operatorKeys: ['IN', 'NOT_IN'] },
+      { key: 'PAPER_MATERIAL_ARCHIVE', label: '是否包含纸质资料', valueType: 'sharedArchive:PAPER_MATERIAL_ARCHIVE', operatorKeys: ['EQ', 'NE', 'IN', 'NOT_IN'] }
     ],
+    branchConditionValueOptions: {
+      'sharedArchive:PAPER_MATERIAL_ARCHIVE': [
+        { label: '是', value: 'ITEM_Y' },
+        { label: '否', value: 'ITEM_N' }
+      ]
+    },
     companyOptions: [{ label: '广州远智教育科技有限公司', value: 'COMPANY_A' }],
     departmentOptions: [{ label: '广州团队', value: '15' }],
-    userOptions: [],
-    userGroupOptions: [],
+    userOptions: [{ label: '张三', value: '101' }],
+    userGroupOptions: [{ label: '行政中心 / 差旅分配组', value: '2001' }],
     expenseTypeOptions: [],
     archiveOptions: []
   }
@@ -259,6 +307,39 @@ function buildFlowDetail(flowName = 'Travel Approval Flow', routeAttachFlags: [b
         sceneId: 1,
         displayOrder: 2,
         config: {}
+      },
+      {
+        nodeKey: 'payment-1',
+        nodeName: '支付节点 1',
+        nodeType: 'PAYMENT',
+        sceneId: 2,
+        displayOrder: 3,
+        config: {
+          approverType: 'DESIGNATED_MEMBER',
+          designatedMemberConfig: { userIds: [101] },
+          designatedUserGroupConfig: {},
+          manualSelectConfig: { candidateScope: 'ALL_ACTIVE_USERS' },
+          missingHandler: 'AUTO_SKIP',
+          approvalMode: 'OR_SIGN',
+          opinionDefaults: ['通过'],
+          specialSettings: ['ALLOW_RETRY'],
+          paymentAction: 'GENERATE_PAYMENT'
+        }
+      },
+      {
+        nodeKey: 'cc-1',
+        nodeName: '抄送节点 1',
+        nodeType: 'CC',
+        sceneId: 1,
+        displayOrder: 4,
+        config: {
+          approverType: 'DESIGNATED_MEMBER',
+          designatedMemberConfig: { userIds: [101] },
+          designatedUserGroupConfig: {},
+          manualSelectConfig: { candidateScope: 'ALL_ACTIVE_USERS' },
+          missingHandler: 'BLOCK_SUBMIT',
+          timing: 'ON_ENTER'
+        }
       },
       {
         nodeKey: 'approval-lane',
@@ -345,7 +426,7 @@ async function mountView(
         'el-empty': EmptyStub,
         'el-dialog': SimpleContainer,
         'el-select': SimpleContainer,
-        'el-option': true,
+        'el-option': OptionStub,
         'el-checkbox-group': SimpleContainer,
         'el-checkbox': SimpleContainer,
         'el-radio-group': SimpleContainer,
@@ -674,14 +755,61 @@ describe('ProcessFlowDesignerView', () => {
 
     const editor = wrapper.getComponent(ProcessConditionGroupEditor)
     expect(editor.props('fields')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'submitterDeptId', label: '提单人部门（含下级）', valueType: 'department' }),
+      expect.objectContaining({ key: 'submitterDeptIds', label: '提单人部门（不含下级）', valueType: 'department' }),
       expect.objectContaining({ key: 'paymentCompanyId', label: '公司抬头', valueType: 'company' }),
-      expect.objectContaining({ key: 'undertakeDeptIdWithChildren', label: '承担部门(含下级部门)', valueType: 'department' }),
-      expect.objectContaining({ key: 'undertakeDeptIdExact', label: '承担部门(不含下级部门)', valueType: 'department' })
+      expect.objectContaining({ key: 'undertakeDeptIdWithChildren', label: '承担部门（含下级）', valueType: 'department' }),
+      expect.objectContaining({ key: 'undertakeDeptIdExact', label: '承担部门（不含下级）', valueType: 'department' }),
+      expect.objectContaining({ key: 'PAPER_MATERIAL_ARCHIVE', label: '是否包含纸质资料', valueType: 'sharedArchive:PAPER_MATERIAL_ARCHIVE' })
     ]))
     expect(editor.props('optionSources')).toMatchObject({
       company: [{ label: '广州远智教育科技有限公司', value: 'COMPANY_A' }],
-      department: [{ label: '广州团队', value: '15' }]
+      department: [{ label: '广州团队', value: '15' }],
+      'sharedArchive:PAPER_MATERIAL_ARCHIVE': [
+        { label: '是', value: 'ITEM_Y' },
+        { label: '否', value: 'ITEM_N' }
+      ]
     })
+  })
+
+  it('keeps legacy submitter department keys compatible with the standardized labels', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.routes[0].conditionGroups = [
+      {
+        groupNo: 1,
+        conditions: [
+          {
+            fieldKey: 'submitterDeptId',
+            operator: 'IN',
+            compareValue: ['15']
+          },
+          {
+            fieldKey: 'submitterDeptIds',
+            operator: 'NOT_IN',
+            compareValue: ['18']
+          }
+        ]
+      }
+    ]
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
+    await wrapper.get('[data-testid="select-route"]').trigger('click')
+    await flushPromises()
+
+    const editor = wrapper.getComponent(ProcessConditionGroupEditor)
+    expect(editor.props('fields')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'submitterDeptId', label: '提单人部门（含下级）' }),
+      expect.objectContaining({ key: 'submitterDeptIds', label: '提单人部门（不含下级）' })
+    ]))
+    expect(editor.props('groups')).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        groupNo: 1,
+        conditions: expect.arrayContaining([
+          expect.objectContaining({ fieldKey: 'submitterDeptId', operator: 'IN', compareValue: ['15'] }),
+          expect.objectContaining({ fieldKey: 'submitterDeptIds', operator: 'NOT_IN', compareValue: ['18'] })
+        ])
+      })
+    ]))
   })
 
   it('shows the else branch helper and hides condition editing when the selected route is a default route', async () => {
@@ -895,6 +1023,58 @@ describe('ProcessFlowDesignerView', () => {
       approvalMode: 'AND_SIGN',
       designatedUserGroupConfig: { groupId: 2001 }
     })
+  })
+
+  it('renders payment nodes with the approval-style panel while keeping payment action', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    await wrapper.get('[data-testid="select-payment"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('审批人类型')
+    expect(wrapper.text()).toContain('指定成员')
+    expect(wrapper.text()).toContain('指定用户组')
+    expect(wrapper.text()).toContain('手动选择')
+    expect(wrapper.text()).toContain('支付动作')
+    expect(wrapper.text()).toContain('审批方式')
+    expect(wrapper.text()).toContain('审批意见默认值')
+    expect(wrapper.text()).toContain('特殊设置')
+    expect(wrapper.text()).not.toContain('主管规则')
+  })
+
+  it('renders cc nodes with the approval-style assignee panel and cc-specific missing-handler copy', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    await wrapper.get('[data-testid="select-cc"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('审批人类型')
+    expect(wrapper.text()).toContain('指定成员')
+    expect(wrapper.text()).toContain('指定用户组')
+    expect(wrapper.text()).toContain('手动选择')
+    expect(wrapper.text()).toContain('抄送时机')
+    expect(wrapper.text()).toContain('找不到抄送人时')
+    expect(wrapper.text()).toContain('提单时找不到抄送人不允许提交')
+    expect(wrapper.text()).not.toContain('审批方式')
+    expect(wrapper.text()).not.toContain('审批意见默认值')
+    expect(wrapper.text()).not.toContain('特殊设置')
+    expect(wrapper.text()).not.toContain('主管规则')
+  })
+
+  it('shows a compatibility notice for legacy payment executor types until the user reselects a new approval-style type', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.nodes.find((item) => item.nodeKey === 'payment-1')!.config = {
+      executorType: 'FINANCE_ROLE',
+      paymentAction: 'GENERATE_PAYMENT'
+    }
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
+
+    await wrapper.get('[data-testid="select-payment"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('当前节点仍在使用历史执行人类型')
+    expect(wrapper.text()).toContain('财务角色')
   })
 
 

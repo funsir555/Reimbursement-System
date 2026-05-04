@@ -82,6 +82,7 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
         Set<String> validConditionFieldKeys = buildConditionFields().stream()
                 .map(ProcessFlowConditionFieldVO::getKey)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+        validConditionFieldKeys.addAll(loadSelectableSharedArchiveCodes());
         Set<Long> validSceneIds = processFlowSceneMapper.selectList(
                 Wrappers.<ProcessFlowScene>lambdaQuery().eq(ProcessFlowScene::getStatus, 1)
         ).stream().map(ProcessFlowScene::getId).collect(Collectors.toCollection(LinkedHashSet::new));
@@ -127,6 +128,18 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
                 }
             }
         }
+    }
+
+    private Set<String> loadSelectableSharedArchiveCodes() {
+        return processCustomArchiveDesignMapper.selectList(
+                Wrappers.<com.finex.auth.entity.ProcessCustomArchiveDesign>lambdaQuery()
+                        .eq(com.finex.auth.entity.ProcessCustomArchiveDesign::getStatus, 1)
+                        .eq(com.finex.auth.entity.ProcessCustomArchiveDesign::getArchiveType, "SELECT")
+        ).stream()
+                .map(com.finex.auth.entity.ProcessCustomArchiveDesign::getArchiveCode)
+                .map(this::trimToNull)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     public void normalizeNodes(List<ProcessFlowNodeDTO> nodes) {
@@ -222,6 +235,12 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
 
     public Map<String, Object> normalizeNodeConfig(String nodeType, Map<String, Object> rawConfig, boolean strictValidation) {
         Map<String, Object> config = rawConfig == null ? new LinkedHashMap<>() : new LinkedHashMap<>(rawConfig);
+        if (NODE_TYPE_CC.equals(nodeType)) {
+            return normalizeCcNodeConfig(config, strictValidation);
+        }
+        if (NODE_TYPE_PAYMENT.equals(nodeType)) {
+            return normalizePaymentNodeConfig(config, strictValidation);
+        }
         if (!NODE_TYPE_APPROVAL.equals(nodeType)) {
             return config;
         }
@@ -256,10 +275,11 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
         config.put("manualSelectConfig", manualSelectConfig);
 
         if (strictValidation && APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
-            List<Long> userIds = toLongList(designatedMemberConfig.get("userIds"));
-            if (userIds.isEmpty()) {
+            List<Object> designatedMembers = normalizeDesignatedMemberEntries(designatedMemberConfig.get("userIds"));
+            if (designatedMembers.isEmpty()) {
                 throw new IllegalStateException("指定成员至少选择一名用户");
             }
+            List<Long> userIds = extractDesignatedMemberUserIds(designatedMembers);
             validateActiveUsers(userIds);
         }
         if (strictValidation && APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
@@ -270,6 +290,80 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
             userGroupResolverSupport.requireSecondLevelGroup(groupId);
         }
         return config;
+    }
+
+    private Map<String, Object> normalizeCcNodeConfig(Map<String, Object> config, boolean strictValidation) {
+        String approverType = normalizeApprovalStyleApproverType(config.get("approverType"), config.get("receiverType"));
+        config.put("approverType", approverType);
+        config.put("missingHandler", normalizeMissingHandler(asText(config.get("missingHandler"), MISSING_HANDLER_AUTO_SKIP)));
+        config.put("timing", asText(config.get("timing"), "ON_ENTER"));
+        config.put("receiverType", asText(config.get("receiverType"), APPROVER_TYPE_DESIGNATED_MEMBER));
+        config.put("receiverUserIds", toLongList(config.get("receiverUserIds")));
+        config.put("specialSettings", toStringList(config.get("specialSettings")));
+        normalizeApprovalStyleConfigs(config, approverType, strictValidation);
+        return config;
+    }
+
+    private Map<String, Object> normalizePaymentNodeConfig(Map<String, Object> config, boolean strictValidation) {
+        String approverType = normalizeApprovalStyleApproverType(config.get("approverType"), config.get("executorType"));
+        config.put("approverType", approverType);
+        config.put("missingHandler", normalizeMissingHandler(asText(config.get("missingHandler"), MISSING_HANDLER_AUTO_SKIP)));
+        String approvalMode = asText(config.get("approvalMode"), APPROVAL_MODE_OR_SIGN);
+        if (!APPROVAL_MODES.contains(approvalMode)) {
+            throw new IllegalStateException("审批方式不合法");
+        }
+        if (APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
+            approvalMode = APPROVAL_MODE_AND_SIGN;
+        }
+        config.put("approvalMode", approvalMode);
+        config.put("opinionDefaults", defaultedOpinions(config.get("opinionDefaults")));
+        config.put("specialSettings", toStringList(config.get("specialSettings")));
+        config.put("paymentAction", asText(config.get("paymentAction"), "GENERATE_PAYMENT"));
+        config.put("executorType", asText(config.get("executorType"), APPROVER_TYPE_DESIGNATED_MEMBER));
+        config.put("executorUserIds", toLongList(config.get("executorUserIds")));
+        normalizeApprovalStyleConfigs(config, approverType, strictValidation);
+        return config;
+    }
+
+    private void normalizeApprovalStyleConfigs(Map<String, Object> config, String approverType, boolean strictValidation) {
+        Map<String, Object> designatedMemberConfig = normalizeDesignatedMemberConfig(config.get("designatedMemberConfig"));
+        Map<String, Object> designatedUserGroupConfig = normalizeDesignatedUserGroupConfig(config.get("designatedUserGroupConfig"));
+        Map<String, Object> manualSelectConfig = normalizeManualSelectConfig(config.get("manualSelectConfig"));
+        config.put("designatedMemberConfig", designatedMemberConfig);
+        config.put("designatedUserGroupConfig", designatedUserGroupConfig);
+        config.put("manualSelectConfig", manualSelectConfig);
+
+        if (!strictValidation || approverType == null) {
+            return;
+        }
+        if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
+            List<Object> designatedMembers = normalizeDesignatedMemberEntries(designatedMemberConfig.get("userIds"));
+            if (designatedMembers.isEmpty()) {
+                throw new IllegalStateException("指定成员至少选择一名用户");
+            }
+            List<Long> userIds = extractDesignatedMemberUserIds(designatedMembers);
+            validateActiveUsers(userIds);
+            return;
+        }
+        if (APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
+            Long groupId = asLong(designatedUserGroupConfig.get("groupId"));
+            if (groupId == null) {
+                throw new IllegalStateException("指定用户组至少选择一个 2 级用户组");
+            }
+            userGroupResolverSupport.requireSecondLevelGroup(groupId);
+        }
+    }
+
+    private String normalizeApprovalStyleApproverType(Object approverTypeSource, Object legacyTypeSource) {
+        String approverType = trimToNull(asText(approverTypeSource, null));
+        if (approverType != null && APPROVER_TYPES.contains(approverType) && !APPROVER_TYPE_MANAGER.equals(approverType)) {
+            return approverType;
+        }
+        String legacyType = trimToNull(asText(legacyTypeSource, null));
+        if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(legacyType)) {
+            return APPROVER_TYPE_DESIGNATED_MEMBER;
+        }
+        return null;
     }
 
     public ProcessFlowVersion createDraftVersion(Long flowId, int versionNo, ProcessFlowSaveDTO dto) {
@@ -346,7 +440,7 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
     public Map<String, Object> normalizeDesignatedMemberConfig(Object source) {
         Map<String, Object> raw = toObjectMap(source);
         Map<String, Object> config = new LinkedHashMap<>();
-        config.put("userIds", toLongList(raw.get("userIds")));
+        config.put("userIds", normalizeDesignatedMemberEntries(raw.get("userIds")));
         return config;
     }
 

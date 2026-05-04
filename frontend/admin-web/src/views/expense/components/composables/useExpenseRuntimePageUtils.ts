@@ -1,4 +1,4 @@
-import { normalizeMoneyValue } from '@/utils/money'
+import { sanitizeMoneyDraftValue } from '@/utils/money'
 
 export function useExpenseRuntimePageUtils() {
   function resolveErrorMessage(error: unknown, fallback: string) {
@@ -7,11 +7,11 @@ export function useExpenseRuntimePageUtils() {
 
   function toOptionalMoney(value: unknown) {
     if (typeof value === 'number' && Number.isFinite(value)) {
-      return normalizeMoneyValue(String(value))
+      return sanitizeMoneyDraftValue(String(value))
     }
 
     if (typeof value === 'string' && value.trim()) {
-      return normalizeMoneyValue(value)
+      return sanitizeMoneyDraftValue(value)
     }
 
     return undefined

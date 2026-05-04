@@ -13,6 +13,7 @@ import {
   enrichExpenseDetailInstance,
   isExpenseDetailBlockReadOnly,
   isExpenseDetailBlockVisible,
+  normalizeRuntimeAmountControlValues,
   resolveBusinessScenario,
   resolveExpenseDetailAmount,
   validateExpenseDetailAmountRules
@@ -49,7 +50,10 @@ export function useExpenseCreateExpenseDetailsOwner(options: UseExpenseCreateExp
     return enrichExpenseDetailInstance(
       {
         ...detail,
-        formData: options.cloneRecord(detail.formData || {})
+        formData: normalizeRuntimeAmountControlValues(
+          options.templateDetail.value?.expenseDetailSchema?.blocks || [],
+          options.cloneRecord(detail.formData || {})
+        )
       },
       options.templateDetail.value?.expenseDetailModeDefault,
       options.templateDetail.value?.expenseDetailSchema

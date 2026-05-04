@@ -25,6 +25,7 @@ import {
   type FlowInsertType,
   type FlowMoveResult
 } from '@/views/process/processFlowDesignerHelper'
+import { normalizeDesignatedMemberValues } from '@/views/process/processFlowDesignatedMembers'
 import { validateFlowPayload } from '@/views/process/pmValidation'
 
 type EditableProcessFlowCondition = Omit<ProcessFlowCondition, 'compareValue'> & {
@@ -126,6 +127,27 @@ export function useProcessFlowDesignerGraphState(params: {
       return true
     }
     return shouldForceManagerAndSign(config)
+  }
+
+  function isApprovalStyleAssigneeType(value: unknown) {
+    return ['DESIGNATED_MEMBER', 'DESIGNATED_USER_GROUP', 'MANUAL_SELECT'].includes(String(value || '').trim())
+  }
+
+  function normalizeApprovalStyleAssigneeType(primary: unknown, legacyFallback?: unknown) {
+    const primaryValue = String(primary || '').trim()
+    if (isApprovalStyleAssigneeType(primaryValue)) {
+      return primaryValue
+    }
+    const legacyValue = String(legacyFallback || '').trim()
+    return legacyValue === 'DESIGNATED_MEMBER' ? 'DESIGNATED_MEMBER' : undefined
+  }
+
+  function defaultApprovalOpinions(source: unknown) {
+    return Array.isArray(source) && source.length ? source : ['通过', '拒绝', '加签', '转交']
+  }
+
+  function resolvePaymentDefaultSceneId() {
+    return metaOptions.value.sceneOptions.find((item) => item.sceneName === '出纳支付')?.id
   }
 
   function sortRoutes(routes: ProcessFlowRoute[]) {
@@ -360,7 +382,7 @@ export function useProcessFlowDesignerGraphState(params: {
           orgTreeLookupLevel: Number(managerConfig.orgTreeLookupLevel || 1)
         },
         designatedMemberConfig: {
-          userIds: normalizeNumberArray(normalized.config.designatedMemberConfig?.userIds)
+          userIds: normalizeDesignatedMemberValues(normalized.config.designatedMemberConfig?.userIds)
         },
         designatedUserGroupConfig: {
           groupId: normalizeOptionalNumber(normalized.config.designatedUserGroupConfig?.groupId)
@@ -373,25 +395,64 @@ export function useProcessFlowDesignerGraphState(params: {
     }
 
     if (normalized.nodeType === 'CC') {
+      const approverType = normalizeApprovalStyleAssigneeType(
+        normalized.config.approverType,
+        normalized.config.receiverType
+      )
       normalized.config = {
         ...createBaseNodeConfig(),
+        approverType,
+        missingHandler: normalized.config.missingHandler || 'AUTO_SKIP',
+        designatedMemberConfig: {
+          userIds: normalizeDesignatedMemberValues(
+            normalized.config.designatedMemberConfig?.userIds
+            ?? (normalized.config.receiverType === 'DESIGNATED_MEMBER' ? normalized.config.receiverUserIds : [])
+          )
+        },
+        designatedUserGroupConfig: {
+          groupId: normalizeOptionalNumber(normalized.config.designatedUserGroupConfig?.groupId)
+        },
+        manualSelectConfig: {
+          candidateScope: normalized.config.manualSelectConfig?.candidateScope || 'ALL_ACTIVE_USERS'
+        },
         receiverType: normalized.config.receiverType || 'DESIGNATED_MEMBER',
         receiverUserIds: normalizeNumberArray(normalized.config.receiverUserIds),
         timing: normalized.config.timing || 'ON_ENTER',
-        missingHandler: normalized.config.missingHandler || 'AUTO_SKIP',
         specialSettings: Array.isArray(normalized.config.specialSettings) ? normalized.config.specialSettings : []
       }
       return normalized
     }
 
     if (normalized.nodeType === 'PAYMENT') {
+      const approverType = normalizeApprovalStyleAssigneeType(
+        normalized.config.approverType,
+        normalized.config.executorType
+      )
+      const approvalMode = approverType === 'DESIGNATED_USER_GROUP'
+        ? 'AND_SIGN'
+        : (normalized.config.approvalMode || 'OR_SIGN')
       normalized.config = {
         ...createBaseNodeConfig(),
+        approverType,
+        missingHandler: normalized.config.missingHandler || 'AUTO_SKIP',
+        approvalMode,
+        opinionDefaults: defaultApprovalOpinions(normalized.config.opinionDefaults),
+        specialSettings: Array.isArray(normalized.config.specialSettings) ? normalized.config.specialSettings : [],
+        designatedMemberConfig: {
+          userIds: normalizeDesignatedMemberValues(
+            normalized.config.designatedMemberConfig?.userIds
+            ?? (normalized.config.executorType === 'DESIGNATED_MEMBER' ? normalized.config.executorUserIds : [])
+          )
+        },
+        designatedUserGroupConfig: {
+          groupId: normalizeOptionalNumber(normalized.config.designatedUserGroupConfig?.groupId)
+        },
+        manualSelectConfig: {
+          candidateScope: normalized.config.manualSelectConfig?.candidateScope || 'ALL_ACTIVE_USERS'
+        },
         executorType: normalized.config.executorType || 'DESIGNATED_MEMBER',
         executorUserIds: normalizeNumberArray(normalized.config.executorUserIds),
-        paymentAction: normalized.config.paymentAction || 'GENERATE_PAYMENT',
-        missingHandler: normalized.config.missingHandler || 'AUTO_SKIP',
-        specialSettings: Array.isArray(normalized.config.specialSettings) ? normalized.config.specialSettings : []
+        paymentAction: normalized.config.paymentAction || 'GENERATE_PAYMENT'
       }
       return normalized
     }
@@ -641,8 +702,18 @@ export function useProcessFlowDesignerGraphState(params: {
         displayOrder: order,
         config: {
           ...createBaseNodeConfig(),
+          approverType: 'DESIGNATED_MEMBER',
           receiverType: 'DESIGNATED_MEMBER',
           receiverUserIds: [],
+          designatedMemberConfig: {
+            userIds: []
+          },
+          designatedUserGroupConfig: {
+            groupId: undefined
+          },
+          manualSelectConfig: {
+            candidateScope: 'ALL_ACTIVE_USERS'
+          },
           timing: 'ON_ENTER',
           missingHandler: 'AUTO_SKIP',
           specialSettings: []
@@ -655,15 +726,27 @@ export function useProcessFlowDesignerGraphState(params: {
         nodeKey: `payment-${stamp}`,
         nodeType: 'PAYMENT',
         nodeName: `支付节点 ${order}`,
-        sceneId: undefined,
+        sceneId: resolvePaymentDefaultSceneId(),
         parentNodeKey: '',
         displayOrder: order,
         config: {
           ...createBaseNodeConfig(),
+          approverType: 'DESIGNATED_MEMBER',
           executorType: 'DESIGNATED_MEMBER',
           executorUserIds: [],
+          designatedMemberConfig: {
+            userIds: []
+          },
+          designatedUserGroupConfig: {
+            groupId: undefined
+          },
+          manualSelectConfig: {
+            candidateScope: 'ALL_ACTIVE_USERS'
+          },
           paymentAction: 'GENERATE_PAYMENT',
           missingHandler: 'AUTO_SKIP',
+          approvalMode: 'OR_SIGN',
+          opinionDefaults: ['通过', '拒绝', '加签', '转交'],
           specialSettings: []
         }
       }
@@ -1045,7 +1128,13 @@ export function useProcessFlowDesignerGraphState(params: {
   }
 
   function normalizeApprovalModeSelection() {
-    if (selectedNode.value?.nodeType === 'APPROVAL' && shouldForceApprovalAndSign(selectedNode.value.config)) {
+    if (
+      (selectedNode.value?.nodeType === 'APPROVAL' && shouldForceApprovalAndSign(selectedNode.value.config))
+      || (
+        selectedNode.value?.nodeType === 'PAYMENT'
+        && selectedNode.value.config.approverType === 'DESIGNATED_USER_GROUP'
+      )
+    ) {
       selectedNode.value.config.approvalMode = 'AND_SIGN'
     }
   }

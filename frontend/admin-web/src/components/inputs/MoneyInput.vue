@@ -5,14 +5,15 @@
     :disabled="disabled"
     :readonly="readonly"
     :clearable="clearable"
+    @focus="handleFocus"
     @input="handleInput"
     @blur="handleBlur"
   />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { normalizeMoneyValue } from '@/utils/money'
+import { computed, ref, watch } from 'vue'
+import { normalizeMoneyValue, sanitizeMoneyDraftValue } from '@/utils/money'
 
 const props = withDefaults(defineProps<{
   modelValue?: string
@@ -35,28 +36,48 @@ const emit = defineEmits<{
   (event: 'blur'): void
 }>()
 
-const displayValue = computed(() => props.modelValue || '')
+const isFocused = ref(false)
+const draftValue = ref('')
+
+watch(
+  () => props.modelValue,
+  (nextValue) => {
+    if (!isFocused.value) {
+      draftValue.value = sanitizeMoneyDraftValue(nextValue, {
+        allowNegative: props.allowNegative,
+        fallback: ''
+      })
+    }
+  },
+  { immediate: true }
+)
+
+const displayValue = computed(() => (isFocused.value ? draftValue.value : props.modelValue || ''))
 
 function sanitizeInput(value: string) {
-  const text = String(value || '').replace(/,/g, '').trim()
-  if (!text) {
-    return ''
-  }
-  const negativePrefix = props.allowNegative && text.startsWith('-') ? '-' : ''
-  const pure = text.replace(/^-/, '').replace(/[^\d.]/g, '')
-  const [wholePart = '', ...decimalParts] = pure.split('.')
-  const decimalPart = decimalParts.join('').slice(0, 2)
-  const normalizedWhole = wholePart.replace(/^0+(?=\d)/, '') || '0'
-  return `${negativePrefix}${decimalPart ? `${normalizedWhole}.${decimalPart}` : normalizedWhole}`
+  return sanitizeMoneyDraftValue(value, {
+    allowNegative: props.allowNegative,
+    fallback: ''
+  })
+}
+
+function handleFocus() {
+  isFocused.value = true
+  draftValue.value = sanitizeInput(props.modelValue || '')
 }
 
 function handleInput(value: string) {
-  emit('update:modelValue', sanitizeInput(value))
+  const nextValue = sanitizeInput(value)
+  draftValue.value = nextValue
+  emit('update:modelValue', nextValue)
 }
 
 function handleBlur() {
+  isFocused.value = false
+  const nextValue = sanitizeInput(draftValue.value)
+  draftValue.value = nextValue
   try {
-    emit('update:modelValue', normalizeMoneyValue(props.modelValue, { allowNegative: props.allowNegative }))
+    emit('update:modelValue', normalizeMoneyValue(nextValue, { allowNegative: props.allowNegative }))
   } catch {
     emit('update:modelValue', '')
   } finally {

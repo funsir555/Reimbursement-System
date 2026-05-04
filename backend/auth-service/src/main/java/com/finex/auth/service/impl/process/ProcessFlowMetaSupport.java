@@ -2,10 +2,14 @@ package com.finex.auth.service.impl.process;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.dto.ProcessFlowConditionFieldVO;
 import com.finex.auth.dto.ProcessFlowMetaVO;
 import com.finex.auth.dto.ProcessFormOptionVO;
+import com.finex.auth.entity.ProcessCustomArchiveDesign;
+import com.finex.auth.entity.ProcessCustomArchiveItem;
 import com.finex.auth.entity.ProcessFlow;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
+import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessFlowMapper;
@@ -18,14 +22,19 @@ import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
 
+    private static final String ARCHIVE_TYPE_SELECT = "SELECT";
+
     private final ProcessUserGroupResolverSupport userGroupResolverSupport;
+    private final ProcessCustomArchiveItemMapper processCustomArchiveItemMapper;
 
     public ProcessFlowMetaSupport(
             ProcessFlowMapper processFlowMapper,
@@ -38,6 +47,7 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
             UserMapper userMapper,
             ProcessExpenseTypeMapper processExpenseTypeMapper,
             ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper,
+            ProcessCustomArchiveItemMapper processCustomArchiveItemMapper,
             ProcessDocumentTemplateMapper processDocumentTemplateMapper,
             ObjectMapper objectMapper,
             ProcessUserGroupResolverSupport userGroupResolverSupport
@@ -57,6 +67,7 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
                 objectMapper
         );
         this.userGroupResolverSupport = userGroupResolverSupport;
+        this.processCustomArchiveItemMapper = processCustomArchiveItemMapper;
     }
 
     public ProcessFlowMetaVO getFlowMeta() {
@@ -144,7 +155,9 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
                 option("介于", "BETWEEN"),
                 option("包含", "CONTAINS")
         ));
-        meta.setBranchConditionFields(buildConditionFields());
+        List<ProcessCustomArchiveDesign> sharedArchives = loadSelectableSharedArchives();
+        meta.setBranchConditionFields(buildConditionFields(sharedArchives));
+        meta.setBranchConditionValueOptions(buildBranchConditionValueOptions(sharedArchives));
         meta.setCompanyOptions(loadCompanyOptions());
         meta.setDepartmentOptions(loadDepartmentOptions());
         meta.setUserOptions(loadUserOptions());
@@ -174,5 +187,86 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
                 (left, right) -> left,
                 LinkedHashMap::new
         ));
+    }
+
+    private List<ProcessFlowConditionFieldVO> buildConditionFields(List<ProcessCustomArchiveDesign> sharedArchives) {
+        List<ProcessFlowConditionFieldVO> fields = new ArrayList<>(buildConditionFields());
+        for (ProcessCustomArchiveDesign archive : sharedArchives) {
+            String archiveCode = trimToNull(archive.getArchiveCode());
+            String archiveName = trimToNull(archive.getArchiveName());
+            if (archiveCode == null || archiveName == null) {
+                continue;
+            }
+            fields.add(ProcessExpenseConditionFieldSupport.buildSharedArchiveBranchField(archiveCode, archiveName));
+        }
+        return fields;
+    }
+
+    private Map<String, List<ProcessFormOptionVO>> buildBranchConditionValueOptions(List<ProcessCustomArchiveDesign> sharedArchives) {
+        LinkedHashMap<String, List<ProcessFormOptionVO>> optionMap = new LinkedHashMap<>();
+        if (sharedArchives == null || sharedArchives.isEmpty()) {
+            return optionMap;
+        }
+        Map<Long, List<ProcessCustomArchiveItem>> itemMap = loadArchiveItemMap(sharedArchives);
+        for (ProcessCustomArchiveDesign archive : sharedArchives) {
+            String archiveCode = trimToNull(archive.getArchiveCode());
+            if (archiveCode == null) {
+                continue;
+            }
+            List<ProcessFormOptionVO> options = itemMap.getOrDefault(archive.getId(), List.of()).stream()
+                    .map(item -> option(
+                            normalizeArchiveItemLabel(item),
+                            firstNonBlank(trimToNull(item.getItemCode()), trimToNull(item.getItemName()))
+                    ))
+                    .toList();
+            optionMap.put(ProcessExpenseConditionFieldSupport.sharedArchiveValueType(archiveCode), options);
+        }
+        return optionMap;
+    }
+
+    private List<ProcessCustomArchiveDesign> loadSelectableSharedArchives() {
+        return processCustomArchiveDesignMapper.selectList(
+                Wrappers.<ProcessCustomArchiveDesign>lambdaQuery()
+                        .eq(ProcessCustomArchiveDesign::getStatus, 1)
+                        .eq(ProcessCustomArchiveDesign::getArchiveType, ARCHIVE_TYPE_SELECT)
+                        .orderByDesc(ProcessCustomArchiveDesign::getCreatedAt, ProcessCustomArchiveDesign::getId)
+        );
+    }
+
+    private Map<Long, List<ProcessCustomArchiveItem>> loadArchiveItemMap(List<ProcessCustomArchiveDesign> sharedArchives) {
+        List<Long> archiveIds = sharedArchives.stream()
+                .map(ProcessCustomArchiveDesign::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (archiveIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return processCustomArchiveItemMapper.selectList(
+                Wrappers.<ProcessCustomArchiveItem>lambdaQuery()
+                        .in(ProcessCustomArchiveItem::getArchiveId, archiveIds)
+                        .eq(ProcessCustomArchiveItem::getStatus, 1)
+                        .orderByAsc(ProcessCustomArchiveItem::getPriority, ProcessCustomArchiveItem::getId)
+        ).stream().collect(Collectors.groupingBy(
+                ProcessCustomArchiveItem::getArchiveId,
+                LinkedHashMap::new,
+                Collectors.toList()
+        ));
+    }
+
+    private String normalizeArchiveItemLabel(ProcessCustomArchiveItem item) {
+        return firstNonBlank(trimToNull(item.getItemName()), trimToNull(item.getItemCode()), "");
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            String normalized = trimToNull(value);
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
     }
 }

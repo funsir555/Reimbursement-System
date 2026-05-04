@@ -141,6 +141,8 @@ class AbstractExpenseWorkflowSupport {
 
     private static final String APPROVER_TYPE_MANUAL_SELECT = "MANUAL_SELECT";
 
+    private static final String DESIGNATED_MEMBER_SUBMITTER = "SUBMITTER";
+
     private static final String PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER = "DESIGNATED_MEMBER";
 
     private static final String PAYMENT_EXECUTOR_TYPE_FINANCE_ROLE = "FINANCE_ROLE";
@@ -383,6 +385,13 @@ public Map<String, Object> buildRuntimeFlowContext(
         List<String> undertakeDeptIds = resolveUndertakeDeptIds(formDesign, formData, expenseDetailDesign, expenseDetails);
 
         putUndertakeDepartmentConditionContext(context, undertakeDeptIds);
+        putSharedArchiveConditionContext(
+                context,
+                formDesign == null ? null : readSchema(formDesign.getSchemaJson()),
+                formData == null ? Collections.emptyMap() : formData,
+                expenseDetailDesign == null ? null : readSchema(expenseDetailDesign.getSchemaJson()),
+                expenseDetails
+        );
 
         return context;
 
@@ -474,6 +483,12 @@ public Map<String, Object> buildRuntimeContextForInstance(ProcessDocumentInstanc
         );
 
         putUndertakeDepartmentConditionContext(context, undertakeDeptIds);
+        putSharedArchiveConditionContextForSnapshots(
+                context,
+                readMap(instance.getFormSchemaSnapshotJson()),
+                formData,
+                expenseDetails
+        );
 
         return context;
 
@@ -781,7 +796,7 @@ public void rejectPendingTask(
 
         if (!Objects.equals(trimToNull(instance.getCurrentTaskType()), CURRENT_TASK_TYPE_MANUAL_SELECT)) {
 
-            throw new IllegalStateException("\u5f53\u524d\u5355\u636e\u4e0d\u5904\u4e8e\u5f85\u624b\u52a8\u9009\u62e9\u5ba1\u6279\u4eba\u7684\u72b6\u6001");
+            throw new IllegalStateException("当前单据不处于待手动选择处理人的状态");
 
         }
 
@@ -793,9 +808,9 @@ public void rejectPendingTask(
 
         ProcessFlowNodeDTO node = snapshot.node(normalizedNodeKey);
 
-        if (!isManualSelectApprovalNode(node)) {
+        if (!isManualSelectNode(node)) {
 
-            throw new IllegalStateException("\u5f53\u524d\u8282\u70b9\u4e0d\u662f\u624b\u52a8\u9009\u62e9\u5ba1\u6279\u4eba\u8282\u70b9");
+            throw new IllegalStateException("当前节点不是手动选择人员节点");
 
         }
 
@@ -807,7 +822,7 @@ public void rejectPendingTask(
 
         if (normalizedUserIds.isEmpty()) {
 
-            throw new IllegalStateException("\u8bf7\u81f3\u5c11\u9009\u62e9\u4e00\u4f4d\u5ba1\u6279\u4eba");
+            throw new IllegalStateException("请至少选择一位处理人");
 
         }
 
@@ -815,7 +830,7 @@ public void rejectPendingTask(
 
         if (selectedUsers.size() != normalizedUserIds.size()) {
 
-            throw new IllegalStateException("\u6240\u9009\u5ba1\u6279\u4eba\u4e0d\u5b58\u5728\u6216\u5df2\u505c\u7528");
+            throw new IllegalStateException("所选处理人不存在或已停用");
 
         }
 
@@ -1419,13 +1434,13 @@ public RawFlowSnapshotSignature inspectRawFlowSnapshot(String snapshotJson) {
 
                 case NODE_TYPE_APPROVAL -> {
 
-                    if (isManualSelectApprovalNode(node)) {
+                    if (isManualSelectNode(node)) {
 
                         List<User> manualApprovers = resolveManualMembers(node, context);
 
                         if (manualApprovers.isEmpty()) {
 
-                            pauseForManualApproverSelection(instance, node);
+                            pauseForManualAssigneeSelection(instance, node);
 
                             return FlowAdvanceState.PAUSED;
 
@@ -1503,6 +1518,24 @@ public RawFlowSnapshotSignature inspectRawFlowSnapshot(String snapshotJson) {
 
             appendLog(instance.getDocumentCode(), node.getNodeKey(), node.getNodeName(), LOG_PAYMENT_REACHED, null, "SYSTEM", "到达支付节点", Collections.emptyMap());
                     String missingHandler = resolveMissingHandler(node.getConfig());
+
+                    if (isManualSelectNode(node)) {
+
+                        List<User> manualExecutors = resolveManualMembers(node, context);
+
+                        if (manualExecutors.isEmpty()) {
+
+                            pauseForManualAssigneeSelection(instance, node);
+
+                            return FlowAdvanceState.PAUSED;
+
+                        }
+
+                        createPaymentTasks(instance, node, manualExecutors);
+
+                        return FlowAdvanceState.PAUSED;
+
+                    }
 
                     List<User> executors = resolvePaymentExecutors(node, context);
 
@@ -1676,7 +1709,7 @@ private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNod
 
             task.setTaskBatchNo(batchNo);
 
-            task.setApprovalMode(APPROVAL_MODE_OR_SIGN);
+      task.setApprovalMode(resolveApprovalMode(node));
 
             task.setTaskKind(TASK_KIND_NORMAL);
 
@@ -1892,7 +1925,25 @@ private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNod
 
         String missingHandler = resolveMissingHandler(node.getConfig());
 
-        List<User> receivers = resolveCcRecipients(instance, node, context);
+   List<User> receivers;
+
+   if (isManualSelectNode(node)) {
+
+       receivers = resolveManualMembers(node, context);
+
+       if (receivers.isEmpty()) {
+
+           pauseForManualAssigneeSelection(instance, node);
+
+           return FlowAdvanceState.PAUSED;
+
+       }
+
+   } else {
+
+       receivers = resolveCcRecipients(instance, node, context);
+
+   }
 
         if (receivers.isEmpty()) {
 
@@ -1902,7 +1953,7 @@ private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNod
 
         if (receivers.isEmpty()) {
 
-            return handleMissingUsers(instance, node, missingHandler, "\u6284\u9001\u63a5\u6536\u4eba");
+       return handleMissingUsers(instance, node, missingHandler, "抄送人");
 
         }
 
@@ -1941,39 +1992,49 @@ private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNod
 
 
 
-    private List<User> resolveCcRecipients(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, Map<String, Object> context) {
+private List<User> resolveCcRecipients(ProcessDocumentInstance instance, ProcessFlowNodeDTO node, Map<String, Object> context) {
 
         Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
 
-        String receiverType = defaultText(asText(config.get("receiverType")), CC_RECEIVER_TYPE_DESIGNATED_MEMBER);
+        String approvalStyleType = resolveApprovalStyleAssigneeType(config);
 
         List<User> receivers;
 
-        if (CC_RECEIVER_TYPE_SUBMITTER.equals(receiverType)) {
+        if (approvalStyleType != null) {
 
-            receivers = resolveSubmitterUser(context);
-
-        } else if (CC_RECEIVER_TYPE_DEPT_MANAGER.equals(receiverType)) {
-
-            Map<String, Object> managerConfig = new LinkedHashMap<>();
-
-            managerConfig.put("managerConfig", Map.of(
-
-                    "deptSource", DEPT_SOURCE_SUBMITTER,
-
-                    "managerLevel", 1,
-
-                    "orgTreeLookupEnabled", true,
-
-                    "orgTreeLookupLevel", 1
-
-            ));
-
-            receivers = resolveManagerMembers(managerConfig, context);
+            receivers = resolveApprovalStyleUsers(node, config, context);
 
         } else {
 
-            receivers = loadActiveUsers(toLongList(config.get("receiverUserIds")));
+            String receiverType = defaultText(asText(config.get("receiverType")), CC_RECEIVER_TYPE_DESIGNATED_MEMBER);
+
+            if (CC_RECEIVER_TYPE_SUBMITTER.equals(receiverType)) {
+
+                receivers = resolveSubmitterUser(context);
+
+            } else if (CC_RECEIVER_TYPE_DEPT_MANAGER.equals(receiverType)) {
+
+                Map<String, Object> managerConfig = new LinkedHashMap<>();
+
+                managerConfig.put("managerConfig", Map.of(
+
+                        "deptSource", DEPT_SOURCE_SUBMITTER,
+
+                        "managerLevel", 1,
+
+                        "orgTreeLookupEnabled", true,
+
+                        "orgTreeLookupLevel", 1
+
+                ));
+
+                receivers = resolveManagerMembers(managerConfig, context);
+
+            } else {
+
+                receivers = loadActiveUsers(toLongList(config.get("receiverUserIds")));
+
+            }
 
         }
 
@@ -2049,7 +2110,7 @@ private void createPaymentTasks(ProcessDocumentInstance instance, ProcessFlowNod
 
 
 
-    private void pauseForManualApproverSelection(ProcessDocumentInstance instance, ProcessFlowNodeDTO node) {
+private void pauseForManualAssigneeSelection(ProcessDocumentInstance instance, ProcessFlowNodeDTO node) {
 
         LocalDateTime now = LocalDateTime.now();
 
@@ -2645,7 +2706,7 @@ private String resolveApprovalMode(ProcessFlowNodeDTO node) {
 
         if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
 
-            users = resolveDesignatedMembers(config);
+       users = resolveDesignatedMembers(config, context);
 
         } else if (APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
 
@@ -2769,9 +2830,81 @@ private List<User> resolveManagerMembers(Map<String, Object> config, Map<String,
             /**
      * 解析指定成员。
      */
-private List<User> resolveDesignatedMembers(Map<String, Object> config) {
+private List<User> resolveDesignatedMembers(Map<String, Object> config, Map<String, Object> context) {
 
-        return loadActiveUsers(toLongList(toObjectMap(config.get("designatedMemberConfig")).get("userIds")));
+       List<Object> designatedMembers = normalizeDesignatedMemberEntries(
+               toObjectMap(config.get("designatedMemberConfig")).get("userIds")
+       );
+
+       List<User> users = new ArrayList<>(loadActiveUsers(extractDesignatedMemberUserIds(designatedMembers)));
+
+       if (designatedMembers.contains(DESIGNATED_MEMBER_SUBMITTER)) {
+
+           users.addAll(resolveSubmitterUser(context));
+
+       }
+
+       return users;
+
+    }
+
+    private List<Object> normalizeDesignatedMemberEntries(Object value) {
+
+       if (value == null) {
+
+           return new ArrayList<>();
+
+       }
+
+       List<Object> result = new ArrayList<>();
+
+       if (value instanceof Collection<?> collection) {
+
+           for (Object item : collection) {
+
+               appendDesignatedMemberEntry(result, item);
+
+           }
+
+           return result;
+
+       }
+
+       appendDesignatedMemberEntry(result, value);
+
+       return result;
+
+    }
+
+    private void appendDesignatedMemberEntry(List<Object> result, Object value) {
+
+       String normalizedText = trimToNull(value == null ? null : String.valueOf(value));
+
+       if (Objects.equals(normalizedText, DESIGNATED_MEMBER_SUBMITTER)) {
+
+           result.add(DESIGNATED_MEMBER_SUBMITTER);
+
+           return;
+
+       }
+
+       Long numeric = asLong(value);
+
+       if (numeric != null) {
+
+           result.add(numeric);
+
+       }
+
+    }
+
+    private List<Long> extractDesignatedMemberUserIds(List<Object> designatedMembers) {
+
+       return designatedMembers.stream()
+               .filter(Number.class::isInstance)
+               .map(Number.class::cast)
+               .map(Number::longValue)
+               .toList();
 
     }
 
@@ -2798,9 +2931,27 @@ private List<User> resolveManualMembers(ProcessFlowNodeDTO node, Map<String, Obj
 
 
 
-    private boolean isManualSelectApprovalNode(ProcessFlowNodeDTO node) {
+    private String resolveApprovalStyleAssigneeType(Map<String, Object> config) {
 
-        if (node == null || !NODE_TYPE_APPROVAL.equals(node.getNodeType())) {
+        String approverType = trimToNull(asText(config == null ? null : config.get("approverType")));
+
+        if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)
+                || APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)
+                || APPROVER_TYPE_MANUAL_SELECT.equals(approverType)) {
+
+            return approverType;
+
+        }
+
+        return null;
+
+    }
+
+
+
+    private boolean isManualSelectNode(ProcessFlowNodeDTO node) {
+
+        if (node == null) {
 
             return false;
 
@@ -2808,7 +2959,35 @@ private List<User> resolveManualMembers(ProcessFlowNodeDTO node, Map<String, Obj
 
         Map<String, Object> config = node.getConfig() == null ? Collections.emptyMap() : node.getConfig();
 
-        return APPROVER_TYPE_MANUAL_SELECT.equals(defaultText(asText(config.get("approverType")), APPROVER_TYPE_MANAGER));
+        return APPROVER_TYPE_MANUAL_SELECT.equals(resolveApprovalStyleAssigneeType(config));
+
+    }
+
+
+
+    private List<User> resolveApprovalStyleUsers(ProcessFlowNodeDTO node, Map<String, Object> config, Map<String, Object> context) {
+
+        String approverType = resolveApprovalStyleAssigneeType(config);
+
+        if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
+
+            return resolveDesignatedMembers(config, context);
+
+        }
+
+        if (APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
+
+            return resolveDesignatedUserGroupMembers(config, context);
+
+        }
+
+        if (APPROVER_TYPE_MANUAL_SELECT.equals(approverType)) {
+
+            return resolveManualMembers(node, context);
+
+        }
+
+        return Collections.emptyList();
 
     }
 
@@ -2820,6 +2999,24 @@ private List<User> resolveManualMembers(ProcessFlowNodeDTO node, Map<String, Obj
 private List<User> resolvePaymentExecutors(ProcessFlowNodeDTO node, Map<String, Object> context) {
 
         Map<String, Object> config = node.getConfig() == null ? new LinkedHashMap<>() : node.getConfig();
+
+        String approvalStyleType = resolveApprovalStyleAssigneeType(config);
+
+        if (approvalStyleType != null) {
+
+            return resolveApprovalStyleUsers(node, config, context).stream()
+
+                    .filter(Objects::nonNull)
+
+                    .collect(Collectors.collectingAndThen(
+
+                            Collectors.toMap(User::getId, item -> item, (left, right) -> left, LinkedHashMap::new),
+
+                            item -> new ArrayList<>(item.values())
+
+                    ));
+
+        }
 
         String executorType = defaultText(asText(config.get("executorType")), PAYMENT_EXECUTOR_TYPE_DESIGNATED_MEMBER);
 
@@ -3647,6 +3844,116 @@ private List<String> resolveUndertakeDeptIdsFromSnapshots(
 
     }
 
+    private void putSharedArchiveConditionContext(
+            Map<String, Object> context,
+            Map<String, Object> mainSchema,
+            Map<String, Object> mainFormData,
+            Map<String, Object> detailSchema,
+            List<ExpenseDetailInstanceDTO> expenseDetails
+    ) {
+
+        Set<String> archiveCodes = new LinkedHashSet<>();
+
+        collectSharedArchiveCodes(archiveCodes, mainSchema);
+        collectSharedArchiveCodes(archiveCodes, detailSchema);
+
+        if (archiveCodes.isEmpty()) {
+
+            return;
+
+        }
+
+        for (String archiveCode : archiveCodes) {
+
+            LinkedHashSet<String> values = new LinkedHashSet<>();
+
+            collectArchiveValues(values, mainSchema, mainFormData, archiveCode);
+
+            if (detailSchema != null && expenseDetails != null) {
+
+                for (ExpenseDetailInstanceDTO expenseDetail : expenseDetails) {
+
+                    collectArchiveValues(
+
+                            values,
+
+                            detailSchema,
+
+                            expenseDetail == null || expenseDetail.getFormData() == null ? Collections.emptyMap() : expenseDetail.getFormData(),
+
+                            archiveCode
+
+                    );
+
+                }
+
+            }
+
+            context.put(archiveCode, new ArrayList<>(values));
+
+        }
+
+    }
+
+    private void putSharedArchiveConditionContextForSnapshots(
+            Map<String, Object> context,
+            Map<String, Object> mainSchema,
+            Map<String, Object> mainFormData,
+            List<ProcessDocumentExpenseDetail> expenseDetails
+    ) {
+
+        Set<String> archiveCodes = new LinkedHashSet<>();
+
+        collectSharedArchiveCodes(archiveCodes, mainSchema);
+
+        if (expenseDetails != null) {
+
+            for (ProcessDocumentExpenseDetail expenseDetail : expenseDetails) {
+
+                collectSharedArchiveCodes(archiveCodes, readMap(expenseDetail.getSchemaSnapshotJson()));
+
+            }
+
+        }
+
+        if (archiveCodes.isEmpty()) {
+
+            return;
+
+        }
+
+        for (String archiveCode : archiveCodes) {
+
+            LinkedHashSet<String> values = new LinkedHashSet<>();
+
+            collectArchiveValues(values, mainSchema, mainFormData, archiveCode);
+
+            if (expenseDetails != null) {
+
+                for (ProcessDocumentExpenseDetail expenseDetail : expenseDetails) {
+
+                    collectArchiveValues(
+
+                            values,
+
+                            readMap(expenseDetail.getSchemaSnapshotJson()),
+
+                            readMap(expenseDetail.getFormDataJson()),
+
+                            archiveCode
+
+                    );
+
+                }
+
+            }
+
+            context.put(archiveCode, new ArrayList<>(values));
+
+        }
+
+    }
+
 
 
     private String resolvePaymentCompanyId(Map<String, Object> schema, Map<String, Object> formData) {
@@ -3715,6 +4022,108 @@ private List<String> resolveUndertakeDeptIdsFromSnapshots(
 
     }
 
+    private void collectSharedArchiveCodes(Set<String> result, Map<String, Object> schema) {
+
+        if (result == null || schema == null) {
+
+            return;
+
+        }
+
+        Object rawBlocks = schema.get("blocks");
+
+        if (!(rawBlocks instanceof List<?> blocks)) {
+
+            return;
+
+        }
+
+        for (Object rawBlock : blocks) {
+
+            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
+
+                continue;
+
+            }
+
+            if (!Objects.equals(String.valueOf(blockMap.get("kind")), "SHARED_FIELD")) {
+
+                continue;
+
+            }
+
+            Object rawProps = blockMap.get("props");
+
+            if (!(rawProps instanceof Map<?, ?> props)) {
+
+                continue;
+
+            }
+
+            String archiveCode = trimToNull(String.valueOf(props.get("archiveCode")));
+
+            if (archiveCode != null) {
+
+                result.add(archiveCode);
+
+            }
+
+        }
+
+    }
+
+    private void collectArchiveValues(Set<String> result, Map<String, Object> schema, Map<String, Object> formData, String archiveCode) {
+
+        if (result == null || schema == null || formData == null || formData.isEmpty() || trimToNull(archiveCode) == null) {
+
+            return;
+
+        }
+
+        Object rawBlocks = schema.get("blocks");
+
+        if (!(rawBlocks instanceof List<?> blocks)) {
+
+            return;
+
+        }
+
+        for (Object rawBlock : blocks) {
+
+            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
+
+                continue;
+
+            }
+
+            Object rawProps = blockMap.get("props");
+
+            if (!(rawProps instanceof Map<?, ?> props)) {
+
+                continue;
+
+            }
+
+            if (!Objects.equals(archiveCode, trimToNull(String.valueOf(props.get("archiveCode"))))) {
+
+                continue;
+
+            }
+
+            String fieldKey = trimToNull(String.valueOf(blockMap.get("fieldKey")));
+
+            if (fieldKey == null) {
+
+                continue;
+
+            }
+
+            collectStringValues(result, formData.get(fieldKey));
+
+        }
+
+    }
+
 
             /**
      * 合并主表单与费用明细运行态数据。
@@ -3770,6 +4179,42 @@ private Map<String, Object> mergeRuntimeFormData(Map<String, Object> formData, L
         }
 
         String normalized = trimToNull(value == null ? null : String.valueOf(value));
+
+        if (normalized != null) {
+
+            result.add(normalized);
+
+        }
+
+    }
+
+    private void collectStringValues(Set<String> result, Object value) {
+
+        if (result == null || value == null) {
+
+            return;
+
+        }
+
+        if (value instanceof Collection<?> items) {
+
+            for (Object item : items) {
+
+                String normalized = trimToNull(String.valueOf(item));
+
+                if (normalized != null) {
+
+                    result.add(normalized);
+
+                }
+
+            }
+
+            return;
+
+        }
+
+        String normalized = trimToNull(String.valueOf(value));
 
         if (normalized != null) {
 

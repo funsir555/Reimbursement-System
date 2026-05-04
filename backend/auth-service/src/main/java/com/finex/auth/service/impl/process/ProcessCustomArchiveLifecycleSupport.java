@@ -7,9 +7,9 @@ import com.finex.auth.dto.ProcessCustomArchiveMetaVO;
 import com.finex.auth.dto.ProcessCustomArchiveOperatorVO;
 import com.finex.auth.dto.ProcessCustomArchiveResolveDTO;
 import com.finex.auth.dto.ProcessCustomArchiveResolveResultVO;
-import com.finex.auth.dto.ProcessCustomArchiveRuleFieldVO;
 import com.finex.auth.dto.ProcessCustomArchiveSaveDTO;
 import com.finex.auth.dto.ProcessCustomArchiveSummaryVO;
+import com.finex.auth.dto.ProcessFlowMetaVO;
 import com.finex.auth.entity.ProcessCustomArchiveDesign;
 import com.finex.auth.entity.ProcessCustomArchiveItem;
 import com.finex.auth.mapper.CodeSequenceMapper;
@@ -159,6 +159,7 @@ public final class ProcessCustomArchiveLifecycleSupport extends AbstractProcessC
 
     public ProcessCustomArchiveMetaVO getCustomArchiveMeta() {
         ProcessCustomArchiveMetaVO meta = new ProcessCustomArchiveMetaVO();
+        ProcessFlowMetaVO flowMeta = getProcessFlowDesignService().getFlowMeta();
         meta.setArchiveTypeOptions(List.of(
                 option("提供选择", ARCHIVE_TYPE_SELECT),
                 option("自动划分", ARCHIVE_TYPE_AUTO_RULE)
@@ -169,15 +170,12 @@ public final class ProcessCustomArchiveLifecycleSupport extends AbstractProcessC
             operator.setLabel(OPERATOR_LABELS.getOrDefault(key, key));
             return operator;
         }).toList());
-        meta.setRuleFields(RULE_FIELD_DEFINITIONS.stream().map(definition -> {
-            ProcessCustomArchiveRuleFieldVO field = new ProcessCustomArchiveRuleFieldVO();
-            field.setKey(definition.key());
-            field.setLabel(definition.label());
-            field.setValueType(definition.valueType());
-            field.setOperatorKeys(new ArrayList<>(definition.operatorKeys()));
-            return field;
-        }).toList());
-        meta.setDepartmentOptions(loadDepartmentOptions());
+        meta.setRuleFields(ProcessExpenseConditionFieldSupport.buildCustomArchiveRuleFields());
+        meta.setCompanyOptions(flowMeta.getCompanyOptions());
+        meta.setDepartmentOptions(flowMeta.getDepartmentOptions());
+        meta.setUserOptions(flowMeta.getUserOptions());
+        meta.setExpenseTypeOptions(flowMeta.getExpenseTypeOptions());
+        meta.setArchiveOptions(flowMeta.getArchiveOptions());
         meta.setTagArchiveCode(DEFAULT_TAG_ARCHIVE_CODE);
         meta.setInstallmentArchiveCode(DEFAULT_INSTALLMENT_ARCHIVE_CODE);
         return meta;

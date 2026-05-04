@@ -56,7 +56,7 @@ export const EXPENSE_WORKBENCH_COLUMNS: ExpenseWorkbenchColumnDefinition[] = [
   { key: 'templateName', label: '模板名称', minWidth: 160 },
   { key: 'templateTypeLabel', label: '模板类型', width: 120 },
   { key: 'submitterName', label: '提单人', width: 120 },
-  { key: 'submitterDeptName', label: '提单人部门', minWidth: 160 },
+    { key: 'submitterDeptName', label: '提单人部门（含下级）', minWidth: 160 },
   { key: 'currentNodeName', label: '当前节点', minWidth: 150 },
   { key: 'documentStatusLabel', label: '状态', width: 110 },
   { key: 'amount', label: '金额', width: 140 },
@@ -65,7 +65,7 @@ export const EXPENSE_WORKBENCH_COLUMNS: ExpenseWorkbenchColumnDefinition[] = [
   { key: 'paymentCompanyName', label: '付款公司', minWidth: 180 },
   { key: 'payeeName', label: '收款人', minWidth: 140 },
   { key: 'counterpartyName', label: '往来单位', minWidth: 180 },
-  { key: 'undertakeDepartmentNames', label: '承担部门', minWidth: 180 },
+    { key: 'undertakeDepartmentNames', label: '承担部门（含下级）', minWidth: 180 },
   { key: 'tagNames', label: '标签', minWidth: 160 },
   { key: 'taskCreatedAt', label: '待办到达时间', width: 168 }
 ]

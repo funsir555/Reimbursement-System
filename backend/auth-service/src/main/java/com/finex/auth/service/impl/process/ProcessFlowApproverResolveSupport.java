@@ -94,7 +94,7 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
         List<String> trace = new ArrayList<>();
         List<User> resolvedUsers;
         if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
-            resolvedUsers = resolveDesignatedMembers(config, trace);
+            resolvedUsers = resolveDesignatedMembers(config, dto.getContext(), trace);
         } else if (APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
             resolvedUsers = resolveDesignatedUserGroupMembers(config, dto.getContext(), trace);
         } else if (APPROVER_TYPE_MANUAL_SELECT.equals(approverType)) {
@@ -233,14 +233,26 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
         return user;
     }
 
-    public List<User> resolveDesignatedMembers(Map<String, Object> config, List<String> trace) {
-        List<Long> userIds = toLongList(toObjectMap(config.get("designatedMemberConfig")).get("userIds"));
-        if (userIds.isEmpty()) {
+    public List<User> resolveDesignatedMembers(Map<String, Object> config, Map<String, Object> context, List<String> trace) {
+        List<Object> designatedMembers = normalizeDesignatedMemberEntries(
+                toObjectMap(config.get("designatedMemberConfig")).get("userIds")
+        );
+        if (designatedMembers.isEmpty()) {
             trace.add("未配置指定成员");
             return Collections.emptyList();
         }
-        trace.add("指定成员：" + userIds);
-        return loadActiveUsers(userIds);
+        List<User> users = new ArrayList<>(loadActiveUsers(extractDesignatedMemberUserIds(designatedMembers)));
+        if (designatedMembers.contains(DESIGNATED_MEMBER_SUBMITTER)) {
+            Long submitterUserId = asLong(context == null ? null : context.get("submitterUserId"));
+            User submitter = loadActiveUser(submitterUserId);
+            if (submitter != null) {
+                users.add(submitter);
+            } else {
+                trace.add("已配置提单人，但上下文未提供有效提单人");
+            }
+        }
+        trace.add("指定成员：" + designatedMembers);
+        return users;
     }
 
     public List<User> resolveDesignatedUserGroupMembers(

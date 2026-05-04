@@ -375,7 +375,8 @@ export function useProcessFlowDesignerPageOrchestration() {
       departmentOptions: metaOptions.value.departmentOptions,
       userOptions: metaOptions.value.userOptions,
       expenseTypeOptions: metaOptions.value.expenseTypeOptions,
-      archiveOptions: metaOptions.value.archiveOptions
+      archiveOptions: metaOptions.value.archiveOptions,
+      branchConditionValueOptions: metaOptions.value.branchConditionValueOptions
     },
     actions: {
       addRouteLane,
@@ -407,7 +408,9 @@ export function useProcessFlowDesignerPageOrchestration() {
   const ccSectionBindings = computed(() => ({
     state: {
       node: selectedNode.value!,
-      meta: metaOptions.value
+      meta: metaOptions.value,
+      approvalApproverTypes: approvalApproverTypes.value,
+      approvalOpinionCandidates: approvalOpinionCandidates.value
     },
     actions: {
       openSceneDialog
@@ -417,7 +420,9 @@ export function useProcessFlowDesignerPageOrchestration() {
   const paymentSectionBindings = computed(() => ({
     state: {
       node: selectedNode.value!,
-      meta: metaOptions.value
+      meta: metaOptions.value,
+      approvalApproverTypes: approvalApproverTypes.value,
+      approvalOpinionCandidates: approvalOpinionCandidates.value
     },
     actions: {
       openSceneDialog
@@ -539,6 +544,7 @@ function emptyMeta(): ProcessFlowMeta {
     paymentSpecialOptions: [],
     branchOperatorOptions: [],
     branchConditionFields: [],
+    branchConditionValueOptions: {},
     companyOptions: [],
     departmentOptions: [],
     userOptions: [],

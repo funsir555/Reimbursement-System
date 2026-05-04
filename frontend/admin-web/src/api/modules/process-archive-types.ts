@@ -75,7 +75,11 @@ export interface ProcessCustomArchiveMeta {
   archiveTypeOptions: ProcessFormOption[]
   operatorOptions: ProcessCustomArchiveOperator[]
   ruleFields: ProcessCustomArchiveRuleField[]
+  companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
+  userOptions: ProcessFormOption[]
+  expenseTypeOptions: ProcessFormOption[]
+  archiveOptions: ProcessFormOption[]
   tagArchiveCode: string
   installmentArchiveCode: string
 }

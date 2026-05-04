@@ -146,8 +146,8 @@
           <el-input v-model="filters.paymentCompanyName" clearable placeholder="付款公司" />
           <el-input v-model="filters.payeeName" clearable placeholder="收款人" />
           <el-input v-model="filters.counterpartyName" clearable placeholder="往来单位" />
-          <el-input v-model="filters.submitterDeptName" clearable placeholder="提单人部门" />
-          <el-input v-model="filters.undertakeDepartmentName" clearable placeholder="承担部门" />
+          <el-input v-model="filters.submitterDeptName" clearable placeholder="提单人部门（含下级）" />
+          <el-input v-model="filters.undertakeDepartmentName" clearable placeholder="承担部门（含下级）" />
           <el-input v-model="filters.tagName" clearable placeholder="标签" />
         </div>
         <div class="expense-wb-advanced-panel__actions">

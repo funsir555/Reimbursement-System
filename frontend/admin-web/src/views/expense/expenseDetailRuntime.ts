@@ -3,7 +3,13 @@ import type {
   ProcessFormDesignBlock,
   ProcessFormDesignSchema
 } from '@/api'
-import { centsToMoney, normalizeMoneyValue, toMoneyCents, type MoneyInputValue } from '@/utils/money'
+import {
+  centsToMoney,
+  normalizeMoneyValue,
+  sanitizeMoneyDraftValue,
+  toMoneyCents,
+  type MoneyInputValue
+} from '@/utils/money'
 import {
   BUSINESS_SCENARIO_MODE_FULL,
   BUSINESS_SCENARIO_MODE_PREPAY,
@@ -251,6 +257,22 @@ export function resolveDocumentTotalAmount(
   return sumMainFormAmounts(blocks, formData) || safeMoneyValue(formData?.__totalAmount) || '0.00'
 }
 
+export function normalizeRuntimeAmountControlValues(
+  blocks: ProcessFormDesignBlock[] | null | undefined,
+  formData: Record<string, unknown> | null | undefined
+) {
+  const next = cloneRecord(formData)
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return next
+  }
+  blocks
+    .filter((block) => block.kind === 'CONTROL' && getControlType(block) === 'AMOUNT' && block.fieldKey)
+    .forEach((block) => {
+      next[block.fieldKey] = safeMoneyValue(next[block.fieldKey])
+    })
+  return next
+}
+
 export function resolveInvoiceOcrTotal(attachments: unknown) {
   const normalizedAttachments = Array.isArray(attachments) ? attachments : []
   let total = 0n
@@ -305,7 +327,7 @@ export function applyExpenseDetailAmountInput(
   defaultBusinessScenario?: string,
   schema?: ProcessFormDesignSchema | null
 ) {
-  const normalized = safeMoneyValue(nextValue)
+  const normalized = sanitizeMoneyDraftValue(nextValue, { fallback: '' })
   formData[fieldKey] = normalized
   if (fieldKey === FIELD_INVOICE_AMOUNT) {
     syncActualPaymentAmountWithInvoice(formData, normalized, detailType, defaultBusinessScenario, schema)
@@ -395,7 +417,7 @@ function syncActualPaymentAmountWithInvoice(
   if (businessScenario !== MODE_INVOICE_FULL_PAYMENT) {
     return
   }
-  formData[FIELD_ACTUAL_PAYMENT_AMOUNT] = safeMoneyValue(invoiceAmount)
+  formData[FIELD_ACTUAL_PAYMENT_AMOUNT] = sanitizeMoneyDraftValue(invoiceAmount, { fallback: '' })
 }
 
 function resolveSchemaDefaultBusinessScenario(

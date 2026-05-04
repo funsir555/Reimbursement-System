@@ -1,8 +1,10 @@
 import type { ComputedRef, Ref } from 'vue'
-import type { ExpenseDetailInstance, ExpenseDocumentUpdatePayload } from '@/api'
+import type { ExpenseDetailInstance, ExpenseDocumentUpdatePayload, ProcessFormDesignBlock } from '@/api'
+import { normalizeRuntimeAmountControlValues } from '../expenseDetailRuntime'
 
 type UseExpenseCreateValidationPayloadOptions = {
   formValues: Record<string, unknown>
+  blocks: ComputedRef<ProcessFormDesignBlock[]>
   totalAmount: ComputedRef<string>
   expenseDetails: Ref<ExpenseDetailInstance[]>
   manualApproverSelections: Record<string, string[]>
@@ -33,7 +35,7 @@ export function useExpenseCreateValidationPayload(options: UseExpenseCreateValid
   function buildDocumentUpdatePayload(): ExpenseDocumentUpdatePayload {
     const payload: ExpenseDocumentUpdatePayload = {
       formData: {
-        ...options.cloneRecord(options.formValues),
+        ...normalizeRuntimeAmountControlValues(options.blocks.value, options.cloneRecord(options.formValues)),
         __totalAmount: options.totalAmount.value
       },
       expenseDetails: options.expenseDetails.value.map(options.cloneDetail)

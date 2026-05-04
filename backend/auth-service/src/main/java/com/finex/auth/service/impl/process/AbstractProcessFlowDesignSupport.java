@@ -69,6 +69,7 @@ abstract class AbstractProcessFlowDesignSupport {
     protected static final String APPROVER_TYPE_DESIGNATED_MEMBER = "DESIGNATED_MEMBER";
     protected static final String APPROVER_TYPE_DESIGNATED_USER_GROUP = "DESIGNATED_USER_GROUP";
     protected static final String APPROVER_TYPE_MANUAL_SELECT = "MANUAL_SELECT";
+    protected static final String DESIGNATED_MEMBER_SUBMITTER = "SUBMITTER";
 
     protected static final String MANAGER_RULE_MODE_FORM_DEPT_MANAGER = "FORM_DEPT_MANAGER";
     protected static final String DEPT_SOURCE_UNDERTAKE = "UNDERTAKE_DEPT";
@@ -256,18 +257,7 @@ abstract class AbstractProcessFlowDesignSupport {
     }
 
     protected List<ProcessFlowConditionFieldVO> buildConditionFields() {
-        return List.of(
-                conditionField("submitterDeptId", "提单人部门", "department", List.of("EQ", "NE", "IN", "NOT_IN")),
-                conditionField("submitterUserId", "提单人", "user", List.of("EQ", "NE", "IN", "NOT_IN")),
-                conditionField(ProcessUserGroupScopeSupport.FIELD_PAYMENT_COMPANY_ID, "公司抬头", "company", List.of("IN", "NOT_IN")),
-                conditionField(ProcessUserGroupScopeSupport.FIELD_UNDERTAKE_DEPT_WITH_CHILDREN, "承担部门(含下级部门)", "department", List.of("IN", "NOT_IN")),
-                conditionField(ProcessUserGroupScopeSupport.FIELD_UNDERTAKE_DEPT_EXACT, "承担部门(不含下级部门)", "department", List.of("IN", "NOT_IN")),
-                conditionField("expenseTypeCode", "费用类型", "expenseType", List.of("EQ", "NE", "IN", "NOT_IN")),
-                conditionField("documentType", "单据类型", "text", List.of("EQ", "NE", "IN", "NOT_IN")),
-                conditionField("amount", "金额区间", "number", List.of("EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN")),
-                conditionField("tagArchiveCode", "标签档案", "archive", List.of("EQ", "NE", "IN", "NOT_IN")),
-                conditionField("installmentArchiveCode", "分期付款档案", "archive", List.of("EQ", "NE", "IN", "NOT_IN"))
-        );
+        return ProcessExpenseConditionFieldSupport.buildBranchConditionFields();
     }
 
     protected ProcessFlowConditionFieldVO conditionField(String key, String label, String valueType, List<String> operators) {
@@ -377,6 +367,41 @@ abstract class AbstractProcessFlowDesignSupport {
         if (validUserCount != new LinkedHashSet<>(userIds).size()) {
             throw new IllegalStateException("审批节点中存在无效的系统成员");
         }
+    }
+
+    protected List<Object> normalizeDesignatedMemberEntries(Object value) {
+        if (value == null) {
+            return new ArrayList<>();
+        }
+        List<Object> result = new ArrayList<>();
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                appendDesignatedMemberEntry(result, item);
+            }
+            return result;
+        }
+        appendDesignatedMemberEntry(result, value);
+        return result;
+    }
+
+    private void appendDesignatedMemberEntry(List<Object> result, Object value) {
+        String normalizedText = trimToNull(value == null ? null : String.valueOf(value));
+        if (Objects.equals(normalizedText, DESIGNATED_MEMBER_SUBMITTER)) {
+            result.add(DESIGNATED_MEMBER_SUBMITTER);
+            return;
+        }
+        Long numeric = asLong(value);
+        if (numeric != null) {
+            result.add(numeric);
+        }
+    }
+
+    protected List<Long> extractDesignatedMemberUserIds(Object value) {
+        return normalizeDesignatedMemberEntries(value).stream()
+                .filter(Number.class::isInstance)
+                .map(Number.class::cast)
+                .map(Number::longValue)
+                .toList();
     }
 
     protected String writeSnapshot(ProcessFlowSaveDTO dto) {

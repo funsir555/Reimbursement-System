@@ -100,11 +100,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { type ExpenseCreateTemplateDetail, type ExpenseDetailInstance, type ProcessFormDesignSchema } from '@/api'
-import { formatMoney, normalizeMoneyValue } from '@/utils/money'
+import { formatMoney } from '@/utils/money'
 import {
-  FIELD_ACTUAL_PAYMENT_AMOUNT,
   buildExpenseDetailFormData,
   enrichExpenseDetailInstance,
+  normalizeRuntimeAmountControlValues,
   resolveExpenseDetailAmount
 } from './expenseDetailRuntime'
 import ExpenseInvoiceWorkbench from './components/ExpenseInvoiceWorkbench.vue'
@@ -286,10 +286,10 @@ function saveDetail() {
   saving.value = true
   try {
     const current = draft.expenseDetails[detailIndex]
-    const nextFormData = cloneRecord(detailFormData)
-    if (FIELD_ACTUAL_PAYMENT_AMOUNT in nextFormData) {
-      nextFormData[FIELD_ACTUAL_PAYMENT_AMOUNT] = normalizeOptionalMoneyValue(nextFormData[FIELD_ACTUAL_PAYMENT_AMOUNT])
-    }
+    const nextFormData = normalizeRuntimeAmountControlValues(
+      templateDetail.value?.expenseDetailSchema?.blocks || [],
+      cloneRecord(detailFormData)
+    )
     draft.expenseDetails[detailIndex] = enrichExpenseDetailInstance(
       {
         ...current,
@@ -313,18 +313,6 @@ function saveDetail() {
 
 function cloneRecord(value: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(value || {})) as Record<string, unknown>
-}
-
-function normalizeOptionalMoneyValue(value: unknown) {
-  const text = String(value ?? '').trim()
-  if (!text) {
-    return ''
-  }
-  try {
-    return normalizeMoneyValue(text, { fallback: '' })
-  } catch {
-    return text
-  }
 }
 
 function updateFloatingBarLayout() {

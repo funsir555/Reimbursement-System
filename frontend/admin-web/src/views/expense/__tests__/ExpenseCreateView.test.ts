@@ -918,6 +918,55 @@ describe('ExpenseCreateView', () => {
     }))
   })
 
+  it('normalizes expense detail amount drafts before submitting', async () => {
+    mocks.route.query = { templateCode: 'TPL-004B', draftKey: 'draft-detail-amount-normalize' }
+    mocks.route.fullPath = '/expense/create?templateCode=TPL-004B&draftKey=draft-detail-amount-normalize'
+    mocks.expenseCreateApi.getTemplateDetail.mockResolvedValue({
+      data: {
+        ...buildTemplateDetail('TPL-004B', '对公模板', 'report', '报销单'),
+        expenseDetailType: 'COMMON',
+        expenseDetailSchema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            buildAmountBlock('invoiceAmount'),
+            buildAmountBlock('actualPaymentAmount')
+          ]
+        }
+      }
+    })
+    writeDraft('draft-detail-amount-normalize', 'TPL-004B', {
+      expenseDetails: [
+        {
+          detailNo: 'D-001',
+          detailTitle: '费用明细 1',
+          detailType: 'COMMON',
+          formData: {
+            invoiceAmount: '120.5',
+            actualPaymentAmount: '120.'
+          }
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+
+    await submitButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.submit).toHaveBeenCalledWith(expect.objectContaining({
+      expenseDetails: [
+        expect.objectContaining({
+          detailNo: 'D-001',
+          formData: expect.objectContaining({
+            invoiceAmount: '120.50',
+            actualPaymentAmount: '120.00'
+          })
+        })
+      ]
+    }))
+  })
+
   it('blocks enterprise expense-detail submit until each detail explicitly selects a business scenario', async () => {
     mocks.route.query = { templateCode: 'TPL-004B', draftKey: 'draft-missing-business-scenario' }
     mocks.route.fullPath = '/expense/create?templateCode=TPL-004B&draftKey=draft-missing-business-scenario'

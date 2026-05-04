@@ -85,7 +85,7 @@
                 <p class="truncate text-lg font-semibold">{{ block.node.nodeName }}</p>
                 <p class="mt-2 text-sm opacity-80">{{ nodeTypeLabel(block.node.nodeType) }}</p>
               </div>
-              <el-tag v-if="block.node.nodeType !== 'APPROVAL'" size="small" effect="plain" round>
+              <el-tag v-if="showsSceneTag(block.node.nodeType)" size="small" effect="plain" round>
                 {{ sceneNameById(block.node.sceneId) || '默认场景' }}
               </el-tag>
             </div>
@@ -416,6 +416,10 @@ function insertButtonAriaLabel(block: FlowCanvasInsertBlock) {
     return '在当前分支与附带下方节点之间插入节点'
   }
   return `在第 ${block.index + 1} 个位置插入节点`
+}
+
+function showsSceneTag(nodeType: string) {
+  return nodeType !== 'APPROVAL' && nodeType !== 'PAYMENT' && nodeType !== 'CC'
 }
 
 function isBranchActive(block: FlowCanvasBranchBlock) {

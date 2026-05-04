@@ -661,6 +661,7 @@ describe('ExpenseDocumentDetailView', () => {
     expect(wrapper.get('[data-testid="approval-timeline-list"]').text()).toContain('财务审批 审批中')
     expect(wrapper.get('[data-testid="approval-timeline-list"]').text()).toContain('出纳支付 未到达')
     expect(timelineItems).toHaveLength(3)
+    expect(timelineItems[timelineItems.length - 1]?.text()).toContain('出纳支付 未到达')
   })
 
   it('prefers detail submitterName over submit log actorName in the submit timeline item', async () => {

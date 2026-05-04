@@ -14,7 +14,15 @@ public class ProcessCustomArchiveMetaVO {
 
     private List<ProcessCustomArchiveRuleFieldVO> ruleFields = new ArrayList<>();
 
+    private List<ProcessFormOptionVO> companyOptions = new ArrayList<>();
+
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
+
+    private List<ProcessFormOptionVO> userOptions = new ArrayList<>();
+
+    private List<ProcessFormOptionVO> expenseTypeOptions = new ArrayList<>();
+
+    private List<ProcessFormOptionVO> archiveOptions = new ArrayList<>();
 
     private String tagArchiveCode;
 

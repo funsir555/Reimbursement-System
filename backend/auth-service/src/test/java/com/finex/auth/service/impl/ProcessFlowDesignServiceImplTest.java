@@ -9,6 +9,7 @@ import com.finex.auth.entity.ProcessFlowRoute;
 import com.finex.auth.entity.ProcessFlowVersion;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
+import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessFlowMapper;
 import com.finex.auth.mapper.ProcessFlowNodeMapper;
@@ -65,6 +66,8 @@ class ProcessFlowDesignServiceImplTest {
     @Mock
     private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     @Mock
+    private ProcessCustomArchiveItemMapper processCustomArchiveItemMapper;
+    @Mock
     private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
     @Mock
     private ProcessUserGroupMapper processUserGroupMapper;
@@ -86,6 +89,7 @@ class ProcessFlowDesignServiceImplTest {
                 userMapper,
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
+                processCustomArchiveItemMapper,
                 processDocumentTemplateMapper,
                 processUserGroupMapper,
                 objectMapper
@@ -231,6 +235,67 @@ class ProcessFlowDesignServiceImplTest {
         List<Map<String, Object>> nodes = (List<Map<String, Object>>) snapshot.get("nodes");
         assertEquals(1, nodes.size());
         assertEquals(null, nodes.get(0).get("parentNodeKey"));
+    }
+
+    @Test
+    void createFlowKeepsSubmitterInDesignatedMemberConfig() throws Exception {
+        ArgumentCaptor<ProcessFlowVersion> versionCaptor = ArgumentCaptor.forClass(ProcessFlowVersion.class);
+        doAnswer(invocation -> {
+            ProcessFlow flow = invocation.getArgument(0);
+            flow.setId(1L);
+            return 1;
+        }).when(processFlowMapper).insert(any(ProcessFlow.class));
+        ProcessFlow storedFlow = new ProcessFlow();
+        storedFlow.setId(1L);
+        storedFlow.setFlowCode("FLOW-001");
+        storedFlow.setFlowName("Flow Submitter Member");
+        storedFlow.setStatus("DRAFT");
+        storedFlow.setCurrentDraftVersionId(11L);
+        when(processFlowMapper.selectById(1L)).thenReturn(storedFlow);
+        doAnswer(invocation -> {
+            ProcessFlowVersion version = invocation.getArgument(0);
+            version.setId(11L);
+            return 1;
+        }).when(processFlowVersionMapper).insert(versionCaptor.capture());
+        ProcessFlowVersion storedVersion = new ProcessFlowVersion();
+        storedVersion.setId(11L);
+        storedVersion.setFlowId(1L);
+        storedVersion.setVersionNo(1);
+        storedVersion.setVersionStatus("DRAFT");
+        when(processFlowVersionMapper.selectById(11L)).thenReturn(storedVersion);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver")));
+
+        com.finex.auth.dto.ProcessFlowSaveDTO dto = new com.finex.auth.dto.ProcessFlowSaveDTO();
+        dto.setFlowName("Flow Submitter Member");
+
+        com.finex.auth.dto.ProcessFlowNodeDTO node = new com.finex.auth.dto.ProcessFlowNodeDTO();
+        node.setNodeKey("approval-1");
+        node.setNodeType("APPROVAL");
+        node.setNodeName("Approval Node 1");
+        node.setDisplayOrder(1);
+        node.setConfig(new LinkedHashMap<>(Map.of(
+                "approverType", "DESIGNATED_MEMBER",
+                "designatedMemberConfig", Map.of("userIds", List.of("SUBMITTER", 101L))
+        )));
+        dto.setNodes(List.of(node));
+
+        ProcessFlowDetailVO detail = service.createFlow(dto);
+
+        assertNotNull(detail);
+        Map<String, Object> snapshot = objectMapper.readValue(
+                versionCaptor.getValue().getSnapshotJson(),
+                new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {}
+        );
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) snapshot.get("nodes");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) nodes.get(0).get("config");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> designatedMemberConfig = (Map<String, Object>) config.get("designatedMemberConfig");
+        assertEquals(
+                List.of("SUBMITTER", "101"),
+                ((List<?>) designatedMemberConfig.get("userIds")).stream().map(String::valueOf).toList()
+        );
     }
 
     @Test
@@ -496,6 +561,62 @@ class ProcessFlowDesignServiceImplTest {
         );
 
         assertEquals("AND_SIGN", normalized.get("approvalMode"));
+    }
+
+    @Test
+    void normalizeNodeConfigSupportsApprovalStylePaymentAssignments() {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalized = (Map<String, Object>) ReflectionTestUtils.invokeMethod(
+                service,
+                "normalizeNodeConfig",
+                "PAYMENT",
+                new LinkedHashMap<>(Map.of(
+                        "approverType", "DESIGNATED_USER_GROUP",
+                        "designatedUserGroupConfig", Map.of("groupId", 2001),
+                        "missingHandler", "AUTO_SKIP",
+                        "approvalMode", "OR_SIGN",
+                        "opinionDefaults", List.of("通过", "拒绝"),
+                        "specialSettings", List.of("ALLOW_RETRY"),
+                        "paymentAction", "GENERATE_PAYMENT"
+                )),
+                false
+        );
+
+        assertEquals("DESIGNATED_USER_GROUP", normalized.get("approverType"));
+        assertEquals("AND_SIGN", normalized.get("approvalMode"));
+        assertEquals("GENERATE_PAYMENT", normalized.get("paymentAction"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> designatedUserGroupConfig = (Map<String, Object>) normalized.get("designatedUserGroupConfig");
+        assertEquals(2001L, Long.valueOf(String.valueOf(designatedUserGroupConfig.get("groupId"))));
+        assertEquals(List.of("通过", "拒绝"), normalized.get("opinionDefaults"));
+    }
+
+    @Test
+    void normalizeNodeConfigSupportsApprovalStyleCcAssignmentsAndKeepsTiming() {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalized = (Map<String, Object>) ReflectionTestUtils.invokeMethod(
+                service,
+                "normalizeNodeConfig",
+                "CC",
+                new LinkedHashMap<>(Map.of(
+                        "approverType", "MANUAL_SELECT",
+                        "manualSelectConfig", Map.of("candidateScope", "ALL_ACTIVE_USERS"),
+                        "missingHandler", "BLOCK_SUBMIT",
+                        "timing", "ON_ENTER",
+                        "receiverType", "DEPT_MANAGER",
+                        "receiverUserIds", List.of(88L)
+                )),
+                false
+        );
+
+        assertEquals("MANUAL_SELECT", normalized.get("approverType"));
+        assertEquals("BLOCK_SUBMIT", normalized.get("missingHandler"));
+        assertEquals("ON_ENTER", normalized.get("timing"));
+        assertEquals("DEPT_MANAGER", normalized.get("receiverType"));
+        assertEquals(List.of(88L), normalized.get("receiverUserIds"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> manualSelectConfig = (Map<String, Object>) normalized.get("manualSelectConfig");
+        assertEquals("ALL_ACTIVE_USERS", manualSelectConfig.get("candidateScope"));
     }
 
     @Test

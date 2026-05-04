@@ -115,6 +115,83 @@ class ExpenseApprovalProjectionSupportTest {
     }
 
     @Test
+    void buildStopsAtLastReachablePaymentTailForNestedMatchedBranches() throws Exception {
+        ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper, userMapper);
+        FlowRuntimeSnapshot snapshot = new FlowRuntimeSnapshot(
+                List.of(
+                        node("approval-start", "发起审批", "APPROVAL", null, 1),
+                        node("branch-1", "流程分支 1", "BRANCH", null, 2),
+                        node("branch-2", "流程分支 2", "BRANCH", null, 3),
+                        node("cc-tail", "抄送节点 3", "CC", null, 4),
+                        node("payment-tail", "支付节点 3", "PAYMENT", null, 5),
+                        node("approval-level-1", "一级审批", "APPROVAL", "route-1-a", 1),
+                        node("branch-1-1", "嵌套分支 1", "BRANCH", "route-1-a", 2),
+                        node("approval-level-2", "二级审批", "APPROVAL", "route-1-1-a", 1),
+                        node("branch-1-1-1", "嵌套分支 2", "BRANCH", "route-1-1-a", 2),
+                        node("approval-current", "当前审批节点", "APPROVAL", "route-1-1-1-a", 1),
+                        node("approval-follow-up", "后续审批节点", "APPROVAL", "route-2-a", 1)
+                ),
+                List.of(
+                        route("route-1-a", "branch-1", 1, true),
+                        route("route-1-1-a", "branch-1-1", 1, true),
+                        route("route-1-1-1-a", "branch-1-1-1", 1, true),
+                        route("route-2-a", "branch-2", 1, true)
+                )
+        );
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setSubmitterName("张三");
+        when(expenseWorkflowRuntimeSupport.previewMatchedRoute(eq(snapshot.routes("branch-2")), eq(Map.of("amount", 88))))
+                .thenReturn(snapshot.routeByKey("route-2-a"));
+        when(expenseWorkflowRuntimeSupport.previewResolvedApprovers(eq(snapshot.node("approval-follow-up")), eq(Map.of("amount", 88))))
+                .thenReturn(List.of(user(410L, "后续审批人")));
+        when(expenseWorkflowRuntimeSupport.previewResolvedCcRecipients(eq(instance), eq(snapshot.node("cc-tail")), eq(Map.of("amount", 88))))
+                .thenReturn(List.of(user(510L, "抄送人A")));
+        when(expenseWorkflowRuntimeSupport.previewResolvedPaymentExecutors(eq(snapshot.node("payment-tail")), eq(Map.of("amount", 88))))
+                .thenReturn(List.of(user(610L, "出纳B")));
+
+        ExpenseApprovalProjectionSupport.ApprovalProjectionResult result = support.build(
+                instance,
+                snapshot,
+                Map.of("amount", 88),
+                List.of(pendingTask("approval-current", "当前审批节点", "审批人C")),
+                List.of(
+                        actionLog(1L, "approval-start", "发起审批", "APPROVE", "审批人A", "通过", null),
+                        actionLog(2L, "branch-1", "流程分支 1", "ROUTE_HIT", "SYSTEM", null, Map.of("routeKey", "route-1-a")),
+                        actionLog(3L, "approval-level-1", "一级审批", "APPROVE", "审批人B", "通过", null),
+                        actionLog(4L, "branch-1-1", "嵌套分支 1", "ROUTE_HIT", "SYSTEM", null, Map.of("routeKey", "route-1-1-a")),
+                        actionLog(5L, "approval-level-2", "二级审批", "APPROVE", "审批人D", "通过", null),
+                        actionLog(6L, "branch-1-1-1", "嵌套分支 2", "ROUTE_HIT", "SYSTEM", null, Map.of("routeKey", "route-1-1-1-a"))
+                )
+        );
+
+        List<ExpenseApprovalNodeStatusVO> statuses = result.approvalNodeStatuses();
+        assertEquals(
+                List.of(
+                        "approval-start",
+                        "approval-level-1",
+                        "approval-level-2",
+                        "approval-current",
+                        "approval-follow-up",
+                        "cc-tail",
+                        "payment-tail"
+                ),
+                statuses.stream().map(ExpenseApprovalNodeStatusVO::getNodeKey).toList()
+        );
+        assertEquals(
+                List.of("APPROVED", "APPROVED", "APPROVED", "PENDING", "NOT_REACHED", "NOT_REACHED", "NOT_REACHED"),
+                statuses.stream().map(ExpenseApprovalNodeStatusVO::getStatus).toList()
+        );
+        assertEquals(List.of("后续审批人"), statuses.get(4).getAssigneeNames());
+        assertEquals(List.of("抄送人A"), statuses.get(5).getAssigneeNames());
+        assertEquals(List.of("出纳B"), statuses.get(6).getAssigneeNames());
+        assertEquals("payment-tail", statuses.get(statuses.size() - 1).getNodeKey());
+
+        assertEquals("payment-tail", result.approvalTimeline().get(result.approvalTimeline().size() - 1).getNodeKey());
+        assertTrue(result.approvalTimeline().get(result.approvalTimeline().size() - 1).isFuture());
+        assertEquals("支付节点 3 未到达", result.approvalTimeline().get(result.approvalTimeline().size() - 1).getTitle());
+    }
+
+    @Test
     void buildMarksCurrentManualSelectNodeAsPendingSelection() {
         ExpenseApprovalProjectionSupport support = new ExpenseApprovalProjectionSupport(expenseWorkflowRuntimeSupport, objectMapper, userMapper);
         FlowRuntimeSnapshot snapshot = new FlowRuntimeSnapshot(
@@ -192,10 +269,14 @@ class ExpenseApprovalProjectionSupportTest {
     }
 
     private ProcessFlowNodeDTO node(String nodeKey, String nodeType, String parentNodeKey, int displayOrder) {
+        return node(nodeKey, nodeKey, nodeType, parentNodeKey, displayOrder);
+    }
+
+    private ProcessFlowNodeDTO node(String nodeKey, String nodeName, String nodeType, String parentNodeKey, int displayOrder) {
         ProcessFlowNodeDTO node = new ProcessFlowNodeDTO();
         node.setNodeKey(nodeKey);
         node.setNodeType(nodeType);
-        node.setNodeName(nodeKey);
+        node.setNodeName(nodeName);
         node.setParentNodeKey(parentNodeKey);
         node.setDisplayOrder(displayOrder);
         return node;

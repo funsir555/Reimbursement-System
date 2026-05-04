@@ -11,6 +11,7 @@ import com.finex.auth.dto.ProcessFlowSceneVO;
 import com.finex.auth.dto.ProcessFlowSummaryVO;
 import com.finex.auth.dto.ProcessFormOptionVO;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
+import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessFlowMapper;
@@ -56,6 +57,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             UserMapper userMapper,
             ProcessExpenseTypeMapper processExpenseTypeMapper,
             ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper,
+            ProcessCustomArchiveItemMapper processCustomArchiveItemMapper,
             ProcessDocumentTemplateMapper processDocumentTemplateMapper,
             ProcessUserGroupMapper processUserGroupMapper,
             ObjectMapper objectMapper
@@ -108,6 +110,7 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 userMapper,
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
+                processCustomArchiveItemMapper,
                 processDocumentTemplateMapper,
                 objectMapper,
                 userGroupResolverSupport
