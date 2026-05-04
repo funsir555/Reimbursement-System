@@ -21,7 +21,7 @@
     </section>
 
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-[380px,minmax(0,1fr)]">
-    <el-card class="expense-wb-panel">
+    <el-card class="expense-wb-panel expense-type-list-panel">
       <template #header>
         <div class="flex items-center justify-between gap-3">
           <div>
@@ -46,15 +46,15 @@
             default-expand-all
             :expand-on-click-node="false"
             :props="{ label: 'expenseName', children: 'children' }"
-            @node-click="handleNodeClick"
-          >
-            <template #default="{ data }">
-              <div class="expense-tree-node">
-                <div class="min-w-0 flex-1">
-                  <p class="truncate text-[14px] font-semibold leading-6 text-slate-800">{{ data.expenseName }}</p>
-                  <p class="truncate font-mono text-[12px] leading-5 text-slate-400">{{ data.expenseCode }}</p>
-                </div>
-                <el-tag class="shrink-0" :type="data.status === 1 ? 'success' : 'info'" size="small">
+              @node-click="handleNodeClick"
+            >
+              <template #default="{ data }">
+                <div class="expense-tree-node">
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-[13px] font-semibold leading-4 text-slate-800">{{ data.expenseName }}</p>
+                    <p class="truncate font-mono text-[11px] leading-[14px] text-slate-400">{{ data.expenseCode }}</p>
+                  </div>
+                <el-tag class="expense-type-tree__status shrink-0" :type="data.status === 1 ? 'success' : 'info'" size="small">
                   {{ data.status === 1 ? '启用' : '停用' }}
                 </el-tag>
               </div>
@@ -137,30 +137,22 @@
               </el-form-item>
 
               <el-form-item label="限定以下部门使用">
-                <el-select
+                <department-tree-select
                   v-model="form.scopeDeptIds"
+                  :options="meta?.departmentOptions || []"
                   multiple
-                  filterable
-                  collapse-tags
-                  collapse-tags-tooltip
                   placeholder="不选则默认全部部门可用"
-                >
-                  <el-option
-                    v-for="item in meta?.departmentOptions || []"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </el-select>
+                />
               </el-form-item>
 
               <el-form-item label="限定以下人员使用">
                 <el-select
                   v-model="form.scopeUserIds"
                   multiple
-                  filterable
+                  filterable v-bind="globalFilterableSelectProps"
                   collapse-tags
                   collapse-tags-tooltip
+                  :tag-tooltip="globalCollapseTagTooltipProps"
                   placeholder="不选则默认全部人员可用"
                 >
                   <el-option
@@ -253,7 +245,11 @@ import {
   type ProcessExpenseTypeMeta,
   type ProcessExpenseTypeTreeNode
 } from '@/api'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
+import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 import { PM_NAME_MAX_LENGTH, validateMaxLength } from '@/views/process/pmValidation'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 type ExpenseTypeTreeInstance = {
   setCurrentKey: (key: number | null) => void
@@ -519,24 +515,37 @@ const flattenTreeNodes = (nodes: ProcessExpenseTypeTreeNode[]): ProcessExpenseTy
   display: flex;
   min-width: 0;
   width: 100%;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 4px 8px 0;
+  gap: 8px;
+  padding: 0 4px 0 0;
+}
+
+:deep(.expense-type-list-panel .el-card__body) {
+  padding: 16px 18px !important;
 }
 
 :deep(.expense-type-tree .el-tree-node__content) {
-  min-height: 62px;
-  align-items: flex-start;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  height: 34px;
+  min-height: 34px;
+  align-items: center;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+:deep(.expense-type-tree .el-tree-node) {
+  margin: 0;
 }
 
 :deep(.expense-type-tree .el-tree-node__expand-icon) {
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 :deep(.expense-type-tree .el-tag) {
-  margin-top: 4px;
+  margin-top: 0;
+  padding: 0 6px;
+  height: 20px;
+  line-height: 18px;
+  font-size: 11px;
 }
 </style>

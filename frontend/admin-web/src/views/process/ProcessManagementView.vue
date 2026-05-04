@@ -1,7 +1,7 @@
 ﻿<template>
   <div class="flex items-start gap-6">
     <process-workbench-sidebar
-      :items="overview?.navItems || []"
+      :items="sidebarItems"
       :active-key="activeSection"
       @select="handleSectionChange"
     />
@@ -165,6 +165,10 @@
 
       <template v-else-if="activeSection === 'custom-archive'">
         <custom-archive-management-panel />
+      </template>
+
+      <template v-else-if="activeSection === 'user-group'">
+        <user-group-management-panel />
       </template>
 
       <template v-else-if="activeSection === 'form-design'">
@@ -425,6 +429,16 @@ import ExpenseDetailDesignManagementPanel from '@/components/process/ExpenseDeta
 import ExpenseTypeManagementPanel from '@/components/process/ExpenseTypeManagementPanel.vue'
 import ProcessWorkbenchSidebar from '@/components/process/ProcessWorkbenchSidebar.vue'
 import TemplateTypeDialog from '@/components/process/TemplateTypeDialog.vue'
+import UserGroupManagementPanel from '@/components/process/UserGroupManagementPanel.vue'
+import { buildReturnToQuery } from '@/views/process/processDesignerNavigation'
+
+const STATIC_NAV_ITEMS = [
+  {
+    key: 'user-group',
+    label: '用户组',
+    tip: '维护审批流可复用的用户组与管理范围'
+  }
+] as const
 
 const route = useRoute()
 const router = useRouter()
@@ -453,7 +467,25 @@ const activeSection = computed(() => {
   const section = route.query.section
   return typeof section === 'string' ? section : 'document-flow'
 })
-const currentNav = computed(() => overview.value?.navItems.find((item) => item.key === activeSection.value))
+const sidebarItems = computed(() => {
+  const baseItems = overview.value?.navItems || []
+  if (!baseItems.length) {
+    return []
+  }
+  if (baseItems.some((item) => item.key === 'user-group')) {
+    return baseItems
+  }
+  const customArchiveIndex = baseItems.findIndex((item) => item.key === 'custom-archive')
+  if (customArchiveIndex < 0) {
+    return [...baseItems, ...STATIC_NAV_ITEMS]
+  }
+  return [
+    ...baseItems.slice(0, customArchiveIndex + 1),
+    ...STATIC_NAV_ITEMS,
+    ...baseItems.slice(customArchiveIndex + 1)
+  ]
+})
+const currentNav = computed(() => sidebarItems.value.find((item) => item.key === activeSection.value))
 const currentNavLabel = computed(() => currentNav.value?.label || '\u6d41\u7a0b\u914d\u7f6e')
 const currentNavTip = computed(() => currentNav.value?.tip || '\u8fd9\u4e2a\u914d\u7f6e\u6a21\u5757\u6b63\u5728\u5efa\u8bbe\u4e2d\uff0c\u540e\u7eed\u4f1a\u7ee7\u7eed\u8865\u9f50\u771f\u5b9e\u80fd\u529b\u3002')
 const flowIdMap = computed(() => new Map(flowSummaries.value.map((item) => [item.flowCode, item.id])))
@@ -709,7 +741,8 @@ const openBoundFlow = (template: ProcessTemplateCard) => {
   }
   router.push({
     name: 'expense-workbench-process-flow-edit',
-    params: { id: flowId }
+    params: { id: flowId },
+    query: buildReturnToQuery(route.fullPath)
   })
 }
 
@@ -752,22 +785,24 @@ const copyFormDesign = (form: ProcessFormDesignSummary) => {
 const openFlowEditor = (id: number) => {
   router.push({
     name: 'expense-workbench-process-flow-edit',
-    params: { id }
+    params: { id },
+    query: buildReturnToQuery(route.fullPath)
   })
 }
 
 const openFlowCreate = () => {
   router.push({
-    name: 'expense-workbench-process-flow-create'
+    name: 'expense-workbench-process-flow-create',
+    query: buildReturnToQuery(route.fullPath)
   })
 }
 
 const copyFlow = (flow: ProcessFlowSummary) => {
   router.push({
     name: 'expense-workbench-process-flow-create',
-    query: {
+    query: buildReturnToQuery(route.fullPath, {
       copyFromId: String(flow.id)
-    }
+    })
   })
 }
 

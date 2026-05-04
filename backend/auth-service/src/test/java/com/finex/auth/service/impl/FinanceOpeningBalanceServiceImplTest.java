@@ -148,6 +148,7 @@ class FinanceOpeningBalanceServiceImplTest {
         child.setSortOrder(560101);
 
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(parent, child));
+        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(1L, 0L);
         when(glAccsumMapper.selectList(any())).thenReturn(List.of(
                 periodSumRow("5601", "100.00"),
                 periodSumRow("560101", "100.00")
@@ -178,6 +179,25 @@ class FinanceOpeningBalanceServiceImplTest {
         assertEquals("1001", preview.getRows().get(0).getSubjectCode());
         assertEquals("88.00", preview.getRows().get(0).getMb().toPlainString());
         assertTrue(preview.getAssistLines().isEmpty());
+    }
+
+    @Test
+    void listRowsTreatsSubjectWithoutChildrenAsLeafEvenWhenStoredLeafFlagIsDirty() {
+        FinanceAccountSubject subject = subject("100201", "Bank Deposit", "DEBIT", 0, 0);
+        subject.setSubjectLevel(2);
+        subject.setSortOrder(100201);
+
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(subject));
+        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);
+        when(glAccsumMapper.selectList(any())).thenReturn(List.of(periodSumRow("100201", "50.00")));
+
+        List<OpeningBalanceRowVO> rows = service.listRows("COMP-001", 2026, 4);
+
+        assertEquals(1, rows.size());
+        assertEquals("100201", rows.get(0).getSubjectCode());
+        assertEquals(1, rows.get(0).getLeafFlag());
+        assertTrue(rows.get(0).getEditable());
+        assertFalse(rows.get(0).getHasChildren());
     }
 
     private FinanceOpeningBalanceState openedState() {

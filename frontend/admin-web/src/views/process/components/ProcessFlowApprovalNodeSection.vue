@@ -9,7 +9,7 @@
             </el-select>
           </el-form-item>
           <div>
-            <el-button plain @click="actions.openSceneDialog">添加</el-button>
+            <el-button plain @click="actions.openSceneDialog">新增</el-button>
           </div>
         </div>
 
@@ -51,7 +51,7 @@
           v-if="state.node.config.managerConfig.deptSource === 'UNDERTAKE_DEPT'"
           class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-6 text-blue-600"
         >
-          “承担部门”来源于表单中的“承担部门”组件结果；若提单时未选到承担部门，当前仍会兼容回退到提单人部门。
+          “承担部门”来源于表单中的承担部门组件；若提单时未选到承担部门，系统会兼容回退到提单人部门。
         </p>
 
         <el-form-item label="部门级次" class="!mb-0">
@@ -72,7 +72,7 @@
         <div class="rounded-2xl bg-white p-4">
           <div class="flex flex-wrap items-center gap-3">
             <el-checkbox v-model="state.node.config.managerConfig.orgTreeLookupEnabled">
-              按照组织架构树向上查找
+              按组织架构树向上查找
             </el-checkbox>
             <span class="text-sm text-slate-500">未命中时继续向上查找上级主管</span>
           </div>
@@ -96,7 +96,7 @@
         <el-select
           v-model="state.node.config.designatedMemberConfig.userIds"
           multiple
-          filterable
+          filterable v-bind="globalFilterableSelectProps"
           clearable
           placeholder="请选择固定审批成员"
         >
@@ -108,6 +108,28 @@
           />
         </el-select>
       </el-form-item>
+    </div>
+
+    <div v-else-if="state.node.config.approverType === 'DESIGNATED_USER_GROUP'" class="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+      <el-form-item label="指定用户组" class="!mb-0">
+        <el-select
+          v-model="designatedUserGroupConfig.groupId"
+          filterable v-bind="globalFilterableSelectProps"
+          clearable
+          placeholder="请选择二级用户组"
+        >
+          <el-option
+            v-for="item in state.meta.userGroupOptions || []"
+            :key="item.value"
+            :label="item.label"
+            :value="Number(item.value)"
+          />
+        </el-select>
+      </el-form-item>
+
+      <p class="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-6 text-blue-600">
+        系统会读取所选二级用户组下命中的三级功能组成员，并按会签方式生成审批任务。
+      </p>
     </div>
 
     <div v-else class="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
@@ -122,7 +144,7 @@
         </el-select>
       </el-form-item>
       <p class="mt-3 text-sm leading-6 text-slate-500">
-        提单时由提单人在候选范围内手动选择审批人，本轮默认全体有效成员。
+        提单时由提单人在候选范围内手动选择审批人，本轮默认面向全体有效成员。
       </p>
     </div>
 
@@ -133,13 +155,13 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="操作类型" class="!mb-0">
+      <el-form-item label="审批方式" class="!mb-0">
         <el-radio-group v-model="state.node.config.approvalMode" class="flex flex-wrap gap-3">
           <el-radio-button
             v-for="item in state.meta.approvalModeOptions"
             :key="item.value"
             :label="item.value"
-            :disabled="state.isManagerMultiLevelApproval && item.value !== 'AND_SIGN'"
+            :disabled="isForcedAndSign && item.value !== 'AND_SIGN'"
           >
             {{ item.label }}
           </el-radio-button>
@@ -150,14 +172,21 @@
         v-if="state.isManagerMultiLevelApproval"
         class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-700"
       >
-        第 1..N 级主管共同审批：多级主管按同一审批节点会签处理，会自动包含第 1 到第 N 级主管，所有命中的主管都审批通过后，当前节点才会通过。
+        第 1..N 级主管共同审批：多级主管会按同一审批节点会签处理，自动包含第 1 到第 N 级主管，全部通过后当前节点才会通过。
+      </p>
+
+      <p
+        v-else-if="state.node.config.approverType === 'DESIGNATED_USER_GROUP'"
+        class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-700"
+      >
+        指定用户组模式固定按会签处理；若命中多个成员，全部审批通过后当前节点才会通过。
       </p>
 
       <el-form-item label="审批意见默认值" class="!mb-0">
         <el-select
           v-model="state.node.config.opinionDefaults"
           multiple
-          filterable
+          filterable v-bind="globalFilterableSelectProps"
           allow-create
           default-first-option
           placeholder="请输入或选择审批意见"
@@ -178,10 +207,14 @@
 </template>
 
 <script setup lang="ts">
-import type { PropType } from 'vue'
+import { computed, type PropType } from 'vue'
 import type { ProcessFlowMeta, ProcessFlowNode } from '@/api'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
-defineProps({
+
+type DesignatedUserGroupConfig = NonNullable<ProcessFlowNode['config']['designatedUserGroupConfig']>
+
+const props = defineProps({
   state: {
     type: Object as PropType<{
       node: ProcessFlowNode
@@ -199,5 +232,19 @@ defineProps({
     }>,
     required: true
   }
+})
+
+const isForcedAndSign = computed(() => (
+  props.state.isManagerMultiLevelApproval
+  || props.state.node.config.approverType === 'DESIGNATED_USER_GROUP'
+))
+
+const designatedUserGroupConfig = computed<DesignatedUserGroupConfig>(() => {
+  if (props.state.node.config.designatedUserGroupConfig) {
+    return props.state.node.config.designatedUserGroupConfig
+  }
+  const fallback: DesignatedUserGroupConfig = {}
+  props.state.node.config.designatedUserGroupConfig = fallback
+  return fallback
 })
 </script>

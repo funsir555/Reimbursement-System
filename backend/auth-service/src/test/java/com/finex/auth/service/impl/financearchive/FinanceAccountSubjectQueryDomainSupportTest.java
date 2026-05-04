@@ -80,6 +80,26 @@ class FinanceAccountSubjectQueryDomainSupportTest {
         assertFalse(detail.getHasChildren());
     }
 
+    @Test
+    void detailAndTreeUseActualChildrenInsteadOfStoredLeafFlag() {
+        FinanceAccountSubject root = subject("COMPANY_A", "1002", null, 1);
+        root.setLeafFlag(1);
+        FinanceAccountSubject child = subject("COMPANY_A", "100201", "1002", 2);
+        child.setLeafFlag(0);
+
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(root, child));
+        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(1L, 0L, 1L);
+        when(financeAccountSubjectMapper.selectOne(any())).thenReturn(root);
+
+        List<FinanceAccountSubjectSummaryVO> result = support.listSubjects("COMPANY_A", null, null, null, null);
+        FinanceAccountSubjectDetailVO detail = support.getSubjectDetail("COMPANY_A", "1002");
+
+        assertEquals(0, result.get(0).getLeafFlag());
+        assertEquals(1, result.get(0).getChildren().get(0).getLeafFlag());
+        assertEquals(0, detail.getLeafFlag());
+        assertTrue(detail.getHasChildren());
+    }
+
     private FinanceAccountSubject subject(String companyId, String subjectCode, String parentCode, int level) {
         FinanceAccountSubject subject = new FinanceAccountSubject();
         subject.setCompanyId(companyId);

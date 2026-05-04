@@ -29,6 +29,7 @@ export function useSystemSettingsEmployees(params: {
   const employeeForm = reactive<EmployeeEditorFormState>({
     username: '',
     name: '',
+    deptIds: [],
     statDepartmentBelong: '',
     statRegionBelong: '',
     statAreaBelong: '',
@@ -77,7 +78,12 @@ export function useSystemSettingsEmployees(params: {
     employeeForm.name = item?.name || ''
     employeeForm.phone = item?.phone
     employeeForm.email = item?.email
-    employeeForm.deptId = item?.deptId
+    employeeForm.deptId = undefined
+    employeeForm.deptIds = item?.departments?.length
+      ? item.departments.map((department) => department.deptId)
+      : item?.deptId
+        ? [item.deptId]
+        : []
     employeeForm.companyId = item?.companyId
     employeeForm.position = item?.position
     employeeForm.laborRelationBelong = item?.laborRelationBelong
@@ -90,7 +96,12 @@ export function useSystemSettingsEmployees(params: {
 
   async function saveEmployee(closeAfterSave: boolean) {
     const { userId, roleIds, ...rest } = employeeForm
-    const payload: EmployeeSavePayload = { ...rest, status: 1 }
+    const payload: EmployeeSavePayload = {
+      ...rest,
+      deptIds: [...(employeeForm.deptIds || [])],
+      status: 1
+    }
+    delete payload.deptId
     const employeeRes = userId
       ? await systemSettingsApi.updateEmployee(userId, payload)
       : await systemSettingsApi.createEmployee(payload)
@@ -163,6 +174,7 @@ export function useSystemSettingsEmployees(params: {
     employeeForm.phone = undefined
     employeeForm.email = undefined
     employeeForm.deptId = undefined
+    employeeForm.deptIds = []
     employeeForm.companyId = undefined
     employeeForm.position = undefined
     employeeForm.laborRelationBelong = undefined

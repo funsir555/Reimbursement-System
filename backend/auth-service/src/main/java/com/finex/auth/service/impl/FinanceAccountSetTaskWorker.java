@@ -228,6 +228,7 @@ public class FinanceAccountSetTaskWorker {
             codeByKey.put(templateSubject.getSubjectKey(), subjectCode);
             subjects.add(toAccountSubject(templateSubject, companyId, templateCode, subjectCode, parentCode));
         }
+        recalculateLeafFlags(subjects);
         return subjects;
     }
 
@@ -243,7 +244,7 @@ public class FinanceAccountSetTaskWorker {
         if (sourceSubjects.isEmpty()) {
             throw new IllegalStateException("参照账套缺少会计科目，不能创建");
         }
-        return sourceSubjects.stream().map(source -> {
+        List<FinanceAccountSubject> copiedSubjects = sourceSubjects.stream().map(source -> {
             FinanceAccountSubject target = new FinanceAccountSubject();
             target.setCompanyId(targetCompanyId);
             target.setSubjectCode(source.getSubjectCode());
@@ -267,7 +268,6 @@ public class FinanceAccountSetTaskWorker {
             target.setBr(source.getBr());
             target.setBe(source.getBe());
             target.setCgather(source.getCgather());
-            target.setLeafFlag(source.getLeafFlag());
             target.setBexchange(source.getBexchange());
             target.setBcash(source.getBcash());
             target.setBbank(source.getBbank());
@@ -304,6 +304,8 @@ public class FinanceAccountSetTaskWorker {
             target.setSortOrder(source.getSortOrder());
             return target;
         }).toList();
+        recalculateLeafFlags(copiedSubjects);
+        return copiedSubjects;
     }
 
     private FinanceAccountSubject toAccountSubject(
@@ -338,7 +340,6 @@ public class FinanceAccountSetTaskWorker {
         subject.setBr(defaultFlag(templateSubject.getBr(), defaultJournalFlag(subjectCode)));
         subject.setBe(defaultFlag(templateSubject.getBe(), defaultBankBookFlag(subjectCode)));
         subject.setCgather(firstNonBlank(templateSubject.getCgather(), "0"));
-        subject.setLeafFlag(templateSubject.getLeafFlag());
         subject.setBexchange(defaultFlag(templateSubject.getBexchange(), 0));
         subject.setBcash(defaultFlag(templateSubject.getBcash(), subjectCode.startsWith("1001") ? 1 : 0));
         subject.setBbank(defaultFlag(templateSubject.getBbank(), subjectCode.startsWith("1002") ? 1 : 0));
@@ -375,6 +376,20 @@ public class FinanceAccountSetTaskWorker {
         subject.setSortOrder(templateSubject.getSortOrder());
         return subject;
     }
+
+    private void recalculateLeafFlags(List<FinanceAccountSubject> subjects) {
+        Map<String, Boolean> parentCodeMap = new LinkedHashMap<>();
+        for (FinanceAccountSubject subject : subjects) {
+            String parentCode = trimToNull(subject.getParentSubjectCode());
+            if (parentCode != null) {
+                parentCodeMap.put(parentCode, Boolean.TRUE);
+            }
+        }
+        for (FinanceAccountSubject subject : subjects) {
+            subject.setLeafFlag(parentCodeMap.containsKey(trimToNull(subject.getSubjectCode())) ? 0 : 1);
+        }
+    }
+
     private FinanceAccountSet requireActiveReferenceAccountSet(FinanceAccountSetTaskPayload payload) {
         String referenceCompanyId = requireText(payload.getReferenceCompanyId(), "参照账套不能为空");
         if (referenceCompanyId.equals(payload.getTargetCompanyId())) {

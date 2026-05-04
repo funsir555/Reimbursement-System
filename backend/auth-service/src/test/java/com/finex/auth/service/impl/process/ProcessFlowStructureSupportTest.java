@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith(MockitoExtension.class)
 class ProcessFlowStructureSupportTest {
@@ -39,6 +40,7 @@ class ProcessFlowStructureSupportTest {
     @Mock private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     @Mock private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
+    @Mock private ProcessUserGroupResolverSupport userGroupResolverSupport;
 
     private ProcessFlowStructureSupport support;
 
@@ -56,7 +58,8 @@ class ProcessFlowStructureSupportTest {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
-                new ObjectMapper()
+                new ObjectMapper(),
+                userGroupResolverSupport
         );
     }
 
@@ -96,5 +99,41 @@ class ProcessFlowStructureSupportTest {
 
         assertEquals(2, routeA.getPriority());
         assertEquals(1, routeB.getPriority());
+    }
+
+    @Test
+    void normalizeRoutesRejectsMultipleDefaultRoutesInSameBranch() {
+        ProcessFlowRouteDTO routeA = new ProcessFlowRouteDTO();
+        routeA.setRouteKey("route-1");
+        routeA.setSourceNodeKey("branch-1");
+        routeA.setPriority(1);
+        routeA.setDefaultRoute(true);
+
+        ProcessFlowRouteDTO routeB = new ProcessFlowRouteDTO();
+        routeB.setRouteKey("route-2");
+        routeB.setSourceNodeKey("branch-1");
+        routeB.setPriority(2);
+        routeB.setDefaultRoute(true);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> support.normalizeRoutes(List.of(routeA, routeB))
+        );
+
+        assertEquals("同一分支块最多只能有 1 条 else 分支", error.getMessage());
+    }
+
+    @Test
+    void normalizeRoutesClearsConditionGroupsForDefaultRoute() {
+        ProcessFlowRouteDTO route = new ProcessFlowRouteDTO();
+        route.setRouteKey("route-1");
+        route.setSourceNodeKey("branch-1");
+        route.setPriority(1);
+        route.setDefaultRoute(true);
+        route.setConditionGroups(List.of(new com.finex.auth.dto.ProcessFlowConditionGroupDTO()));
+
+        support.normalizeRoutes(List.of(route));
+
+        assertEquals(List.of(), route.getConditionGroups());
     }
 }

@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ProcessFlowNode, ProcessFlowRoute } from '@/api'
 import type { FlowCanvasBlock, FlowCanvasInsertTarget } from '@/views/process/processFlowDesignerHelper'
 import ProcessFlowCanvasRenderer from '@/components/process/ProcessFlowCanvasRenderer.vue'
@@ -209,22 +209,114 @@ describe('ProcessFlowCanvasRenderer', () => {
     expect(branchShells[0]?.attributes('style')).toContain('--branch-shell-width: max-content;')
     expect(branchShells[0]?.attributes('style')).toContain('--branch-lane-min-width: 144px;')
     expect(branchShells[0]?.attributes('style')).toContain('--branch-element-width: 144px;')
+    expect(branchShells[0]?.attributes('style')).toContain('--branch-lane-gray-strength: 0%;')
     expect(branchShells[1]?.attributes('style')).toContain('--branch-shell-width: max-content;')
     expect(branchShells[1]?.attributes('style')).toContain('--branch-shell-max-width: none;')
     expect(branchShells[1]?.attributes('style')).toContain('--branch-element-width: 144px;')
+    expect(branchShells[1]?.attributes('style')).toContain('--branch-lane-gray-strength: 3%;')
     expect(branchShells[1]?.attributes('style')).not.toContain('--branch-shell-width: 100%;')
     expect(branchShells[1]?.attributes('style')).not.toContain('--branch-shell-max-width: 100%;')
     expect(wrapper.find('.branch-shell.is-compact .branch-lanes').exists()).toBe(true)
     expect(wrapper.find('.node-shell.is-lane-node .flow-node-card').exists()).toBe(true)
+    expect(wrapper.find('.flow-node-card').attributes('data-flow-interactive')).toBe('true')
+    expect(wrapper.find('.route-head-card').attributes('data-flow-interactive')).toBe('true')
+    expect(wrapper.find('.insert-trigger').attributes('data-flow-interactive')).toBe('true')
+    expect(wrapper.findAll('[data-testid="flow-step-connector"]')).toHaveLength(4)
+    expect(wrapper.findAll('.flow-stack.is-center-rail-only [data-testid="flow-step-connector"]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-testid="branch-split-line"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="branch-merge-line"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="branch-post-merge-connector"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="branch-lane-body"]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="branch-lane-center-rail"]')).toHaveLength(4)
+    expect(wrapper.find('.branch-lane-stack.is-lane-stack').exists()).toBe(true)
+    expect(wrapper.findAll('.branch-lane-stack.is-distributed-lane-stack')).toHaveLength(1)
+    expect(wrapper.findAll('[data-spacing-mode="distributed"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-spacing-mode="compact"]')).toHaveLength(3)
+    expect(wrapper.findAll('.flow-stack.is-distributed-spacing')).toHaveLength(1)
+    expect(wrapper.findAll('.flow-step.is-distributed-gap-step')).toHaveLength(1)
+    expect(wrapper.findAll('.branch-line-joint-slot')).toHaveLength(0)
     expect(wrapper.findAll('[data-testid="branch-add-route-trigger"]')).toHaveLength(2)
     expect(wrapper.findAll('.insert-trigger-shell.is-merged-target')).toHaveLength(1)
     expect(wrapper.findAll('.branch-post-merge-insert .insert-trigger')).toHaveLength(1)
     expect(wrapper.find('.branch-post-merge-insert .insert-trigger').attributes('aria-label')).toContain('2')
     expect(wrapper.findAll('[data-testid="branch-add-route-trigger"]')[0]?.attributes('aria-label')).toBeTruthy()
+    expect(wrapper.text()).not.toContain('条件设置')
+    expect(wrapper.text()).not.toContain('默认场景')
 
+    const routeHeadCard = wrapper.findAll('.route-head-card').find((item) => item.text().includes('Branch B'))
+    await routeHeadCard!.trigger('click')
+    expect(wrapper.emitted('select-route')).toEqual([['route-root-b']])
 
     const addRouteTriggers = wrapper.findAll('[data-testid="branch-add-route-trigger"]')
     await addRouteTriggers[addRouteTriggers.length - 1]!.trigger('click')
     expect(wrapper.emitted('add-route-lane')).toEqual([['branch-root']])
+
+    const nestedBranchShell = wrapper.findAll('.branch-shell')[1]
+    expect(nestedBranchShell?.attributes('style')).toContain('--branch-lane-mask-surface:')
+  })
+
+  it('emits copy drag payload for approval nodes when ctrl-dragging', async () => {
+    const wrapper = mount(ProcessFlowCanvasRenderer, {
+      props: {
+        blocks: buildBlocks(),
+        selectedNodeKey: '',
+        selectedRouteKey: '',
+        sceneNameById: () => '',
+        nodeTypeLabel: (nodeType: string) => nodeType,
+        nodeCardClass: (nodeType: string) => `is-${nodeType.toLowerCase()}`
+      },
+      global: {
+        stubs: {
+          'el-dropdown': DropdownStub,
+          'el-dropdown-menu': DropdownMenuStub,
+          'el-dropdown-item': DropdownItemStub,
+          'el-tag': TagStub
+        }
+      }
+    })
+
+    const dataTransfer = {
+      setData: vi.fn(),
+      setDragImage: vi.fn(),
+      effectAllowed: 'move'
+    }
+
+    await wrapper.find('.flow-node-card').trigger('dragstart', {
+      ctrlKey: true,
+      dataTransfer
+    })
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'approval-lane')
+    expect(wrapper.emitted('drag-node-start')).toEqual([
+      [{ nodeKey: 'approval-lane', mode: 'copy' }]
+    ])
+  })
+
+  it('keeps branch handles non-draggable and does not emit drag events from them', async () => {
+    const wrapper = mount(ProcessFlowCanvasRenderer, {
+      props: {
+        blocks: buildBlocks(),
+        selectedNodeKey: '',
+        selectedRouteKey: '',
+        sceneNameById: () => '',
+        nodeTypeLabel: (nodeType: string) => nodeType,
+        nodeCardClass: (nodeType: string) => `is-${nodeType.toLowerCase()}`
+      },
+      global: {
+        stubs: {
+          'el-dropdown': DropdownStub,
+          'el-dropdown-menu': DropdownMenuStub,
+          'el-dropdown-item': DropdownItemStub,
+          'el-tag': TagStub
+        }
+      }
+    })
+
+    const branchHandle = wrapper.get('.branch-drag-handle')
+    expect(branchHandle.attributes('draggable')).toBeUndefined()
+
+    await branchHandle.trigger('dragstart')
+
+    expect(wrapper.emitted('drag-node-start')).toBeUndefined()
   })
 })

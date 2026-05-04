@@ -196,9 +196,8 @@
           <el-select
             v-model="userActionForm.targetUserId"
             class="w-full"
-            filterable
+            filterable v-bind="globalFilterableSelectProps"
             remote
-            reserve-keyword
             clearable
             placeholder="搜索并选择处理人"
             :remote-method="loadActionUsers"
@@ -261,6 +260,8 @@ import { useExpenseDocumentDetailApprovalRuntime } from './composables/useExpens
 import { useExpenseDocumentDetailActionOwner } from './composables/useExpenseDocumentDetailActionOwner'
 import { useExpenseDocumentDetailDisplayOwner } from './composables/useExpenseDocumentDetailDisplayOwner'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 const route = useRoute()
 const storedUser = (readStoredUser() || {}) as { userId?: number; permissionCodes?: string[] }

@@ -23,6 +23,8 @@ import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessTemplateCategoryMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
+import com.finex.auth.mapper.ProcessUserGroupMapper;
+import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.ProcessExpenseDetailDesignService;
@@ -71,6 +73,10 @@ class ProcessManagementServiceImplTest {
     @Mock
     private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock
+    private ProcessUserGroupMapper processUserGroupMapper;
+    @Mock
+    private SystemCompanyMapper systemCompanyMapper;
+    @Mock
     private SystemDepartmentMapper systemDepartmentMapper;
     @Mock
     private UserMapper userMapper;
@@ -101,6 +107,8 @@ class ProcessManagementServiceImplTest {
                 customArchiveItemMapper,
                 customArchiveRuleMapper,
                 processExpenseTypeMapper,
+                processUserGroupMapper,
+                systemCompanyMapper,
                 systemDepartmentMapper,
                 userMapper,
                 processFormDesignService,

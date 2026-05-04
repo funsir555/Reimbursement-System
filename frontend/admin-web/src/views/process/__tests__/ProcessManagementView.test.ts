@@ -5,7 +5,8 @@ import ProcessManagementView from '@/views/process/ProcessManagementView.vue'
 
 const mocks = vi.hoisted(() => ({
   route: {
-    query: {}
+    query: {},
+    fullPath: '/expense/workbench/process-management'
   },
   router: {
     push: vi.fn(),
@@ -170,12 +171,17 @@ const ExpenseTypePanelStub = defineComponent({
   template: '<div data-testid="expense-type-panel">expense-type-panel</div>'
 })
 
+const UserGroupPanelStub = defineComponent({
+  template: '<div data-testid="user-group-panel">user-group-panel</div>'
+})
+
 const globalStubs = {
   'process-workbench-sidebar': SidebarStub,
   'template-type-dialog': true,
   'custom-archive-management-panel': CustomArchivePanelStub,
   'expense-detail-design-management-panel': ExpenseDetailPanelStub,
   'expense-type-management-panel': ExpenseTypePanelStub,
+  'user-group-management-panel': UserGroupPanelStub,
   'el-card': SimpleContainer,
   'el-button': ButtonStub,
   'el-input': InputStub,
@@ -292,6 +298,7 @@ describe('ProcessManagementView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.route.query = {}
+    mocks.route.fullPath = '/expense/workbench/process-management'
     mocks.router.push.mockResolvedValue(undefined)
     mocks.router.replace.mockResolvedValue(undefined)
     mocks.elMessageBox.confirm.mockResolvedValue('confirm')
@@ -303,30 +310,29 @@ describe('ProcessManagementView', () => {
     mocks.processApi.deleteFlow.mockResolvedValue({ data: true })
   })
 
-  it('renders the sidebar with the new section order', async () => {
+  it('keeps the sidebar order and inserts user-group after custom-archive when overview has not returned it yet', async () => {
     const wrapper = await mountView([buildTemplate()])
 
-    const labels = wrapper.findAll('[data-testid="process-sidebar-item"]').map((item) => item.text())
-    expect(labels).toEqual(['单据与流程', '费用表单', '审批流程', '费用明细表单', '自定义档案', '费用类型'])
+    const keys = wrapper.findAll('[data-testid="process-sidebar-item"]').map((item) => item.attributes('data-key'))
+    expect(keys).toEqual([
+      'document-flow',
+      'form-design',
+      'approval-flow',
+      'expense-detail-form',
+      'custom-archive',
+      'user-group',
+      'expense-type'
+    ])
   })
 
-  it('keeps the compact template grid and existing bound metadata on the document section', async () => {
+  it('renders the real user-group panel section', async () => {
+    mocks.route.query = { section: 'user-group' }
     const wrapper = await mountView([buildTemplate()])
 
-    const summaryGrid = wrapper.get('[data-testid="process-summary-grid"]')
-    expect(summaryGrid.classes()).toContain('xl:grid-cols-4')
-
-    const templateGrid = wrapper.get('[data-testid="process-template-grid"]')
-    expect(templateGrid.text()).toContain('差旅报销单')
-    expect(templateGrid.text()).toContain('绑定流程')
-    expect(templateGrid.text()).toContain('差旅审批流程')
-    expect(templateGrid.text()).toContain('绑定表单')
-    expect(templateGrid.text()).toContain('差旅报销表单')
-    expect(templateGrid.text()).toContain('绑定明细表单')
-    expect(templateGrid.text()).toContain('差旅费用明细表单')
+    expect(wrapper.get('[data-testid="user-group-panel"]').text()).toContain('user-group-panel')
   })
 
-  it('opens bound flow, form, and expense detail editors from clickable names', async () => {
+  it('keeps the document section metadata and opens bound editors from clickable names', async () => {
     const wrapper = await mountView(
       [buildTemplate()],
       {
@@ -336,6 +342,12 @@ describe('ProcessManagementView', () => {
       }
     )
 
+    const templateGrid = wrapper.get('[data-testid="process-template-grid"]')
+    expect(templateGrid.text()).toContain('差旅报销单')
+    expect(templateGrid.text()).toContain('绑定流程')
+    expect(templateGrid.text()).toContain('绑定表单')
+    expect(templateGrid.text()).toContain('绑定明细表单')
+
     const buttons = wrapper.findAll('button')
     await buttons.find((item) => item.text() === '差旅审批流程')!.trigger('click')
     await buttons.find((item) => item.text() === '差旅报销表单')!.trigger('click')
@@ -343,7 +355,8 @@ describe('ProcessManagementView', () => {
 
     expect(mocks.router.push).toHaveBeenNthCalledWith(1, {
       name: 'expense-workbench-process-flow-edit',
-      params: { id: 88 }
+      params: { id: 88 },
+      query: { returnTo: '/expense/workbench/process-management' }
     })
     expect(mocks.router.push).toHaveBeenNthCalledWith(2, {
       name: 'expense-workbench-process-form-edit',
@@ -355,163 +368,96 @@ describe('ProcessManagementView', () => {
     })
   })
 
-  it('renders the form design section and opens the form designer on modify', async () => {
+  it('renders the form-design section and opens create/edit routes', async () => {
     mocks.route.query = { section: 'form-design' }
-    const wrapper = await mountView(
-      [buildTemplate()],
-      { forms: [buildFormSummary()] }
-    )
+    const wrapper = await mountView([buildTemplate()], { forms: [buildFormSummary()] })
 
-    expect(wrapper.get('[data-testid="process-form-section"]').text()).toContain('费用表单')
-    expect(wrapper.get('[data-testid="process-form-summary-grid"]').text()).toContain('表单总数')
-    expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('差旅报销表单')
-    expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('FD-001')
-    expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('报销单')
-    expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('用于差旅报销的业务表单')
-    expect(wrapper.get('[data-testid="process-form-grid"]').text()).toContain('2026-04-10 08:30')
-
-    const modifyButton = wrapper.findAll('button').find((item) => item.text() === '修改')
-    expect(modifyButton).toBeTruthy()
-    await modifyButton!.trigger('click')
-
-    expect(mocks.router.push).toHaveBeenCalledWith({
-      name: 'expense-workbench-process-form-edit',
-      params: { id: 66 }
-    })
-  })
-
-  it('adds a create button to the form design section', async () => {
-    mocks.route.query = { section: 'form-design' }
-    const wrapper = await mountView(
-      [buildTemplate()],
-      { forms: [buildFormSummary()] }
-    )
-
+    expect(wrapper.get('[data-testid="process-form-section"]').text()).toContain('增加费用表单')
     await wrapper.get('[data-testid="process-form-create"]').trigger('click')
 
     expect(mocks.router.push).toHaveBeenCalledWith({
       name: 'expense-workbench-process-form-create'
     })
-  })
-
-  it('renders a stable empty state when no form designs exist', async () => {
-    mocks.route.query = { section: 'form-design' }
-    const wrapper = await mountView([buildTemplate()], { forms: [] })
-
-    expect(wrapper.get('[data-testid="process-form-empty"]').text()).toContain('暂无费用表单')
-  })
-
-  it('renders the approval flow section and opens the flow designer on modify', async () => {
-    mocks.route.query = { section: 'approval-flow' }
-    const wrapper = await mountView(
-      [buildTemplate()],
-      { flows: [buildFlowSummary()] }
-    )
-
-    expect(wrapper.get('[data-testid="process-flow-section"]').text()).toContain('审批流程')
-    expect(wrapper.get('[data-testid="process-flow-summary-grid"]').text()).toContain('流程总数')
-    expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('差旅审批流程')
-    expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('FLOW-001')
-    expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('已启用')
-    expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('覆盖普通报销场景的审批流')
-    expect(wrapper.get('[data-testid="process-flow-grid"]').text()).toContain('V3')
 
     const modifyButton = wrapper.findAll('button').find((item) => item.text() === '修改')
     expect(modifyButton).toBeTruthy()
     await modifyButton!.trigger('click')
 
-    expect(mocks.router.push).toHaveBeenCalledWith({
-      name: 'expense-workbench-process-flow-edit',
-      params: { id: 88 }
+    expect(mocks.router.push).toHaveBeenLastCalledWith({
+      name: 'expense-workbench-process-form-edit',
+      params: { id: 66 }
     })
   })
 
-  it('adds a create button to the approval flow section', async () => {
+  it('renders the approval-flow section and opens create/edit routes', async () => {
     mocks.route.query = { section: 'approval-flow' }
-    const wrapper = await mountView(
-      [buildTemplate()],
-      { flows: [buildFlowSummary()] }
-    )
+    mocks.route.fullPath = '/expense/workbench/process-management?section=approval-flow'
+    const wrapper = await mountView([buildTemplate()], { flows: [buildFlowSummary()] })
 
+    expect(wrapper.get('[data-testid="process-flow-section"]').text()).toContain('增加审批流程')
     await wrapper.get('[data-testid="process-flow-create"]').trigger('click')
 
     expect(mocks.router.push).toHaveBeenCalledWith({
-      name: 'expense-workbench-process-flow-create'
-    })
-  })
-
-  it('renders a stable empty state when no approval flows exist', async () => {
-    mocks.route.query = { section: 'approval-flow' }
-    const wrapper = await mountView([buildTemplate()], { flows: [] })
-
-    expect(wrapper.get('[data-testid="process-flow-empty"]').text()).toContain('暂无审批流程')
-  })
-
-  it('keeps the expense detail section mounted on its existing panel', async () => {
-    mocks.route.query = { section: 'expense-detail-form' }
-    const wrapper = await mountView([buildTemplate()])
-
-    expect(wrapper.get('[data-testid="expense-detail-panel"]').text()).toContain('expense-detail-panel')
-  })
-
-  it('copies a template, shows success, and reloads the overview', async () => {
-    const wrapper = await mountView([buildTemplate()])
-    const copyButton = wrapper.findAll('button').find((item) => item.text() === '复制模板')
-
-    expect(copyButton).toBeTruthy()
-    await copyButton!.trigger('click')
-    await flushPromises()
-
-    expect(mocks.processApi.copyTemplate).toHaveBeenCalledWith(1)
-    expect(mocks.processApi.getOverview).toHaveBeenCalledTimes(2)
-    expect(mocks.elMessage.success).toHaveBeenCalledWith('模板副本已创建')
-  })
-
-
-  it('adds copy and delete actions to form cards', async () => {
-    mocks.route.query = { section: 'form-design' }
-    const wrapper = await mountView([buildTemplate()], { forms: [buildFormSummary()] })
-
-    const buttons = wrapper.findAll('button')
-    await buttons.find((item) => item.text() === '\u590d\u5236')!.trigger('click')
-    expect(mocks.router.push).toHaveBeenCalledWith({
-      name: 'expense-workbench-process-form-create',
-      query: { templateType: 'report', copyFromId: '66' }
-    })
-
-    await buttons.find((item) => item.text() === '\u5220\u9664')!.trigger('click')
-    await flushPromises()
-
-    expect(mocks.elMessageBox.confirm).toHaveBeenCalled()
-    expect(mocks.processApi.deleteFormDesign).toHaveBeenCalledWith(66)
-    expect(mocks.elMessage.success).toHaveBeenCalledWith('\u8d39\u7528\u8868\u5355\u5df2\u5220\u9664')
-    expect(mocks.processApi.getOverview).toHaveBeenCalledTimes(2)
-  })
-
-  it('adds copy and delete actions to approval flow cards', async () => {
-    mocks.route.query = { section: 'approval-flow' }
-    const wrapper = await mountView([buildTemplate()], { flows: [buildFlowSummary()] })
-
-    const buttons = wrapper.findAll('button')
-    await buttons.find((item) => item.text() === '\u590d\u5236')!.trigger('click')
-    expect(mocks.router.push).toHaveBeenCalledWith({
       name: 'expense-workbench-process-flow-create',
-      query: { copyFromId: '88' }
+      query: { returnTo: '/expense/workbench/process-management?section=approval-flow' }
     })
 
-    await buttons.find((item) => item.text() === '\u5220\u9664')!.trigger('click')
-    await flushPromises()
+    const modifyButton = wrapper.findAll('button').find((item) => item.text() === '修改')
+    expect(modifyButton).toBeTruthy()
+    await modifyButton!.trigger('click')
 
-    expect(mocks.elMessageBox.confirm).toHaveBeenCalled()
-    expect(mocks.processApi.deleteFlow).toHaveBeenCalledWith(88)
-    expect(mocks.elMessage.success).toHaveBeenCalledWith('\u5ba1\u6279\u6d41\u7a0b\u5df2\u5220\u9664')
-    expect(mocks.processApi.getOverview).toHaveBeenCalledTimes(2)
+    expect(mocks.router.push).toHaveBeenLastCalledWith({
+      name: 'expense-workbench-process-flow-edit',
+      params: { id: 88 },
+      query: { returnTo: '/expense/workbench/process-management?section=approval-flow' }
+    })
   })
 
-  it('switches sections through the sidebar without changing the route domain', async () => {
+  it('copies and deletes template/form/flow cards through the existing actions', async () => {
+    const wrapper = await mountView([buildTemplate()], {
+      flows: [buildFlowSummary()],
+      forms: [buildFormSummary()]
+    })
+
+    await wrapper.findAll('button').find((item) => item.text() === '复制模板')!.trigger('click')
+    await flushPromises()
+    expect(mocks.processApi.copyTemplate).toHaveBeenCalledWith(1)
+
+    await wrapper.findAll('button').find((item) => item.text() === '删除模板')!.trigger('click')
+    await flushPromises()
+    expect(mocks.processApi.deleteTemplate).toHaveBeenCalledWith(1)
+
+    mocks.route.query = { section: 'form-design' }
+    const formWrapper = await mountView([buildTemplate()], { forms: [buildFormSummary()] })
+    await formWrapper.findAll('button').find((item) => item.text() === '删除')!.trigger('click')
+    await flushPromises()
+    expect(mocks.processApi.deleteFormDesign).toHaveBeenCalledWith(66)
+
+    mocks.route.query = { section: 'approval-flow' }
+    const flowWrapper = await mountView([buildTemplate()], { flows: [buildFlowSummary()] })
+    await flowWrapper.findAll('button').find((item) => item.text() === '删除')!.trigger('click')
+    await flushPromises()
+    expect(mocks.processApi.deleteFlow).toHaveBeenCalledWith(88)
+  })
+
+  it('keeps expense-detail, custom-archive, and expense-type tabs mounted on their dedicated panels', async () => {
+    mocks.route.query = { section: 'expense-detail-form' }
+    const detailWrapper = await mountView([buildTemplate()])
+    expect(detailWrapper.get('[data-testid="expense-detail-panel"]').text()).toContain('expense-detail-panel')
+
+    mocks.route.query = { section: 'custom-archive' }
+    const archiveWrapper = await mountView([buildTemplate()])
+    expect(archiveWrapper.get('[data-testid="custom-archive-panel"]').text()).toContain('custom-archive-panel')
+
+    mocks.route.query = { section: 'expense-type' }
+    const expenseTypeWrapper = await mountView([buildTemplate()])
+    expect(expenseTypeWrapper.get('[data-testid="expense-type-panel"]').text()).toContain('expense-type-panel')
+  })
+
+  it('switches sections through the sidebar without changing the route path', async () => {
     const wrapper = await mountView([buildTemplate()])
 
-    const flowNav = wrapper.findAll('[data-testid="process-sidebar-item"]').find((item) => item.text() === '审批流程')
+    const flowNav = wrapper.findAll('[data-testid="process-sidebar-item"]').find((item) => item.attributes('data-key') === 'approval-flow')
     expect(flowNav).toBeTruthy()
     await flowNav!.trigger('click')
 

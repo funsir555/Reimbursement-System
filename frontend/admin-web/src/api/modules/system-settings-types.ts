@@ -40,6 +40,11 @@ export interface DepartmentSavePayload {
   syncEnabled?: number
 }
 
+export interface EmployeeDepartmentRef {
+  deptId: number
+  deptName: string
+}
+
 export interface EmployeeRecord {
   userId: number
   username: string
@@ -50,6 +55,7 @@ export interface EmployeeRecord {
   companyName?: string
   deptId?: number
   deptName?: string
+  departments?: EmployeeDepartmentRef[]
   position?: string
   laborRelationBelong?: string
   statDepartmentBelong?: string
@@ -69,6 +75,7 @@ export interface EmployeeSavePayload {
   email?: string
   companyId?: string
   deptId?: number
+  deptIds?: number[]
   position?: string
   laborRelationBelong?: string
   statDepartmentBelong?: string

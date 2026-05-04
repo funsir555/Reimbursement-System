@@ -27,6 +27,8 @@ public class EmployeeVO {
 
     private String deptName;
 
+    private List<EmployeeDepartmentRefVO> departments = new ArrayList<>();
+
     private String position;
 
     private String laborRelationBelong;

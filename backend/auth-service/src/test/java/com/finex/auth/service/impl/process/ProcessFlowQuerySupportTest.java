@@ -44,6 +44,7 @@ class ProcessFlowQuerySupportTest {
     @Mock private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     @Mock private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
+    @Mock private ProcessUserGroupResolverSupport userGroupResolverSupport;
 
     private ProcessFlowQuerySupport support;
 
@@ -61,7 +62,8 @@ class ProcessFlowQuerySupportTest {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
-                new ObjectMapper()
+                new ObjectMapper(),
+                userGroupResolverSupport
         );
         support = new ProcessFlowQuerySupport(
                 processFlowMapper,

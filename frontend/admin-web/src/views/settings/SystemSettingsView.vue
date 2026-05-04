@@ -29,12 +29,17 @@
               canCreate: can('settings:organization:create'),
               canDelete: can('settings:organization:delete'),
               canSyncConfig: can('settings:organization:sync_config'),
-              canRunSync: can('settings:organization:run_sync')
+              canRunSync: can('settings:organization:run_sync'),
+              canEditEmployee: can('settings:employees:edit')
             }"
             :state="{
-              departments,
+              organizationTreeNodes,
               departmentExpandedKeys,
-              selectedDepartmentId,
+              selectedOrganizationNodeKey,
+              selectedOrganizationEmployee,
+              selectedOrganizationEmployeeSyncLocked,
+              selectedOrganizationNodeIsDepartment,
+              selectedOrganizationNodeIsEmployee,
               selectedDepartment,
               selectedDepartmentSyncLocked,
               departmentConfigForm,
@@ -43,6 +48,7 @@
               employeeOptions,
               departmentCoreFieldsReadonly,
               departmentStatEditable,
+              resolveEmployeeRoleNames,
               connectors,
               jobs,
               sourceLabelMap,
@@ -54,8 +60,11 @@
             }"
             :actions="{
               openDepartmentDialog,
+              openEmployeeDialog,
               handleDeleteDepartment,
-              handleDepartmentSelect,
+              handleOrganizationNodeSelect,
+              handleDepartmentNodeExpand,
+              handleDepartmentNodeCollapse,
               saveDepartmentConfig,
               saveConnector,
               runConnectorSync,
@@ -89,29 +98,17 @@
               jobs,
               isWecomConnector,
               resolveConnectorPlatformName,
-              resolveEmployeeRoleNames,
-              employeeDialogVisible,
-              employeeForm,
-              employeeSyncLocked,
-              employeeCoreFieldsReadonly,
-              canAssignEmployeeRoles,
-              employeeRoleOptions,
-              employeeHasSuperAdminRole,
-              departmentOptions,
-              companyOptions,
-              isSuperAdminRole
+              resolveEmployeeRoleNames
             }"
             :actions="{
               openEmployeeDialog,
               handleDeleteEmployee,
-              saveEmployee,
               saveConnector,
               runConnectorSync
             }"
             @update:employee-keyword="employeeKeyword = $event"
             @update:employee-status-filter="employeeStatusFilter = $event"
             @update:selected-employee="selectedEmployee = $event"
-            @update:employee-dialog-visible="employeeDialogVisible = $event"
           />
         </el-tab-pane>
 
@@ -253,11 +250,31 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <SystemSettingsEmployeeDialog
+      :model-value="employeeDialogVisible"
+      :state="{
+        employeeForm,
+        employeeSyncLocked,
+        employeeCoreFieldsReadonly,
+        canAssignEmployeeRoles,
+        employeeRoleOptions,
+        employeeHasSuperAdminRole,
+        departmentOptions,
+        companyOptions,
+        isSuperAdminRole
+      }"
+      :actions="{
+        saveEmployee
+      }"
+      @update:model-value="employeeDialogVisible = $event"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import SystemSettingsOverviewHero from './components/SystemSettingsOverviewHero.vue'
+import SystemSettingsEmployeeDialog from './components/SystemSettingsEmployeeDialog.vue'
 import SystemSettingsOrganizationSection from './components/SystemSettingsOrganizationSection.vue'
 import SystemSettingsEmployeesSection from './components/SystemSettingsEmployeesSection.vue'
 import SystemSettingsRolesSection from './components/SystemSettingsRolesSection.vue'
@@ -324,7 +341,12 @@ const {
 })
 
 const {
-  selectedDepartmentId,
+  selectedOrganizationNodeKey,
+  selectedOrganizationEmployee,
+  selectedOrganizationEmployeeSyncLocked,
+  selectedOrganizationNodeIsDepartment,
+  selectedOrganizationNodeIsEmployee,
+  organizationTreeNodes,
   departmentExpandedKeys,
   departmentDialogVisible,
   departmentForm,
@@ -338,11 +360,14 @@ const {
   selectedDepartmentSyncLocked,
   departmentStatEditable,
   applyDepartmentBootstrap,
-  handleDepartmentSelect,
+  handleOrganizationNodeSelect,
+  handleDepartmentNodeExpand,
+  handleDepartmentNodeCollapse,
   openDepartmentDialog,
   saveDepartment,
   saveDepartmentConfig,
-  handleDeleteDepartment
+  handleDeleteDepartment,
+  loadBootstrapKeepingDepartmentTreeState
 } = useSystemSettingsOrganization({
   departments,
   employees,
@@ -373,7 +398,7 @@ const {
   employees,
   roles,
   can,
-  loadBootstrap
+  loadBootstrap: loadBootstrapKeepingDepartmentTreeState
 })
 
 const {

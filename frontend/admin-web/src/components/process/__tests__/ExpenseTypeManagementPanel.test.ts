@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseTypeManagementPanel from '@/components/process/ExpenseTypeManagementPanel.vue'
+import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 
 const mocks = vi.hoisted(() => ({
   processApi: {
@@ -26,19 +27,27 @@ vi.mock('@/api', () => ({
   processApi: mocks.processApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
-vi.mock('@element-plus/icons-vue', () => ({
-  Check: { template: '<span />' },
-  CircleCheckFilled: { template: '<span />' },
-  Delete: { template: '<span />' },
-  Files: { template: '<span />' },
-  Plus: { template: '<span />' },
-  Search: { template: '<span />' }
-}))
+vi.mock('@element-plus/icons-vue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@element-plus/icons-vue')>()
+  return {
+    ...actual,
+    Check: { template: '<span />' },
+    CircleCheckFilled: { template: '<span />' },
+    Delete: { template: '<span />' },
+    Files: { template: '<span />' },
+    Plus: { template: '<span />' },
+    Search: { template: '<span />' }
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="header" /><slot /><slot name="footer" /></div>'
@@ -64,6 +73,25 @@ const InputStub = defineComponent({
   },
   emits: ['update:modelValue'],
   template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+})
+
+const SelectStub = defineComponent({
+  props: {
+    modelValue: {
+      type: [String, Number, Array],
+      default: ''
+    },
+    multiple: {
+      type: Boolean,
+      default: false
+    },
+    tagTooltip: {
+      type: Object,
+      default: undefined
+    }
+  },
+  emits: ['update:modelValue'],
+  template: '<div><slot /></div>'
 })
 
 const SwitchStub = defineComponent({
@@ -97,7 +125,7 @@ const globalStubs = {
   'el-empty': SimpleContainer,
   'el-form': SimpleContainer,
   'el-form-item': SimpleContainer,
-  'el-select': SimpleContainer,
+  'el-select': SelectStub,
   'el-option': SimpleContainer,
   'el-switch': SwitchStub,
   'el-skeleton': SimpleContainer
@@ -184,5 +212,14 @@ describe('ExpenseTypeManagementPanel', () => {
 
     expect(mocks.processApi.updateExpenseType).not.toHaveBeenCalled()
     expect(mocks.elMessage.warning).toHaveBeenCalledWith('费用类型名称最多 64 个字符')
+  })
+
+  it('uses the global collapsed tag tooltip config for multi-select user scope', async () => {
+    const wrapper = await mountView()
+
+    const multiSelect = wrapper.findAllComponents(SelectStub).find((item) => item.props('multiple') === true)
+
+    expect(multiSelect).toBeTruthy()
+    expect(multiSelect!.props('tagTooltip')).toEqual(globalCollapseTagTooltipProps)
   })
 })

@@ -413,7 +413,6 @@ class SystemSettingsServiceImplTest {
         when(userMapper.selectById(10L)).thenReturn(syncedUser);
         when(userMapper.selectList(any())).thenReturn(List.of(syncedUser));
         when(systemCompanyMapper.selectList(any())).thenReturn(List.of());
-        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of());
         when(systemUserRoleMapper.selectList(any())).thenReturn(List.of());
 
         EmployeeVO result = systemSettingsService.updateEmployee(10L, dto);

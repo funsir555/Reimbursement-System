@@ -756,7 +756,15 @@ abstract class AbstractFinanceOpeningBalanceSupport {
     }
 
     protected boolean isLeaf(FinanceAccountSubject subject) {
-        return subject != null && Objects.equals(subject.getLeafFlag(), 1);
+        if (subject == null) {
+            return false;
+        }
+        Long count = financeAccountSubjectMapper.selectCount(Wrappers.<FinanceAccountSubject>lambdaQuery()
+                .eq(FinanceAccountSubject::getCompanyId, subject.getCompanyId())
+                .eq(FinanceAccountSubject::getParentSubjectCode, subject.getSubjectCode())
+                .eq(FinanceAccountSubject::getStatus, 1)
+                .ne(FinanceAccountSubject::getBclose, 1));
+        return count == null || count == 0;
     }
 
     protected boolean hasAssist(FinanceAccountSubject subject) {
@@ -946,14 +954,15 @@ abstract class AbstractFinanceOpeningBalanceSupport {
 
     protected OpeningBalanceRowVO toRowVO(FinanceAccountSubject subject, GlAccsum row) {
         OpeningBalanceRowVO vo = new OpeningBalanceRowVO();
+        boolean leaf = isLeaf(subject);
         vo.setSubjectCode(subject.getSubjectCode());
         vo.setSubjectName(subject.getSubjectName());
         vo.setParentSubjectCode(subject.getParentSubjectCode());
         vo.setSubjectLevel(subject.getSubjectLevel());
         vo.setSortOrder(subject.getSortOrder());
-        vo.setLeafFlag(subject.getLeafFlag());
-        vo.setHasChildren(!isLeaf(subject));
-        vo.setEditable(isLeaf(subject));
+        vo.setLeafFlag(leaf ? 1 : 0);
+        vo.setHasChildren(!leaf);
+        vo.setEditable(leaf);
         vo.setAssistRequired(hasAssist(subject));
         vo.setBalanceDirection(subject.getBalanceDirection());
         vo.setBalanceDirectionLabel(isDebitDirection(subject.getBalanceDirection()) ? "借" : "贷");
@@ -997,8 +1006,18 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         option.setValue(String.valueOf(department.getId()));
         option.setCode(department.getDeptCode());
         option.setName(department.getDeptName());
-        option.setLabel(department.getDeptName());
+        option.setParentValue(department.getParentId() == null ? null : String.valueOf(department.getParentId()));
+        option.setLabel(buildDepartmentLabel(department.getDeptCode(), department.getDeptName(), option.getValue()));
         return option;
+    }
+
+    private String buildDepartmentLabel(String code, String name, String fallback) {
+        String normalizedCode = trimToNull(code);
+        String normalizedName = trimToNull(name);
+        if (normalizedCode != null && normalizedName != null) {
+            return normalizedCode + "  " + normalizedName;
+        }
+        return normalizedName != null ? normalizedName : normalizedCode != null ? normalizedCode : fallback;
     }
 
     protected FinanceVoucherOptionVO toUserOption(User user) {

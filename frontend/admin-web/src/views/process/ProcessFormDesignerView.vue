@@ -350,7 +350,7 @@
                     <el-select v-else-if="controlType(selectedBlock) === 'SELECT' || controlType(selectedBlock) === 'RADIO'" :model-value="stringDefaultValue(selectedBlock)" clearable placeholder="请选择默认值" @update:model-value="setSelectedBlockDefaultValue">
                       <el-option v-for="item in optionItems(selectedBlock)" :key="item.value" :label="item.label" :value="item.value" />
                     </el-select>
-                    <el-select v-else-if="controlType(selectedBlock) === 'MULTI_SELECT' || controlType(selectedBlock) === 'CHECKBOX'" :model-value="arrayDefaultValue(selectedBlock)" multiple clearable collapse-tags collapse-tags-tooltip placeholder="请选择默认值" @update:model-value="setSelectedBlockDefaultValue">
+                    <el-select v-else-if="controlType(selectedBlock) === 'MULTI_SELECT' || controlType(selectedBlock) === 'CHECKBOX'" :model-value="arrayDefaultValue(selectedBlock)" multiple clearable collapse-tags collapse-tags-tooltip :tag-tooltip="globalCollapseTagTooltipProps" placeholder="请选择默认值" @update:model-value="setSelectedBlockDefaultValue">
                       <el-option v-for="item in optionItems(selectedBlock)" :key="item.value" :label="item.label" :value="item.value" />
                     </el-select>
                     <el-input v-else :model-value="stringDefaultValue(selectedBlock)" placeholder="请输入默认值" @update:model-value="setSelectedBlockDefaultValue" />
@@ -620,6 +620,7 @@ import {
   type ProcessFormOption
 } from '@/api'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 import {
   CONTROL_PALETTE_ITEMS,
   CONTROL_PALETTE_CATEGORIES,

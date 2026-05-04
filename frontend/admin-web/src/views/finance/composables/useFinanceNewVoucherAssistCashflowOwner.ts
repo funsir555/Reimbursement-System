@@ -2,6 +2,7 @@ import { computed, nextTick, reactive, ref, watch, type ComputedRef, type Ref } 
 import type { FinanceVoucherMeta, FinanceVoucherOption } from '@/api'
 import { isZeroMoney } from '@/utils/money'
 import { showBusinessWarning } from '@/utils/businessWarning'
+import { buildDepartmentTreeOptions, filterDepartmentTreeNode } from '@/utils/departmentTree'
 
 type VoucherEntryRowLike = {
   localId: string
@@ -27,8 +28,6 @@ type VoucherAssistCapability = {
   project: boolean
   lockedProjectClassCode?: string
 }
-
-type DepartmentTreeOption = FinanceVoucherOption & { children: DepartmentTreeOption[] }
 
 type UseFinanceNewVoucherAssistCashflowOwnerOptions<TEntry extends VoucherEntryRowLike> = {
   voucherMeta: Ref<FinanceVoucherMeta | null>
@@ -366,35 +365,6 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
     }
   }
 
-  function buildDepartmentTreeOptions(optionList: FinanceVoucherOption[]) {
-    const nodeMap = new Map<string, DepartmentTreeOption>()
-    const roots: DepartmentTreeOption[] = []
-
-    optionList.forEach((item) => {
-      nodeMap.set(item.value, {
-        ...item,
-        label: formatVoucherOptionLabel(item),
-        children: []
-      })
-    })
-
-    optionList.forEach((item) => {
-      const node = nodeMap.get(item.value)
-      if (!node) return
-      const parentValue = normalizeText(item.parentValue)
-      if (parentValue && parentValue !== item.value) {
-        const parentNode = nodeMap.get(parentValue)
-        if (parentNode) {
-          parentNode.children.push(node)
-          return
-        }
-      }
-      roots.push(node)
-    })
-
-    return roots
-  }
-
   function validateEntrySelection(row: TEntry, rowNo: number, errors: string[]) {
     const meta = options.voucherMeta.value
     if (!meta) {
@@ -531,14 +501,6 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
     if (ensureRowCashFlowState(row)) {
       openCashFlowDialog(index)
     }
-  }
-
-  function filterDepartmentTreeNode(query: string, data?: DepartmentTreeOption) {
-    const keyword = normalizeText(query)?.toLowerCase()
-    if (!keyword) return true
-    return [data?.label, data?.code, data?.name, data?.value]
-      .filter((item): item is string => Boolean(item))
-      .some((item) => item.toLowerCase().includes(keyword))
   }
 
   function formatVoucherOptionLabel(option?: FinanceVoucherOption | null) {

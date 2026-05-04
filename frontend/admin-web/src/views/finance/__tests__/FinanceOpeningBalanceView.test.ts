@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FinanceOpeningBalanceView from '@/views/finance/FinanceOpeningBalanceView.vue'
 
 const EXPANDED_STORAGE_KEY = 'finance-opening-balance-expanded-keys'
+const OPEN_BOOK_REQUIRED_MESSAGE = '当前期间尚未开账，请先开账'
 
 const financeCompanyStore = reactive({
   currentCompanyId: 'COMPANY_A',
@@ -268,6 +269,39 @@ describe('FinanceOpeningBalanceView', () => {
 
     await vm.saveAll()
     expect(mocks.openingBalanceApi.commit).toHaveBeenCalled()
+  })
+
+  it('warns before open book for direct balance entry', async () => {
+    mocks.openingBalanceApi.getMeta.mockResolvedValue({ data: buildMeta(false) })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ subjectCode: string; draftBalance: string; mb: string }>
+      handleDirectBalanceClick: (row: { subjectCode: string; draftBalance: string; mb: string }) => void
+      handleRowDraftChange: (row: { subjectCode: string; draftBalance: string; mb: string }, value: string) => void
+    }
+
+    const bankRow = vm.rows.find((item) => item.subjectCode === '100201')
+    expect(bankRow).toBeTruthy()
+
+    vm.handleDirectBalanceClick(bankRow!)
+    vm.handleRowDraftChange(bankRow!, '99.00')
+
+    expect(mocks.message.warning).toHaveBeenCalledWith(OPEN_BOOK_REQUIRED_MESSAGE)
+    expect(bankRow?.draftBalance).toBe('80.00')
+  })
+
+  it('warns before open book for assist entry and does not load assist lines', async () => {
+    mocks.openingBalanceApi.getMeta.mockResolvedValue({ data: buildMeta(false) })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ children?: Array<{ subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string }> }>
+      openAssistDialog: (row: { subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string }) => Promise<void>
+    }
+
+    await vm.openAssistDialog(vm.rows[0].children?.[0] as { subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string })
+
+    expect(mocks.message.warning).toHaveBeenCalledWith(OPEN_BOOK_REQUIRED_MESSAGE)
+    expect(mocks.openingBalanceApi.getAssistBalances).not.toHaveBeenCalled()
   })
 
   it('keeps assist dialog changes in local draft and does not call direct assist save api', async () => {

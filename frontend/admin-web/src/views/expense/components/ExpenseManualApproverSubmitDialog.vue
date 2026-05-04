@@ -49,7 +49,8 @@
             multiple
             collapse-tags
             collapse-tags-tooltip
-            filterable
+            :tag-tooltip="globalCollapseTagTooltipProps"
+            filterable v-bind="globalFilterableSelectProps"
             clearable
             :placeholder="`请选择${node.nodeName || '该节点'}审批人`"
             @update:model-value="handleSelectionChange(node.nodeKey, $event)"
@@ -78,6 +79,9 @@
 
 <script setup lang="ts">
 import type { ExpenseApprovalTimelineItem, ExpenseManualApproverPreviewNode } from '@/api'
+import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 defineProps<{
   modelValue: boolean

@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type {
   ProcessFlowDetail,
@@ -28,6 +28,17 @@ export function useProcessFlowDesignerPageOrchestration() {
   const selectedRouteKey = ref('')
   const draggingNodeKey = ref('')
   const dropTargetKey = ref('')
+  const drawerVisible = ref(false)
+  const canvasScrollRef = ref<HTMLElement | null>(null)
+  const isCanvasPanning = ref(false)
+  const canvasPanState = reactive({
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    scrollLeft: 0,
+    scrollTop: 0,
+    moved: false
+  })
 
   const working = reactive<ProcessFlowDetail>(createEmptyFlow())
   const sceneDialog = reactive({
@@ -41,15 +52,16 @@ export function useProcessFlowDesignerPageOrchestration() {
     normalizeFlowDetail,
     assignCopiedFlow,
     restoreSelection,
-    selectNode,
-    selectRoute,
-    handleCanvasDragStart,
-    handleCanvasDragEnd,
+    selectNode: selectNodeInternal,
+    selectRoute: selectRouteInternal,
+    handleCanvasDragStart: handleCanvasDragStartInternal,
+    handleCanvasDragEnd: handleCanvasDragEndInternal,
     handleCanvasDragOver,
-    handleCanvasDrop,
-    handleCanvasInsert,
-    addRouteLane,
+    handleCanvasDrop: handleCanvasDropInternal,
+    handleCanvasInsert: handleCanvasInsertInternal,
+    addRouteLane: addRouteLaneInternal,
     updateSelectedRouteAttachBelowNodes,
+    updateSelectedRouteDefaultRoute,
     removeSelectedItem,
     removeSelectedRoute,
     removeSelectedNode,
@@ -58,17 +70,6 @@ export function useProcessFlowDesignerPageOrchestration() {
     removeConditionGroup,
     addCondition,
     removeCondition,
-    handleConditionFieldChange,
-    handleConditionOperatorChange,
-    operatorOptionsForField,
-    conditionValueOptions,
-    usesOptionSelect,
-    isNumberCondition,
-    isBetweenOperator,
-    isMultiOperator,
-    singleValuePlaceholder,
-    multiValuePlaceholder,
-    describeRouteConditions,
     sortRoutes,
     nodeTypeLabel,
     nodeCardClass,
@@ -98,7 +99,6 @@ export function useProcessFlowDesignerPageOrchestration() {
     selectedNode,
     selectedRoute,
     selectedRouteAttachBelowNodes,
-    activeBranchNode,
     currentBranchRoutes,
     currentFlowLabel,
     panelTitle,
@@ -129,9 +129,9 @@ export function useProcessFlowDesignerPageOrchestration() {
     parseCopyFromFlowId,
     isCreateRoute,
     createNewFlow,
-    openFlow,
+    openFlow: openFlowInternal,
     openCopiedFlow,
-    reloadPageData,
+    reloadPageData: reloadPageDataInternal,
     saveFlow,
     publishCurrentFlow,
     disableCurrentFlow,
@@ -167,8 +167,139 @@ export function useProcessFlowDesignerPageOrchestration() {
     sceneDialog.visible = true
   }
 
+  function openDrawer() {
+    drawerVisible.value = true
+  }
+
+  function collapseDrawer(options: { clearCurrentSelection?: boolean } = {}) {
+    drawerVisible.value = false
+    if (options.clearCurrentSelection) {
+      clearSelection()
+    }
+  }
+
+  function toggleDrawer() {
+    drawerVisible.value = !drawerVisible.value
+  }
+
+  function setCanvasScrollRef(element: Element | ComponentPublicInstance | null) {
+    canvasScrollRef.value = element instanceof HTMLElement ? element : null
+  }
+
+  function isCanvasInteractiveTarget(target: EventTarget | null) {
+    return target instanceof HTMLElement && Boolean(target.closest('[data-flow-interactive="true"]'))
+  }
+
+  function resetCanvasPanState() {
+    canvasPanState.pointerId = -1
+    canvasPanState.startX = 0
+    canvasPanState.startY = 0
+    canvasPanState.scrollLeft = 0
+    canvasPanState.scrollTop = 0
+    canvasPanState.moved = false
+    isCanvasPanning.value = false
+  }
+
+  function handleCanvasPointerDown(event: PointerEvent) {
+    const scrollElement = canvasScrollRef.value
+    if (!scrollElement || event.button !== 0 || isCanvasInteractiveTarget(event.target)) {
+      return
+    }
+    canvasPanState.pointerId = event.pointerId
+    canvasPanState.startX = event.clientX
+    canvasPanState.startY = event.clientY
+    canvasPanState.scrollLeft = scrollElement.scrollLeft
+    canvasPanState.scrollTop = scrollElement.scrollTop
+    canvasPanState.moved = false
+    scrollElement.setPointerCapture?.(event.pointerId)
+  }
+
+  function handleCanvasPointerMove(event: PointerEvent) {
+    const scrollElement = canvasScrollRef.value
+    if (!scrollElement || canvasPanState.pointerId !== event.pointerId) {
+      return
+    }
+    const deltaX = event.clientX - canvasPanState.startX
+    const deltaY = event.clientY - canvasPanState.startY
+    if (!canvasPanState.moved && (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4)) {
+      canvasPanState.moved = true
+      isCanvasPanning.value = true
+    }
+    if (!canvasPanState.moved) {
+      return
+    }
+    scrollElement.scrollLeft = canvasPanState.scrollLeft - deltaX
+    scrollElement.scrollTop = canvasPanState.scrollTop - deltaY
+  }
+
+  function finalizeCanvasPointer(event: PointerEvent, clearWhenTap: boolean) {
+    const scrollElement = canvasScrollRef.value
+    if (!scrollElement || canvasPanState.pointerId !== event.pointerId) {
+      return
+    }
+    const tappedBlankCanvas = !canvasPanState.moved
+    scrollElement.releasePointerCapture?.(event.pointerId)
+    resetCanvasPanState()
+    if (clearWhenTap && tappedBlankCanvas) {
+      collapseDrawer({ clearCurrentSelection: true })
+    }
+  }
+
+  function handleCanvasPointerUp(event: PointerEvent) {
+    finalizeCanvasPointer(event, true)
+  }
+
+  function handleCanvasPointerCancel(event: PointerEvent) {
+    finalizeCanvasPointer(event, false)
+  }
+
+  function selectNode(nodeKey: string) {
+    selectNodeInternal(nodeKey)
+    openDrawer()
+  }
+
+  function selectRoute(routeKey: string) {
+    selectRouteInternal(routeKey)
+    openDrawer()
+  }
+
+  function handleCanvasInsert(payload: Parameters<typeof handleCanvasInsertInternal>[0]) {
+    handleCanvasInsertInternal(payload)
+    openDrawer()
+  }
+
+  function addRouteLane(branchNodeKey: string) {
+    addRouteLaneInternal(branchNodeKey)
+    openDrawer()
+  }
+
+  function handleCanvasDragStart(payload: Parameters<typeof handleCanvasDragStartInternal>[0]) {
+    handleCanvasDragStartInternal(payload)
+  }
+
+  function handleCanvasDragEnd() {
+    handleCanvasDragEndInternal()
+  }
+
+  async function handleCanvasDrop(payload: Parameters<typeof handleCanvasDropInternal>[0]) {
+    const outcome = await handleCanvasDropInternal(payload)
+    if (outcome === 'copied') {
+      openDrawer()
+    }
+  }
+
   function resolveErrorMessage(error: unknown, fallback: string) {
     return error instanceof Error && error.message ? error.message : fallback
+  }
+
+  async function openFlow(flowId: number) {
+    collapseDrawer()
+    await openFlowInternal(flowId)
+  }
+
+  async function reloadPageData() {
+    collapseDrawer()
+    await reloadPageDataInternal()
   }
 
   function handleDesignerKeydown(event: KeyboardEvent) {
@@ -224,6 +355,7 @@ export function useProcessFlowDesignerPageOrchestration() {
 
   onBeforeUnmount(() => {
     window.removeEventListener('keydown', handleDesignerKeydown)
+    resetCanvasPanState()
   })
 
   const panelRemoveDisabled = computed(() =>
@@ -233,36 +365,28 @@ export function useProcessFlowDesignerPageOrchestration() {
   const routeConditionEditorBindings = computed(() => ({
     state: {
       route: selectedRoute.value!,
-      activeBranchNode: activeBranchNode.value,
       currentBranchRoutes: currentBranchRoutes.value,
       attachBelowEnabled: selectedRouteAttachBelowNodes.value
     },
     meta: {
-      branchConditionFields: metaOptions.value.branchConditionFields
-    },
-    helpers: {
-      describeRouteConditions,
-      operatorOptionsForField,
-      conditionValueOptions,
-      usesOptionSelect,
-      isNumberCondition,
-      isBetweenOperator,
-      isMultiOperator,
-      singleValuePlaceholder,
-      multiValuePlaceholder
+      branchConditionFields: metaOptions.value.branchConditionFields,
+      branchOperatorOptions: metaOptions.value.branchOperatorOptions,
+      companyOptions: metaOptions.value.companyOptions,
+      departmentOptions: metaOptions.value.departmentOptions,
+      userOptions: metaOptions.value.userOptions,
+      expenseTypeOptions: metaOptions.value.expenseTypeOptions,
+      archiveOptions: metaOptions.value.archiveOptions
     },
     actions: {
-      selectRoute,
       addRouteLane,
       removeSelectedItem,
       removeActiveBranchBlock,
       updateAttachBelowEnabled: updateSelectedRouteAttachBelowNodes,
+      updateDefaultRouteEnabled: updateSelectedRouteDefaultRoute,
       addConditionGroup,
       removeConditionGroup,
       addCondition,
-      removeCondition,
-      handleConditionFieldChange,
-      handleConditionOperatorChange
+      removeCondition
     }
   }))
 
@@ -306,9 +430,6 @@ export function useProcessFlowDesignerPageOrchestration() {
       currentBranchRoutes: currentBranchRoutes.value,
       currentFlowLabel: currentFlowLabel.value
     },
-    helpers: {
-      describeRouteConditions
-    },
     actions: {
       addRouteLane,
       selectRoute
@@ -316,6 +437,9 @@ export function useProcessFlowDesignerPageOrchestration() {
   }))
 
   return {
+    drawerVisible,
+    canvasScrollRef,
+    isCanvasPanning,
     listLoading,
     saving,
     publishing,
@@ -341,6 +465,14 @@ export function useProcessFlowDesignerPageOrchestration() {
     nodeTypeLabel,
     nodeCardClass,
     sceneName,
+    openDrawer,
+    collapseDrawer,
+    toggleDrawer,
+    setCanvasScrollRef,
+    handleCanvasPointerDown,
+    handleCanvasPointerMove,
+    handleCanvasPointerUp,
+    handleCanvasPointerCancel,
     selectNode,
     selectRoute,
     handleCanvasDragStart,
@@ -410,6 +542,7 @@ function emptyMeta(): ProcessFlowMeta {
     companyOptions: [],
     departmentOptions: [],
     userOptions: [],
+    userGroupOptions: [],
     expenseTypeOptions: [],
     archiveOptions: []
   }

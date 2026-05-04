@@ -44,8 +44,22 @@ type RuntimePayeeAccountSnapshot = {
   bankName?: string
 }
 
+type ExpenseVendorLengthField = keyof Pick<
+  FinanceVendorSavePayload,
+  | 'cVenName'
+  | 'cVenAbbName'
+  | 'cVenPerson'
+  | 'cVenPhone'
+  | 'receiptAccountName'
+  | 'cVenBank'
+  | 'cVenAccount'
+  | 'receiptBranchName'
+>
+
 const PERSONAL_PAYEE_PREFIX = 'PERSONAL_PAYEE:'
 const ENTERPRISE_DETAIL_TYPE = 'ENTERPRISE_TRANSACTION'
+const PERSONAL_PAYEE_CREATE_LABEL = '\u65b0\u589e\u6536\u6b3e\u4eba'
+const MISSING_PERSONAL_PAYEE_MESSAGE = '\u672a\u7ef4\u62a4\u6536\u6b3e\u4eba\u4fe1\u606f\uff0c\u8bf7\u5148\u65b0\u589e\u6536\u6b3e\u4eba'
 const PAYEE_PLACEHOLDER = '请选择收款人'
 const PAYEE_ACCOUNT_PLACEHOLDER = '请选择收款账户'
 const MISSING_VENDOR_BANK_INFO_MESSAGE = '未维护银行信息，请维护银行信息'
@@ -53,7 +67,7 @@ const LOAD_COUNTERPARTY_ERROR = '加载收款单位失败'
 const LOAD_PAYEE_ERROR = '加载收款人失败'
 const LOAD_PAYEE_ACCOUNT_ERROR = '加载收款账户失败'
 
-const EXPENSE_VENDOR_FIELD_MAX_LENGTH: Record<string, number> = {
+const EXPENSE_VENDOR_FIELD_MAX_LENGTH: Record<ExpenseVendorLengthField, number> = {
   cVenName: 128,
   cVenAbbName: 64,
   cVenPerson: 64,
@@ -113,6 +127,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
   const payeeAccountDropdownVisible = ref(false)
   const payeeAccountMissingInfoWarned = ref(false)
   const counterpartySelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
+  const payeeSelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
   const payeeAccountSelectRefs = ref<Record<string, FocusManagedSelectInstance | null>>({})
   const suppressLinkedFieldReset = ref(false)
   let linkedFieldResetSyncToken = 0
@@ -126,6 +141,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
   const vendorDraft = reactive<FinanceVendorSavePayload>(emptyVendorDraft())
   const personalPayeeDialogVisible = ref(false)
   const personalPayeeFieldKey = ref('')
+  let pendingPersonalPayeeDialogOpenTimer: ReturnType<typeof setTimeout> | null = null
 
   const paymentCompanyFieldKeys = computed(() => findBusinessFieldKeys('payment-company'))
   const payeeFieldKeys = computed(() => findBusinessFieldKeys('payee'))
@@ -174,12 +190,14 @@ export function useExpenseRuntimePaymentCounterparty(params: {
       payeeAccountOptions.value.length === 0
   )
 
-  const showPersonalPayeeCreateEntry = computed(
+  const showPersonalPayeeEmptyState = computed(
     () =>
       payeeDropdownVisible.value &&
       !payeeOptionsLoading.value &&
       payeeOptions.value.length === 0
   )
+
+  const showPersonalPayeeCreateEntry = computed(() => payeeDropdownVisible.value)
 
   const vendorDialogTitle = computed(() =>
     vendorDialogMode.value === 'edit' ? '新增银行账户' : '新增供应商'
@@ -563,6 +581,13 @@ export function useExpenseRuntimePaymentCounterparty(params: {
         : null
   }
 
+  function setPayeeSelectRef(fieldKey: string, instance: unknown) {
+    payeeSelectRefs.value[fieldKey] =
+      instance && typeof instance === 'object'
+        ? (instance as FocusManagedSelectInstance)
+        : null
+  }
+
   function setPayeeAccountSelectRef(fieldKey: string, instance: unknown) {
     payeeAccountSelectRefs.value[fieldKey] =
       instance && typeof instance === 'object'
@@ -635,6 +660,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
 
   function settleLinkedSelectInteractions() {
     Object.values(counterpartySelectRefs.value).forEach((instance) => closeManagedSelect(instance))
+    Object.values(payeeSelectRefs.value).forEach((instance) => closeManagedSelect(instance))
     Object.values(payeeAccountSelectRefs.value).forEach((instance) => closeManagedSelect(instance))
     clearActiveFieldInteraction()
   }
@@ -658,6 +684,8 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     value: RuntimePayeeSnapshot | '' | null | undefined
   ) {
     formData.value[fieldKey] = value || ''
+    settleLinkedSelectInteractions()
+    void nextTick(() => settleLinkedSelectInteractions())
   }
 
   function handlePayeeDropdownVisibleChange(visible: boolean) {
@@ -706,15 +734,38 @@ export function useExpenseRuntimePaymentCounterparty(params: {
   }
 
   function openPersonalPayeeDialog(fieldKey: string) {
+    clearPendingPersonalPayeeDialogOpen()
     personalPayeeFieldKey.value = fieldKey
     personalPayeeDialogVisible.value = true
   }
 
+  function openPersonalPayeeDialogFromPanel(fieldKey: string) {
+    clearPendingPersonalPayeeDialogOpen()
+    personalPayeeFieldKey.value = fieldKey
+    payeeDropdownVisible.value = false
+    settleLinkedSelectInteractions()
+    pendingPersonalPayeeDialogOpenTimer = setTimeout(() => {
+      pendingPersonalPayeeDialogOpenTimer = null
+      personalPayeeDialogVisible.value = true
+    }, 0)
+  }
+
   function handlePersonalPayeeDialogVisibleChange(visible: boolean) {
+    if (visible) {
+      clearPendingPersonalPayeeDialogOpen()
+    }
     personalPayeeDialogVisible.value = visible
     if (!visible) {
       personalPayeeFieldKey.value = ''
     }
+  }
+
+  function clearPendingPersonalPayeeDialogOpen() {
+    if (pendingPersonalPayeeDialogOpenTimer === null) {
+      return
+    }
+    clearTimeout(pendingPersonalPayeeDialogOpenTimer)
+    pendingPersonalPayeeDialogOpenTimer = null
   }
 
   async function handlePersonalPayeeSaved(payload: {
@@ -846,7 +897,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     ) {
       return incompleteBankDirectoryMessage
     }
-    const lengthRules = [
+    const lengthRules: Array<{ key: ExpenseVendorLengthField; label: string; max: number }> = [
       { key: 'cVenName', label: '供应商名称', max: EXPENSE_VENDOR_FIELD_MAX_LENGTH.cVenName },
       { key: 'cVenAbbName', label: '供应商简称', max: EXPENSE_VENDOR_FIELD_MAX_LENGTH.cVenAbbName },
       { key: 'cVenPerson', label: '联系人', max: EXPENSE_VENDOR_FIELD_MAX_LENGTH.cVenPerson },
@@ -863,7 +914,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
         label: '开户网点',
         max: EXPENSE_VENDOR_FIELD_MAX_LENGTH.receiptBranchName
       }
-    ] as const
+    ]
     for (const rule of lengthRules) {
       const value = String(vendorDraft[rule.key] || '').trim()
       if (value.length > rule.max) {
@@ -1003,6 +1054,8 @@ export function useExpenseRuntimePaymentCounterparty(params: {
 
   return {
     PAYEE_PLACEHOLDER,
+    PERSONAL_PAYEE_CREATE_LABEL,
+    MISSING_PERSONAL_PAYEE_MESSAGE,
     MISSING_VENDOR_BANK_INFO_MESSAGE,
     effectivePaymentCompanyId,
     selectedCounterpartyCode,
@@ -1015,6 +1068,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     visiblePayeeAccountOptions,
     counterpartyPlaceholder,
     payeeAccountPlaceholder,
+    showPersonalPayeeEmptyState,
     showPersonalPayeeCreateEntry,
     showVendorAccountMaintenanceEntry,
     vendorDialogVisible,
@@ -1033,6 +1087,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     buildPayeeSnapshot,
     buildPayeeAccountSnapshot,
     setCounterpartySelectRef,
+    setPayeeSelectRef,
     setPayeeAccountSelectRef,
     prepareDocumentPickerOpen,
     handleCounterpartySelection,
@@ -1041,6 +1096,7 @@ export function useExpenseRuntimePaymentCounterparty(params: {
     personalPayeeDialogVisible,
     handlePersonalPayeeDialogVisibleChange,
     openPersonalPayeeDialog,
+    openPersonalPayeeDialogFromPanel,
     handlePersonalPayeeSaved,
     openVendorDialog,
     closeVendorDialog,

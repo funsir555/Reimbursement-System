@@ -264,36 +264,20 @@
                             />
                           </el-select>
 
-                          <el-select
+                          <department-tree-select
                             v-if="isDepartmentField(rule) && isMultipleRule(rule)"
                             v-model="rule.compareValue"
+                            :options="meta?.departmentOptions || []"
                             multiple
-                            filterable
-                            collapse-tags
-                            collapse-tags-tooltip
                             placeholder="请选择部门"
-                          >
-                            <el-option
-                              v-for="dept in meta?.departmentOptions || []"
-                              :key="dept.value"
-                              :label="dept.label"
-                              :value="dept.value"
-                            />
-                          </el-select>
+                          />
 
-                          <el-select
+                          <department-tree-select
                             v-else-if="isDepartmentField(rule)"
                             v-model="rule.compareValue"
-                            filterable
+                            :options="meta?.departmentOptions || []"
                             placeholder="请选择部门"
-                          >
-                            <el-option
-                              v-for="dept in meta?.departmentOptions || []"
-                              :key="dept.value"
-                              :label="dept.label"
-                              :value="dept.value"
-                            />
-                          </el-select>
+                          />
 
                           <div
                             v-else-if="rule.operator === 'BETWEEN'"
@@ -326,11 +310,12 @@
                             v-else-if="isMultipleRule(rule)"
                             v-model="rule.compareValue"
                             multiple
-                            filterable
+                            filterable v-bind="globalFilterableSelectProps"
                             allow-create
                             default-first-option
                             collapse-tags
                             collapse-tags-tooltip
+                            :tag-tooltip="globalCollapseTagTooltipProps"
                             placeholder="请输入或选择多个值"
                           />
 
@@ -397,7 +382,11 @@ import {
   type ProcessCustomArchiveSavePayload,
   type ProcessCustomArchiveSummary
 } from '@/api'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
+import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 import { PM_NAME_MAX_LENGTH, validateArchiveRuleFieldKey, validateMaxLength } from '@/views/process/pmValidation'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 type ArchiveTypeValue = 'SELECT' | 'AUTO_RULE'
 

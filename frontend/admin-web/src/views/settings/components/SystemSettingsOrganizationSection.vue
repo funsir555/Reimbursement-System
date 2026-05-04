@@ -1,13 +1,18 @@
-﻿<template>
+<template>
   <div class="space-y-5">
     <SystemSettingsOrganizationTab
       :can-create="permissions.canCreate"
       :can-delete="permissions.canDelete"
       :can-sync-config="permissions.canSyncConfig"
       :can-run-sync="permissions.canRunSync"
-      :departments="state.departments"
+      :can-edit-employee="permissions.canEditEmployee"
+      :organization-tree-nodes="state.organizationTreeNodes"
       :department-expanded-keys="state.departmentExpandedKeys"
-      :selected-department-id="state.selectedDepartmentId"
+      :selected-organization-node-key="state.selectedOrganizationNodeKey"
+      :selected-organization-employee="state.selectedOrganizationEmployee"
+      :selected-organization-employee-sync-locked="state.selectedOrganizationEmployeeSyncLocked"
+      :selected-organization-node-is-department="state.selectedOrganizationNodeIsDepartment"
+      :selected-organization-node-is-employee="state.selectedOrganizationNodeIsEmployee"
       :selected-department="state.selectedDepartment"
       :selected-department-sync-locked="state.selectedDepartmentSyncLocked"
       :department-config-form="state.departmentConfigForm"
@@ -21,9 +26,13 @@
       :source-label-map="state.sourceLabelMap"
       :is-wecom-connector="state.isWecomConnector"
       :resolve-connector-platform-name="state.resolveConnectorPlatformName"
+      :resolve-employee-role-names="state.resolveEmployeeRoleNames"
       @create="actions.openDepartmentDialog()"
       @delete-selected="actions.handleDeleteDepartment()"
-      @select-department="actions.handleDepartmentSelect($event)"
+      @select-node="actions.handleOrganizationNodeSelect($event)"
+      @node-expand="actions.handleDepartmentNodeExpand($event)"
+      @node-collapse="actions.handleDepartmentNodeCollapse($event)"
+      @edit-employee="actions.openEmployeeDialog($event)"
       @save-config="actions.saveDepartmentConfig()"
       @save-connector="actions.saveConnector($event)"
       @run-connector="actions.runConnectorSync($event)"
@@ -64,7 +73,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="部门负责人">
-          <el-select v-model="state.departmentForm.leaderUserId" clearable filterable class="w-full">
+          <el-select v-model="state.departmentForm.leaderUserId" clearable filterable v-bind="globalFilterableSelectProps" class="w-full">
             <el-option
               v-for="item in state.employeeOptions"
               :key="item.userId"
@@ -93,14 +102,17 @@
 </template>
 
 <script setup lang="ts">
-import type { DepartmentTreeNode, SyncConnectorConfig, SyncJobRecord } from '@/api'
+import type { DepartmentTreeNode, EmployeeRecord, SyncConnectorConfig, SyncJobRecord } from '@/api'
 import type {
   CompanyOption,
   DepartmentConfigFormState,
   DepartmentFormState,
   EmployeeOption
 } from '../systemSettingsShared'
+import type { OrganizationTreeNode } from '../systemSettingsOrganizationTree'
 import SystemSettingsOrganizationTab from './SystemSettingsOrganizationTab.vue'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 defineProps<{
   permissions: {
@@ -108,11 +120,16 @@ defineProps<{
     canDelete: boolean
     canSyncConfig: boolean
     canRunSync: boolean
+    canEditEmployee: boolean
   }
   state: {
-    departments: DepartmentTreeNode[]
-    departmentExpandedKeys: number[]
-    selectedDepartmentId?: number
+    organizationTreeNodes: OrganizationTreeNode[]
+    departmentExpandedKeys: string[]
+    selectedOrganizationNodeKey?: string
+    selectedOrganizationEmployee?: EmployeeRecord
+    selectedOrganizationEmployeeSyncLocked: boolean
+    selectedOrganizationNodeIsDepartment: boolean
+    selectedOrganizationNodeIsEmployee: boolean
     selectedDepartment?: DepartmentTreeNode
     selectedDepartmentSyncLocked: boolean
     departmentConfigForm: DepartmentConfigFormState
@@ -126,14 +143,18 @@ defineProps<{
     sourceLabelMap: Record<string, string>
     isWecomConnector: (connector: SyncConnectorConfig) => boolean
     resolveConnectorPlatformName: (connector: SyncConnectorConfig) => string
+    resolveEmployeeRoleNames: (roleCodes?: string[]) => string[]
     departmentDialogVisible: boolean
     departmentForm: DepartmentFormState
     departmentOptions: DepartmentTreeNode[]
   }
   actions: {
     openDepartmentDialog: () => void
+    openEmployeeDialog: (item?: EmployeeRecord) => void
     handleDeleteDepartment: () => Promise<void>
-    handleDepartmentSelect: (node: DepartmentTreeNode) => void
+    handleOrganizationNodeSelect: (node: OrganizationTreeNode) => void
+    handleDepartmentNodeExpand: (node: OrganizationTreeNode) => void
+    handleDepartmentNodeCollapse: (node: OrganizationTreeNode) => void
     saveDepartmentConfig: () => Promise<void>
     saveConnector: (connector: SyncConnectorConfig) => Promise<void>
     runConnectorSync: (platformCode: string) => Promise<void>

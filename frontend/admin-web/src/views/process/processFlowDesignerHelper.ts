@@ -57,6 +57,15 @@ export type FlowMoveResult = FlowStateSnapshot & {
   reason: FlowMoveReason
 }
 
+export type FlowCopyReason = 'COPIED' | 'NOT_FOUND' | 'UNSUPPORTED'
+
+export type FlowCopyResult = {
+  nodes: ProcessFlowNode[]
+  copied: boolean
+  copiedNodeKey?: string
+  reason: FlowCopyReason
+}
+
 const AUTO_ROUTE_NAME_PREFIX = '条件分支 '
 
 export function normalizeContainerKey(value?: string | null): FlowContainerKey {
@@ -267,6 +276,48 @@ export function moveNodeIntoContainer(
   }
 }
 
+export function copyNodeIntoContainer(
+  nodes: ProcessFlowNode[],
+  nodeKey: string,
+  containerKey: FlowContainerKey,
+  index: number
+): FlowCopyResult {
+  const sourceNode = cloneValue(nodes).find((item) => item.nodeKey === nodeKey)
+  if (!sourceNode) {
+    return {
+      nodes: cloneValue(nodes),
+      copied: false,
+      reason: 'NOT_FOUND'
+    }
+  }
+
+  if (sourceNode.nodeType !== 'APPROVAL') {
+    return {
+      nodes: cloneValue(nodes),
+      copied: false,
+      reason: 'UNSUPPORTED'
+    }
+  }
+
+  const copiedNodeKey = createNodeKey(sourceNode.nodeType)
+  const inserted = insertNodeIntoContainer(
+    nodes,
+    {
+      ...cloneValue(sourceNode),
+      nodeKey: copiedNodeKey
+    },
+    containerKey,
+    index
+  )
+
+  return {
+    nodes: inserted.nodes,
+    copied: true,
+    copiedNodeKey,
+    reason: 'COPIED'
+  }
+}
+
 export function reindexFlowState(nodes: ProcessFlowNode[], routes: ProcessFlowRoute[]): FlowStateSnapshot {
   const nextNodes = cloneValue(nodes)
   const nextRoutes = cloneValue(routes)
@@ -294,13 +345,14 @@ export function reindexFlowState(nodes: ProcessFlowNode[], routes: ProcessFlowRo
   const branchNodeKeys = new Set(nextRoutes.map((item) => item.sourceNodeKey))
   branchNodeKeys.forEach((branchNodeKey) => {
     const ordered = orderRoutesForBranch(nextRoutes, branchNodeKey)
+    const defaultRouteKey = ordered.find((item) => item.defaultRoute)?.routeKey
     ordered.forEach((item, index) => {
       const target = nextRoutes.find((route) => route.routeKey === item.routeKey)
       if (!target) {
         return
       }
       target.priority = index + 1
-      target.defaultRoute = false
+      target.defaultRoute = Boolean(defaultRouteKey && item.routeKey === defaultRouteKey)
       target.attachBelowNodes = Boolean(index === 0 && item.attachBelowNodes)
       if (!target.routeName || isAutoRouteName(target.routeName)) {
         target.routeName = `${AUTO_ROUTE_NAME_PREFIX}${index + 1}`
@@ -546,6 +598,20 @@ function buildDisplayOrderHint(nodes: ProcessFlowNode[], index: number) {
 
 function createRouteKey(branchNodeKey: string, order: number) {
   return `${branchNodeKey}-route-${order}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
+function createNodeKey(nodeType: string) {
+  const stamp = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+  switch (nodeType) {
+    case 'CC':
+      return `cc-${stamp}`
+    case 'PAYMENT':
+      return `payment-${stamp}`
+    case 'BRANCH':
+      return `branch-${stamp}`
+    default:
+      return `approval-${stamp}`
+  }
 }
 
 function orderRoutesForBranch(routes: ProcessFlowRoute[], branchNodeKey: string) {

@@ -119,6 +119,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
      */
     protected FinanceAccountSubjectSummaryVO toSummary(FinanceAccountSubject subject) {
         FinanceAccountSubjectSummaryVO summary = new FinanceAccountSubjectSummaryVO();
+        Integer leafFlag = resolveLeafFlag(subject);
         summary.setSubjectCode(subject.getSubjectCode());
         summary.setSubjectName(subject.getSubjectName());
         summary.setParentSubjectCode(subject.getParentSubjectCode());
@@ -126,7 +127,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         summary.setBalanceDirection(subject.getBalanceDirection());
         summary.setSubjectCategory(subject.getSubjectCategory());
         summary.setChelp(subject.getChelp());
-        summary.setLeafFlag(subject.getLeafFlag());
+        summary.setLeafFlag(leafFlag);
         summary.setStatus(subject.getStatus());
         summary.setBclose(subject.getBclose());
         summary.setBperson(subject.getBperson());
@@ -142,7 +143,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         summary.setSortOrder(subject.getSortOrder());
         summary.setUpdatedAt(subject.getUpdatedAt());
         summary.setBdC(subject.getBdC());
-        summary.setHasChildren(hasChildren(subject.getCompanyId(), subject.getSubjectCode()));
+        summary.setHasChildren(!Objects.equals(leafFlag, 1));
         summary.setAuxiliarySummary(buildAuxiliarySummary(subject));
         summary.setCashBankSummary(buildCashBankSummary(subject));
         if (summary.getChildren() == null) {
@@ -156,6 +157,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
      */
     protected FinanceAccountSubjectDetailVO toDetail(FinanceAccountSubject subject) {
         FinanceAccountSubjectDetailVO detail = new FinanceAccountSubjectDetailVO();
+        Integer leafFlag = resolveLeafFlag(subject);
         detail.setId(subject.getId());
         detail.setCompanyId(subject.getCompanyId());
         detail.setSubjectCode(subject.getSubjectCode());
@@ -179,7 +181,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         detail.setBr(subject.getBr());
         detail.setBe(subject.getBe());
         detail.setCgather(subject.getCgather());
-        detail.setLeafFlag(subject.getLeafFlag());
+        detail.setLeafFlag(leafFlag);
         detail.setBexchange(subject.getBexchange());
         detail.setBcash(subject.getBcash());
         detail.setBbank(subject.getBbank());
@@ -216,7 +218,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         detail.setSortOrder(subject.getSortOrder());
         detail.setCreatedAt(subject.getCreatedAt());
         detail.setUpdatedAt(subject.getUpdatedAt());
-        detail.setHasChildren(hasChildren(subject.getCompanyId(), subject.getSubjectCode()));
+        detail.setHasChildren(!Objects.equals(leafFlag, 1));
         return detail;
     }
 
@@ -304,7 +306,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
      * 应用后端权威派生的受控字段。
      */
     protected void applyDerivedControlledFields(FinanceAccountSubject target, boolean createMode) {
-        target.setLeafFlag(createMode ? 1 : (hasChildren(target.getCompanyId(), target.getSubjectCode()) ? 0 : 1));
+        target.setLeafFlag(resolveLeafFlag(target));
         target.setCclassany(target.getSubjectCategory());
         target.setBproperty(resolveDefaultProperty(target.getBalanceDirection()));
         target.setCbookType(defaultBookType(target));
@@ -319,7 +321,7 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
         }
         if (!Objects.equals(before.getSubjectCategory(), after.getSubjectCategory())
                 || !Objects.equals(before.getBalanceDirection(), after.getBalanceDirection())
-                || !Objects.equals(before.getLeafFlag(), after.getLeafFlag())
+                || !Objects.equals(resolveLeafFlag(before), resolveLeafFlag(after))
                 || !Objects.equals(before.getBperson(), after.getBperson())
                 || !Objects.equals(before.getBcus(), after.getBcus())
                 || !Objects.equals(before.getBsup(), after.getBsup())
@@ -770,6 +772,18 @@ public abstract class AbstractFinanceAccountSubjectArchiveSupport {
                         .eq(FinanceAccountSubject::getParentSubjectCode, subjectCode)
         );
         return count != null && count > 0;
+    }
+
+    protected Integer resolveLeafFlag(FinanceAccountSubject subject) {
+        if (subject == null) {
+            return 0;
+        }
+        String companyId = trimToNull(subject.getCompanyId());
+        String subjectCode = trimToNull(subject.getSubjectCode());
+        if (companyId == null || subjectCode == null) {
+            return normalizeLeafFlag(subject.getLeafFlag(), 1);
+        }
+        return hasChildren(companyId, subjectCode) ? 0 : 1;
     }
 
     /**

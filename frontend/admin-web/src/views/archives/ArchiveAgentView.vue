@@ -29,7 +29,7 @@
           <el-select v-model="filters.status" clearable placeholder="状态筛选" @change="loadAgents()">
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
-          <el-select v-model="filters.tag" clearable filterable placeholder="标签筛选">
+          <el-select v-model="filters.tag" clearable filterable v-bind="globalFilterableSelectProps" placeholder="标签筛选">
             <el-option v-for="tag in availableTags" :key="tag" :label="tag" :value="tag" />
           </el-select>
         </div>
@@ -118,7 +118,7 @@
           </el-form-item>
           <el-form-item label="描述"><el-input v-model="editableAgent.agentDescription" type="textarea" :rows="3" maxlength="240" show-word-limit placeholder="说明这个 Agent 主要解决什么问题。" /></el-form-item>
           <el-form-item label="标签">
-            <el-select v-model="editableAgent.tags" multiple filterable allow-create default-first-option placeholder="输入并回车创建标签">
+            <el-select v-model="editableAgent.tags" multiple filterable v-bind="globalFilterableSelectProps" allow-create default-first-option placeholder="输入并回车创建标签">
               <el-option v-for="tag in availableTags" :key="`tag-${tag}`" :label="tag" :value="tag" />
             </el-select>
           </el-form-item>
@@ -322,6 +322,8 @@ import { Bell, Clock, Connection, DocumentCopy, FolderDelete, Plus, RefreshRight
 import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import { archiveAgentApi, type ArchiveAgentDetail, type ArchiveAgentMeta, type ArchiveAgentRunDetail, type ArchiveAgentRunRecord, type ArchiveAgentSavePayload, type ArchiveAgentSummary, type ArchiveAgentVersionRecord, type ArchiveAgentWorkflowEdge, type ArchiveAgentWorkflowNode } from '@/api'
 import { hasAnyPermission, readStoredUser } from '@/utils/permissions'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 type PromptConfig = { systemPrompt: string; rolePrompt: string; outputSchema: string; guardrails: string }
 type ModelConfig = { provider: string; model: string; temperature: number; maxTokens: number; timeoutSeconds: number; credentialCode: string }

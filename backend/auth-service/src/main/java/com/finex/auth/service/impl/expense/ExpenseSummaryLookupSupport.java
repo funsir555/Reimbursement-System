@@ -11,10 +11,12 @@ import com.finex.auth.entity.ProcessTemplateScope;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
+import com.finex.auth.support.UserDepartmentSupport;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -222,11 +224,18 @@ final class ExpenseSummaryLookupSupport extends AbstractExpenseSummarySupport {
         if (userMap == null || userMap.isEmpty() || departmentIds == null) {
             return;
         }
-        userMap.values().stream()
-                .map(User::getDeptId)
-                .filter(Objects::nonNull)
-                .map(String::valueOf)
-                .forEach(departmentIds::add);
+        Map<Long, List<Long>> departmentIdsByUserId = UserDepartmentSupport.loadDepartmentIdsByUserId(userMapper, userMap.keySet());
+        for (Map.Entry<Long, User> entry : userMap.entrySet()) {
+            List<Long> ids = departmentIdsByUserId.get(entry.getKey());
+            if (ids == null || ids.isEmpty()) {
+                Long deptId = entry.getValue() == null ? null : entry.getValue().getDeptId();
+                if (deptId != null) {
+                    departmentIds.add(String.valueOf(deptId));
+                }
+                continue;
+            }
+            ids.stream().map(String::valueOf).forEach(departmentIds::add);
+        }
     }
 
     ExpenseSummaryAssembler.SummaryMetadata buildMetadata(
@@ -239,8 +248,21 @@ final class ExpenseSummaryLookupSupport extends AbstractExpenseSummarySupport {
             Map<String, Map<String, String>> archiveItemLabelMap
     ) {
         User submitter = submitterUserId == null ? null : userMap.get(submitterUserId);
+        String submitterDeptName = null;
+        if (submitter != null && submitter.getId() != null) {
+            submitterDeptName = UserDepartmentSupport.joinDepartmentNames(
+                    UserDepartmentSupport.loadDepartmentRefsByUserId(
+                            userMapper,
+                            systemDepartmentMapper,
+                            List.of(submitter.getId())
+                    ).getOrDefault(submitter.getId(), Collections.emptyList())
+            );
+            if (trimToNull(submitterDeptName) == null && submitter.getDeptId() != null) {
+                submitterDeptName = departmentNameMap.get(String.valueOf(submitter.getDeptId()));
+            }
+        }
         return new ExpenseSummaryAssembler.SummaryMetadata(
-                submitter == null || submitter.getDeptId() == null ? null : departmentNameMap.get(String.valueOf(submitter.getDeptId())),
+                trimToNull(submitterDeptName),
                 draft == null ? null : draft.getPaymentCompanyId(),
                 draft == null ? null : resolvePaymentCompanyName(draft.getPaymentCompanyId(), companyMap),
                 draft == null ? null : resolvePartyName(draft.getPayeeValue(), userMap, vendorMap),

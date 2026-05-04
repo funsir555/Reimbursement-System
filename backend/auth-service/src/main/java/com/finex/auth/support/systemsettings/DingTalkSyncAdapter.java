@@ -22,8 +22,8 @@ public class DingTalkSyncAdapter implements OrganizationSyncAdapter {
                         new ExternalDepartmentData("DD_OPERATE", "钉钉运营中心", "DD_ROOT", "ding-operate", 1)
                 ),
                 List.of(
-                        new ExternalEmployeeData("ding.finance", "钉钉财务专员", "13900001111", "ding.finance@finex.com", "DD_FINANCE", "财务专员", "集团总部", "ding-user-01", 1),
-                        new ExternalEmployeeData("ding.ops", "钉钉运营经理", "13900001112", "ding.ops@finex.com", "DD_OPERATE", "运营经理", "集团总部", "ding-user-02", 1)
+                        new ExternalEmployeeData("ding.finance", "钉钉财务专员", "13900001111", "ding.finance@finex.com", List.of("DD_FINANCE"), "财务专员", "集团总部", "ding-user-01", 1),
+                        new ExternalEmployeeData("ding.ops", "钉钉运营经理", "13900001112", "ding.ops@finex.com", List.of("DD_OPERATE"), "运营经理", "集团总部", "ding-user-02", 1)
                 )
         );
     }

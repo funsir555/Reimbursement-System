@@ -90,6 +90,7 @@ import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.UserDepartmentSupport;
 import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.FinanceVendorService;
 import com.finex.auth.service.NotificationService;
@@ -2084,8 +2085,8 @@ class AbstractExpenseDocumentSupport {
         if (currentUser != null && currentUser.getId() != null) {
             context.put("submitterUserId", currentUser.getId());
         }
-        if (currentUser != null && currentUser.getDeptId() != null) {
-            context.put("submitterDeptId", currentUser.getDeptId());
+        if (currentUser != null) {
+            putSubmitterDepartmentConditionContext(context, currentUser);
         }
         BigDecimal amount = resolveTotalAmount(formData, expenseDetails, template.getExpenseDetailModeDefault());
         if (amount != null) {
@@ -2370,26 +2371,46 @@ class AbstractExpenseDocumentSupport {
         if (!hasManualSelectApprovalNode(flowSnapshot)) {
             return Collections.emptyList();
         }
-        Map<Long, String> departmentNameMap = systemDepartmentMapper.selectList(
-                Wrappers.<SystemDepartment>lambdaQuery().eq(SystemDepartment::getStatus, 1)
-        ).stream().collect(Collectors.toMap(
-                SystemDepartment::getId,
-                SystemDepartment::getDeptName,
-                (left, right) -> left,
-                LinkedHashMap::new
-        ));
-        return userMapper.selectList(
+        List<User> users = userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
                         .eq(User::getStatus, 1)
                         .orderByAsc(User::getName, User::getId)
-        ).stream().map(user -> {
+        );
+        Map<Long, List<com.finex.auth.dto.EmployeeDepartmentRefVO>> departmentsByUserId =
+                UserDepartmentSupport.loadDepartmentRefsByUserId(
+                        userMapper,
+                        systemDepartmentMapper,
+                        users.stream().map(User::getId).toList()
+                );
+        return users.stream().map(user -> {
             ProcessFormOptionVO option = new ProcessFormOptionVO();
-            String deptName = user.getDeptId() == null ? null : departmentNameMap.get(user.getDeptId());
+            String deptName = UserDepartmentSupport.joinDepartmentNames(
+                    departmentsByUserId.getOrDefault(user.getId(), Collections.emptyList())
+            );
             String baseLabel = firstNonBlank(trimToNull(user.getName()), trimToNull(user.getUsername()), "\u672a\u547d\u540d\u7528\u6237");
-            option.setLabel(baseLabel + (deptName == null ? "" : " / " + deptName));
+            option.setLabel(baseLabel + (trimToNull(deptName) == null ? "" : " / " + deptName));
             option.setValue(String.valueOf(user.getId()));
             return option;
         }).toList();
+    }
+
+    private void putSubmitterDepartmentConditionContext(Map<String, Object> context, User user) {
+        if (context == null || user == null) {
+            return;
+        }
+        Long userId = user.getId();
+        List<Long> submitterDeptIds = userId == null
+                ? Collections.emptyList()
+                : UserDepartmentSupport.loadDepartmentIdsByUserId(userMapper, List.of(userId))
+                .getOrDefault(userId, Collections.emptyList());
+        if (submitterDeptIds.isEmpty() && user.getDeptId() != null) {
+            submitterDeptIds = List.of(user.getDeptId());
+        }
+        if (submitterDeptIds.isEmpty()) {
+            return;
+        }
+        context.put("submitterDeptIds", submitterDeptIds);
+        context.put("submitterDeptId", submitterDeptIds.get(0));
     }
 
     private boolean hasManualSelectApprovalNode(Map<String, Object> flowSnapshot) {
@@ -2509,12 +2530,7 @@ class AbstractExpenseDocumentSupport {
                 Wrappers.<SystemDepartment>lambdaQuery()
                         .eq(SystemDepartment::getStatus, 1)
                         .orderByAsc(SystemDepartment::getSortOrder, SystemDepartment::getId)
-        ).stream().map(item -> {
-            ProcessFormOptionVO option = new ProcessFormOptionVO();
-            option.setLabel(item.getDeptName());
-            option.setValue(String.valueOf(item.getId()));
-            return option;
-        }).toList();
+        ).stream().map(this::toDepartmentOption).toList();
     }
 
     /**
@@ -2538,12 +2554,27 @@ class AbstractExpenseDocumentSupport {
                         .eq(SystemDepartment::getStatus, 1)
                         .in(SystemDepartment::getId, normalizedIds)
                         .orderByAsc(SystemDepartment::getSortOrder, SystemDepartment::getId)
-        ).stream().map(item -> {
-            ProcessFormOptionVO option = new ProcessFormOptionVO();
-            option.setLabel(item.getDeptName());
-            option.setValue(String.valueOf(item.getId()));
-            return option;
-        }).toList();
+        ).stream().map(this::toDepartmentOption).toList();
+    }
+
+    private ProcessFormOptionVO toDepartmentOption(SystemDepartment department) {
+        String value = String.valueOf(department.getId());
+        ProcessFormOptionVO option = new ProcessFormOptionVO();
+        option.setValue(value);
+        option.setCode(department.getDeptCode());
+        option.setName(department.getDeptName());
+        option.setParentValue(department.getParentId() == null ? null : String.valueOf(department.getParentId()));
+        option.setLabel(formatDepartmentLabel(department.getDeptCode(), department.getDeptName(), value));
+        return option;
+    }
+
+    private String formatDepartmentLabel(String code, String name, String fallback) {
+        String normalizedCode = trimToNull(code);
+        String normalizedName = trimToNull(name);
+        if (normalizedCode != null && normalizedName != null) {
+            return normalizedCode + "  " + normalizedName;
+        }
+        return normalizedName != null ? normalizedName : normalizedCode != null ? normalizedCode : fallback;
     }
 
     /**

@@ -36,6 +36,8 @@ import java.util.stream.Collectors;
 
 public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSupport {
 
+    private final ProcessUserGroupResolverSupport userGroupResolverSupport;
+
     public ProcessFlowStructureSupport(
             ProcessFlowMapper processFlowMapper,
             ProcessFlowVersionMapper processFlowVersionMapper,
@@ -48,7 +50,8 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
             ProcessExpenseTypeMapper processExpenseTypeMapper,
             ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper,
             ProcessDocumentTemplateMapper processDocumentTemplateMapper,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ProcessUserGroupResolverSupport userGroupResolverSupport
     ) {
         super(
                 processFlowMapper,
@@ -64,6 +67,7 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
                 processDocumentTemplateMapper,
                 objectMapper
         );
+        this.userGroupResolverSupport = userGroupResolverSupport;
     }
 
     public void validateFlowSave(ProcessFlowSaveDTO dto) {
@@ -167,7 +171,11 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
             if (route.getPriority() == null) {
                 route.setPriority(index + 1);
             }
+            route.setDefaultRoute(Boolean.TRUE.equals(route.getDefaultRoute()));
             route.setAttachBelowNodes(Boolean.TRUE.equals(route.getAttachBelowNodes()));
+            if (Boolean.TRUE.equals(route.getDefaultRoute())) {
+                route.setConditionGroups(new ArrayList<>());
+            }
             if (route.getConditionGroups() == null) {
                 route.setConditionGroups(new ArrayList<>());
             }
@@ -186,6 +194,12 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
                     .count();
             if (attachedCount > 1) {
                 throw new IllegalStateException("同一分支块最多只能有 1 条通道开启附带下方节点");
+            }
+            long defaultRouteCount = branchRoutes.stream()
+                    .filter(item -> Boolean.TRUE.equals(item.getDefaultRoute()))
+                    .count();
+            if (defaultRouteCount > 1) {
+                throw new IllegalStateException("同一分支块最多只能有 1 条 else 分支");
             }
             normalizeBranchRoutePriorities(branchRoutes);
         }
@@ -227,8 +241,10 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
         }
         Map<String, Object> managerConfig = normalizeManagerConfig(config.get("managerConfig"));
         Map<String, Object> designatedMemberConfig = normalizeDesignatedMemberConfig(config.get("designatedMemberConfig"));
+        Map<String, Object> designatedUserGroupConfig = normalizeDesignatedUserGroupConfig(config.get("designatedUserGroupConfig"));
         Map<String, Object> manualSelectConfig = normalizeManualSelectConfig(config.get("manualSelectConfig"));
-        if (shouldForceManagerAndSign(approverType, managerConfig)) {
+        if (shouldForceManagerAndSign(approverType, managerConfig)
+                || APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
             approvalMode = APPROVAL_MODE_AND_SIGN;
         }
         config.put("approvalMode", approvalMode);
@@ -236,6 +252,7 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
         config.put("specialSettings", toStringList(config.get("specialSettings")));
         config.put("managerConfig", managerConfig);
         config.put("designatedMemberConfig", designatedMemberConfig);
+        config.put("designatedUserGroupConfig", designatedUserGroupConfig);
         config.put("manualSelectConfig", manualSelectConfig);
 
         if (strictValidation && APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
@@ -244,6 +261,13 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
                 throw new IllegalStateException("指定成员至少选择一名用户");
             }
             validateActiveUsers(userIds);
+        }
+        if (strictValidation && APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
+            Long groupId = asLong(designatedUserGroupConfig.get("groupId"));
+            if (groupId == null) {
+                throw new IllegalStateException("指定用户组至少选择一个 2 级用户组");
+            }
+            userGroupResolverSupport.requireSecondLevelGroup(groupId);
         }
         return config;
     }
@@ -330,6 +354,14 @@ public class ProcessFlowStructureSupport extends AbstractProcessFlowDesignSuppor
         Map<String, Object> raw = toObjectMap(source);
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("candidateScope", asText(raw.get("candidateScope"), MANUAL_SCOPE_ALL_ACTIVE_USERS));
+        return config;
+    }
+
+    public Map<String, Object> normalizeDesignatedUserGroupConfig(Object source) {
+        Map<String, Object> raw = toObjectMap(source);
+        Map<String, Object> config = new LinkedHashMap<>();
+        Long groupId = asLong(raw.get("groupId"));
+        config.put("groupId", groupId);
         return config;
     }
 

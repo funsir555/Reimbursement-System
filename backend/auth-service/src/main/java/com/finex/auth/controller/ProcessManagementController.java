@@ -37,6 +37,10 @@ import com.finex.auth.dto.ProcessTemplateFormOptionsVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.dto.ProcessTemplateSaveResultVO;
 import com.finex.auth.dto.ProcessTemplateTypeVO;
+import com.finex.auth.dto.ProcessUserGroupDetailVO;
+import com.finex.auth.dto.ProcessUserGroupMetaVO;
+import com.finex.auth.dto.ProcessUserGroupSaveDTO;
+import com.finex.auth.dto.ProcessUserGroupTreeVO;
 import com.finex.auth.interceptor.TemplateSaveTraceInterceptor;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ProcessManagementService;
@@ -289,6 +293,49 @@ public class ProcessManagementController {
     public Result<Boolean> deleteExpenseType(@PathVariable Long id, HttpServletRequest request) {
         accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
         return Result.success("Expense type deleted", processManagementService.deleteExpenseType(id));
+    }
+
+    @GetMapping("/user-groups/tree")
+    public Result<List<ProcessUserGroupTreeVO>> listUserGroupTree(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.listUserGroupTree());
+    }
+
+    @GetMapping("/user-groups/meta")
+    public Result<ProcessUserGroupMetaVO> userGroupMeta(HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.getUserGroupMeta());
+    }
+
+    @GetMapping("/user-groups/{id}")
+    public Result<ProcessUserGroupDetailVO> userGroupDetail(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_VIEW);
+        return Result.success(processManagementService.getUserGroupDetail(id));
+    }
+
+    @PostMapping("/user-groups")
+    public Result<ProcessUserGroupDetailVO> createUserGroup(
+            @Valid @RequestBody ProcessUserGroupSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_CREATE);
+        return Result.success("\u7528\u6237\u7ec4\u5df2\u4fdd\u5b58", processManagementService.createUserGroup(dto));
+    }
+
+    @PutMapping("/user-groups/{id}")
+    public Result<ProcessUserGroupDetailVO> updateUserGroup(
+            @PathVariable Long id,
+            @Valid @RequestBody ProcessUserGroupSaveDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("\u7528\u6237\u7ec4\u5df2\u66f4\u65b0", processManagementService.updateUserGroup(id, dto));
+    }
+
+    @DeleteMapping("/user-groups/{id}")
+    public Result<Boolean> deleteUserGroup(@PathVariable Long id, HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), PROCESS_EDIT);
+        return Result.success("\u7528\u6237\u7ec4\u5df2\u5220\u9664", processManagementService.deleteUserGroup(id));
     }
 
     // 处理 listExpenseDetailDesigns 请求。

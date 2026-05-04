@@ -765,7 +765,15 @@ abstract class AbstractFinancePostVoucherSupport {
     }
 
     protected boolean isLeaf(FinanceAccountSubject subject) {
-        return subject != null && Objects.equals(subject.getLeafFlag(), 1);
+        if (subject == null) {
+            return false;
+        }
+        Long count = financeAccountSubjectMapper.selectCount(Wrappers.<FinanceAccountSubject>lambdaQuery()
+                .eq(FinanceAccountSubject::getCompanyId, subject.getCompanyId())
+                .eq(FinanceAccountSubject::getParentSubjectCode, subject.getSubjectCode())
+                .eq(FinanceAccountSubject::getStatus, 1)
+                .ne(FinanceAccountSubject::getBclose, 1));
+        return count == null || count == 0;
     }
 
     protected int normalizeYear(Integer iyear) {

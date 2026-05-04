@@ -9,7 +9,7 @@
 } from '@/api'
 
 export type FlatCompanyRecord = CompanyRecord & { level: number; label: string }
-export type DepartmentTreeExpandStrategy = 'default' | 'focusPath'
+export type DepartmentTreeExpandStrategy = 'default' | 'focusPath' | 'preserve'
 export type OcrProviderCode = 'ALIYUN' | 'TENCENT' | 'BAIDU'
 export type OcrFormState = Required<
   Pick<
@@ -33,7 +33,7 @@ export type ApiInterfaceOption = {
     value: string
   }>
 }
-export type CompanyBankAccountFormState = CompanyBankAccountSavePayload & {
+export type CompanyBankAccountFormState = CompanyBankAccountSavePayload & Record<string, unknown> & {
   status: number
   defaultAccount: number
   directConnectEnabled: number
@@ -249,6 +249,19 @@ export function isTopLevelDepartment(department: DepartmentTreeNode) {
 
 export function normalizeOcrText(value?: string | null) {
   return String(value || '').trim()
+}
+
+export function formatEmployeeDepartmentNames(
+  employee?: Pick<EmployeeRecord, 'departments' | 'deptName'>
+) {
+  const departments = employee?.departments || []
+  const names = departments
+    .map((item) => String(item?.deptName || '').trim())
+    .filter(Boolean)
+  if (names.length) {
+    return [...new Set(names)].join('、')
+  }
+  return String(employee?.deptName || '').trim()
 }
 
 export function maskAccountNo(accountNo?: string) {

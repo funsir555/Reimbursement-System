@@ -1,6 +1,7 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { reactive, ref, type ComputedRef, type Ref } from 'vue'
 import { financeApi, type FinanceVoucherDetail, type FinanceVoucherMeta, type FinanceVoucherSavePayload } from '@/api'
+import type { Router } from 'vue-router'
 import type { FinanceVoucherEntryRow } from './useFinanceNewVoucherRowOwner'
 
 export type FinanceNewVoucherToolbarActionKey =
@@ -29,10 +30,7 @@ type ActionDialogKey = Exclude<
   'new' | 'modify' | 'insert' | 'delete' | 'save' | 'review' | 'unreview' | 'markError' | 'find'
 >
 
-type RouterLike = {
-  push: (to: unknown) => Promise<unknown> | unknown
-  replace: (to: unknown) => Promise<unknown> | unknown
-}
+type RouterLike = Pick<Router, 'push' | 'replace'>
 
 type UseFinanceNewVoucherPageOrchestrationOptions = {
   router: RouterLike

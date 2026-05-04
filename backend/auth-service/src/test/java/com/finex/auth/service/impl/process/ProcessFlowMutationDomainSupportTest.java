@@ -41,6 +41,7 @@ class ProcessFlowMutationDomainSupportTest {
     @Mock private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     @Mock private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
+    @Mock private ProcessUserGroupResolverSupport userGroupResolverSupport;
 
     private ProcessFlowMutationDomainSupport support;
 
@@ -59,7 +60,8 @@ class ProcessFlowMutationDomainSupportTest {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
-                objectMapper
+                objectMapper,
+                userGroupResolverSupport
         );
         ProcessFlowQuerySupport querySupport = new ProcessFlowQuerySupport(
                 processFlowMapper,

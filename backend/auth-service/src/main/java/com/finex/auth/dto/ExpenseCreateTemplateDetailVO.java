@@ -39,4 +39,6 @@ public class ExpenseCreateTemplateDetailVO {
     private String currentUserCompanyName;
     private String currentUserDeptId;
     private String currentUserDeptName;
+    private List<String> currentUserDeptIds = new ArrayList<>();
+    private List<String> currentUserDeptNames = new ArrayList<>();
 }

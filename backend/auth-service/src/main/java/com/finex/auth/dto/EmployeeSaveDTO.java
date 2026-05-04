@@ -3,6 +3,9 @@ package com.finex.auth.dto;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 public class EmployeeSaveDTO {
 
@@ -19,6 +22,8 @@ public class EmployeeSaveDTO {
     private String companyId;
 
     private Long deptId;
+
+    private List<Long> deptIds = new ArrayList<>();
 
     private String position;
 

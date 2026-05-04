@@ -1504,7 +1504,11 @@ public abstract class AbstractFixedAssetSupport {
     }
 
     private FixedAssetOptionVO toDepartmentOption(SystemDepartment department) {
-        return option(String.valueOf(department.getId()), department.getDeptCode() + " - " + department.getDeptName());
+        FixedAssetOptionVO option = option(String.valueOf(department.getId()), buildDepartmentLabel(department.getDeptCode(), department.getDeptName(), String.valueOf(department.getId())));
+        option.setCode(department.getDeptCode());
+        option.setName(department.getDeptName());
+        option.setParentValue(department.getParentId() == null ? null : String.valueOf(department.getParentId()));
+        return option;
     }
 
     private FixedAssetOptionVO toUserOption(User user) {
@@ -1520,6 +1524,15 @@ public abstract class AbstractFixedAssetSupport {
         option.setValue(value);
         option.setLabel(label);
         return option;
+    }
+
+    private String buildDepartmentLabel(String code, String name, String fallback) {
+        String normalizedCode = trimToNull(code);
+        String normalizedName = trimToNull(name);
+        if (normalizedCode != null && normalizedName != null) {
+            return normalizedCode + "  " + normalizedName;
+        }
+        return normalizedName != null ? normalizedName : normalizedCode != null ? normalizedCode : fallback;
     }
 
     /**

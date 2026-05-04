@@ -1,7 +1,9 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ComputedRef, Ref } from 'vue'
+import type { LocationQuery, Router } from 'vue-router'
 import { processApi, type ProcessFlowDetail, type ProcessFlowMeta, type ProcessFlowNode, type ProcessFlowSavePayload, type ProcessFlowSummary } from '@/api'
 import { persistFlowDraft, publishFlowAfterPersist } from '@/views/process/flowDesignerPersistence'
+import { resolveReturnToQuery } from '@/views/process/processDesignerNavigation'
 
 type SelectionPreference = {
   nodeKey?: string
@@ -11,12 +13,10 @@ type SelectionPreference = {
 type RouteLike = {
   name?: string | symbol | null
   params: Record<string, unknown>
-  query: Record<string, unknown>
+  query: LocationQuery
 }
 
-type RouterLike = {
-  push: (location: unknown) => unknown | Promise<unknown>
-}
+type RouterLike = Pick<Router, 'push'> & Partial<Pick<Router, 'back'>>
 
 type SceneDialogState = {
   visible: boolean
@@ -236,7 +236,7 @@ export function useProcessFlowDesignerFlowManagement(params: {
       await reloadFlowListOnly()
       ElMessage.success('\u6d41\u7a0b\u5df2\u53d1\u5e03')
 
-      const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
+      const returnTo = resolveReturnToQuery(route.query)
       if (returnTo && working.flowCode) {
         await router.push(appendQueryParam(returnTo, 'createdFlowCode', working.flowCode))
       }
@@ -315,8 +315,16 @@ export function useProcessFlowDesignerFlowManagement(params: {
   }
 
   function goBack() {
-    const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
-    void router.push(returnTo || '/expense/workbench/process-management')
+    const returnTo = resolveReturnToQuery(route.query)
+    if (returnTo) {
+      void router.push(returnTo)
+      return
+    }
+    if (typeof router.back === 'function' && window.history.length > 1) {
+      void router.back()
+      return
+    }
+    void router.push('/expense/workbench/process-management')
   }
 
   function appendQueryParam(path: string, key: string, value: string) {

@@ -102,6 +102,8 @@ export interface ExpenseCreateTemplateDetail {
   currentUserCompanyName?: string
   currentUserDeptId?: string
   currentUserDeptName?: string
+  currentUserDeptIds?: string[]
+  currentUserDeptNames?: string[]
 }
 
 // 这是 ExpenseDocumentEditContext 的数据结构。

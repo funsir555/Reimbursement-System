@@ -3,6 +3,9 @@ package com.finex.auth.support.systemsettings;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @AllArgsConstructor
 public class ExternalEmployeeData {
@@ -15,7 +18,7 @@ public class ExternalEmployeeData {
 
     private String email;
 
-    private String deptCode;
+    private List<String> deptCodes = new ArrayList<>();
 
     private String position;
 

@@ -33,7 +33,7 @@
       <label><span>账簿</span><el-select v-model="filters.bookCode" @change="refreshAll"><el-option v-for="item in meta?.bookOptions || []" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
       <label><span>年度</span><el-input-number v-model="filters.fiscalYear" :controls="false" :min="2000" :max="2099" disabled /></label>
       <label><span>期间</span><el-input-number v-model="filters.fiscalPeriod" :controls="false" :min="1" :max="12" disabled /></label>
-      <label><span>资产类别</span><el-select v-model="filters.categoryId" clearable filterable @change="loadCards"><el-option v-for="item in meta?.categoryOptions || []" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select></label>
+      <label><span>资产类别</span><el-select v-model="filters.categoryId" clearable filterable v-bind="globalFilterableSelectProps" @change="loadCards"><el-option v-for="item in meta?.categoryOptions || []" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select></label>
       <label><span>状态</span><el-select v-model="filters.status" clearable @change="loadCards"><el-option v-for="item in meta?.cardStatusOptions || []" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
       <label class="search"><span>关键字</span><el-input v-model="filters.keyword" clearable placeholder="资产编码 / 资产名称" @keyup.enter="loadCards" /></label>
     </section>
@@ -205,10 +205,13 @@
       <div class="form-grid">
         <label><span>资产编码</span><el-input v-model="cardForm.assetCode" :disabled="Boolean(editingCardId)" :maxlength="FA_CODE_MAX_LENGTH" show-word-limit /></label>
         <label><span>资产名称</span><el-input v-model="cardForm.assetName" :maxlength="FA_NAME_MAX_LENGTH" show-word-limit /></label>
-        <label><span>资产类别</span><el-select v-model="cardForm.categoryId" filterable><el-option v-for="item in categories" :key="item.id" :label="`${item.categoryCode} - ${item.categoryName}`" :value="item.id" /></el-select></label>
+        <label><span>资产类别</span><el-select v-model="cardForm.categoryId" filterable v-bind="globalFilterableSelectProps"><el-option v-for="item in categories" :key="item.id" :label="`${item.categoryCode} - ${item.categoryName}`" :value="item.id" /></el-select></label>
         <label><span>启用日期</span><el-date-picker v-model="cardForm.inServiceDate" type="date" value-format="YYYY-MM-DD" /></label>
-        <label><span>使用部门</span><el-select v-model="cardForm.useDeptId" filterable clearable><el-option v-for="item in meta?.departmentOptions || []" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select></label>
-        <label><span>保管人</span><el-select v-model="cardForm.keeperUserId" filterable clearable><el-option v-for="item in meta?.employeeOptions || []" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select></label>
+        <label>
+          <span>使用部门</span>
+          <department-tree-select v-model="cardForm.useDeptId" :options="meta?.departmentOptions || []" value-type="number" />
+        </label>
+        <label><span>保管人</span><el-select v-model="cardForm.keeperUserId" filterable v-bind="globalFilterableSelectProps" clearable><el-option v-for="item in meta?.employeeOptions || []" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select></label>
         <label><span>原值</span><money-input v-model="cardForm.originalAmount" class="full" /></label>
         <label><span>累计折旧</span><money-input v-model="cardForm.accumDeprAmount" class="full" /></label>
         <label><span>净残值</span><money-input v-model="cardForm.salvageAmount" class="full" /></label>
@@ -244,7 +247,7 @@
         <label><span>单据日期</span><el-date-picker v-model="changeForm.billDate" type="date" value-format="YYYY-MM-DD" /></label>
         <label><span>资产编码</span><el-input v-model="changeLine.assetCode" :maxlength="FA_CODE_MAX_LENGTH" show-word-limit /></label>
         <label><span>资产名称</span><el-input v-model="changeLine.assetName" :maxlength="FA_NAME_MAX_LENGTH" show-word-limit /></label>
-        <label><span>资产类别</span><el-select v-model="changeLine.categoryId" clearable filterable><el-option v-for="item in categories" :key="item.id" :label="`${item.categoryCode} - ${item.categoryName}`" :value="item.id" /></el-select></label>
+        <label><span>资产类别</span><el-select v-model="changeLine.categoryId" clearable filterable v-bind="globalFilterableSelectProps"><el-option v-for="item in categories" :key="item.id" :label="`${item.categoryCode} - ${item.categoryName}`" :value="item.id" /></el-select></label>
         <label><span>变动金额</span><money-input v-model="changeLine.changeAmount" class="full" /></label>
       </div>
       <template #footer><el-button @click="changeDialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveChangeBill">保存</el-button></template>
@@ -265,10 +268,13 @@ import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, react
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fixedAssetApi, type FixedAssetCard, type FixedAssetCardPayload, type FixedAssetCategory, type FixedAssetCategoryPayload, type FixedAssetChangeBill, type FixedAssetChangeBillPayload, type FixedAssetChangeLinePayload, type FixedAssetDeprPreviewPayload, type FixedAssetDeprRun, type FixedAssetDisposalBill, type FixedAssetDisposalBillPayload, type FixedAssetDisposalLinePayload, type FixedAssetMeta, type FixedAssetOpeningImportResult, type FixedAssetOpeningImportRow } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 const FA_CODE_MAX_LENGTH = 32
 const FA_NAME_MAX_LENGTH = 64

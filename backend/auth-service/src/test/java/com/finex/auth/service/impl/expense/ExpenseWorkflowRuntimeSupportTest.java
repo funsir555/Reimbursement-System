@@ -8,6 +8,7 @@ import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.ProcessDocumentTemplate;
 import com.finex.auth.entity.ProcessExpenseDetailDesign;
+import com.finex.auth.entity.ProcessUserGroup;
 import com.finex.auth.entity.ProcessFormDesign;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
@@ -15,6 +16,7 @@ import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
+import com.finex.auth.mapper.ProcessUserGroupMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.SystemPermissionMapper;
 import com.finex.auth.mapper.SystemRolePermissionMapper;
@@ -50,6 +52,8 @@ class ExpenseWorkflowRuntimeSupportTest {
     @Mock
     private ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     @Mock
+    private ProcessUserGroupMapper processUserGroupMapper;
+    @Mock
     private SystemPermissionMapper systemPermissionMapper;
     @Mock
     private SystemDepartmentMapper systemDepartmentMapper;
@@ -70,9 +74,38 @@ class ExpenseWorkflowRuntimeSupportTest {
         template.setTemplateType("report");
         template.setCategoryCode("travel");
         ProcessFormDesign formDesign = new ProcessFormDesign();
+        formDesign.setSchemaJson("""
+                {
+                  "blocks": [
+                    {
+                      "kind": "BUSINESS_COMPONENT",
+                      "fieldKey": "paymentCompany",
+                      "props": {
+                        "componentCode": "payment-company"
+                      }
+                    },
+                    {
+                      "kind": "BUSINESS_COMPONENT",
+                      "fieldKey": "undertakeDept",
+                      "props": {
+                        "componentCode": "undertake-department"
+                      }
+                    }
+                  ]
+                }
+                """);
         ProcessExpenseDetailDesign expenseDetailDesign = new ProcessExpenseDetailDesign();
         Map<String, Object> formData = new LinkedHashMap<>();
         formData.put("amount", new BigDecimal("123.45"));
+        formData.put("paymentCompany", "COMPANY_A");
+        formData.put("undertakeDept", List.of("15"));
+
+        when(systemDepartmentMapper.selectList(any())).thenReturn(buildUndertakeDepartmentTree());
+
+        com.finex.auth.dto.ExpenseDetailInstanceDTO detailA = new com.finex.auth.dto.ExpenseDetailInstanceDTO();
+        detailA.setFormData(new LinkedHashMap<>(Map.of("actualPaymentAmount", "88.80")));
+        com.finex.auth.dto.ExpenseDetailInstanceDTO detailB = new com.finex.auth.dto.ExpenseDetailInstanceDTO();
+        detailB.setFormData(new LinkedHashMap<>(Map.of("actualPaymentAmount", "11.20")));
 
         Map<String, Object> actual = support.buildRuntimeFlowContext(
                 submitter,
@@ -80,12 +113,16 @@ class ExpenseWorkflowRuntimeSupportTest {
                 formDesign,
                 formData,
                 expenseDetailDesign,
-                List.of()
+                List.of(detailA, detailB)
         );
 
         assertEquals(7L, actual.get("submitterUserId"));
         assertEquals(9L, actual.get("submitterDeptId"));
-        assertEquals(new BigDecimal("123.45"), actual.get("amount"));
+        assertEquals(new BigDecimal("100.00"), actual.get("amount"));
+        assertEquals("COMPANY_A", actual.get("paymentCompanyId"));
+        assertEquals(List.of("15"), actual.get("undertakeDeptIds"));
+        assertEquals(List.of("15"), actual.get("undertakeDeptIdExact"));
+        assertEquals(List.of(15L, 7L, 3L), actual.get("undertakeDeptIdWithChildren"));
         assertEquals("report", actual.get("documentType"));
         assertEquals("travel", actual.get("expenseTypeCode"));
     }
@@ -262,6 +299,43 @@ class ExpenseWorkflowRuntimeSupportTest {
     }
 
     @Test
+    void designatedUserGroupApprovalResolvesMatchedMembersAsAndSignTasks() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+
+        ProcessUserGroup secondLevelGroup = new ProcessUserGroup();
+        secondLevelGroup.setId(200L);
+        secondLevelGroup.setCodeLevel(2);
+        secondLevelGroup.setGroupName("二级分配组");
+
+        ProcessUserGroup thirdLevelGroup = new ProcessUserGroup();
+        thirdLevelGroup.setId(201L);
+        thirdLevelGroup.setParentId(200L);
+        thirdLevelGroup.setCodeLevel(3);
+        thirdLevelGroup.setGroupName("三级功能组");
+        thirdLevelGroup.setMemberUserIdsJson("[\"501\",\"502\"]");
+        thirdLevelGroup.setScopeConditionGroupsJson("""
+                [{"groupNo":1,"conditions":[{"fieldKey":"paymentCompanyId","operator":"IN","compareValue":["COMPANY_A"]}]}]
+                """);
+
+        when(processUserGroupMapper.selectById(200L)).thenReturn(secondLevelGroup);
+        when(processUserGroupMapper.selectList(any())).thenReturn(List.of(secondLevelGroup, thirdLevelGroup));
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(
+                createActiveUser(501L, "group-user-a"),
+                createActiveUser(502L, "group-user-b")
+        ));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildUserGroupApprovalSnapshot());
+
+        support.initializeRuntime(instance, Map.of("paymentCompanyId", "COMPANY_A"));
+
+        assertEquals(2, insertedTasks.size());
+        assertEquals(List.of(501L, 502L), insertedTasks.stream().map(ProcessDocumentTask::getAssigneeUserId).toList());
+        assertTrue(insertedTasks.stream().allMatch(item -> "AND_SIGN".equals(item.getApprovalMode())));
+    }
+
+    @Test
     void submitterDeptBranchMatchesAncestorDepartment() throws Exception {
         List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
         mockTaskInsertions(insertedTasks);
@@ -323,6 +397,81 @@ class ExpenseWorkflowRuntimeSupportTest {
 
         assertEquals(1, insertedTasks.size());
         assertEquals("approval-route-b", insertedTasks.get(0).getNodeKey());
+    }
+
+    @Test
+    void paymentCompanyBranchMatchesConfiguredCompany() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildBranchSnapshotForField("paymentCompanyId", "IN", List.of("COMPANY_A")));
+
+        support.initializeRuntime(instance, Map.of("paymentCompanyId", "COMPANY_A"));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-route-a", insertedTasks.get(0).getNodeKey());
+    }
+
+    @Test
+    void defaultRouteFallsBackOnlyAfterConfiguredConditionsDoNotMatch() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildDefaultRouteSnapshotForField("paymentCompanyId", "IN", List.of("COMPANY_A")));
+
+        support.initializeRuntime(instance, Map.of("paymentCompanyId", "COMPANY_A"));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-route-a", insertedTasks.get(0).getNodeKey());
+    }
+
+    @Test
+    void defaultRouteHandlesTheBranchWhenConfiguredConditionsDoNotMatch() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildDefaultRouteSnapshotForField("paymentCompanyId", "IN", List.of("COMPANY_A")));
+
+        support.initializeRuntime(instance, Map.of("paymentCompanyId", "COMPANY_B"));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-route-b", insertedTasks.get(0).getNodeKey());
+    }
+
+    @Test
+    void undertakeDeptExactBranchMatchesOnlyExactDepartment() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildBranchSnapshotForField("undertakeDeptIdExact", "IN", List.of("15")));
+
+        support.initializeRuntime(instance, Map.of("undertakeDeptIdExact", List.of("15")));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-route-a", insertedTasks.get(0).getNodeKey());
+    }
+
+    @Test
+    void undertakeDeptWithChildrenBranchMatchesAncestorDepartment() throws Exception {
+        List<ProcessDocumentTask> insertedTasks = new ArrayList<>();
+        mockTaskInsertions(insertedTasks);
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(createActiveUser(101L, "approver-A")));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = createRuntimeInstance(buildBranchSnapshotForField("undertakeDeptIdWithChildren", "IN", List.of("3")));
+
+        support.initializeRuntime(instance, Map.of("undertakeDeptIdWithChildren", List.of(15L, 7L, 3L)));
+
+        assertEquals(1, insertedTasks.size());
+        assertEquals("approval-route-a", insertedTasks.get(0).getNodeKey());
     }
     @Test
     void undertakeDepartmentManagerResubmitPathCreatesApprovalTaskWhenLeaderExists() throws Exception {
@@ -459,6 +608,7 @@ class ExpenseWorkflowRuntimeSupportTest {
                 processDocumentTaskMapper,
                 processDocumentActionLogMapper,
                 processDocumentExpenseDetailMapper,
+                processUserGroupMapper,
                 systemPermissionMapper,
                 systemDepartmentMapper,
                 systemRolePermissionMapper,
@@ -625,6 +775,26 @@ class ExpenseWorkflowRuntimeSupportTest {
         ));
     }
 
+    private String buildUserGroupApprovalSnapshot() throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "approval-user-group",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "user-group-node",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_USER_GROUP",
+                                        "designatedUserGroupConfig", Map.of("groupId", 200L),
+                                        "missingHandler", "BLOCK_SUBMIT",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        )
+                ),
+                "routes", List.of()
+        ));
+    }
+
     private String buildSubmitterDeptBranchSnapshot(String operator, Object compareValue) throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         ProcessFlowConditionDTO routeCondition = new ProcessFlowConditionDTO();
@@ -692,6 +862,145 @@ class ExpenseWorkflowRuntimeSupportTest {
                 )
         ));
     }
+
+    private String buildBranchSnapshotForField(String fieldKey, String operator, Object compareValue) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        ProcessFlowConditionDTO routeCondition = new ProcessFlowConditionDTO();
+        routeCondition.setFieldKey(fieldKey);
+        routeCondition.setOperator(operator);
+        routeCondition.setCompareValue(compareValue);
+
+        ProcessFlowConditionGroupDTO routeGroup = new ProcessFlowConditionGroupDTO();
+        routeGroup.setGroupNo(1);
+        routeGroup.setConditions(List.of(routeCondition));
+
+        return mapper.writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "branch-1",
+                                "nodeType", "BRANCH",
+                                "nodeName", "branch-node",
+                                "displayOrder", 1,
+                                "config", Map.of()
+                        ),
+                        Map.of(
+                                "nodeKey", "approval-route-a",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "route-a-approval",
+                                "parentNodeKey", "route-a",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        ),
+                        Map.of(
+                                "nodeKey", "approval-route-b",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "route-b-approval",
+                                "parentNodeKey", "route-b",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        )
+                ),
+                "routes", List.of(
+                        Map.of(
+                                "routeKey", "route-a",
+                                "sourceNodeKey", "branch-1",
+                                "routeName", "route-a",
+                                "priority", 1,
+                                "attachBelowNodes", false,
+                                "conditionGroups", List.of(routeGroup)
+                        ),
+                        Map.of(
+                                "routeKey", "route-b",
+                                "sourceNodeKey", "branch-1",
+                                "routeName", "route-b",
+                                "priority", 2,
+                                "attachBelowNodes", false,
+                                "conditionGroups", List.of()
+                        )
+                )
+        ));
+    }
+
+    private String buildDefaultRouteSnapshotForField(String fieldKey, String operator, Object compareValue) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        ProcessFlowConditionDTO routeCondition = new ProcessFlowConditionDTO();
+        routeCondition.setFieldKey(fieldKey);
+        routeCondition.setOperator(operator);
+        routeCondition.setCompareValue(compareValue);
+
+        ProcessFlowConditionGroupDTO routeGroup = new ProcessFlowConditionGroupDTO();
+        routeGroup.setGroupNo(1);
+        routeGroup.setConditions(List.of(routeCondition));
+
+        return mapper.writeValueAsString(Map.of(
+                "nodes", List.of(
+                        Map.of(
+                                "nodeKey", "branch-1",
+                                "nodeType", "BRANCH",
+                                "nodeName", "branch-node",
+                                "displayOrder", 1,
+                                "config", Map.of()
+                        ),
+                        Map.of(
+                                "nodeKey", "approval-route-a",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "route-a-approval",
+                                "parentNodeKey", "route-a",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        ),
+                        Map.of(
+                                "nodeKey", "approval-route-b",
+                                "nodeType", "APPROVAL",
+                                "nodeName", "route-b-approval",
+                                "parentNodeKey", "route-b",
+                                "displayOrder", 1,
+                                "config", Map.of(
+                                        "approverType", "DESIGNATED_MEMBER",
+                                        "designatedMemberConfig", Map.of("userIds", List.of(101L)),
+                                        "missingHandler", "AUTO_SKIP",
+                                        "approvalMode", "OR_SIGN"
+                                )
+                        )
+                ),
+                "routes", List.of(
+                        Map.of(
+                                "routeKey", "route-b",
+                                "sourceNodeKey", "branch-1",
+                                "routeName", "route-b",
+                                "priority", 1,
+                                "defaultRoute", true,
+                                "attachBelowNodes", false,
+                                "conditionGroups", List.of()
+                        ),
+                        Map.of(
+                                "routeKey", "route-a",
+                                "sourceNodeKey", "branch-1",
+                                "routeName", "route-a",
+                                "priority", 2,
+                                "defaultRoute", false,
+                                "attachBelowNodes", false,
+                                "conditionGroups", List.of(routeGroup)
+                        )
+                )
+        ));
+    }
+
     private String buildUndertakeDeptManagerSnapshot(String missingHandler) throws Exception {
         return buildUndertakeDeptManagerSnapshot(missingHandler, 1, "OR_SIGN");
     }

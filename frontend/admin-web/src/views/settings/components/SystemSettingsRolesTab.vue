@@ -110,7 +110,7 @@
           <el-select
             :model-value="selectedRoleUserIds"
             multiple
-            filterable
+            filterable v-bind="globalFilterableSelectProps"
             placeholder="选择员工"
             class="w-full"
             :disabled="roleUserAssignmentReadonly"
@@ -131,6 +131,8 @@
 
 <script setup lang="ts">
 import type { EmployeeRecord, PermissionTreeNode, RoleRecord } from '@/api'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 defineProps<{
   canCreate: boolean

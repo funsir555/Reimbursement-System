@@ -1058,7 +1058,7 @@ public abstract class AbstractFinanceVoucherSupport {
         option.setBdept(subject.getBdept());
         option.setBitem(subject.getBitem());
         option.setCassItem(trimToNull(subject.getCassItem()));
-        option.setLeafFlag(subject.getLeafFlag());
+        option.setLeafFlag(isLeafSubject(subject) ? 1 : 0);
         option.setBcash(subject.getBcash());
         return option;
     }
@@ -1741,7 +1741,7 @@ public abstract class AbstractFinanceVoucherSupport {
     }
 
     protected void validateLeafSubject(FinanceAccountSubject subject, int rowNo) {
-        if (isEnabled(subject.getLeafFlag())) {
+        if (isLeafSubject(subject)) {
             return;
         }
         String subjectCode = normalize(subject.getSubjectCode(), "");
@@ -1750,6 +1750,20 @@ public abstract class AbstractFinanceVoucherSupport {
         throw new IllegalArgumentException(
                 "\u7b2c " + rowNo + " \u884c\u79d1\u76ee\u3010" + subjectLabel + "\u3011\u4e0d\u662f\u672b\u7ea7\u79d1\u76ee\uff0c\u4e0d\u5141\u8bb8\u5f55\u5165\u51ed\u8bc1"
         );
+    }
+
+    protected boolean isLeafSubject(FinanceAccountSubject subject) {
+        if (subject == null) {
+            return false;
+        }
+        Long count = financeAccountSubjectMapper.selectCount(
+                Wrappers.<FinanceAccountSubject>lambdaQuery()
+                        .eq(FinanceAccountSubject::getCompanyId, subject.getCompanyId())
+                        .eq(FinanceAccountSubject::getParentSubjectCode, subject.getSubjectCode())
+                        .eq(FinanceAccountSubject::getStatus, 1)
+                        .ne(FinanceAccountSubject::getBclose, 1)
+        );
+        return count == null || count == 0;
     }
 
     protected void validateCashFlowSelection(

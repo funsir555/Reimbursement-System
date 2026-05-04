@@ -18,6 +18,7 @@ import com.finex.auth.mapper.ProcessFlowNodeMapper;
 import com.finex.auth.mapper.ProcessFlowRouteMapper;
 import com.finex.auth.mapper.ProcessFlowSceneMapper;
 import com.finex.auth.mapper.ProcessFlowVersionMapper;
+import com.finex.auth.mapper.ProcessUserGroupMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
@@ -27,6 +28,7 @@ import com.finex.auth.service.impl.process.ProcessFlowMetaSupport;
 import com.finex.auth.service.impl.process.ProcessFlowMutationDomainSupport;
 import com.finex.auth.service.impl.process.ProcessFlowQuerySupport;
 import com.finex.auth.service.impl.process.ProcessFlowStructureSupport;
+import com.finex.auth.service.impl.process.ProcessUserGroupResolverSupport;
 import com.finex.auth.entity.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,8 +57,16 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
             ProcessExpenseTypeMapper processExpenseTypeMapper,
             ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper,
             ProcessDocumentTemplateMapper processDocumentTemplateMapper,
+            ProcessUserGroupMapper processUserGroupMapper,
             ObjectMapper objectMapper
     ) {
+        ProcessUserGroupResolverSupport userGroupResolverSupport = new ProcessUserGroupResolverSupport(
+                processUserGroupMapper,
+                processFlowNodeMapper,
+                systemDepartmentMapper,
+                userMapper,
+                objectMapper
+        );
         this.structureSupport = new ProcessFlowStructureSupport(
                 processFlowMapper,
                 processFlowVersionMapper,
@@ -69,7 +79,8 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
-                objectMapper
+                objectMapper,
+                userGroupResolverSupport
         );
         this.querySupport = new ProcessFlowQuerySupport(
                 processFlowMapper,
@@ -98,7 +109,8 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
-                objectMapper
+                objectMapper,
+                userGroupResolverSupport
         );
         this.approverResolveSupport = new ProcessFlowApproverResolveSupport(
                 processFlowMapper,
@@ -113,7 +125,8 @@ public class ProcessFlowDesignServiceImpl implements ProcessFlowDesignService {
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
                 objectMapper,
-                structureSupport
+                structureSupport,
+                userGroupResolverSupport
         );
         this.mutationSupport = new ProcessFlowMutationDomainSupport(
                 processFlowMapper,

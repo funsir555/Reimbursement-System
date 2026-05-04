@@ -57,4 +57,6 @@ public class ProcessFlowMetaVO {
     private List<ProcessFormOptionVO> expenseTypeOptions = new ArrayList<>();
 
     private List<ProcessFormOptionVO> archiveOptions = new ArrayList<>();
+
+    private List<ProcessFormOptionVO> userGroupOptions = new ArrayList<>();
 }

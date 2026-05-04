@@ -22,8 +22,8 @@ public class FeishuSyncAdapter implements OrganizationSyncAdapter {
                         new ExternalDepartmentData("FS_PM", "飞书产品中心", "FS_ROOT", "feishu-pm", 1)
                 ),
                 List.of(
-                        new ExternalEmployeeData("feishu.sales", "飞书销售顾问", "13900003331", "feishu.sales@finex.com", "FS_SALES", "销售顾问", "集团总部", "feishu-user-01", 1),
-                        new ExternalEmployeeData("feishu.pm", "飞书产品经理", "13900003332", "feishu.pm@finex.com", "FS_PM", "产品经理", "集团总部", "feishu-user-02", 1)
+                        new ExternalEmployeeData("feishu.sales", "飞书销售顾问", "13900003331", "feishu.sales@finex.com", List.of("FS_SALES"), "销售顾问", "集团总部", "feishu-user-01", 1),
+                        new ExternalEmployeeData("feishu.pm", "飞书产品经理", "13900003332", "feishu.pm@finex.com", List.of("FS_PM"), "产品经理", "集团总部", "feishu-user-02", 1)
                 )
         );
     }

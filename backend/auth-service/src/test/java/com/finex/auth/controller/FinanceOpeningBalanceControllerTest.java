@@ -1,5 +1,15 @@
 package com.finex.auth.controller;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.config.GlobalExceptionHandler;
 import com.finex.auth.dto.AsyncTaskSubmitResultVO;
@@ -16,16 +26,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class FinanceOpeningBalanceControllerTest {
@@ -83,7 +83,7 @@ class FinanceOpeningBalanceControllerTest {
     void openBookSubmitsAsyncTask() throws Exception {
         AsyncTaskSubmitResultVO result = new AsyncTaskSubmitResultVO();
         result.setTaskNo("FOB20260427120000001");
-        result.setTaskType("FINANCE_OPENING_BALANCE_OPEN_BOOK");
+        result.setTaskType("FIN_OB_OPEN_BOOK");
         result.setStatus("PENDING");
         result.setMessage("开账任务已提交");
 

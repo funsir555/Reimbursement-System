@@ -5,7 +5,7 @@
         <div>
           <p class="text-base font-semibold text-slate-800">分支泳道</p>
           <p class="mt-1 text-sm text-slate-500">
-            当前属于 {{ state.activeBranchNode?.nodeName || '流程分支' }}，至少保留 2 条分支泳道。
+            当前分支块至少保留 2 条分支泳道。
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
@@ -27,218 +27,64 @@
         <div class="flex items-start justify-between gap-4">
           <div class="space-y-1">
             <p class="text-sm font-semibold text-slate-800">附带下方节点</p>
+            <p class="text-xs leading-6 text-slate-500">开启后，当前分支以下的公共节点会跟随这条分支一起显示。</p>
           </div>
-          <el-switch :model-value="state.attachBelowEnabled" @update:model-value="actions.updateAttachBelowEnabled" />
+          <el-switch
+            data-testid="attach-below-switch"
+            :model-value="state.attachBelowEnabled"
+            @update:model-value="actions.updateAttachBelowEnabled"
+          />
         </div>
       </div>
 
-      <div class="route-pill-grid">
-        <button
-          v-for="routeItem in state.currentBranchRoutes"
-          :key="routeItem.routeKey"
-          type="button"
-          class="route-pill"
-          :class="routeItem.routeKey === state.route.routeKey ? 'is-selected' : ''"
-          @click="actions.selectRoute(routeItem.routeKey)"
-        >
-          <div class="min-w-0 text-left">
-            <div class="flex items-center gap-2">
-              <p class="truncate text-sm font-semibold text-slate-800">{{ routeItem.routeName || '未命名分支' }}</p>
-              <span
-                v-if="routeItem.attachBelowNodes"
-                class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-600"
-              >
-                附带下方节点
-              </span>
-            </div>
-            <p class="mt-1 text-xs text-slate-400">
-              优先级 {{ routeItem.priority }} · {{ helpers.describeRouteConditions(routeItem).groups }} 组条件 ·
-              {{ helpers.describeRouteConditions(routeItem).conditions }} 条条件
-            </p>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="flex items-start justify-between gap-4">
+          <div class="space-y-1">
+            <p class="text-sm font-semibold text-slate-800">不满足所有条件时进入该分支</p>
+            <p class="text-xs leading-6 text-slate-500">开启后，当前分支会作为 else 分支，在其他分支都不满足时进入。</p>
           </div>
-        </button>
+          <el-switch
+            data-testid="default-route-switch"
+            :model-value="state.route.defaultRoute"
+            @update:model-value="actions.updateDefaultRouteEnabled"
+          />
+        </div>
       </div>
+
     </div>
 
-    <div class="rounded-[24px] border border-slate-200 bg-white p-5 space-y-5">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p class="text-base font-semibold text-slate-800">条件设置</p>
-          <p class="mt-1 text-sm text-slate-500">
-            当前共 {{ helpers.describeRouteConditions(state.route).groups }} 组条件，{{ helpers.describeRouteConditions(state.route).conditions }} 条条件。
-          </p>
-        </div>
-        <el-button type="primary" plain @click="actions.addConditionGroup(state.route)">新增条件组</el-button>
-      </div>
-      <div v-if="state.route.conditionGroups.length" class="space-y-4">
-        <div
-          v-for="group in state.route.conditionGroups"
-          :key="group.groupNo"
-          class="rounded-[24px] border border-slate-200 bg-slate-50 p-5 space-y-4"
-        >
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p class="text-sm font-semibold text-slate-800">条件组 {{ group.groupNo }}</p>
-              <p class="mt-1 text-xs text-slate-400">每个条件组都可以继续添加多个条件项。</p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <el-button plain @click="actions.addCondition(group)">新增条件</el-button>
-              <el-button type="danger" text @click="actions.removeConditionGroup(state.route, group.groupNo)">删除条件组</el-button>
-            </div>
-          </div>
+    <div v-if="!state.route.defaultRoute" class="rounded-[24px] border border-slate-200 bg-white p-5">
+      <ProcessConditionGroupEditor
+        :groups="state.route.conditionGroups"
+        :fields="meta.branchConditionFields"
+        :operator-options="meta.branchOperatorOptions"
+        :option-sources="optionSources"
+        title="条件设置"
+        summary=""
+        :handlers="conditionHandlers"
+      />
+    </div>
 
-          <div v-if="group.conditions.length" class="space-y-3">
-            <div
-              v-for="(condition, conditionIndex) in group.conditions"
-              :key="`${group.groupNo}-${conditionIndex}`"
-              class="rounded-2xl border border-slate-200 bg-white p-4 space-y-4"
-            >
-              <div class="space-y-4">
-                <div class="process-flow-condition-primary-grid grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.2fr),minmax(0,0.9fr)]">
-                  <el-form-item label="条件字段" class="!mb-0">
-                    <el-select
-                      v-model="condition.fieldKey"
-                      placeholder="请选择条件字段"
-                      @change="actions.handleConditionFieldChange(condition)"
-                    >
-                      <el-option
-                        v-for="field in meta.branchConditionFields"
-                        :key="field.key"
-                        :label="field.label"
-                        :value="field.key"
-                      />
-                    </el-select>
-                  </el-form-item>
-
-                  <el-form-item label="比较方式" class="!mb-0">
-                    <el-select
-                      v-model="condition.operator"
-                      placeholder="请选择比较方式"
-                      @change="actions.handleConditionOperatorChange(condition)"
-                    >
-                      <el-option
-                        v-for="item in helpers.operatorOptionsForField(condition.fieldKey)"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="item.value"
-                      />
-                    </el-select>
-                  </el-form-item>
-                </div>
-
-                <el-form-item
-                  label="比较值"
-                  class="process-flow-condition-value-row !mb-0"
-                  data-testid="process-flow-condition-value-row"
-                >
-                  <template v-if="helpers.isBetweenOperator(condition.operator)">
-                    <div class="grid grid-cols-2 gap-3">
-                      <el-input-number
-                        v-model="condition.compareValue[0]"
-                        class="!w-full"
-                        :controls="false"
-                        placeholder="起始值"
-                      />
-                      <el-input-number
-                        v-model="condition.compareValue[1]"
-                        class="!w-full"
-                        :controls="false"
-                        placeholder="结束值"
-                      />
-                    </div>
-                  </template>
-
-                  <el-select
-                    v-else-if="helpers.isMultiOperator(condition.operator)"
-                    v-model="condition.compareValue"
-                    multiple
-                    filterable
-                    clearable
-                    collapse-tags
-                    collapse-tags-tooltip
-                    :allow-create="!helpers.usesOptionSelect(condition)"
-                    default-first-option
-                    :placeholder="helpers.multiValuePlaceholder(condition)"
-                  >
-                    <el-option
-                      v-for="item in helpers.conditionValueOptions(condition)"
-                      :key="item.value"
-                      :label="item.label"
-                      :value="item.value"
-                    />
-                  </el-select>
-
-                  <el-select
-                    v-else-if="helpers.usesOptionSelect(condition)"
-                    v-model="condition.compareValue"
-                    filterable
-                    clearable
-                    :placeholder="helpers.singleValuePlaceholder(condition)"
-                  >
-                    <el-option
-                      v-for="item in helpers.conditionValueOptions(condition)"
-                      :key="item.value"
-                      :label="item.label"
-                      :value="item.value"
-                    />
-                  </el-select>
-
-                  <el-input-number
-                    v-else-if="helpers.isNumberCondition(condition)"
-                    v-model="condition.compareValue"
-                    class="!w-full"
-                    :controls="false"
-                    placeholder="请输入数值"
-                  />
-
-                  <el-input v-else v-model="condition.compareValue" :placeholder="helpers.singleValuePlaceholder(condition)" />
-                </el-form-item>
-              </div>
-
-              <div class="flex justify-end">
-                <el-button type="danger" text @click="actions.removeCondition(group, conditionIndex)">删除条件</el-button>
-              </div>
-            </div>
-          </div>
-
-          <el-empty v-else description="当前条件组还没有条件项" :image-size="56" />
-        </div>
-      </div>
-
-      <el-empty v-else description="当前分支还没有条件组" :image-size="64" />
+    <div v-else class="rounded-[24px] border border-emerald-200 bg-emerald-50 p-5">
+      <p class="text-sm font-semibold text-emerald-900">条件设置</p>
+      <p class="mt-2 text-sm leading-6 text-emerald-800">
+        当前分支已作为 else 分支，当其他分支条件都不满足时进入该分支。
+      </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { PropType } from 'vue'
-import type { ProcessFlowMeta, ProcessFlowNode, ProcessFormOption } from '@/api'
+import { computed, type PropType } from 'vue'
+import type { ProcessFlowConditionGroup, ProcessFlowMeta, ProcessFlowRoute } from '@/api'
+import ProcessConditionGroupEditor from '@/components/process/ProcessConditionGroupEditor.vue'
 
-type EditableProcessFlowCondition = {
-  fieldKey: string
-  operator: string
-  compareValue: any
-}
+type EditableProcessFlowRoute = ProcessFlowRoute
 
-type EditableProcessFlowConditionGroup = {
-  groupNo: number
-  conditions: EditableProcessFlowCondition[]
-}
-
-type EditableProcessFlowRoute = {
-  routeKey: string
-  sourceNodeKey: string
-  routeName?: string
-  priority?: number
-  attachBelowNodes?: boolean
-  conditionGroups: EditableProcessFlowConditionGroup[]
-}
-
-defineProps({
+const props = defineProps({
   state: {
     type: Object as PropType<{
       route: EditableProcessFlowRoute
-      activeBranchNode?: ProcessFlowNode
       currentBranchRoutes: EditableProcessFlowRoute[]
       attachBelowEnabled: boolean
     }>,
@@ -247,38 +93,53 @@ defineProps({
   meta: {
     type: Object as PropType<{
       branchConditionFields: ProcessFlowMeta['branchConditionFields']
-    }>,
-    required: true
-  },
-  helpers: {
-    type: Object as PropType<{
-      describeRouteConditions: (route?: EditableProcessFlowRoute) => { groups: number; conditions: number }
-      operatorOptionsForField: (fieldKey?: string) => ProcessFormOption[]
-      conditionValueOptions: (condition: EditableProcessFlowCondition) => ProcessFormOption[]
-      usesOptionSelect: (condition: EditableProcessFlowCondition) => boolean
-      isNumberCondition: (condition: EditableProcessFlowCondition) => boolean
-      isBetweenOperator: (operator: string) => boolean
-      isMultiOperator: (operator: string) => boolean
-      singleValuePlaceholder: (condition: EditableProcessFlowCondition) => string
-      multiValuePlaceholder: (condition: EditableProcessFlowCondition) => string
+      branchOperatorOptions: ProcessFlowMeta['branchOperatorOptions']
+      companyOptions: ProcessFlowMeta['companyOptions']
+      departmentOptions: ProcessFlowMeta['departmentOptions']
+      userOptions: ProcessFlowMeta['userOptions']
+      expenseTypeOptions: ProcessFlowMeta['expenseTypeOptions']
+      archiveOptions: ProcessFlowMeta['archiveOptions']
     }>,
     required: true
   },
   actions: {
     type: Object as PropType<{
-      selectRoute: (routeKey: string) => void
       addRouteLane: (branchNodeKey: string) => void
       removeSelectedItem: () => void
       removeActiveBranchBlock: () => void
       updateAttachBelowEnabled: (enabled: boolean) => void
+      updateDefaultRouteEnabled: (enabled: boolean) => void
       addConditionGroup: (route: EditableProcessFlowRoute) => void
       removeConditionGroup: (route: EditableProcessFlowRoute, groupNo: number) => void
-      addCondition: (group: EditableProcessFlowConditionGroup) => void
-      removeCondition: (group: EditableProcessFlowConditionGroup, index: number) => void
-      handleConditionFieldChange: (condition: EditableProcessFlowCondition) => void
-      handleConditionOperatorChange: (condition: EditableProcessFlowCondition) => void
+      addCondition: (group: ProcessFlowConditionGroup) => void
+      removeCondition: (group: ProcessFlowConditionGroup, index: number) => void
     }>,
     required: true
   }
 })
+
+const optionSources = computed(() => ({
+  company: props.meta.companyOptions || [],
+  department: props.meta.departmentOptions || [],
+  user: props.meta.userOptions || [],
+  expenseType: props.meta.expenseTypeOptions || [],
+  archive: props.meta.archiveOptions || []
+}))
+
+const conditionHandlers = {
+  addGroup: () => props.actions.addConditionGroup(props.state.route),
+  removeGroup: (groupNo: number) => props.actions.removeConditionGroup(props.state.route, groupNo),
+  addCondition: (groupNo: number) => {
+    const group = props.state.route.conditionGroups.find((item) => item.groupNo === groupNo)
+    if (group) {
+      props.actions.addCondition(group)
+    }
+  },
+  removeCondition: (groupNo: number, index: number) => {
+    const group = props.state.route.conditionGroups.find((item) => item.groupNo === groupNo)
+    if (group) {
+      props.actions.removeCondition(group, index)
+    }
+  }
+}
 </script>

@@ -24,7 +24,7 @@
       </el-form-item>
 
       <el-form-item label="指定成员" class="!mb-0">
-        <el-select v-model="state.node.config.executorUserIds" multiple filterable clearable placeholder="请选择支付执行成员">
+        <el-select v-model="state.node.config.executorUserIds" multiple filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择支付执行成员">
           <el-option v-for="item in state.meta.userOptions" :key="item.value" :label="item.label" :value="Number(item.value)" />
         </el-select>
       </el-form-item>
@@ -55,6 +55,8 @@
 <script setup lang="ts">
 import type { PropType } from 'vue'
 import type { ProcessFlowMeta, ProcessFlowNode } from '@/api'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 defineProps({
   state: {

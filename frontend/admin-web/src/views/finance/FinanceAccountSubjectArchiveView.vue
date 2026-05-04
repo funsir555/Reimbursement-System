@@ -124,7 +124,7 @@
                     v-model="form.cass_item"
                     :disabled="isProjectClassBindingDisabled"
                     clearable
-                    filterable
+                    filterable v-bind="globalFilterableSelectProps"
                     placeholder="&#24320;&#21551;&#39033;&#30446;&#26680;&#31639;&#21518;&#21487;&#36873;&#25321;&#39033;&#30446;&#22823;&#31867;"
                   >
                     <el-option
@@ -178,6 +178,8 @@ import { financeArchiveApi, type FinanceAccountSubjectDerivedDefaults, type Fina
 import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 const FlagSwitch = defineComponent({
   name: 'FlagSwitch',

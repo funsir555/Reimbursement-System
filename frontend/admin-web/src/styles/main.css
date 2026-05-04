@@ -174,3 +174,31 @@ html, body, #app {
   background: #d97706;
   border-color: #d97706;
 }
+
+.global-collapsed-tag-tooltip {
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.global-collapsed-tag-tooltip .el-select__selection {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.global-collapsed-tag-tooltip .el-select__selected-item {
+  width: 100%;
+}
+
+.global-collapsed-tag-tooltip .el-tag.in-tooltip {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.global-collapsed-tag-tooltip .el-select__tags-text {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}

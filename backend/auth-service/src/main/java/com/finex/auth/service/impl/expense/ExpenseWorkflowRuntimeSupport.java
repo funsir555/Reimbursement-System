@@ -19,11 +19,13 @@ import com.finex.auth.mapper.ProcessDocumentActionLogMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
+import com.finex.auth.mapper.ProcessUserGroupMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.SystemPermissionMapper;
 import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.impl.process.ProcessUserGroupResolverSupport;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -50,6 +52,7 @@ public class ExpenseWorkflowRuntimeSupport {
             ProcessDocumentTaskMapper processDocumentTaskMapper,
             ProcessDocumentActionLogMapper processDocumentActionLogMapper,
             ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper,
+            ProcessUserGroupMapper processUserGroupMapper,
             SystemPermissionMapper systemPermissionMapper,
             SystemDepartmentMapper systemDepartmentMapper,
             SystemRolePermissionMapper systemRolePermissionMapper,
@@ -57,6 +60,13 @@ public class ExpenseWorkflowRuntimeSupport {
             UserMapper userMapper,
             ObjectMapper objectMapper
     ) {
+        ProcessUserGroupResolverSupport userGroupResolverSupport = new ProcessUserGroupResolverSupport(
+                processUserGroupMapper,
+                null,
+                systemDepartmentMapper,
+                userMapper,
+                objectMapper
+        );
         AbstractExpenseWorkflowSupport support = new AbstractExpenseWorkflowSupport(
                 processDocumentInstanceMapper,
                 processDocumentTaskMapper,
@@ -67,7 +77,8 @@ public class ExpenseWorkflowRuntimeSupport {
                 systemRolePermissionMapper,
                 systemUserRoleMapper,
                 userMapper,
-                objectMapper
+                objectMapper,
+                userGroupResolverSupport
         );
         this.contextSupport = new ExpenseWorkflowContextSupport(support);
         this.executionSupport = new ExpenseWorkflowExecutionSupport(support);

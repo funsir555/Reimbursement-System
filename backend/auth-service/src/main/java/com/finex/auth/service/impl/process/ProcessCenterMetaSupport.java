@@ -168,6 +168,7 @@ public final class ProcessCenterMetaSupport {
                 navItem("approval-flow", "审批流程", "维护模板使用的审批流程与版本配置"),
                 navItem("expense-detail-form", "费用明细表单", "维护报销模板专用的费用明细子表单"),
                 navItem("custom-archive", "自定义档案", "维护标签、分期付款等业务配置档案"),
+                navItem("user-group", "用户组", "维护审批流可复用的用户组与管理范围"),
                 navItem("expense-type", "费用类型", "维护费用类型树和发票税务配置")
         );
     }
@@ -335,10 +336,21 @@ public final class ProcessCenterMetaSupport {
     private List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
-                        .select(SystemDepartment::getId, SystemDepartment::getDeptName)
+                        .select(SystemDepartment::getId, SystemDepartment::getDeptCode, SystemDepartment::getDeptName, SystemDepartment::getParentId)
                         .eq(SystemDepartment::getStatus, 1)
                         .orderByAsc(SystemDepartment::getSortOrder, SystemDepartment::getId)
-        ).stream().map(department -> option(department.getDeptName(), String.valueOf(department.getId()))).toList();
+        ).stream().map(this::departmentOption).toList();
+    }
+
+    private ProcessFormOptionVO departmentOption(SystemDepartment department) {
+        String value = String.valueOf(department.getId());
+        ProcessFormOptionVO option = new ProcessFormOptionVO();
+        option.setValue(value);
+        option.setCode(department.getDeptCode());
+        option.setName(department.getDeptName());
+        option.setParentValue(department.getParentId() == null ? null : String.valueOf(department.getParentId()));
+        option.setLabel(formatDepartmentLabel(department.getDeptCode(), department.getDeptName(), value));
+        return option;
     }
 
     private List<ProcessFormOptionVO> loadEnabledArchiveOptions() {
@@ -434,5 +446,14 @@ public final class ProcessCenterMetaSupport {
         option.setLabel(label);
         option.setValue(value);
         return option;
+    }
+
+    private String formatDepartmentLabel(String code, String name, String fallback) {
+        String normalizedCode = trimToNull(code);
+        String normalizedName = trimToNull(name);
+        if (normalizedCode != null && normalizedName != null) {
+            return normalizedCode + "  " + normalizedName;
+        }
+        return normalizedName != null ? normalizedName : normalizedCode != null ? normalizedCode : fallback;
     }
 }

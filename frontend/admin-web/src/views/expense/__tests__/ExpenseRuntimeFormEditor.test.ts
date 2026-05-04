@@ -378,6 +378,10 @@ async function triggerDocumentPickerOpen(wrapper: ReturnType<typeof mount>, fiel
   await trigger.trigger('click')
 }
 
+async function waitForDeferredUiTask() {
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 function createManagedSelectDouble() {
   const input = document.createElement('input')
   const root = document.createElement('div')
@@ -690,7 +694,50 @@ describe('ExpenseRuntimeFormEditor', () => {
     payeeSelect!.vm.$emit('visible-change', true)
     await flushPromises()
 
-    expect(wrapper.get('[data-testid="payee-create-personal-payee"]').text()).toContain('增加收款人')
+    expect(wrapper.text()).toContain('未维护收款人信息，请先新增收款人')
+    expect(wrapper.get('[data-testid="payee-create-personal-payee"]').text()).toContain('新增收款人')
+  })
+
+  it('keeps the add payee entry visible after personal payees already exist', async () => {
+    mocks.expenseCreateApi.listPayeeOptions.mockResolvedValue({
+      data: [{
+        value: 'PERSONAL_PAYEE:李四',
+        label: '李四',
+        sourceType: 'PERSONAL_PRIVATE_PAYEE',
+        sourceCode: '李四',
+        secondaryLabel: '个人对私账户'
+      }]
+    })
+
+    const { wrapper } = mountEditor({ payee: '', payeeAccount: '' }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const payeeSelect = wrapper.findAllComponents({ name: 'ElSelect' })
+      .find((component) => component.attributes('data-testid') === 'payee-select-payee')
+    expect(payeeSelect).toBeTruthy()
+
+    payeeSelect!.vm.$emit('visible-change', true)
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('未维护收款人信息，请先新增收款人')
+    expect(wrapper.get('[data-testid="payee-create-personal-payee"]').text()).toContain('新增收款人')
+  })
+
+  it('uses the same non-teleported non-persistent select behavior for payee as other managed lookups', async () => {
+    const { wrapper } = mountEditor({ payee: '', payeeAccount: '' }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const payeeSelect = wrapper.get('[data-testid="payee-select-payee"]')
+    expect(payeeSelect.attributes('persistent')).toBe('false')
+    expect(payeeSelect.attributes('teleported')).toBe('false')
   })
 
   it('creates a personal payee in place and refreshes the employee payee chain', async () => {
@@ -719,7 +766,9 @@ describe('ExpenseRuntimeFormEditor', () => {
 
     payeeSelect!.vm.$emit('visible-change', true)
     await flushPromises()
-    await wrapper.get('[data-testid="payee-create-personal-payee"]').trigger('click')
+    await wrapper.get('[data-testid="payee-create-personal-payee"]').trigger('mousedown')
+    await waitForDeferredUiTask()
+    await flushPromises()
     await flushPromises()
 
     const dialog = wrapper.findComponent({ name: 'PersonalBankAccountDialog' })
@@ -746,6 +795,35 @@ describe('ExpenseRuntimeFormEditor', () => {
       counterpartyCode: undefined,
       paymentCompanyId: undefined
     })
+  })
+
+  it('opens the personal payee dialog from the payee footer before the select swallows the click', async () => {
+    const { wrapper } = mountEditor({ payee: '', payeeAccount: '' }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      personalPayeeDialogVisible: boolean
+      openPersonalPayeeDialogFromPanel: (fieldKey: string) => void
+      setPayeeSelectRef: (fieldKey: string, instance: unknown) => void
+    }
+
+    const payeeSelect = createManagedSelectDouble()
+    vm.setPayeeSelectRef('payee', payeeSelect)
+
+    vm.openPersonalPayeeDialogFromPanel('payee')
+    await waitForDeferredUiTask()
+    await flushPromises()
+    await flushPromises()
+
+    expect(vm.personalPayeeDialogVisible).toBe(true)
+    expect(payeeSelect.handleClose).toHaveBeenCalled()
+    expect(payeeSelect.handleQueryChange).toHaveBeenCalledWith('')
+    expect(payeeSelect.states.inputValue).toBe('')
+    expect(payeeSelect.inputRef.blur).toHaveBeenCalled()
   })
 
   it('creates a vendor under the selected payment company and backfills counterparty', async () => {
@@ -1270,6 +1348,75 @@ describe('ExpenseRuntimeFormEditor', () => {
     }))
   })
 
+  it('still opens related and writeoff pickers after selecting payee and settles the payee select state', async () => {
+    const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+    const writeoffBlock = createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document')
+    const { wrapper } = mountEditor({
+      payee: '',
+      payeeAccount: '',
+      relatedDocs: [],
+      writeoffDocs: []
+    }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account'),
+      relatedBlock,
+      writeoffBlock
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      documentPickerDialog: {
+        visible: boolean
+        fieldKey: string
+        relationType: string
+      }
+      closeDocumentPicker: () => void
+      setPayeeSelectRef: (fieldKey: string, instance: unknown) => void
+      handlePayeeSelection: (
+        fieldKey: string,
+        value: {
+          value: string
+          label: string
+          sourceType: string
+          sourceCode: string
+        }
+      ) => void
+    }
+
+    const payeeSelect = createManagedSelectDouble()
+    vm.setPayeeSelectRef('payee', payeeSelect)
+    vm.handlePayeeSelection('payee', {
+      value: 'PERSONAL_PAYEE:张三',
+      label: '张三',
+      sourceType: 'PERSONAL_PRIVATE_PAYEE',
+      sourceCode: '张三'
+    })
+    await flushPromises()
+
+    await triggerDocumentPickerOpen(wrapper, 'relatedDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('relatedDocs')
+    expect(vm.documentPickerDialog.relationType).toBe('RELATED')
+    expect(payeeSelect.handleClose).toHaveBeenCalled()
+    expect(payeeSelect.handleQueryChange).toHaveBeenCalledWith('')
+
+    vm.closeDocumentPicker()
+    await flushPromises()
+
+    await triggerDocumentPickerOpen(wrapper, 'writeoffDocs')
+    await flushPromises()
+
+    expect(vm.documentPickerDialog.visible).toBe(true)
+    expect(vm.documentPickerDialog.fieldKey).toBe('writeoffDocs')
+    expect(vm.documentPickerDialog.relationType).toBe('WRITEOFF')
+    expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
+      relationType: 'WRITEOFF'
+    }))
+  })
+
   it('still opens the picker after switching counterparty multiple times', async () => {
     const relatedBlock = createBusinessBlock('relatedDocs', '关联单据', 'related-document')
     const { wrapper, setModelValue } = mountEditor({
@@ -1315,6 +1462,58 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(mocks.expenseApi.getDocumentPicker).toHaveBeenLastCalledWith(expect.objectContaining({
       relationType: 'RELATED'
     }))
+  })
+
+  it('settles payee select state immediately after payee selection', async () => {
+    const { wrapper } = mountEditor({
+      payee: '',
+      payeeAccount: ''
+    }, [
+      createBusinessBlock('payee', '收款人', 'payee'),
+      createBusinessBlock('payeeAccount', '收款账户', 'payee-account')
+    ])
+
+    await flushPromises()
+
+    const vm = wrapper.findComponent(ExpenseRuntimeFormEditor).vm as unknown as {
+      setPayeeSelectRef: (fieldKey: string, instance: unknown) => void
+      setPayeeAccountSelectRef: (fieldKey: string, instance: unknown) => void
+      handlePayeeSelection: (
+        fieldKey: string,
+        value: {
+          value: string
+          label: string
+          sourceType: string
+          sourceCode: string
+        }
+      ) => void
+    }
+
+    const payeeSelect = createManagedSelectDouble()
+    const payeeAccountSelect = createManagedSelectDouble()
+
+    vm.setPayeeSelectRef('payee', payeeSelect)
+    vm.setPayeeAccountSelectRef('payeeAccount', payeeAccountSelect)
+    vm.handlePayeeSelection('payee', {
+      value: 'PERSONAL_PAYEE:张三',
+      label: '张三',
+      sourceType: 'PERSONAL_PRIVATE_PAYEE',
+      sourceCode: '张三'
+    })
+    await flushPromises()
+
+    expect(payeeSelect.handleClose).toHaveBeenCalled()
+    expect(payeeSelect.handleQueryChange).toHaveBeenCalledWith('')
+    expect(payeeSelect.inputRef.blur).toHaveBeenCalled()
+    expect(payeeSelect.blur).toHaveBeenCalled()
+    expect(payeeSelect.query).toBe('')
+    expect(payeeSelect.previousQuery).toBe('')
+    expect(payeeSelect.states.inputValue).toBe('')
+    expect(payeeSelect.inputRef.input.value).toBe('')
+
+    expect(payeeAccountSelect.handleClose).toHaveBeenCalled()
+    expect(payeeAccountSelect.handleQueryChange).toHaveBeenCalledWith('')
+    expect(payeeAccountSelect.states.inputValue).toBe('')
   })
 
   it('settles counterparty and payee-account select state immediately after counterparty selection', async () => {

@@ -223,6 +223,19 @@ CREATE TABLE IF NOT EXISTS sys_user (
     CONSTRAINT fk_sys_user_dept_id FOREIGN KEY (dept_id) REFERENCES sys_department(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
+CREATE TABLE IF NOT EXISTS sys_user_department_rel (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '员工部门归属关系ID',
+    user_id BIGINT NOT NULL COMMENT '员工ID',
+    dept_id BIGINT NOT NULL COMMENT '部门ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    CONSTRAINT uk_sys_user_department_rel_user_dept UNIQUE (user_id, dept_id),
+    KEY idx_sys_user_department_rel_user_id (user_id),
+    KEY idx_sys_user_department_rel_dept_id (dept_id),
+    CONSTRAINT fk_sys_user_department_rel_user_id FOREIGN KEY (user_id) REFERENCES sys_user(id),
+    CONSTRAINT fk_sys_user_department_rel_dept_id FOREIGN KEY (dept_id) REFERENCES sys_department(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='员工部门归属关系表';
+
 SET @sql = IF(
     EXISTS (
         SELECT 1
@@ -581,6 +594,23 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+CREATE TABLE IF NOT EXISTS pm_user_group (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户组ID',
+    parent_id BIGINT NULL COMMENT '父级用户组ID',
+    group_code VARCHAR(16) NOT NULL COMMENT '用户组编码，4-2-2 分级',
+    group_name VARCHAR(64) NOT NULL COMMENT '用户组名称',
+    code_level INT NOT NULL COMMENT '编码层级：1/2/3',
+    code_prefix VARCHAR(4) NOT NULL COMMENT '一级编码前缀',
+    member_user_ids_json JSON NULL COMMENT '三级功能组成员ID列表',
+    scope_condition_groups_json JSON NULL COMMENT '三级功能组管理范围条件组',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_pm_user_group_code (group_code),
+    KEY idx_pm_user_group_parent_id (parent_id),
+    CONSTRAINT fk_pm_user_group_parent_id
+        FOREIGN KEY (parent_id) REFERENCES pm_user_group(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='流程管理用户组';
+
 CREATE TABLE IF NOT EXISTS pm_document_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',
     template_code VARCHAR(64) NOT NULL COMMENT '模板编码',
@@ -759,6 +789,21 @@ INSERT IGNORE INTO sys_user (
     ('zhangsan', 'e10adc3949ba59abbe56e057f20f883e', '张三', '13800138001', 'zhangsan@finex.com', 'GROUP_HQ', '财务经理', '华东运营中心', 1, NULL),
     ('lisi', 'e10adc3949ba59abbe56e057f20f883e', '李四', '13800138002', 'lisi@finex.com', 'GROUP_HQ', '报销专员', '总部职能中心', 1, NULL);
 
+INSERT IGNORE INTO sys_user (
+    id, username, password, name, phone, email, company_id, position, labor_relation_belong, status, feishu_user_id
+) VALUES
+    (4, 'smoke04', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73034 USING utf8mb4), '13800138004', 'smoke04@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (5, 'smoke05', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73035 USING utf8mb4), '13800138005', 'smoke05@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (6, 'smoke06', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73036 USING utf8mb4), '13800138006', 'smoke06@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (7, 'smoke07', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73037 USING utf8mb4), '13800138007', 'smoke07@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (8, 'smoke08', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73038 USING utf8mb4), '13800138008', 'smoke08@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (9, 'smoke09', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73039 USING utf8mb4), '13800138009', 'smoke09@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (10, 'smoke10', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73130 USING utf8mb4), '13800138010', 'smoke10@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (11, 'smoke11', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73131 USING utf8mb4), '13800138011', 'smoke11@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (12, 'smoke12', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73132 USING utf8mb4), '13800138012', 'smoke12@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (13, 'smoke13', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73133 USING utf8mb4), '13800138013', 'smoke13@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL),
+    (14, 'smoke14', 'e10adc3949ba59abbe56e057f20f883e', CONVERT(0xE58692E7839FE794A8E688B73134 USING utf8mb4), '13800138014', 'smoke14@finex.com', 'GROUP_HQ', CONVERT(0xE58692E7839FE6B58BE8AF95E59198 USING utf8mb4), CONVERT(0xE680BBE983A8 USING utf8mb4), 1, NULL);
+
 INSERT INTO sys_department (
     company_id, dept_code, dept_name, parent_id, wecom_department_id, dingtalk_department_id,
     feishu_department_id, sync_source, sync_enabled, last_sync_at, status, sort_order
@@ -810,6 +855,30 @@ JOIN sys_department d ON d.dept_code = 'HQ_FUNCTION'
 SET u.company_id = 'GROUP_HQ',
     u.dept_id = d.id
 WHERE u.username = 'lisi';
+
+UPDATE sys_user u
+JOIN sys_department d ON d.dept_code = 'FINANCE_CENTER'
+SET u.company_id = 'GROUP_HQ',
+    u.dept_id = d.id
+WHERE u.username IN ('smoke04', 'smoke08', 'smoke12');
+
+UPDATE sys_user u
+JOIN sys_department d ON d.dept_code = 'EAST_OPERATION'
+SET u.company_id = 'GROUP_HQ',
+    u.dept_id = d.id
+WHERE u.username IN ('smoke05', 'smoke09', 'smoke13');
+
+UPDATE sys_user u
+JOIN sys_department d ON d.dept_code = 'HQ_FUNCTION'
+SET u.company_id = 'GROUP_HQ',
+    u.dept_id = d.id
+WHERE u.username IN ('smoke06', 'smoke10', 'smoke14');
+
+UPDATE sys_user u
+JOIN sys_department d ON d.dept_code = 'HEAD_OFFICE'
+SET u.company_id = 'GROUP_HQ',
+    u.dept_id = d.id
+WHERE u.username IN ('smoke07', 'smoke11');
 
 INSERT INTO sys_user_bank_account (
     user_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
@@ -2413,5 +2482,24 @@ ALTER TABLE sys_user_bank_account
     MODIFY COLUMN created_at datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     MODIFY COLUMN updated_at datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     COMMENT = '用户银行卡表';
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user_role'
+    ) AND EXISTS (
+        SELECT 1
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_role'
+    ),
+    'INSERT IGNORE INTO sys_user_role (user_id, role_id) SELECT u.id, r.id FROM sys_user u JOIN sys_role r ON r.role_code = ''RL000005'' WHERE u.username IN (''smoke04'', ''smoke05'', ''smoke06'', ''smoke07'', ''smoke08'', ''smoke09'', ''smoke10'', ''smoke11'', ''smoke12'', ''smoke13'', ''smoke14'')',
+    'SELECT ''sys_user_role seed skipped'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- comment standardization end

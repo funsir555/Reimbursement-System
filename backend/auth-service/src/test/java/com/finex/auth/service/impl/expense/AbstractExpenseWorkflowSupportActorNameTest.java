@@ -11,6 +11,7 @@ import com.finex.auth.mapper.SystemPermissionMapper;
 import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.impl.process.ProcessUserGroupResolverSupport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -42,6 +43,8 @@ class AbstractExpenseWorkflowSupportActorNameTest {
     private SystemUserRoleMapper systemUserRoleMapper;
     @Mock
     private UserMapper userMapper;
+    @Mock
+    private ProcessUserGroupResolverSupport processUserGroupResolverSupport;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -79,7 +82,8 @@ class AbstractExpenseWorkflowSupportActorNameTest {
                 systemRolePermissionMapper,
                 systemUserRoleMapper,
                 userMapper,
-                objectMapper
+                objectMapper,
+                processUserGroupResolverSupport
         );
         Method method = AbstractExpenseWorkflowSupport.class.getDeclaredMethod("resolveActorDisplayName", Long.class, String.class);
         method.setAccessible(true);

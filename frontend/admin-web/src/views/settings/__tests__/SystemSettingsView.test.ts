@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   systemSettingsApi: {
     getBootstrap: vi.fn(),
     updateDepartment: vi.fn(),
+    createEmployee: vi.fn(),
+    updateEmployee: vi.fn(),
+    deleteEmployee: vi.fn(),
+    assignUserRoles: vi.fn(),
     createCompanyBankAccount: vi.fn(),
     updateCompanyBankAccount: vi.fn(),
     deleteCompanyBankAccount: vi.fn(),
@@ -135,15 +139,28 @@ const TreeStub = defineComponent({
       default: () => []
     }
   },
-  setup(props, { slots }) {
-    return () =>
-      h(
-        'div',
-        {},
-        props.data.map((item: any) =>
-          slots.default ? slots.default({ data: item }) : h('div', item?.deptName || '')
-        )
+  emits: ['node-click', 'node-expand', 'node-collapse'],
+  setup(props, { slots, emit }) {
+    function renderNodes(nodes: any[]) {
+      return nodes.map((item) =>
+        h('div', { key: item.nodeKey || item.id, class: 'tree-node-group' }, [
+          h(
+            'div',
+            {
+              class: 'tree-node-shell',
+              'data-node-key': item.nodeKey || item.id,
+              onClick: () => emit('node-click', item)
+            },
+            slots.default ? slots.default({ data: item }) : h('div', item?.deptName || item?.name || '')
+          ),
+          Array.isArray(item?.children) && item.children.length
+            ? h('div', { class: 'tree-node-children' }, renderNodes(item.children))
+            : null
+        ])
       )
+    }
+
+    return () => h('div', {}, renderNodes(props.data as any[]))
   }
 })
 
@@ -407,6 +424,144 @@ function createDepartmentTree() {
   ]
 }
 
+function createOrganizationEnhancementBootstrap() {
+  const bootstrap = createBootstrap()
+  bootstrap.currentUser.permissionCodes.push(
+    'settings:organization:create',
+    'settings:organization:delete',
+    'settings:organization:edit'
+  )
+  bootstrap.departments = [
+    {
+      id: 11,
+      companyId: 'COMPANY_A',
+      deptCode: 'ROOT_FIN',
+      deptName: '财务中心',
+      parentId: undefined,
+      leaderUserId: undefined,
+      leaderName: '',
+      syncSource: 'MANUAL',
+      syncManaged: false,
+      syncEnabled: true,
+      syncStatus: 'MANUAL',
+      syncRemark: '',
+      status: 1,
+      sortOrder: 1,
+      children: [
+        {
+          id: 12,
+          companyId: 'COMPANY_A',
+          deptCode: 'CHILD_AP',
+          deptName: '应付组',
+          parentId: 11,
+          leaderUserId: undefined,
+          leaderName: '',
+          syncSource: 'MANUAL',
+          syncManaged: false,
+          syncEnabled: true,
+          syncStatus: 'MANUAL',
+          syncRemark: '',
+          status: 1,
+          sortOrder: 1,
+          children: []
+        }
+      ]
+    }
+  ]
+  bootstrap.employees = [
+    {
+      userId: 101,
+      username: 'awang',
+      name: '阿王',
+      phone: '13800000001',
+      email: 'awang@finex.com',
+      companyId: 'COMPANY_A',
+      companyName: '测试公司A',
+      deptId: 11,
+      deptName: '财务中心',
+      departments: [{ deptId: 11, deptName: '财务中心' }],
+      position: '会计',
+      laborRelationBelong: '总部',
+      statDepartmentBelong: '财务共享',
+      statRegionBelong: '华东',
+      statAreaBelong: '上海',
+      status: 1,
+      sourceType: 'MANUAL',
+      syncManaged: false,
+      lastSyncAt: '',
+      roleCodes: ['FINANCE']
+    },
+    {
+      userId: 102,
+      username: 'zhaoer',
+      name: '赵二',
+      phone: '13800000002',
+      email: 'zhaoer@finex.com',
+      companyId: 'COMPANY_A',
+      companyName: '测试公司A',
+      deptId: 11,
+      deptName: '财务中心',
+      departments: [{ deptId: 11, deptName: '财务中心' }],
+      position: '出纳',
+      laborRelationBelong: '总部',
+      statDepartmentBelong: '财务共享',
+      statRegionBelong: '华东',
+      statAreaBelong: '上海',
+      status: 1,
+      sourceType: 'WECOM',
+      syncManaged: true,
+      lastSyncAt: '',
+      roleCodes: ['FINANCE']
+    },
+    {
+      userId: 103,
+      username: 'childuser',
+      name: '李三',
+      phone: '13800000003',
+      email: 'lisi3@finex.com',
+      companyId: 'COMPANY_A',
+      companyName: '测试公司A',
+      deptId: 12,
+      deptName: '应付组',
+      departments: [{ deptId: 12, deptName: '应付组' }],
+      position: '助理',
+      laborRelationBelong: '总部',
+      statDepartmentBelong: '财务共享',
+      statRegionBelong: '华东',
+      statAreaBelong: '上海',
+      status: 0,
+      sourceType: 'MANUAL',
+      syncManaged: false,
+      lastSyncAt: '',
+      roleCodes: []
+    }
+  ]
+  bootstrap.roles = [
+    {
+      id: 51,
+      roleCode: 'FINANCE',
+      roleName: '财务角色',
+      roleDescription: '财务权限',
+      status: 1,
+      permissionCodes: [],
+      userIds: [101, 102],
+      userNames: ['阿王', '赵二']
+    }
+  ]
+  bootstrap.companies = [
+    {
+      companyId: 'COMPANY_A',
+      companyCode: 'COMPANY_A',
+      companyName: '测试公司A',
+      invoiceTitle: '测试公司A',
+      taxNo: '91310000TEST',
+      status: 1,
+      children: []
+    }
+  ]
+  return bootstrap
+}
+
 async function mountView() {
   const wrapper = mount(SystemSettingsView, {
     global: {
@@ -441,6 +596,12 @@ async function mountView() {
   return wrapper
 }
 
+function indexOfText(content: string, needle: string) {
+  const index = content.indexOf(needle)
+  expect(index).toBeGreaterThan(-1)
+  return index
+}
+
 describe('SystemSettingsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -449,6 +610,10 @@ describe('SystemSettingsView', () => {
     mocks.router.push.mockResolvedValue(undefined)
     mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: createBootstrap() })
     mocks.systemSettingsApi.updateDepartment.mockResolvedValue({})
+    mocks.systemSettingsApi.createEmployee.mockResolvedValue({ data: { userId: 88 } })
+    mocks.systemSettingsApi.updateEmployee.mockResolvedValue({ data: { userId: 88 } })
+    mocks.systemSettingsApi.deleteEmployee.mockResolvedValue({})
+    mocks.systemSettingsApi.assignUserRoles.mockResolvedValue({})
     mocks.systemSettingsApi.createCompanyBankAccount.mockResolvedValue({})
     mocks.systemSettingsApi.updateCompanyBankAccount.mockResolvedValue({})
     mocks.systemSettingsApi.deleteCompanyBankAccount.mockResolvedValue({})
@@ -615,6 +780,7 @@ describe('SystemSettingsView', () => {
       companyName: '\u6d4b\u8bd5\u516c\u53f8',
       deptId: 12,
       deptName: '\u8d22\u52a1\u90e8',
+      departments: [{ deptId: 12, deptName: '\u8d22\u52a1\u90e8' }],
       position: '\u4f1a\u8ba1',
       laborRelationBelong: '\u6b63\u5f0f',
       statDepartmentBelong: '\u534e\u4e1c\u8d22\u52a1',
@@ -675,6 +841,141 @@ describe('SystemSettingsView', () => {
     expect(statDepartmentInput.attributes('disabled')).toBeUndefined()
   })
 
+  it('renders mixed organization nodes with departments before employees under the same parent', async () => {
+    const bootstrap = createOrganizationEnhancementBootstrap()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const html = wrapper.html()
+
+    expect(wrapper.find('[data-testid="organization-node-dept-12"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="organization-node-emp-101-dept-11"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="organization-node-emp-102-dept-11"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="organization-node-emp-103-dept-12"]').exists()).toBe(true)
+    expect(indexOfText(html, 'organization-node-dept-12')).toBeLessThan(
+      indexOfText(html, 'organization-node-emp-103-dept-12')
+    )
+    expect(indexOfText(html, 'organization-node-emp-101-dept-11')).toBeLessThan(
+      indexOfText(html, 'organization-node-emp-102-dept-11')
+    )
+  })
+
+  it('shows the employee info card instead of department config when an organization employee node is selected', async () => {
+    const bootstrap = createOrganizationEnhancementBootstrap()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    await wrapper.get('[data-testid="organization-node-emp-101-dept-11"]').trigger('click')
+    await flushPromises()
+
+    expect(vm.selectedOrganizationNodeKey).toBe('emp-101-dept-11')
+    expect(vm.selectedOrganizationNodeIsEmployee).toBe(true)
+    expect(vm.selectedOrganizationEmployee?.userId).toBe(101)
+    expect(wrapper.find('[data-testid="organization-employee-info"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="organization-department-config"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('阿王')
+    expect(wrapper.text()).toContain('财务中心')
+  })
+
+  it('opens the shared employee dialog with employee data when double-clicking an organization employee node', async () => {
+    const bootstrap = createOrganizationEnhancementBootstrap()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    await wrapper.get('[data-testid="organization-node-emp-102-dept-11"]').trigger('dblclick')
+    await flushPromises()
+
+    expect(vm.employeeDialogVisible).toBe(true)
+    expect(vm.employeeForm.userId).toBe(102)
+    expect(vm.employeeForm.username).toBe('zhaoer')
+    expect(vm.employeeForm.name).toBe('赵二')
+    expect(vm.employeeForm.deptIds).toEqual([11])
+    expect((wrapper.get('[data-testid="employee-username-input"]').element as HTMLInputElement).value).toBe(
+      'zhaoer'
+    )
+  })
+
+  it('reuses the existing employee save flow when editing from the organization tree', async () => {
+    const bootstrap = createOrganizationEnhancementBootstrap()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+    mocks.systemSettingsApi.updateEmployee.mockResolvedValue({ data: { userId: 102 } })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    await wrapper.get('[data-testid="organization-node-emp-102-dept-11"]').trigger('dblclick')
+    await flushPromises()
+
+    vm.employeeForm.name = '赵二（更新）'
+    vm.employeeForm.statDepartmentBelong = '财务核算'
+    vm.employeeForm.roleIds = [51]
+
+    await vm.saveEmployee(true)
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateEmployee).toHaveBeenCalledWith(
+      102,
+      expect.objectContaining({
+        username: 'zhaoer',
+        name: '赵二（更新）',
+        deptIds: [11],
+        statDepartmentBelong: '财务核算',
+        status: 1
+      })
+    )
+    expect(mocks.systemSettingsApi.assignUserRoles).toHaveBeenCalledWith(102, [51])
+    expect(vm.employeeDialogVisible).toBe(false)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('员工与角色已保存')
+  })
+
+  it('disables department deletion for employee nodes and restores it for department nodes', async () => {
+    const bootstrap = createOrganizationEnhancementBootstrap()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const deleteButton = wrapper.get('[data-testid="organization-delete-button"]')
+
+    expect(deleteButton.attributes('disabled')).toBeUndefined()
+
+    await wrapper.get('[data-testid="organization-node-emp-101-dept-11"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="organization-delete-button"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.get('[data-testid="organization-node-dept-11"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="organization-delete-button"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('keeps the employee management edit entry working with the shared employee dialog', async () => {
+    const bootstrap = createOrganizationEnhancementBootstrap()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    vm.selectedEmployee = bootstrap.employees[0]
+    await flushPromises()
+
+    const editButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === '编辑')
+
+    expect(editButton).toBeTruthy()
+
+    await editButton!.trigger('click')
+    await flushPromises()
+
+    expect(vm.employeeDialogVisible).toBe(true)
+    expect(vm.employeeForm.userId).toBe(101)
+    expect(vm.employeeForm.username).toBe('awang')
+  })
+
   it('keeps department tree collapsed to level-1 on initial load', async () => {
     const bootstrap = createBootstrap()
     bootstrap.currentUser.permissionCodes.push('settings:organization:edit')
@@ -687,7 +988,7 @@ describe('SystemSettingsView', () => {
     expect(vm.departmentExpandedKeys).toEqual([])
   })
 
-  it('expands only ancestor path after saving a non-top-level department config', async () => {
+  it('preserves expanded departments and keeps the edited non-top-level department visible after saving config', async () => {
     const bootstrap = createBootstrap()
     bootstrap.currentUser.permissionCodes.push('settings:organization:edit')
     bootstrap.departments = createDepartmentTree()
@@ -695,18 +996,19 @@ describe('SystemSettingsView', () => {
 
     const wrapper = await mountView()
     const vm = wrapper.vm as any
-    vm.handleDepartmentSelect(bootstrap.departments[0].children[0].children[0])
+    vm.handleDepartmentNodeExpand(vm.organizationTreeNodes[0])
+    vm.handleDepartmentNodeExpand(vm.organizationTreeNodes[1])
+    await wrapper.get('[data-testid="organization-node-dept-3"]').trigger('click')
     await flushPromises()
 
     await vm.saveDepartmentConfig()
     await flushPromises()
 
     expect(mocks.systemSettingsApi.updateDepartment).toHaveBeenCalledWith(3, expect.any(Object))
-    expect(vm.departmentExpandedKeys).toEqual([1, 2, 3])
-    expect(vm.departmentExpandedKeys).not.toContain(4)
+    expect(vm.departmentExpandedKeys).toEqual(['dept-1', 'dept-4', 'dept-2', 'dept-3'])
   })
 
-  it('resets to level-1 collapsed after saving a top-level department config', async () => {
+  it('collapses a department and all expanded child departments at once', async () => {
     const bootstrap = createBootstrap()
     bootstrap.currentUser.permissionCodes.push('settings:organization:edit')
     bootstrap.departments = createDepartmentTree()
@@ -714,7 +1016,25 @@ describe('SystemSettingsView', () => {
 
     const wrapper = await mountView()
     const vm = wrapper.vm as any
-    vm.handleDepartmentSelect(bootstrap.departments[0])
+    vm.handleDepartmentNodeExpand(vm.organizationTreeNodes[0])
+    vm.handleDepartmentNodeExpand(vm.organizationTreeNodes[0].children[0])
+    vm.handleDepartmentNodeExpand(vm.organizationTreeNodes[0].children[0].children[0])
+    vm.handleDepartmentNodeExpand(vm.organizationTreeNodes[1])
+
+    vm.handleDepartmentNodeCollapse(vm.organizationTreeNodes[0])
+
+    expect(vm.departmentExpandedKeys).toEqual(['dept-4'])
+  })
+
+  it('keeps level-1 collapsed after saving a top-level department config when nothing was expanded', async () => {
+    const bootstrap = createBootstrap()
+    bootstrap.currentUser.permissionCodes.push('settings:organization:edit')
+    bootstrap.departments = createDepartmentTree()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    await wrapper.get('[data-testid="organization-node-dept-1"]').trigger('click')
     await flushPromises()
 
     await vm.saveDepartmentConfig()
@@ -722,6 +1042,24 @@ describe('SystemSettingsView', () => {
 
     expect(mocks.systemSettingsApi.updateDepartment).toHaveBeenCalledWith(1, expect.any(Object))
     expect(vm.departmentExpandedKeys).toEqual([])
+  })
+
+  it('preserves the organization tree expansion after saving employee information', async () => {
+    const bootstrap = createOrganizationEnhancementBootstrap()
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: bootstrap })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.handleDepartmentNodeExpand(vm.organizationTreeNodes[0])
+    await wrapper.get('[data-testid="organization-node-emp-101-dept-11"]').trigger('dblclick')
+    await flushPromises()
+
+    vm.employeeForm.name = '王一（更新）'
+    await vm.saveEmployee(true)
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.updateEmployee).toHaveBeenCalledWith(101, expect.any(Object))
+    expect(vm.departmentExpandedKeys).toEqual(['dept-11'])
   })
 
   it('uses the unified outlet wording when validating company bank accounts', async () => {

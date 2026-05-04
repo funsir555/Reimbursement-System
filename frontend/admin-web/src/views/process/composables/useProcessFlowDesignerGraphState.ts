@@ -1,4 +1,4 @@
-import { computed, type ComputedRef, type Ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type {
   ProcessFlowCondition,
@@ -14,6 +14,7 @@ import type {
 import {
   appendRouteToBranch,
   buildDefaultBranchRoutes,
+  copyNodeIntoContainer,
   insertNodeIntoContainer,
   moveNodeIntoContainer,
   normalizeContainerKey,
@@ -55,6 +56,15 @@ type CanvasDropTarget = {
   blockKey: string
 }
 
+type CanvasDragMode = 'move' | 'copy'
+
+type CanvasDragStartPayload = {
+  nodeKey: string
+  mode: CanvasDragMode
+}
+
+type CanvasDropOutcome = 'copied' | 'moved' | 'ignored' | 'cancelled'
+
 export function useProcessFlowDesignerGraphState(params: {
   working: ProcessFlowDetail
   metaOptions: ComputedRef<ProcessFlowMeta>
@@ -76,6 +86,7 @@ export function useProcessFlowDesignerGraphState(params: {
 
   const workingNodes = computed(() => working.nodes || [])
   const workingRoutes = computed(() => (working.routes || []) as EditableProcessFlowRoute[])
+  const draggingNodeMode = ref<CanvasDragMode>('move')
   const selectedNode = computed(() =>
     workingNodes.value.find((item) => item.nodeKey === selectedNodeKey.value)
   )
@@ -103,6 +114,18 @@ export function useProcessFlowDesignerGraphState(params: {
       return false
     }
     return Number(config.managerConfig?.managerLevel || 1) > 1
+  }
+
+  function shouldForceApprovalAndSign(
+    config?: Pick<ProcessFlowNode['config'], 'approverType' | 'managerConfig'>
+  ) {
+    if (!config) {
+      return false
+    }
+    if (config.approverType === 'DESIGNATED_USER_GROUP') {
+      return true
+    }
+    return shouldForceManagerAndSign(config)
   }
 
   function sortRoutes(routes: ProcessFlowRoute[]) {
@@ -155,6 +178,9 @@ export function useProcessFlowDesignerGraphState(params: {
       designatedMemberConfig: {
         userIds: []
       } as ProcessFlowNode['config']['designatedMemberConfig'],
+      designatedUserGroupConfig: {
+        groupId: undefined
+      } as NonNullable<ProcessFlowNode['config']['designatedUserGroupConfig']>,
       manualSelectConfig: {
         candidateScope: 'ALL_ACTIVE_USERS'
       } as ProcessFlowNode['config']['manualSelectConfig']
@@ -168,8 +194,16 @@ export function useProcessFlowDesignerGraphState(params: {
     return source.map((item) => Number(item)).filter((item) => Number.isFinite(item))
   }
 
+  function normalizeOptionalNumber(source: unknown) {
+    if (source === undefined || source === null || source === '') {
+      return undefined
+    }
+    const numeric = Number(source)
+    return Number.isFinite(numeric) ? numeric : undefined
+  }
+
   function isOptionValueType(valueType?: string) {
-    return ['department', 'user', 'expenseType', 'archive'].includes(valueType || '')
+    return ['company', 'department', 'user', 'expenseType', 'archive'].includes(valueType || '')
   }
 
   function isMultiOperator(operator: string) {
@@ -267,7 +301,7 @@ export function useProcessFlowDesignerGraphState(params: {
       ...cloneValue(route),
       routeName: route.routeName || `分支 ${index + 1}`,
       priority: route.priority ?? index + 1,
-      defaultRoute: false,
+      defaultRoute: Boolean(route.defaultRoute),
       attachBelowNodes: Boolean(route.attachBelowNodes),
       conditionGroups: normalizeConditionGroups(route.conditionGroups || [])
     }
@@ -289,6 +323,10 @@ export function useProcessFlowDesignerGraphState(params: {
           ...baseConfig.designatedMemberConfig,
           ...cloneValue(node.config?.designatedMemberConfig || {})
         },
+        designatedUserGroupConfig: {
+          ...baseConfig.designatedUserGroupConfig,
+          ...cloneValue(node.config?.designatedUserGroupConfig || {})
+        },
         manualSelectConfig: {
           ...baseConfig.manualSelectConfig,
           ...cloneValue(node.config?.manualSelectConfig || {})
@@ -298,7 +336,7 @@ export function useProcessFlowDesignerGraphState(params: {
 
     if (normalized.nodeType === 'APPROVAL') {
       const managerConfig = cloneValue(normalized.config.managerConfig || {})
-      const approvalMode = shouldForceManagerAndSign({
+      const approvalMode = shouldForceApprovalAndSign({
         approverType: normalized.config.approverType || 'MANAGER',
         managerConfig
       })
@@ -323,6 +361,9 @@ export function useProcessFlowDesignerGraphState(params: {
         },
         designatedMemberConfig: {
           userIds: normalizeNumberArray(normalized.config.designatedMemberConfig?.userIds)
+        },
+        designatedUserGroupConfig: {
+          groupId: normalizeOptionalNumber(normalized.config.designatedUserGroupConfig?.groupId)
         },
         manualSelectConfig: {
           candidateScope: normalized.config.manualSelectConfig?.candidateScope || 'ALL_ACTIVE_USERS'
@@ -507,13 +548,15 @@ export function useProcessFlowDesignerGraphState(params: {
     return Boolean(editableParent)
   }
 
-  function handleCanvasDragStart(nodeKey: string) {
-    draggingNodeKey.value = nodeKey
+  function handleCanvasDragStart(payload: CanvasDragStartPayload) {
+    draggingNodeKey.value = payload.nodeKey
+    draggingNodeMode.value = payload.mode
     dropTargetKey.value = ''
   }
 
   function handleCanvasDragEnd() {
     draggingNodeKey.value = ''
+    draggingNodeMode.value = 'move'
     dropTargetKey.value = ''
   }
 
@@ -530,11 +573,27 @@ export function useProcessFlowDesignerGraphState(params: {
     }
   }
 
-  async function handleCanvasDrop(payload: CanvasDropTarget) {
+  async function handleCanvasDrop(payload: CanvasDropTarget): Promise<CanvasDropOutcome> {
     const currentNodeKey = draggingNodeKey.value
+    const currentDragMode = draggingNodeMode.value
     handleCanvasDragEnd()
     if (!currentNodeKey) {
-      return
+      return 'ignored'
+    }
+
+    if (currentDragMode === 'copy') {
+      const copyResult = copyNodeIntoContainer(
+        working.nodes || [],
+        currentNodeKey,
+        payload.containerKey,
+        payload.index
+      )
+      if (!copyResult.copied || !copyResult.copiedNodeKey) {
+        return 'ignored'
+      }
+      applyWorkingGraph(copyResult.nodes, working.routes || [], { nodeKey: copyResult.copiedNodeKey })
+      ElMessage.success('节点副本已添加')
+      return 'copied'
     }
 
     const moveResult = moveNodeIntoContainer(
@@ -546,7 +605,7 @@ export function useProcessFlowDesignerGraphState(params: {
     )
     if (!moveResult.moved) {
       handleMoveFailure(moveResult)
-      return
+      return 'ignored'
     }
 
     try {
@@ -560,11 +619,12 @@ export function useProcessFlowDesignerGraphState(params: {
         }
       )
     } catch {
-      return
+      return 'cancelled'
     }
 
     applyWorkingGraph(moveResult.nodes, moveResult.routes, { nodeKey: currentNodeKey })
     ElMessage.success('节点位置已调整')
+    return 'moved'
   }
 
   function buildNodeByType(nodeType: FlowInsertType, index: number): ProcessFlowNode {
@@ -645,6 +705,9 @@ export function useProcessFlowDesignerGraphState(params: {
         designatedMemberConfig: {
           userIds: []
         },
+        designatedUserGroupConfig: {
+          groupId: undefined
+        },
         manualSelectConfig: {
           candidateScope: 'ALL_ACTIVE_USERS'
         }
@@ -698,6 +761,34 @@ export function useProcessFlowDesignerGraphState(params: {
       return {
         ...cloneValue(item),
         attachBelowNodes: false
+      }
+    })
+    applyWorkingGraph(working.nodes || [], nextRoutes, { routeKey })
+  }
+
+  function updateSelectedRouteDefaultRoute(enabled: boolean) {
+    if (!selectedRoute.value) {
+      return
+    }
+    const routeKey = selectedRoute.value.routeKey
+    const sourceNodeKey = selectedRoute.value.sourceNodeKey
+    const nextRoutes = (working.routes || []).map((item) => {
+      if (item.sourceNodeKey !== sourceNodeKey) {
+        return cloneValue(item)
+      }
+      if (item.routeKey === routeKey) {
+        return {
+          ...cloneValue(item),
+          defaultRoute: enabled,
+          conditionGroups: enabled ? [] : cloneValue(item.conditionGroups || [])
+        }
+      }
+      if (!enabled) {
+        return cloneValue(item)
+      }
+      return {
+        ...cloneValue(item),
+        defaultRoute: false
       }
     })
     applyWorkingGraph(working.nodes || [], nextRoutes, { routeKey })
@@ -790,6 +881,9 @@ export function useProcessFlowDesignerGraphState(params: {
   }
 
   function addConditionGroup(route: EditableProcessFlowRoute) {
+    if (route.defaultRoute) {
+      return
+    }
     route.conditionGroups.push({
       groupNo: route.conditionGroups.length + 1,
       conditions: [createEmptyCondition()]
@@ -835,6 +929,8 @@ export function useProcessFlowDesignerGraphState(params: {
   function conditionValueOptions(condition: EditableProcessFlowCondition): ProcessFormOption[] {
     const valueType = getConditionField(condition.fieldKey)?.valueType
     switch (valueType) {
+      case 'company':
+        return metaOptions.value.companyOptions
       case 'department':
         return metaOptions.value.departmentOptions
       case 'user':
@@ -924,10 +1020,14 @@ export function useProcessFlowDesignerGraphState(params: {
       flowName: working.flowName.trim(),
       flowDescription: working.flowDescription?.trim() || '',
       nodes: graph.nodes.map((node, index) => cloneValue(normalizeNode(node, index))),
-      routes: graph.routes.map((route, index) => ({
-        ...cloneValue(normalizeRoute(route, index)),
-        defaultRoute: false
-      }))
+      routes: graph.routes.map((route, index) => {
+        const normalizedRoute = normalizeRoute(route, index)
+        return {
+          ...cloneValue(normalizedRoute),
+          defaultRoute: normalizedRoute.defaultRoute,
+          conditionGroups: normalizedRoute.defaultRoute ? [] : normalizedRoute.conditionGroups
+        }
+      })
     }
   }
 
@@ -945,7 +1045,7 @@ export function useProcessFlowDesignerGraphState(params: {
   }
 
   function normalizeApprovalModeSelection() {
-    if (selectedNode.value?.nodeType === 'APPROVAL' && shouldForceManagerAndSign(selectedNode.value.config)) {
+    if (selectedNode.value?.nodeType === 'APPROVAL' && shouldForceApprovalAndSign(selectedNode.value.config)) {
       selectedNode.value.config.approvalMode = 'AND_SIGN'
     }
   }
@@ -966,6 +1066,7 @@ export function useProcessFlowDesignerGraphState(params: {
     handleCanvasInsert,
     addRouteLane,
     updateSelectedRouteAttachBelowNodes,
+    updateSelectedRouteDefaultRoute,
     removeSelectedItem,
     removeSelectedRoute,
     removeSelectedNode,

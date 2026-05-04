@@ -39,14 +39,12 @@
           </template>
         </el-input>
 
-        <el-select v-model="filters.deptId" clearable filterable placeholder="部门">
-          <el-option
-            v-for="item in departmentOptions"
-            :key="item.id"
-            :label="item.label"
-            :value="item.id"
-          />
-        </el-select>
+        <department-tree-select
+          v-model="filters.deptId"
+          :options="departmentTreeOptions"
+          value-type="number"
+          placeholder="部门"
+        />
 
         <el-select v-model="filters.status" clearable placeholder="状态">
           <el-option label="启用" :value="1" />
@@ -165,13 +163,9 @@ import {
   type EmployeeQueryPayload,
   type EmployeeRecord
 } from '@/api'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
 import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
-
-type DepartmentOption = {
-  id: number
-  label: string
-}
 
 const loading = ref(false)
 const employees = ref<EmployeeRecord[]>([])
@@ -196,7 +190,7 @@ const sourceLabelMap: Record<string, string> = {
 
 const currentCompanyId = computed(() => financeCompany.currentCompanyId)
 const currentCompanyName = computed(() => financeCompany.currentCompanyName)
-const departmentOptions = computed(() => flattenDepartments(departments.value, currentCompanyId.value))
+const departmentTreeOptions = computed(() => filterDepartmentsByCompany(departments.value, currentCompanyId.value))
 const enabledCount = computed(() => employees.value.filter((item) => item.status === 1).length)
 const disabledCount = computed(() => employees.value.filter((item) => item.status !== 1).length)
 const syncedCount = computed(() => employees.value.filter((item) => item.sourceType && item.sourceType !== 'MANUAL').length)
@@ -288,20 +282,13 @@ function formatDateTime(value?: string) {
   return value.replace('T', ' ').slice(0, 19)
 }
 
-function flattenDepartments(items: DepartmentTreeNode[], companyId?: string, level = 0, result: DepartmentOption[] = []) {
-  items.forEach((item) => {
-    if (companyId && item.companyId && item.companyId !== companyId) {
-      return
-    }
-    result.push({
-      id: item.id,
-      label: `${'—'.repeat(level)}${level > 0 ? ' ' : ''}${item.deptName}`
-    })
-    if (item.children?.length) {
-      flattenDepartments(item.children, companyId, level + 1, result)
-    }
-  })
-  return result
+function filterDepartmentsByCompany(items: DepartmentTreeNode[], companyId?: string): DepartmentTreeNode[] {
+  return items
+    .filter((item) => !companyId || !item.companyId || item.companyId === companyId)
+    .map((item) => ({
+      ...item,
+      children: filterDepartmentsByCompany(item.children || [], companyId)
+    }))
 }
 </script>
 

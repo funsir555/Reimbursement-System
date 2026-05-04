@@ -11,4 +11,10 @@ public class ProcessFormOptionVO {
     private String label;
 
     private String value;
+
+    private String code;
+
+    private String name;
+
+    private String parentValue;
 }

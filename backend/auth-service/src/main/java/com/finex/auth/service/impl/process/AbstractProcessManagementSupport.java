@@ -191,10 +191,20 @@ abstract class AbstractProcessManagementSupport {
     protected List<ProcessFormOptionVO> loadDepartmentOptions() {
         return systemDepartmentMapper.selectList(
                 Wrappers.<SystemDepartment>lambdaQuery()
-                        .select(SystemDepartment::getId, SystemDepartment::getDeptName)
+                        .select(SystemDepartment::getId, SystemDepartment::getDeptCode, SystemDepartment::getDeptName, SystemDepartment::getParentId)
                         .eq(SystemDepartment::getStatus, 1)
                         .orderByAsc(SystemDepartment::getSortOrder, SystemDepartment::getId)
-        ).stream().map(department -> option(department.getDeptName(), String.valueOf(department.getId()))).toList();
+        ).stream().map(this::toDepartmentOption).toList();
+    }
+
+    protected ProcessFormOptionVO toDepartmentOption(SystemDepartment department) {
+        ProcessFormOptionVO option = new ProcessFormOptionVO();
+        option.setValue(String.valueOf(department.getId()));
+        option.setCode(department.getDeptCode());
+        option.setName(department.getDeptName());
+        option.setParentValue(department.getParentId() == null ? null : String.valueOf(department.getParentId()));
+        option.setLabel(formatDepartmentLabel(department.getDeptCode(), department.getDeptName(), option.getValue()));
+        return option;
     }
 
     /**
@@ -623,6 +633,15 @@ abstract class AbstractProcessManagementSupport {
         option.setLabel(label);
         option.setValue(value);
         return option;
+    }
+
+    protected String formatDepartmentLabel(String code, String name, String fallback) {
+        String normalizedCode = trimToNull(code);
+        String normalizedName = trimToNull(name);
+        if (normalizedCode != null && normalizedName != null) {
+            return normalizedCode + "  " + normalizedName;
+        }
+        return normalizedName != null ? normalizedName : normalizedCode != null ? normalizedCode : fallback;
     }
 
     protected record RuleFieldDefinition(

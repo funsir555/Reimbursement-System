@@ -21,6 +21,7 @@ import com.finex.auth.mapper.ProcessFlowVersionMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.UserDepartmentSupport;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesignSupport {
 
     private final ProcessFlowStructureSupport structureSupport;
+    private final ProcessUserGroupResolverSupport userGroupResolverSupport;
 
     public ProcessFlowApproverResolveSupport(
             ProcessFlowMapper processFlowMapper,
@@ -47,7 +49,8 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
             ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper,
             ProcessDocumentTemplateMapper processDocumentTemplateMapper,
             ObjectMapper objectMapper,
-            ProcessFlowStructureSupport structureSupport
+            ProcessFlowStructureSupport structureSupport,
+            ProcessUserGroupResolverSupport userGroupResolverSupport
     ) {
         super(
                 processFlowMapper,
@@ -64,6 +67,7 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
                 objectMapper
         );
         this.structureSupport = structureSupport;
+        this.userGroupResolverSupport = userGroupResolverSupport;
     }
 
     public ProcessFlowResolveApproversVO resolveApprovers(ProcessFlowResolveApproversDTO dto) {
@@ -91,6 +95,8 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
         List<User> resolvedUsers;
         if (APPROVER_TYPE_DESIGNATED_MEMBER.equals(approverType)) {
             resolvedUsers = resolveDesignatedMembers(config, trace);
+        } else if (APPROVER_TYPE_DESIGNATED_USER_GROUP.equals(approverType)) {
+            resolvedUsers = resolveDesignatedUserGroupMembers(config, dto.getContext(), trace);
         } else if (APPROVER_TYPE_MANUAL_SELECT.equals(approverType)) {
             resolvedUsers = resolveManualMembers(dto.getContext(), trace);
         } else {
@@ -112,17 +118,29 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
             return result;
         }
 
-        Map<Long, String> deptNameMap = loadDeptNameMap(
-                distinctUsers.stream().map(User::getDeptId).filter(Objects::nonNull).toList()
-        );
+        Map<Long, List<com.finex.auth.dto.EmployeeDepartmentRefVO>> departmentsByUserId =
+                UserDepartmentSupport.loadDepartmentRefsByUserId(
+                        userMapper,
+                        systemDepartmentMapper,
+                        distinctUsers.stream().map(User::getId).toList()
+                );
         result.setResolutionType("RESOLVED");
         result.setApproverUserIds(distinctUsers.stream().map(User::getId).toList());
         result.setApproverUsers(distinctUsers.stream().map(user -> {
             ProcessFlowResolvedUserVO item = new ProcessFlowResolvedUserVO();
+            List<com.finex.auth.dto.EmployeeDepartmentRefVO> departments = departmentsByUserId.getOrDefault(user.getId(), List.of());
+            if (departments.isEmpty() && user.getDeptId() != null) {
+                com.finex.auth.dto.EmployeeDepartmentRefVO fallbackDepartment = new com.finex.auth.dto.EmployeeDepartmentRefVO();
+                fallbackDepartment.setDeptId(user.getDeptId());
+                SystemDepartment department = systemDepartmentMapper.selectById(user.getDeptId());
+                fallbackDepartment.setDeptName(department == null ? null : department.getDeptName());
+                departments = List.of(fallbackDepartment);
+            }
             item.setUserId(user.getId());
             item.setUserName(normalizeUserName(user));
-            item.setDeptId(user.getDeptId());
-            item.setDeptName(deptNameMap.get(user.getDeptId()));
+            item.setDepartments(new ArrayList<>(departments));
+            item.setDeptId(UserDepartmentSupport.resolvePrimaryDepartmentId(departments));
+            item.setDeptName(UserDepartmentSupport.joinDepartmentNames(departments));
             return item;
         }).toList());
         return result;
@@ -225,6 +243,20 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
         return loadActiveUsers(userIds);
     }
 
+    public List<User> resolveDesignatedUserGroupMembers(
+            Map<String, Object> config,
+            Map<String, Object> context,
+            List<String> trace
+    ) {
+        Long groupId = asLong(toObjectMap(config.get("designatedUserGroupConfig")).get("groupId"));
+        if (groupId == null) {
+            trace.add("未配置指定用户组");
+            return Collections.emptyList();
+        }
+        trace.add("指定用户组：" + groupId);
+        return userGroupResolverSupport.resolveMatchedMembers(groupId, context);
+    }
+
     public List<User> resolveManualMembers(Map<String, Object> context, List<String> trace) {
         List<Long> userIds = toLongList(context == null ? null : context.get("manualSelectedUserIds"));
         if (userIds.isEmpty()) {
@@ -237,17 +269,23 @@ public class ProcessFlowApproverResolveSupport extends AbstractProcessFlowDesign
 
     public List<Long> resolveStartDeptIds(String deptSource, Map<String, Object> context) {
         if (DEPT_SOURCE_SUBMITTER.equals(deptSource)) {
-            Long submitterDeptId = asLong(context == null ? null : context.get("submitterDeptId"));
-            return submitterDeptId == null ? Collections.emptyList() : List.of(submitterDeptId);
+            List<Long> submitterDeptIds = toLongList(context == null ? null : context.get("submitterDeptIds"));
+            if (!submitterDeptIds.isEmpty()) {
+                return submitterDeptIds;
+            }
+            return toLongList(context == null ? null : context.get("submitterDeptId"));
         }
 
         List<Long> undertakeDeptIds = toLongList(context == null ? null : context.get("undertakeDeptIds"));
         if (!undertakeDeptIds.isEmpty()) {
-            return List.of(undertakeDeptIds.get(0));
+            return undertakeDeptIds;
         }
 
-        Long submitterDeptId = asLong(context == null ? null : context.get("submitterDeptId"));
-        return submitterDeptId == null ? Collections.emptyList() : List.of(submitterDeptId);
+        List<Long> submitterDeptIds = toLongList(context == null ? null : context.get("submitterDeptIds"));
+        if (!submitterDeptIds.isEmpty()) {
+            return submitterDeptIds;
+        }
+        return toLongList(context == null ? null : context.get("submitterDeptId"));
     }
 
     public SystemDepartment climbDepartment(SystemDepartment start, Map<Long, SystemDepartment> departmentMap, int steps) {

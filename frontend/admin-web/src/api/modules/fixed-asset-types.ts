@@ -7,6 +7,9 @@ import type { MoneyValue } from './core'
 export interface FixedAssetOption {
   value: string
   label: string
+  code?: string
+  name?: string
+  parentValue?: string
 }
 
 // 这是 FixedAssetMeta 的数据结构。

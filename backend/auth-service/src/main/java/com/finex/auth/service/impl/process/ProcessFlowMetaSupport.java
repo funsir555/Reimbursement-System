@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
 
 public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
 
+    private final ProcessUserGroupResolverSupport userGroupResolverSupport;
+
     public ProcessFlowMetaSupport(
             ProcessFlowMapper processFlowMapper,
             ProcessFlowVersionMapper processFlowVersionMapper,
@@ -37,7 +39,8 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
             ProcessExpenseTypeMapper processExpenseTypeMapper,
             ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper,
             ProcessDocumentTemplateMapper processDocumentTemplateMapper,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ProcessUserGroupResolverSupport userGroupResolverSupport
     ) {
         super(
                 processFlowMapper,
@@ -53,6 +56,7 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
                 processDocumentTemplateMapper,
                 objectMapper
         );
+        this.userGroupResolverSupport = userGroupResolverSupport;
     }
 
     public ProcessFlowMetaVO getFlowMeta() {
@@ -67,6 +71,7 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
         meta.setApprovalApproverTypeOptions(List.of(
                 option("指定主管", APPROVER_TYPE_MANAGER),
                 option("指定成员", APPROVER_TYPE_DESIGNATED_MEMBER),
+                option("指定用户组", APPROVER_TYPE_DESIGNATED_USER_GROUP),
                 option("手动选择", APPROVER_TYPE_MANUAL_SELECT)
         ));
         meta.setApprovalManagerRuleModeOptions(List.of(
@@ -145,6 +150,7 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
         meta.setUserOptions(loadUserOptions());
         meta.setExpenseTypeOptions(loadExpenseTypeOptions());
         meta.setArchiveOptions(loadArchiveOptions());
+        meta.setUserGroupOptions(userGroupResolverSupport.listSecondLevelGroupOptions());
         return meta;
     }
 

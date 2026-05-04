@@ -35,6 +35,10 @@ import com.finex.auth.dto.ProcessTemplateFormOptionsVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.dto.ProcessTemplateSaveResultVO;
 import com.finex.auth.dto.ProcessTemplateTypeVO;
+import com.finex.auth.dto.ProcessUserGroupDetailVO;
+import com.finex.auth.dto.ProcessUserGroupMetaVO;
+import com.finex.auth.dto.ProcessUserGroupSaveDTO;
+import com.finex.auth.dto.ProcessUserGroupTreeVO;
 
 import java.util.List;
 
@@ -156,6 +160,18 @@ public interface ProcessManagementService {
      * 删除报销单类型。
      */
     Boolean deleteExpenseType(Long id);
+
+    List<ProcessUserGroupTreeVO> listUserGroupTree();
+
+    ProcessUserGroupMetaVO getUserGroupMeta();
+
+    ProcessUserGroupDetailVO getUserGroupDetail(Long id);
+
+    ProcessUserGroupDetailVO createUserGroup(ProcessUserGroupSaveDTO dto);
+
+    ProcessUserGroupDetailVO updateUserGroup(Long id, ProcessUserGroupSaveDTO dto);
+
+    Boolean deleteUserGroup(Long id);
 
     /**
      * 查询报销单明细设计列表。

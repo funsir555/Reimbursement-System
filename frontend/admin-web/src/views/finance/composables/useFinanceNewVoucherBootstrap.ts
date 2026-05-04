@@ -15,6 +15,7 @@ import {
   type FinanceVoucherMeta,
   type FinanceVoucherSavePayload
 } from '@/api'
+import type { Router } from 'vue-router'
 
 type FinanceCompanyLike = {
   currentCompanyId?: string
@@ -22,10 +23,7 @@ type FinanceCompanyLike = {
   unregisterSwitchGuard: (key: string) => void
 }
 
-type RouterLike = {
-  push: (to: unknown) => Promise<unknown> | unknown
-  replace: (to: unknown) => Promise<unknown> | unknown
-}
+type RouterLike = Pick<Router, 'push' | 'replace'>
 
 type UseFinanceNewVoucherBootstrapOptions = {
   financeCompany: FinanceCompanyLike

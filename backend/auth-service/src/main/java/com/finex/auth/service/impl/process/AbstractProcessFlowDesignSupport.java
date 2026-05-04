@@ -67,6 +67,7 @@ abstract class AbstractProcessFlowDesignSupport {
 
     protected static final String APPROVER_TYPE_MANAGER = "MANAGER";
     protected static final String APPROVER_TYPE_DESIGNATED_MEMBER = "DESIGNATED_MEMBER";
+    protected static final String APPROVER_TYPE_DESIGNATED_USER_GROUP = "DESIGNATED_USER_GROUP";
     protected static final String APPROVER_TYPE_MANUAL_SELECT = "MANUAL_SELECT";
 
     protected static final String MANAGER_RULE_MODE_FORM_DEPT_MANAGER = "FORM_DEPT_MANAGER";
@@ -86,6 +87,7 @@ abstract class AbstractProcessFlowDesignSupport {
     protected static final Set<String> APPROVER_TYPES = Set.of(
             APPROVER_TYPE_MANAGER,
             APPROVER_TYPE_DESIGNATED_MEMBER,
+            APPROVER_TYPE_DESIGNATED_USER_GROUP,
             APPROVER_TYPE_MANUAL_SELECT
     );
     protected static final Set<String> DEPT_SOURCES = Set.of(DEPT_SOURCE_UNDERTAKE, DEPT_SOURCE_SUBMITTER);
@@ -257,6 +259,9 @@ abstract class AbstractProcessFlowDesignSupport {
         return List.of(
                 conditionField("submitterDeptId", "提单人部门", "department", List.of("EQ", "NE", "IN", "NOT_IN")),
                 conditionField("submitterUserId", "提单人", "user", List.of("EQ", "NE", "IN", "NOT_IN")),
+                conditionField(ProcessUserGroupScopeSupport.FIELD_PAYMENT_COMPANY_ID, "公司抬头", "company", List.of("IN", "NOT_IN")),
+                conditionField(ProcessUserGroupScopeSupport.FIELD_UNDERTAKE_DEPT_WITH_CHILDREN, "承担部门(含下级部门)", "department", List.of("IN", "NOT_IN")),
+                conditionField(ProcessUserGroupScopeSupport.FIELD_UNDERTAKE_DEPT_EXACT, "承担部门(不含下级部门)", "department", List.of("IN", "NOT_IN")),
                 conditionField("expenseTypeCode", "费用类型", "expenseType", List.of("EQ", "NE", "IN", "NOT_IN")),
                 conditionField("documentType", "单据类型", "text", List.of("EQ", "NE", "IN", "NOT_IN")),
                 conditionField("amount", "金额区间", "number", List.of("EQ", "NE", "GT", "GE", "LT", "LE", "BETWEEN")),
@@ -279,7 +284,17 @@ abstract class AbstractProcessFlowDesignSupport {
                 Wrappers.<SystemDepartment>lambdaQuery()
                         .eq(SystemDepartment::getStatus, 1)
                         .orderByAsc(SystemDepartment::getSortOrder, SystemDepartment::getId)
-        ).stream().map(item -> option(item.getDeptName(), item.getId())).toList();
+        ).stream().map(this::toDepartmentOption).toList();
+    }
+
+    protected ProcessFormOptionVO toDepartmentOption(SystemDepartment department) {
+        ProcessFormOptionVO option = new ProcessFormOptionVO();
+        option.setValue(String.valueOf(department.getId()));
+        option.setCode(department.getDeptCode());
+        option.setName(department.getDeptName());
+        option.setParentValue(department.getParentId() == null ? null : String.valueOf(department.getParentId()));
+        option.setLabel(formatDepartmentLabel(department.getDeptCode(), department.getDeptName(), option.getValue()));
+        return option;
     }
 
     protected List<ProcessFormOptionVO> loadUserOptions() {
@@ -448,6 +463,15 @@ abstract class AbstractProcessFlowDesignSupport {
         item.setLabel(label);
         item.setValue(value == null ? null : String.valueOf(value));
         return item;
+    }
+
+    protected String formatDepartmentLabel(String code, String name, String fallback) {
+        String normalizedCode = trimToNull(code);
+        String normalizedName = trimToNull(name);
+        if (normalizedCode != null && normalizedName != null) {
+            return normalizedCode + "  " + normalizedName;
+        }
+        return normalizedName != null ? normalizedName : normalizedCode != null ? normalizedCode : fallback;
     }
 
     protected ProcessFlowConfigOptionVO configOption(String value, String label, String description) {

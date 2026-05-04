@@ -186,6 +186,8 @@
 
             collapse-tags-tooltip
 
+            :tag-tooltip="globalCollapseTagTooltipProps"
+
             class="w-full expense-runtime-control"
 
             :placeholder="placeholderOf(block)"
@@ -343,7 +345,7 @@
 
             :data-testid="`counterparty-select-${block.fieldKey}`"
 
-            filterable
+            filterable v-bind="globalFilterableSelectProps"
 
             remote
 
@@ -421,20 +423,18 @@
           <el-select
 
             v-model="formData[block.fieldKey]"
+            :ref="(instance: unknown) => setPayeeSelectRef(block.fieldKey, instance)"
 
             :data-testid="`payee-select-${block.fieldKey}`"
 
             value-key="value"
 
-            filterable
+            filterable v-bind="globalFilterableSelectProps"
 
             remote
-
-            
-
-            reserve-keyword
-
             clearable
+            :persistent="false"
+            :teleported="false"
 
             class="w-full expense-runtime-control"
 
@@ -474,20 +474,21 @@
 
             </el-option>
 
-            <template v-if="showPersonalPayeeCreateEntry && !isReadOnly(block)" #empty>
-              <div class="space-y-3 px-3 py-4 text-center">
-                <p class="text-sm text-slate-500">
-                  未维护收款人信息，请先新增收款人
-                </p>
-                <button
-                  type="button"
-                  :data-testid="`payee-create-personal-${block.fieldKey}`"
-                  class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
-                  @click.stop="openPersonalPayeeDialog(block.fieldKey)"
-                >
-                  增加收款人
-                </button>
+            <template v-if="showPersonalPayeeEmptyState && !isReadOnly(block)" #empty>
+              <div class="px-3 py-4 text-center">
+                <p class="text-sm text-slate-500">{{ MISSING_PERSONAL_PAYEE_MESSAGE }}</p>
               </div>
+            </template>
+
+            <template v-if="showPersonalPayeeCreateEntry && !isReadOnly(block)" #footer>
+              <button
+                type="button"
+                :data-testid="`payee-create-personal-${block.fieldKey}`"
+                class="flex w-full items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                @mousedown.prevent.stop="openPersonalPayeeDialogFromPanel(block.fieldKey)"
+              >
+                {{ PERSONAL_PAYEE_CREATE_LABEL }}
+              </button>
             </template>
 
           </el-select>
@@ -505,7 +506,7 @@
 
             value-key="value"
 
-            filterable
+            filterable v-bind="globalFilterableSelectProps"
 
             remote
 
@@ -581,33 +582,13 @@
 
         <template v-else-if="businessCode(block) === 'undertake-department'">
 
-          <el-select
-
+          <department-tree-select
             v-model="formData[block.fieldKey]"
-
-            clearable
-
-            filterable
-
-            class="w-full expense-runtime-control"
-
+            :options="departmentOptions"
+            class="expense-runtime-control"
+            :disabled="isReadOnly(block)"
             :placeholder="`请选择${block.label}`"
-
-          >
-
-            <el-option
-
-              v-for="item in departmentOptions"
-
-              :key="item.value"
-
-              :label="item.label"
-
-              :value="item.value"
-
-            />
-
-          </el-select>
+          />
 
           <p v-if="String(formData[block.fieldKey] || '').trim()" class="mt-2 text-xs leading-6 text-slate-400">
 
@@ -625,7 +606,7 @@
 
             clearable
 
-            filterable
+            filterable v-bind="globalFilterableSelectProps"
 
             class="w-full expense-runtime-control"
 
@@ -1064,13 +1045,17 @@ import {
 } from '@/api'
 import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
 import PersonalBankAccountDialog from '@/components/profile/PersonalBankAccountDialog.vue'
+import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 import { useExpenseRuntimeAttachmentOcr } from '@/views/expense/components/composables/useExpenseRuntimeAttachmentOcr'
 import { useExpenseRuntimeBlockRuntime } from '@/views/expense/components/composables/useExpenseRuntimeBlockRuntime'
 import { useExpenseRuntimeDocumentPicker } from '@/views/expense/components/composables/useExpenseRuntimeDocumentPicker'
 import { useExpenseRuntimePageUtils } from '@/views/expense/components/composables/useExpenseRuntimePageUtils'
 import { useExpenseRuntimePaymentCounterparty } from '@/views/expense/components/composables/useExpenseRuntimePaymentCounterparty'
 import { ensureExpenseDetailFormDefaults } from '@/views/expense/expenseDetailRuntime'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 const formData = defineModel<Record<string, unknown>>({ required: true })
 
@@ -1162,6 +1147,8 @@ const { resolveErrorMessage, toOptionalMoney, toOptionalString } = useExpenseRun
 
 const {
   PAYEE_PLACEHOLDER,
+  PERSONAL_PAYEE_CREATE_LABEL,
+  MISSING_PERSONAL_PAYEE_MESSAGE,
   MISSING_VENDOR_BANK_INFO_MESSAGE,
   effectivePaymentCompanyId,
   selectedCounterpartyCode,
@@ -1174,6 +1161,7 @@ const {
   visiblePayeeAccountOptions,
   counterpartyPlaceholder,
   payeeAccountPlaceholder,
+  showPersonalPayeeEmptyState,
   showPersonalPayeeCreateEntry,
   showVendorAccountMaintenanceEntry,
   personalPayeeDialogVisible,
@@ -1193,13 +1181,14 @@ const {
   buildPayeeSnapshot,
   buildPayeeAccountSnapshot,
   setCounterpartySelectRef,
+  setPayeeSelectRef,
   setPayeeAccountSelectRef,
   prepareDocumentPickerOpen,
   handleCounterpartySelection,
   handlePayeeSelection,
   handlePayeeAccountSelection,
   handlePersonalPayeeDialogVisibleChange,
-  openPersonalPayeeDialog,
+  openPersonalPayeeDialogFromPanel,
   handlePersonalPayeeSaved,
   openVendorDialog,
   closeVendorDialog,

@@ -50,7 +50,11 @@
         <el-table-column prop="name" label="姓名" min-width="140" />
         <el-table-column prop="username" label="用户名" min-width="140" />
         <el-table-column prop="phone" label="手机号" width="140" />
-        <el-table-column prop="deptName" label="部门" min-width="120" />
+        <el-table-column label="部门" min-width="180">
+          <template #default="{ row }">
+            {{ formatEmployeeDepartmentNames(row) || '未设置' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="companyName" label="公司" min-width="150" />
         <el-table-column prop="statDepartmentBelong" label="统计部门归属" min-width="150" />
         <el-table-column prop="statRegionBelong" label="统计大区归属" min-width="150" />
@@ -107,6 +111,7 @@
 
 <script setup lang="ts">
 import type { EmployeeRecord, SyncConnectorConfig, SyncJobRecord } from '@/api'
+import { formatEmployeeDepartmentNames } from '../systemSettingsShared'
 import SystemSettingsSyncConnectorList from './SystemSettingsSyncConnectorList.vue'
 import SystemSettingsSyncJobTable from './SystemSettingsSyncJobTable.vue'
 

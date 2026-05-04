@@ -158,13 +158,12 @@
 
             <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <el-form-item label="限定部门使用">
-                <button
-                  type="button"
-                  class="selection-trigger selection-trigger-subtle"
-                  @click="openDepartmentDialog"
-                >
-                  {{ form.scopeDeptIds.length ? `已选择 ${form.scopeDeptIds.length} 个部门` : '点击选择部门' }}
-                </button>
+                <department-tree-select
+                  v-model="form.scopeDeptIds"
+                  :options="options?.departmentOptions || []"
+                  multiple
+                  placeholder="不选则默认全部部门可用"
+                />
                 <div v-if="selectedDepartments.length" class="selection-tags">
                   <el-tag v-for="item in selectedDepartments" :key="item.value" effect="plain">
                     {{ item.label }}
@@ -322,45 +321,6 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="departmentDialogVisible" title="限定部门使用" width="960px" destroy-on-close>
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr),320px]">
-        <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-          <el-input v-model="departmentKeyword" placeholder="搜索部门名称" clearable />
-          <div class="mt-4 max-h-[420px] overflow-y-auto rounded-2xl bg-white p-3">
-            <el-checkbox-group v-model="draftScopeDeptIds" class="flex flex-col gap-3">
-              <el-checkbox v-for="item in filteredDepartmentOptions" :key="item.value" :label="item.value">
-                {{ item.label }}
-              </el-checkbox>
-            </el-checkbox-group>
-            <el-empty v-if="filteredDepartmentOptions.length === 0" description="暂无匹配部门" />
-          </div>
-        </div>
-
-        <div class="rounded-3xl border border-slate-200 bg-white p-4">
-          <div class="flex items-center justify-between">
-            <p class="font-semibold text-slate-800">已选部门</p>
-            <span class="text-xs text-slate-400">{{ draftScopeDeptIds.length }} 项</span>
-          </div>
-          <div class="mt-4 space-y-3">
-            <div v-for="item in draftSelectedDepartments" :key="item.value" class="selected-item">
-              <span class="truncate">{{ item.label }}</span>
-              <el-button text @click="removeDepartment(item.value)">
-                <el-icon><Close /></el-icon>
-              </el-button>
-            </div>
-            <el-empty v-if="draftSelectedDepartments.length === 0" description="暂未选择部门" />
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <el-button @click="departmentDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="confirmDepartmentDialog">确定</el-button>
-        </div>
-      </template>
-    </el-dialog>
-
     <el-dialog v-model="expenseTypeDialogVisible" title="限定费用类型使用" width="1080px" destroy-on-close>
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr),340px]">
         <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4">
@@ -435,8 +395,11 @@ import {
 } from '@/api'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
 import { compareMoney } from '@/utils/money'
+import { buildDepartmentLabelMap } from '@/utils/departmentTree'
 import ProcessWorkbenchSidebar from '@/components/process/ProcessWorkbenchSidebar.vue'
+import { buildReturnToQuery } from '@/views/process/processDesignerNavigation'
 import {
   PM_NAME_MAX_LENGTH,
   collectTemplateBindingIssues,
@@ -513,10 +476,6 @@ const optionDialog = reactive<{
   pendingValue: ''
 })
 
-const departmentDialogVisible = ref(false)
-const departmentKeyword = ref('')
-const draftScopeDeptIds = ref<string[]>([])
-
 const expenseTypeDialogVisible = ref(false)
 const expenseTypeKeyword = ref('')
 const draftScopeExpenseTypeCodes = ref<string[]>([])
@@ -531,14 +490,12 @@ const optionDialogConfig: Record<SingleOptionField, { title: string; createLabel
   allocationForm: { title: '选择分摊表单', createLabel: '新建分摊表单' }
 }
 
-const filteredDepartmentOptions = computed(() => {
-  const keyword = departmentKeyword.value.trim().toLowerCase()
-  return (options.value?.departmentOptions || []).filter((item) => !keyword || item.label.toLowerCase().includes(keyword))
-})
-
-const selectedDepartments = computed(() => resolveLabeledValues(form.scopeDeptIds, options.value?.departmentOptions || []))
-const draftSelectedDepartments = computed(() =>
-  resolveLabeledValues(draftScopeDeptIds.value, options.value?.departmentOptions || [])
+const departmentLabelMap = computed(() => buildDepartmentLabelMap(options.value?.departmentOptions || []))
+const selectedDepartments = computed(() =>
+  form.scopeDeptIds.map((value) => ({
+    label: departmentLabelMap.value.get(value) || value,
+    value
+  }))
 )
 const expenseTypeMap = computed(() => buildExpenseTypeMap(options.value?.expenseTypes || []))
 const selectedExpenseTypes = computed(() => resolveLabeledValues(form.scopeExpenseTypeCodes, expenseTypeMap.value))
@@ -917,11 +874,10 @@ function showCreateEntry() {
     optionDialog.visible = false
     router.push({
       name: 'expense-workbench-process-form-create',
-      query: {
+      query: buildReturnToQuery(route.fullPath, {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
-        templateType: templateType.value,
-        returnTo: route.fullPath
-      }
+        templateType: templateType.value
+      })
     })
     return
   }
@@ -931,11 +887,10 @@ function showCreateEntry() {
     optionDialog.visible = false
     router.push({
       name: 'expense-workbench-process-expense-detail-create',
-      query: {
+      query: buildReturnToQuery(route.fullPath, {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
-        templateType: templateType.value,
-        returnTo: route.fullPath
-      }
+        templateType: templateType.value
+      })
     })
     return
   }
@@ -945,11 +900,10 @@ function showCreateEntry() {
     optionDialog.visible = false
     router.push({
       name: 'expense-workbench-process-flow-create',
-      query: {
+      query: buildReturnToQuery(route.fullPath, {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
-        templateType: templateType.value,
-        returnTo: route.fullPath
-      }
+        templateType: templateType.value
+      })
     })
     return
   }
@@ -970,11 +924,10 @@ function showOptionEdit(item: ProcessFormOption) {
     router.push({
       name: 'expense-workbench-process-form-edit',
       params: { id: formDesign.id },
-      query: {
+      query: buildReturnToQuery(route.fullPath, {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
-        templateType: templateType.value,
-        returnTo: route.fullPath
-      }
+        templateType: templateType.value
+      })
     })
     return
   }
@@ -991,11 +944,10 @@ function showOptionEdit(item: ProcessFormOption) {
     router.push({
       name: 'expense-workbench-process-expense-detail-edit',
       params: { id: expenseDetailDesign.id },
-      query: {
+      query: buildReturnToQuery(route.fullPath, {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
-        templateType: templateType.value,
-        returnTo: route.fullPath
-      }
+        templateType: templateType.value
+      })
     })
     return
   }
@@ -1012,11 +964,10 @@ function showOptionEdit(item: ProcessFormOption) {
     router.push({
       name: 'expense-workbench-process-flow-edit',
       params: { id: flow.id },
-      query: {
+      query: buildReturnToQuery(route.fullPath, {
         from: templateId.value !== null ? 'template-edit' : 'template-create',
-        templateType: templateType.value,
-        returnTo: route.fullPath
-      }
+        templateType: templateType.value
+      })
     })
     return
   }
@@ -1026,21 +977,6 @@ function showOptionEdit(item: ProcessFormOption) {
 
 function showStaticEdit(label: string) {
   ElMessage.info(`“${label}”的编辑入口本期先做静态展示`)
-}
-
-function openDepartmentDialog() {
-  draftScopeDeptIds.value = [...form.scopeDeptIds]
-  departmentKeyword.value = ''
-  departmentDialogVisible.value = true
-}
-
-function confirmDepartmentDialog() {
-  form.scopeDeptIds = [...draftScopeDeptIds.value]
-  departmentDialogVisible.value = false
-}
-
-function removeDepartment(value: string) {
-  draftScopeDeptIds.value = draftScopeDeptIds.value.filter((item) => item !== value)
 }
 
 async function openExpenseTypeDialog() {

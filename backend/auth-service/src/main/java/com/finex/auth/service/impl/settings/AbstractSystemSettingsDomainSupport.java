@@ -55,6 +55,7 @@ import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.UserService;
+import com.finex.auth.support.UserDepartmentSupport;
 import com.finex.auth.support.systemsettings.ExternalDepartmentData;
 import com.finex.auth.support.systemsettings.ExternalEmployeeData;
 import com.finex.auth.support.systemsettings.ExternalSyncPayload;
@@ -229,9 +230,7 @@ abstract class AbstractSystemSettingsDomainSupport {
         if (childCount > 0) {
             throw new IllegalArgumentException("\u8bf7\u5148\u5220\u9664\u4e0b\u7ea7\u90e8\u95e8");
         }
-        long employeeCount = userMapper.selectCount(
-                Wrappers.<User>lambdaQuery().eq(User::getDeptId, id)
-        );
+        long employeeCount = userMapper.countDepartmentRelationsByDepartmentId(id);
         if (employeeCount > 0) {
             throw new IllegalArgumentException("\u8bf7\u5148\u8fc1\u79fb\u8be5\u90e8\u95e8\u4e0b\u5458\u5de5");
         }
@@ -257,7 +256,11 @@ abstract class AbstractSystemSettingsDomainSupport {
             wrapper.eq(User::getCompanyId, payload.getCompanyId().trim());
         }
         if (payload.getDeptId() != null) {
-            wrapper.eq(User::getDeptId, payload.getDeptId());
+            List<Long> userIds = userMapper.selectUserIdsByDepartmentIds(List.of(payload.getDeptId()));
+            if (userIds == null || userIds.isEmpty()) {
+                return List.of();
+            }
+            wrapper.in(User::getId, userIds);
         }
         if (payload.getStatus() != null) {
             wrapper.eq(User::getStatus, payload.getStatus());
@@ -279,21 +282,17 @@ abstract class AbstractSystemSettingsDomainSupport {
                         .in(SystemCompany::getCompanyId, companyIds)
         ).stream().collect(Collectors.toMap(SystemCompany::getCompanyId, SystemCompany::getCompanyName, (left, right) -> left));
 
-        Set<Long> departmentIds = users.stream()
-                .map(User::getDeptId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, String> departmentNameMap = departmentIds.isEmpty()
-                ? Map.of()
-                : systemDepartmentMapper.selectList(
-                Wrappers.<SystemDepartment>lambdaQuery()
-                        .in(SystemDepartment::getId, departmentIds)
-        ).stream().collect(Collectors.toMap(SystemDepartment::getId, SystemDepartment::getDeptName, (left, right) -> left));
-
+        Map<Long, List<com.finex.auth.dto.EmployeeDepartmentRefVO>> departmentsByUserId =
+                UserDepartmentSupport.loadDepartmentRefsByUserId(
+                        userMapper,
+                        systemDepartmentMapper,
+                        users.stream().map(User::getId).toList()
+                );
         Map<Long, List<String>> roleCodesByUserId = buildUserRoleCodeMap(users.stream().map(User::getId).toList());
 
         return users.stream().map(user -> {
             EmployeeVO vo = new EmployeeVO();
+            List<com.finex.auth.dto.EmployeeDepartmentRefVO> departments = departmentsByUserId.getOrDefault(user.getId(), List.of());
             vo.setUserId(user.getId());
             vo.setUsername(user.getUsername());
             vo.setName(StrUtil.blankToDefault(user.getName(), user.getUsername()));
@@ -301,8 +300,9 @@ abstract class AbstractSystemSettingsDomainSupport {
             vo.setEmail(user.getEmail());
             vo.setCompanyId(user.getCompanyId());
             vo.setCompanyName(resolveMapValue(companyNameMap, user.getCompanyId(), ""));
-            vo.setDeptId(user.getDeptId());
-            vo.setDeptName(resolveMapValue(departmentNameMap, user.getDeptId(), ""));
+            vo.setDepartments(new ArrayList<>(departments));
+            vo.setDeptId(UserDepartmentSupport.resolvePrimaryDepartmentId(departments));
+            vo.setDeptName(UserDepartmentSupport.joinDepartmentNames(departments));
             vo.setPosition(StrUtil.blankToDefault(user.getPosition(), ""));
             vo.setLaborRelationBelong(StrUtil.blankToDefault(user.getLaborRelationBelong(), ""));
             vo.setStatDepartmentBelong(StrUtil.blankToDefault(user.getStatDepartmentBelong(), ""));
@@ -323,6 +323,7 @@ abstract class AbstractSystemSettingsDomainSupport {
     @Transactional(rollbackFor = Exception.class)
     protected EmployeeVO createEmployee(EmployeeSaveDTO dto) {
         ensureUsernameUnique(dto.getUsername(), null);
+        List<Long> departmentIds = resolveEmployeeDepartmentIds(dto);
 
         User user = new User();
         user.setUsername(dto.getUsername().trim());
@@ -331,7 +332,6 @@ abstract class AbstractSystemSettingsDomainSupport {
         user.setPhone(trimToNull(dto.getPhone()));
         user.setEmail(normalizeEmail(dto.getEmail()));
         user.setCompanyId(trimToNull(dto.getCompanyId()));
-        user.setDeptId(dto.getDeptId());
         user.setPosition(trimToNull(dto.getPosition()));
         user.setLaborRelationBelong(trimToNull(dto.getLaborRelationBelong()));
         applyEmployeeStatBelong(user, dto);
@@ -339,6 +339,7 @@ abstract class AbstractSystemSettingsDomainSupport {
         user.setSourceType(SOURCE_MANUAL);
         user.setSyncManaged(0);
         userMapper.insert(user);
+        replaceUserDepartmentRelations(user.getId(), departmentIds);
         return findEmployee(user.getId());
     }
 
@@ -349,16 +350,17 @@ abstract class AbstractSystemSettingsDomainSupport {
     protected EmployeeVO updateEmployee(Long id, EmployeeSaveDTO dto) {
         User user = requireUser(id);
         if (isManualEmployee(user)) {
+            List<Long> departmentIds = resolveEmployeeDepartmentIds(dto);
             ensureUsernameUnique(dto.getUsername(), id);
             user.setUsername(dto.getUsername().trim());
             user.setName(dto.getName().trim());
             user.setPhone(trimToNull(dto.getPhone()));
             user.setEmail(normalizeEmail(dto.getEmail()));
             user.setCompanyId(trimToNull(dto.getCompanyId()));
-            user.setDeptId(dto.getDeptId());
             user.setPosition(trimToNull(dto.getPosition()));
             user.setLaborRelationBelong(trimToNull(dto.getLaborRelationBelong()));
             user.setStatus(normalizeStatus(dto.getStatus()));
+            replaceUserDepartmentRelations(id, departmentIds);
         }
         applyEmployeeStatBelong(user, dto);
         userMapper.updateById(user);
@@ -380,6 +382,7 @@ abstract class AbstractSystemSettingsDomainSupport {
         if (departmentLeaderCount > 0) {
             throw new IllegalArgumentException("\u8bf7\u5148\u8c03\u6574\u8be5\u5458\u5de5\u8d1f\u8d23\u7684\u90e8\u95e8\u8d1f\u8d23\u4eba");
         }
+        userMapper.deleteDepartmentRelationsByUserId(id);
         systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getUserId, id));
         userMapper.deleteById(id);
         return Boolean.TRUE;
@@ -954,6 +957,13 @@ abstract class AbstractSystemSettingsDomainSupport {
                 continue;
             }
 
+            List<Long> departmentIds = resolveExternalDepartmentIds(externalEmployee, departmentIdByCode);
+            if (departmentIds.isEmpty()) {
+                stats.failedCount.incrementAndGet();
+                appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_FAILED, "\u540c\u6b65\u5458\u5de5\u7f3a\u5c11\u6709\u6548\u90e8\u95e8\u5f52\u5c5e\uff0c\u5df2\u8df3\u8fc7");
+                continue;
+            }
+
             User target = matchedUser == null ? new User() : matchedUser;
             if (target.getId() == null) {
                 target.setUsername(buildSyncUsername(externalEmployee, platformCode));
@@ -962,7 +972,6 @@ abstract class AbstractSystemSettingsDomainSupport {
             target.setName(StrUtil.blankToDefault(externalEmployee.getName(), target.getUsername()));
             target.setPhone(trimToNull(externalEmployee.getPhone()));
             target.setEmail(normalizeEmail(externalEmployee.getEmail()));
-            target.setDeptId(departmentIdByCode.get(externalEmployee.getDeptCode()));
             target.setPosition(trimToNull(externalEmployee.getPosition()));
             target.setLaborRelationBelong(trimToNull(externalEmployee.getLaborRelationBelong()));
             target.setStatus(normalizeStatus(externalEmployee.getStatus()));
@@ -983,6 +992,7 @@ abstract class AbstractSystemSettingsDomainSupport {
             } else {
                 userMapper.updateById(target);
             }
+            replaceUserDepartmentRelations(target.getId(), departmentIds);
             stats.successCount.incrementAndGet();
             appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_SUCCESS, "\u5458\u5de5\u540c\u6b65\u6210\u529f");
         }
@@ -1003,11 +1013,60 @@ abstract class AbstractSystemSettingsDomainSupport {
             if (StrUtil.isBlank(externalId) || externalIds.contains(externalId)) {
                 continue;
             }
+            userMapper.deleteDepartmentRelationsByUserId(user.getId());
             systemUserRoleMapper.delete(Wrappers.<SystemUserRole>lambdaQuery().eq(SystemUserRole::getUserId, user.getId()));
             userMapper.deleteById(user.getId());
             stats.deletedCount.incrementAndGet();
             appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "DELETE", String.valueOf(user.getId()), DETAIL_STATUS_DELETED, "\u6765\u6e90\u4e8e " + resolvePlatformName(platformCode) + " \u81ea\u52a8\u540c\u6b65\u7684\u5458\u5de5\u4e0d\u5b58\u5728\u4e8e\u4e0a\u6e38\uff0c\u5df2\u81ea\u52a8\u5220\u9664");
         }
+    }
+
+    private List<Long> resolveEmployeeDepartmentIds(EmployeeSaveDTO dto) {
+        List<Long> requestedDepartmentIds = new ArrayList<>();
+        if (dto != null && dto.getDeptIds() != null) {
+            requestedDepartmentIds.addAll(dto.getDeptIds());
+        }
+        if (dto != null && dto.getDeptId() != null) {
+            requestedDepartmentIds.add(dto.getDeptId());
+        }
+        List<Long> departmentIds = UserDepartmentSupport.normalizeDepartmentIds(requestedDepartmentIds);
+        if (departmentIds.isEmpty()) {
+            throw new IllegalArgumentException("\u5458\u5de5\u81f3\u5c11\u9700\u8981\u5f52\u5c5e\u4e00\u4e2a\u90e8\u95e8");
+        }
+        long matchedCount = systemDepartmentMapper.selectCount(
+                Wrappers.<SystemDepartment>lambdaQuery().in(SystemDepartment::getId, departmentIds)
+        );
+        if (matchedCount != departmentIds.size()) {
+            throw new IllegalArgumentException("\u6240\u5c5e\u90e8\u95e8\u4e0d\u5b58\u5728\u6216\u5df2\u88ab\u5220\u9664");
+        }
+        return departmentIds;
+    }
+
+    private void replaceUserDepartmentRelations(Long userId, List<Long> departmentIds) {
+        if (userId == null) {
+            return;
+        }
+        userMapper.deleteDepartmentRelationsByUserId(userId);
+        List<Long> normalizedDepartmentIds = UserDepartmentSupport.normalizeDepartmentIds(departmentIds);
+        if (!normalizedDepartmentIds.isEmpty()) {
+            userMapper.insertDepartmentRelations(userId, normalizedDepartmentIds);
+        }
+    }
+
+    private List<Long> resolveExternalDepartmentIds(
+            ExternalEmployeeData externalEmployee,
+            Map<String, Long> departmentIdByCode
+    ) {
+        if (externalEmployee == null || externalEmployee.getDeptCodes() == null || externalEmployee.getDeptCodes().isEmpty()) {
+            return List.of();
+        }
+        return externalEmployee.getDeptCodes().stream()
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .map(departmentIdByCode::get)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     private void cleanupMissingDepartments(Long jobId, String platformCode, List<ExternalDepartmentData> externalDepartments, SyncStats stats) {

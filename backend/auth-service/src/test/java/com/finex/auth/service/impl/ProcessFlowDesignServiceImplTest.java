@@ -15,6 +15,7 @@ import com.finex.auth.mapper.ProcessFlowNodeMapper;
 import com.finex.auth.mapper.ProcessFlowRouteMapper;
 import com.finex.auth.mapper.ProcessFlowSceneMapper;
 import com.finex.auth.mapper.ProcessFlowVersionMapper;
+import com.finex.auth.mapper.ProcessUserGroupMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
@@ -65,6 +66,8 @@ class ProcessFlowDesignServiceImplTest {
     private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     @Mock
     private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
+    @Mock
+    private ProcessUserGroupMapper processUserGroupMapper;
 
     private ObjectMapper objectMapper;
     private ProcessFlowDesignServiceImpl service;
@@ -84,6 +87,7 @@ class ProcessFlowDesignServiceImplTest {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
+                processUserGroupMapper,
                 objectMapper
         );
     }
@@ -97,9 +101,25 @@ class ProcessFlowDesignServiceImplTest {
         company.setStatus(1);
         when(systemCompanyMapper.selectList(any())).thenReturn(List.of(company));
 
-        assertEquals(1, service.getFlowMeta().getCompanyOptions().size());
-        assertEquals("COMPANY_A", service.getFlowMeta().getCompanyOptions().get(0).getValue());
-        assertEquals("广州远智教育科技有限公司", service.getFlowMeta().getCompanyOptions().get(0).getLabel());
+        var meta = service.getFlowMeta();
+
+        assertEquals(1, meta.getCompanyOptions().size());
+        assertEquals("COMPANY_A", meta.getCompanyOptions().get(0).getValue());
+        assertEquals("广州远智教育科技有限公司", meta.getCompanyOptions().get(0).getLabel());
+        assertEquals(
+                List.of(
+                        "MANAGER",
+                        "DESIGNATED_MEMBER",
+                        "DESIGNATED_USER_GROUP",
+                        "MANUAL_SELECT"
+                ),
+                meta.getApprovalApproverTypeOptions().stream()
+                        .map(item -> item.getValue())
+                        .toList()
+        );
+        assertTrue(meta.getBranchConditionFields().stream().anyMatch(item -> "paymentCompanyId".equals(item.getKey())));
+        assertTrue(meta.getBranchConditionFields().stream().anyMatch(item -> "undertakeDeptIdWithChildren".equals(item.getKey())));
+        assertTrue(meta.getBranchConditionFields().stream().anyMatch(item -> "undertakeDeptIdExact".equals(item.getKey())));
     }
 
     @Test

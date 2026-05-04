@@ -2,6 +2,9 @@ package com.finex.auth.dto;
 
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 public class ProcessFlowResolvedUserVO {
 
@@ -12,4 +15,6 @@ public class ProcessFlowResolvedUserVO {
     private Long deptId;
 
     private String deptName;
+
+    private List<EmployeeDepartmentRefVO> departments = new ArrayList<>();
 }

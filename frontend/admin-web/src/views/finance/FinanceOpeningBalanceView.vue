@@ -65,18 +65,30 @@
                 <span class="ob-balance-cell__text">{{ moneyText(row.mb) }}</span>
               </template>
               <template v-else-if="row.assistRequired">
-                <el-button link type="primary" @click="openAssistDialog(row)">
+                <el-button
+                  link
+                  type="primary"
+                  class="ob-balance-action"
+                  :class="{ 'is-locked': !canEditOpeningBalance }"
+                  @click="handleAssistEntryClick(row)"
+                >
                   {{ moneyText(row.mb) }} / 录入辅助
                 </el-button>
               </template>
               <template v-else>
-                <money-input
-                  v-model="row.draftBalance"
-                  :disabled="!meta?.opened"
-                  @update:model-value="handleRowDraftChange(row, $event)"
-                  @blur="handleRowDraftChange(row, row.draftBalance)"
-                  @change="handleRowDraftChange(row, row.draftBalance)"
-                />
+                <div
+                  class="ob-balance-editor"
+                  :class="{ 'is-locked': !canEditOpeningBalance }"
+                  @click="handleDirectBalanceClick(row)"
+                >
+                  <money-input
+                    v-model="row.draftBalance"
+                    :disabled="!canEditOpeningBalance"
+                    @update:model-value="handleRowDraftChange(row, $event)"
+                    @blur="handleRowDraftChange(row, row.draftBalance)"
+                    @change="handleRowDraftChange(row, row.draftBalance)"
+                  />
+                </div>
               </template>
             </div>
           </template>
@@ -113,28 +125,26 @@
       <el-table :data="assistLines" row-key="rowKey">
         <el-table-column v-if="activeAssistConfig.bdept" label="部门" min-width="140">
           <template #default="{ row }">
-            <el-select v-model="row.cdeptId" filterable clearable>
-              <el-option v-for="item in meta?.departmentOptions || []" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
+            <department-tree-select v-model="row.cdeptId" :options="meta?.departmentOptions || []" />
           </template>
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bperson" label="人员" min-width="140">
           <template #default="{ row }">
-            <el-select v-model="row.cpersonId" filterable clearable>
+            <el-select v-model="row.cpersonId" filterable v-bind="globalFilterableSelectProps" clearable>
               <el-option v-for="item in meta?.employeeOptions || []" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </template>
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bcus" label="客户" min-width="160">
           <template #default="{ row }">
-            <el-select v-model="row.ccusId" filterable clearable>
+            <el-select v-model="row.ccusId" filterable v-bind="globalFilterableSelectProps" clearable>
               <el-option v-for="item in meta?.customerOptions || []" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </template>
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bsup" label="供应商" min-width="160">
           <template #default="{ row }">
-            <el-select v-model="row.csupId" filterable clearable>
+            <el-select v-model="row.csupId" filterable v-bind="globalFilterableSelectProps" clearable>
               <el-option v-for="item in meta?.supplierOptions || []" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </template>
@@ -144,7 +154,7 @@
             <el-select
               v-model="row.citemClass"
               :disabled="Boolean(activeAssistRow?.cassItem)"
-              filterable
+              filterable v-bind="globalFilterableSelectProps"
               clearable
               @change="handleAssistProjectClassChange(row)"
             >
@@ -154,7 +164,7 @@
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bitem" label="项目" min-width="170">
           <template #default="{ row }">
-            <el-select v-model="row.citemId" filterable clearable>
+            <el-select v-model="row.citemId" filterable v-bind="globalFilterableSelectProps" clearable>
               <el-option v-for="item in projectOptionsForRow(row)" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </template>
@@ -193,11 +203,14 @@ import {
   type OpeningBalanceTrialResult
 } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
-type OpeningBalanceTableRow = OpeningBalanceRow & {
+
+type OpeningBalanceTableRow = Omit<OpeningBalanceRow, 'children'> & {
   draftBalance: string
   savedBalance: string
   children?: OpeningBalanceTableRow[]
@@ -214,6 +227,7 @@ type PersistedExpandedMap = Record<string, string[]>
 
 const SWITCH_GUARD_KEY = 'finance-opening-balance-draft-guard'
 const EXPANDED_STORAGE_KEY = 'finance-opening-balance-expanded-keys'
+const OPEN_BOOK_REQUIRED_MESSAGE = '当前期间尚未开账，请先开账'
 
 const financeCompany = useFinanceCompanyStore()
 const financePeriod = useFinancePeriodStore()
@@ -246,6 +260,7 @@ const flatRows = computed(() => flattenRows(rows.value))
 const editableLeafCount = computed(() => flatRows.value.filter((item) => item.editable).length)
 const assistLeafCount = computed(() => flatRows.value.filter((item) => item.editable && item.assistRequired).length)
 const hasUnsavedChanges = computed(() => hasDraftContent())
+const canEditOpeningBalance = computed(() => Boolean(meta.value?.opened))
 const activeAssistConfig = computed(() => ({
   bdept: activeAssistRow.value?.bdept === 1,
   bperson: activeAssistRow.value?.bperson === 1,
@@ -392,7 +407,7 @@ async function loadRowsFromServer() {
   }
 }
 
-function decorateRows(source: OpeningBalanceRow[], balanceMap: Record<string, string>) {
+function decorateRows(source: OpeningBalanceRow[], balanceMap: Record<string, string>): OpeningBalanceTableRow[] {
   return source.map((item) => {
     const currentBalance = normalizeMoneyValue(String(item.mb ?? '0.00'), { fallback: '0.00' })
     return {
@@ -405,7 +420,7 @@ function decorateRows(source: OpeningBalanceRow[], balanceMap: Record<string, st
   })
 }
 
-function collectPersistedBalances(source: OpeningBalanceRow[]) {
+function collectPersistedBalances(source: OpeningBalanceRow[]): Record<string, string> {
   const result: Record<string, string> = {}
   for (const row of flattenRows(source)) {
     result[row.subjectCode] = normalizeMoneyValue(String(row.mb ?? '0.00'), { fallback: '0.00' })
@@ -413,8 +428,8 @@ function collectPersistedBalances(source: OpeningBalanceRow[]) {
   return result
 }
 
-function flattenRows(source: Array<OpeningBalanceRow | OpeningBalanceTableRow>) {
-  const result: Array<OpeningBalanceRow | OpeningBalanceTableRow> = []
+function flattenRows<T extends { children?: T[] }>(source: T[]): T[] {
+  const result: T[] = []
   for (const item of source) {
     result.push(item)
     if (item.children?.length) {
@@ -424,7 +439,29 @@ function flattenRows(source: Array<OpeningBalanceRow | OpeningBalanceTableRow>) 
   return result
 }
 
+function ensureOpeningBookReady() {
+  if (canEditOpeningBalance.value) {
+    return true
+  }
+  ElMessage.warning(OPEN_BOOK_REQUIRED_MESSAGE)
+  return false
+}
+
+function handleDirectBalanceClick(_row: OpeningBalanceTableRow) {
+  ensureOpeningBookReady()
+}
+
+function handleAssistEntryClick(row: OpeningBalanceTableRow) {
+  if (!ensureOpeningBookReady()) {
+    return
+  }
+  void openAssistDialog(row)
+}
+
 function handleRowDraftChange(row: OpeningBalanceTableRow, value: string | number) {
+  if (!canEditOpeningBalance.value) {
+    return
+  }
   const normalized = normalizeMoneyValue(String(value ?? row.draftBalance ?? '0.00'), { fallback: '0.00' })
   row.draftBalance = normalized
   row.mb = normalized
@@ -439,6 +476,9 @@ function handleRowDraftChange(row: OpeningBalanceTableRow, value: string | numbe
 }
 
 async function openAssistDialog(row: OpeningBalanceTableRow) {
+  if (!ensureOpeningBookReady()) {
+    return
+  }
   activeAssistRow.value = row
   const draftedLines = assistDrafts.value[row.subjectCode]
   if (draftedLines) {
@@ -800,25 +840,25 @@ function handleExpandChange(row: OpeningBalanceTableRow, expandedRows: OpeningBa
   persistExpandedRowKeys()
 }
 
-function recalculateTreeBalances(source: OpeningBalanceTableRow[]) {
+function recalculateTreeBalances(source: OpeningBalanceTableRow[]): void {
   for (const row of source) {
     recalculateNodeBalance(row)
   }
 }
 
-function recalculateNodeBalance(row: OpeningBalanceTableRow) {
+function recalculateNodeBalance(row: OpeningBalanceTableRow): number {
   if (!row.children?.length) {
     row.mb = normalizeMoneyValue(String(row.mb ?? row.draftBalance ?? '0.00'), { fallback: '0.00' })
     return toCents(row.mb)
   }
-  const total = row.children.reduce((sum, child) => sum + recalculateNodeBalance(child), 0)
+  const total: number = row.children.reduce((sum, child) => sum + recalculateNodeBalance(child), 0)
   row.mb = centsToMoney(total)
   row.draftBalance = row.mb
   return total
 }
 
-function flatRowsFrom(source: OpeningBalanceTableRow[]) {
-  return flattenRows(source) as OpeningBalanceTableRow[]
+function flatRowsFrom(source: OpeningBalanceTableRow[]): OpeningBalanceTableRow[] {
+  return flattenRows(source)
 }
 
 function hasDraftContent() {
@@ -1014,6 +1054,23 @@ function moneyText(value?: string | number) {
 .ob-balance-cell__text {
   font-weight: 600;
   color: #111827;
+}
+
+.ob-balance-editor {
+  width: 100%;
+}
+
+.ob-balance-editor.is-locked,
+.ob-balance-action.is-locked {
+  cursor: not-allowed;
+}
+
+.ob-balance-action.is-locked {
+  color: #9ca3af;
+}
+
+.ob-balance-editor.is-locked :deep(input) {
+  pointer-events: none;
 }
 
 .ob-result-card {

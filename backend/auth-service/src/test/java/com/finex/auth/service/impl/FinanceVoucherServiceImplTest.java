@@ -134,6 +134,7 @@ class FinanceVoucherServiceImplTest {
                 buildSubject("560101", "管理费用"),
                 buildSubject("100201", "银行存款")
         ));
+        lenient().when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);
         lenient().when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
     }
 
@@ -199,6 +200,7 @@ class FinanceVoucherServiceImplTest {
     void saveVoucherRejectsNonLeafSubjects() {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(1L, 1L);
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
                 buildSubject("5601", "Management Expense", 0, 0, 0, 0, 0, null, 0),
                 buildSubject("1002", "Bank Deposit", 0, 0, 0, 0, 0, null, 0)
@@ -220,6 +222,40 @@ class FinanceVoucherServiceImplTest {
         );
 
         assertEquals("\u7b2c 1 \u884c\u79d1\u76ee\u30105601 Management Expense\u3011\u4e0d\u662f\u672b\u7ea7\u79d1\u76ee\uff0c\u4e0d\u5141\u8bb8\u5f55\u5165\u51ed\u8bc1", exception.getMessage());
+    }
+
+    @Test
+    void saveVoucherAcceptsLeafSubjectsWhenStoredLeafFlagIsDirty() {
+        List<GlAccvouch> insertedRows = new ArrayList<>();
+        doAnswer(invocation -> {
+            insertedRows.add(invocation.getArgument(0));
+            return 1;
+        }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
+
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L, 0L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("560101", "Management Expense", 0, 0, 0, 0, 0, null, 0),
+                buildSubject("100201", "Bank Deposit", 0, 0, 0, 0, 0, null, 0)
+        ));
+        when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "100201", null, "100.00")
+        ));
+
+        service.saveVoucher(dto, 1L, "alice");
+
+        assertEquals(2, insertedRows.size());
+        assertEquals("560101", insertedRows.get(0).getCcode());
+        assertEquals("100201", insertedRows.get(1).getCcode());
     }
 
     @Test

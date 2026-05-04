@@ -4,6 +4,7 @@ import {
   appendRouteToBranch,
   buildDefaultBranchRoutes,
   buildFlowCanvasBlocks,
+  copyNodeIntoContainer,
   insertNodeIntoContainer,
   moveNodeIntoContainer,
   normalizeContainerKey,
@@ -357,6 +358,31 @@ describe('processFlowDesignerHelper', () => {
     expect(branchOneRoutes.map((item) => item.attachBelowNodes)).toEqual([true, false])
   })
 
+  it('keeps only one default route flag per branch after reindexing', () => {
+    const routes = [
+      {
+        ...createRoute('route-1', 'branch-1', 2),
+        defaultRoute: true
+      },
+      {
+        ...createRoute('route-2', 'branch-1', 1),
+        defaultRoute: true
+      },
+      {
+        ...createRoute('route-3', 'branch-2', 1),
+        defaultRoute: true
+      }
+    ]
+
+    const next = reindexFlowState([], routes)
+    const branchOneRoutes = next.routes
+      .filter((item) => item.sourceNodeKey === 'branch-1')
+      .sort((left, right) => (left.priority ?? 0) - (right.priority ?? 0))
+
+    expect(branchOneRoutes.map((item) => item.defaultRoute)).toEqual([true, false])
+    expect(next.routes.find((item) => item.routeKey === 'route-3')?.defaultRoute).toBe(true)
+  })
+
   it('moves a node across containers and reindexes both sides', () => {
     const nodes = [
       createApprovalNode('approval-root', 1),
@@ -425,5 +451,58 @@ describe('processFlowDesignerHelper', () => {
 
     expect(next.moved).toBe(false)
     expect(next.reason).toBe('INVALID_TARGET')
+  })
+
+  it('copies an approval node into the root container and keeps the source node intact', () => {
+    const nodes = [
+      createBranchNode('branch-1', 1),
+      createApprovalNode('approval-lane', 1, 'route-1')
+    ]
+
+    const next = copyNodeIntoContainer(nodes, 'approval-lane', null, 0)
+
+    expect(next.copied).toBe(true)
+    expect(next.reason).toBe('COPIED')
+    expect(next.copiedNodeKey).toBeTruthy()
+    expect(next.nodes).toHaveLength(3)
+
+    const sourceNode = next.nodes.find((item) => item.nodeKey === 'approval-lane')
+    const copiedNode = next.nodes.find((item) => item.nodeKey === next.copiedNodeKey)
+
+    expect(sourceNode?.parentNodeKey).toBe('route-1')
+    expect(copiedNode).toMatchObject({
+      nodeType: 'APPROVAL',
+      nodeName: 'approval-lane',
+      parentNodeKey: ''
+    })
+    expect(copiedNode?.config).toEqual(sourceNode?.config)
+  })
+
+  it('copies an approval node into a route container with a new key and correct ordering', () => {
+    const nodes = [
+      createApprovalNode('approval-root', 1),
+      createBranchNode('branch-1', 2),
+      createApprovalNode('approval-lane-a', 1, 'route-1'),
+      createApprovalNode('approval-lane-b', 2, 'route-1')
+    ]
+
+    const next = copyNodeIntoContainer(nodes, 'approval-root', 'route-1', 1)
+
+    expect(next.copied).toBe(true)
+    expect(next.copiedNodeKey).toBeTruthy()
+    expect(
+      next.nodes
+        .filter((item) => item.parentNodeKey === 'route-1')
+        .sort((left, right) => (left.displayOrder ?? 0) - (right.displayOrder ?? 0))
+        .map((item) => item.nodeKey)
+    ).toEqual(['approval-lane-a', next.copiedNodeKey!, 'approval-lane-b'])
+  })
+
+  it('rejects copying unsupported node types', () => {
+    const next = copyNodeIntoContainer([createBranchNode('branch-1', 1)], 'branch-1', null, 0)
+
+    expect(next.copied).toBe(false)
+    expect(next.reason).toBe('UNSUPPORTED')
+    expect(next.nodes).toHaveLength(1)
   })
 })

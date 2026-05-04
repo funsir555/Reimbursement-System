@@ -26,9 +26,8 @@
       <el-form-item label="开户银行" :required="required" class="!mb-0">
         <el-select
           v-model="bankCodeModel"
-          filterable
+          filterable v-bind="globalFilterableSelectProps"
           remote
-          reserve-keyword
           clearable
           class="w-full"
           placeholder="请选择开户银行"
@@ -57,7 +56,7 @@
         <el-select
           v-model="provinceModel"
           clearable
-          filterable
+          filterable v-bind="globalFilterableSelectProps"
           class="w-full"
           placeholder="请选择开户省"
           :disabled="!bankCodeModel"
@@ -76,7 +75,7 @@
         <el-select
           v-model="cityModel"
           clearable
-          filterable
+          filterable v-bind="globalFilterableSelectProps"
           class="w-full"
           placeholder="请选择开户市"
           :disabled="!bankCodeModel || !provinceModel"
@@ -94,9 +93,8 @@
       <el-form-item label="开户网点" :required="required" class="!mb-0 xl:col-span-2">
         <el-select
           v-model="branchCodeModel"
-          filterable
+          filterable v-bind="globalFilterableSelectProps"
           remote
-          reserve-keyword
           clearable
           class="w-full"
           placeholder="请选择或搜索开户网点"
@@ -120,6 +118,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 import {
   financeBankApi,
   type FinanceBankBranchOption,

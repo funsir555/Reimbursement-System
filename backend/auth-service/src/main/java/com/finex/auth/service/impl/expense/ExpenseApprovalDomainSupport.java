@@ -25,6 +25,7 @@ import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.UserDepartmentSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -253,11 +254,18 @@ public ExpenseDocumentDetailVO transferTask(Long userId, String username, Long t
                 (left, right) -> left,
                 LinkedHashMap::new
         ));
-        return userMapper.selectList(
+        List<User> users = userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
                         .eq(User::getStatus, 1)
                         .orderByAsc(User::getName, User::getId)
-        ).stream()
+        );
+        Map<Long, List<com.finex.auth.dto.EmployeeDepartmentRefVO>> departmentsByUserId =
+                UserDepartmentSupport.loadDepartmentRefsByUserId(
+                        userMapper,
+                        systemDepartmentMapper,
+                        users.stream().map(User::getId).toList()
+                );
+        return users.stream()
                 .filter(item -> matchesKeyword(normalizedKeyword, item.getName(), item.getUsername(), item.getPhone(), item.getEmail()))
                 .map(item -> {
                     ExpenseActionUserOptionVO option = new ExpenseActionUserOptionVO();
@@ -265,7 +273,14 @@ public ExpenseDocumentDetailVO transferTask(Long userId, String username, Long t
                     option.setName(item.getName());
                     option.setUsername(item.getUsername());
                     option.setPhone(item.getPhone());
-                    option.setDeptName(item.getDeptId() == null ? null : departmentNameMap.get(item.getDeptId()));
+                    String deptName = UserDepartmentSupport.joinDepartmentNames(
+                            departmentsByUserId.getOrDefault(item.getId(), Collections.emptyList())
+                    );
+                    option.setDeptName(
+                            trimToNull(deptName) == null && item.getDeptId() != null
+                                    ? departmentNameMap.get(item.getDeptId())
+                                    : deptName
+                    );
                     return option;
                 })
                 .toList();

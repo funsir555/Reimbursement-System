@@ -9,6 +9,7 @@ import type { ProcessFlowDetail, ProcessFlowMeta, ProcessFlowResolveApproversPay
 import type { ProcessExpenseDetailDesignDetail, ProcessExpenseDetailDesignSavePayload, ProcessExpenseDetailDesignSummary, ProcessFormDesignDetail, ProcessFormDesignSavePayload, ProcessFormDesignSummary } from './process-form-types'
 import type { ProcessTemplateDetail, ProcessTemplateFormOptions, ProcessTemplateSavePayload, ProcessTemplateSaveResult, ProcessTemplateTypeOption } from './process-template-types'
 import type { ProcessCenterOverview } from './process-center-types'
+import type { ProcessUserGroupDetail, ProcessUserGroupMeta, ProcessUserGroupSavePayload, ProcessUserGroupTreeNode } from './process-user-group-types'
 
 // 这一组方法供对应页面统一调用。
 export const processApi = {
@@ -148,6 +149,26 @@ export const processApi = {
     request<ProcessCustomArchiveResolveResult>('/auth/process-management/custom-archives/resolve', {
       method: 'POST',
       body: JSON.stringify(payload)
+    }),
+  listUserGroupTree: () =>
+    request<ProcessUserGroupTreeNode[]>('/auth/process-management/user-groups/tree'),
+  getUserGroupMeta: () =>
+    request<ProcessUserGroupMeta>('/auth/process-management/user-groups/meta'),
+  getUserGroupDetail: (id: number) =>
+    request<ProcessUserGroupDetail>(`/auth/process-management/user-groups/${id}`),
+  createUserGroup: (payload: ProcessUserGroupSavePayload) =>
+    request<ProcessUserGroupDetail>('/auth/process-management/user-groups', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  updateUserGroup: (id: number, payload: ProcessUserGroupSavePayload) =>
+    request<ProcessUserGroupDetail>(`/auth/process-management/user-groups/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  deleteUserGroup: (id: number) =>
+    request<boolean>(`/auth/process-management/user-groups/${id}`, {
+      method: 'DELETE'
     }),
   listExpenseTypesTree: () =>
     request<ProcessExpenseTypeTreeNode[]>('/auth/process-management/expense-types/tree'),

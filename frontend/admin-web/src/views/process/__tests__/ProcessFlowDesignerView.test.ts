@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import ProcessConditionGroupEditor from '@/components/process/ProcessConditionGroupEditor.vue'
 import ProcessFlowDesignerView from '@/views/process/ProcessFlowDesignerView.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -9,10 +10,12 @@ const mocks = vi.hoisted(() => ({
     params: {
       id: '1'
     },
-    query: {}
+    query: {},
+    fullPath: '/expense/workbench/process-flow/1'
   },
   router: {
-    push: vi.fn()
+    push: vi.fn(),
+    back: vi.fn()
   },
   processApi: {
     listFlows: vi.fn(),
@@ -121,7 +124,7 @@ const SwitchStub = defineComponent({
     }
   },
   emits: ['change', 'update:modelValue'],
-  template: '<button type="button" data-testid="attach-below-switch" @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)"><slot /></button>'
+  template: '<button type="button" :data-testid="$attrs[\'data-testid\'] || \'switch\'" @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)"><slot /></button>'
 })
 
 const FormItemStub = defineComponent({
@@ -170,9 +173,16 @@ const ProcessFlowCanvasRendererStub = defineComponent({
       <button
         type="button"
         data-testid="move-lane-node-to-root"
-        @click="$emit('drag-node-start', 'approval-lane')"
+        @click="$emit('drag-node-start', { nodeKey: 'approval-lane', mode: 'move' })"
       >
         start drag lane node
+      </button>
+      <button
+        type="button"
+        data-testid="copy-lane-node-to-root"
+        @click="$emit('drag-node-start', { nodeKey: 'approval-lane', mode: 'copy' })"
+      >
+        copy drag lane node
       </button>
       <button
         type="button"
@@ -205,11 +215,21 @@ function buildFlowMeta() {
     ccSpecialOptions: [],
     paymentActionOptions: [],
     paymentSpecialOptions: [],
-    branchOperatorOptions: [],
-    branchConditionFields: [],
-    companyOptions: [],
-    departmentOptions: [],
+    branchOperatorOptions: [
+      { value: 'EQ', label: '等于' },
+      { value: 'NE', label: '不等于' },
+      { value: 'IN', label: '属于' },
+      { value: 'NOT_IN', label: '不属于' }
+    ],
+    branchConditionFields: [
+      { key: 'paymentCompanyId', label: '公司抬头', valueType: 'company', operatorKeys: ['IN', 'NOT_IN'] },
+      { key: 'undertakeDeptIdWithChildren', label: '承担部门(含下级部门)', valueType: 'department', operatorKeys: ['IN', 'NOT_IN'] },
+      { key: 'undertakeDeptIdExact', label: '承担部门(不含下级部门)', valueType: 'department', operatorKeys: ['IN', 'NOT_IN'] }
+    ],
+    companyOptions: [{ label: '广州远智教育科技有限公司', value: 'COMPANY_A' }],
+    departmentOptions: [{ label: '广州团队', value: '15' }],
     userOptions: [],
+    userGroupOptions: [],
     expenseTypeOptions: [],
     archiveOptions: []
   }
@@ -256,6 +276,7 @@ function buildFlowDetail(flowName = 'Travel Approval Flow', routeAttachFlags: [b
         sourceNodeKey: 'branch-1',
         routeName: '分支 A',
         priority: 1,
+        defaultRoute: false,
         attachBelowNodes: routeAttachFlags[0],
         conditionGroups: []
       },
@@ -264,6 +285,7 @@ function buildFlowDetail(flowName = 'Travel Approval Flow', routeAttachFlags: [b
         sourceNodeKey: 'branch-1',
         routeName: '分支 B',
         priority: 2,
+        defaultRoute: false,
         attachBelowNodes: routeAttachFlags[1],
         conditionGroups: []
       }
@@ -287,7 +309,7 @@ function buildSavedFlowDetail(payload: { flowName: string; flowDescription?: str
 async function mountView(
   flowName = 'Travel Approval Flow',
   detail = buildFlowDetail(flowName),
-  options?: { detailError?: Error }
+  options?: { detailError?: Error; meta?: Record<string, unknown> }
 ) {
   mocks.processApi.listFlows.mockResolvedValue({
     data: [
@@ -301,7 +323,7 @@ async function mountView(
       }
     ]
   })
-  mocks.processApi.getFlowMeta.mockResolvedValue({ data: buildFlowMeta() })
+  mocks.processApi.getFlowMeta.mockResolvedValue({ data: { ...buildFlowMeta(), ...(options?.meta || {}) } })
   if (options?.detailError) {
     mocks.processApi.getFlowDetail.mockRejectedValue(options.detailError)
   } else {
@@ -349,7 +371,9 @@ describe('ProcessFlowDesignerView', () => {
     mocks.route.name = 'expense-workbench-process-flow-edit'
     mocks.route.params = { id: '1' }
     mocks.route.query = {}
+    mocks.route.fullPath = '/expense/workbench/process-flow/1'
     mocks.router.push.mockResolvedValue(undefined)
+    mocks.router.back.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -358,7 +382,7 @@ describe('ProcessFlowDesignerView', () => {
     }
   })
 
-  it('keeps return and refresh actions on the left, removes local create button, and shows the unified floating footer', async () => {
+  it('keeps return and refresh actions on the left, removes local create button, and shows the canvas toolbar actions', async () => {
     const wrapper = await mountView()
     const buttons = wrapper.findAll('button')
 
@@ -370,34 +394,64 @@ describe('ProcessFlowDesignerView', () => {
     expect(wrapper.get('[data-testid="flow-canvas-surface"]').classes()).toContain('flow-canvas-surface')
     expect(wrapper.get('[data-testid="flow-track"]').classes()).toContain('flow-track')
     expect(wrapper.get('[data-testid="designer-side-panel"]').classes()).toContain('designer-side-scroll')
+    expect(wrapper.get('[data-testid="designer-config-drawer"]').classes()).not.toContain('is-open')
+    expect(wrapper.find('[data-testid="process-flow-designer-floating-bar"]').exists()).toBe(false)
 
-    const floatingBar = wrapper.get('[data-testid="process-flow-designer-floating-bar"]')
-    expect(floatingBar.classes()).toContain('process-flow-designer-floating-bar')
-    expect(floatingBar.classes()).toContain('bottom-0')
-    expect(floatingBar.classes()).toContain('mt-10')
-    expect(wrapper.get('[data-testid="process-flow-designer-floating-bar-inner"]').classes()).toContain(
-      'process-flow-designer-floating-bar__inner'
-    )
-    expect(floatingBar.text()).toContain('保存草稿')
-    expect(floatingBar.text()).toContain('发布流程')
-    expect(floatingBar.text()).toContain('停用流程')
+    const toolbar = wrapper.get('[data-testid="flow-canvas-toolbar"]')
+    expect(toolbar.text()).toContain('保存草稿')
+    expect(toolbar.text()).toContain('发布流程')
+    expect(toolbar.text()).toContain('停用流程')
 
-    const footerButtons = buttons.filter((item) => (
+    const toolbarButtons = buttons.filter((item) => (
       item.text().includes('保存草稿') || item.text().includes('发布流程') || item.text().includes('停用流程')
     ))
-    expect(footerButtons).toHaveLength(3)
-    expect(footerButtons.every((item) => item.classes().includes('process-flow-designer-floating-bar__button'))).toBe(true)
-    expect(footerButtons.some((item) => item.classes().includes('process-flow-designer-floating-bar__button--success'))).toBe(true)
+    expect(toolbarButtons).toHaveLength(3)
   })
 
-  it('opens the first route panel after selecting a branch node', async () => {
+  it('returns to the page that opened the designer when returnTo is present', async () => {
+    mocks.route.query = { returnTo: '/expense/workbench/process-management?section=approval-flow' }
+    const wrapper = await mountView()
+    mocks.router.push.mockClear()
+    mocks.router.back.mockClear()
+
+    await wrapper.findAll('button')[0]!.trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/expense/workbench/process-management?section=approval-flow')
+    expect(mocks.router.back).not.toHaveBeenCalled()
+  })
+
+  it('falls back to browser history when returnTo is missing', async () => {
+    const historyLengthDescriptor = Object.getOwnPropertyDescriptor(window.history, 'length')
+    Object.defineProperty(window.history, 'length', {
+      configurable: true,
+      value: 2
+    })
+
+    try {
+      const wrapper = await mountView()
+      mocks.router.push.mockClear()
+      mocks.router.back.mockClear()
+      await wrapper.findAll('button')[0]!.trigger('click')
+
+      expect(mocks.router.back).toHaveBeenCalledTimes(1)
+      expect(mocks.router.push).not.toHaveBeenCalled()
+    } finally {
+      if (historyLengthDescriptor) {
+        Object.defineProperty(window.history, 'length', historyLengthDescriptor)
+      }
+    }
+  })
+
+  it('opens the drawer and first route panel after selecting a branch node', async () => {
     const wrapper = await mountView('Travel Approval Flow')
 
     await wrapper.get('[data-testid="select-branch"]').trigger('click')
     await flushPromises()
 
+    expect(wrapper.get('[data-testid="designer-config-drawer"]').classes()).toContain('is-open')
     expect(wrapper.find('[data-testid="attach-below-switch"]').exists()).toBe(true)
-    expect(wrapper.findAll('.route-pill')[0]?.classes()).toContain('is-selected')
+    expect(wrapper.find('[data-testid="designer-side-panel"] input[value="分支 A"]').exists()).toBe(true)
+    expect(wrapper.find('.route-pill-grid').exists()).toBe(false)
   })
 
   it('still opens the first route panel when current flow name is empty', async () => {
@@ -406,8 +460,59 @@ describe('ProcessFlowDesignerView', () => {
     await wrapper.get('[data-testid="select-branch"]').trigger('click')
     await flushPromises()
 
+    expect(wrapper.get('[data-testid="designer-config-drawer"]').classes()).toContain('is-open')
     expect(wrapper.find('[data-testid="attach-below-switch"]').exists()).toBe(true)
-    expect(wrapper.findAll('.route-pill')[0]?.classes()).toContain('is-selected')
+    expect(wrapper.find('[data-testid="designer-side-panel"] input[value="分支 A"]').exists()).toBe(true)
+  })
+
+  it('collapses the drawer and clears selection after clicking blank canvas', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    await wrapper.get('[data-testid="select-branch"]').trigger('click')
+    await flushPromises()
+
+    const scroll = wrapper.get('[data-testid="flow-canvas-scroll"]')
+    const pointerDownEvent = new Event('pointerdown', { bubbles: true })
+    Object.defineProperties(pointerDownEvent, {
+      button: { value: 0 },
+      clientX: { value: 120 },
+      clientY: { value: 120 },
+      pointerId: { value: 1 }
+    })
+    scroll.element.dispatchEvent(pointerDownEvent)
+
+    const pointerUpEvent = new Event('pointerup', { bubbles: true })
+    Object.defineProperties(pointerUpEvent, {
+      button: { value: 0 },
+      clientX: { value: 120 },
+      clientY: { value: 120 },
+      pointerId: { value: 1 }
+    })
+    scroll.element.dispatchEvent(pointerUpEvent)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="designer-config-drawer"]').classes()).not.toContain('is-open')
+    expect(wrapper.find('[data-testid="attach-below-switch"]').exists()).toBe(false)
+  })
+
+  it('collapses and reopens the drawer manually without losing the current selection', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    await wrapper.get('[data-testid="select-route-2"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="designer-config-drawer"]').classes()).toContain('is-open')
+    await wrapper.get('[data-testid="designer-config-drawer-toggle"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="designer-config-drawer"]').classes()).not.toContain('is-open')
+    expect(wrapper.find('[data-testid="designer-side-panel"] input[value="分支 B"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="designer-config-drawer-handle"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="designer-config-drawer"]').classes()).toContain('is-open')
+    expect(wrapper.find('[data-testid="designer-side-panel"] input[value="分支 B"]').exists()).toBe(true)
   })
 
   it('moves compare value to its own row and removes the conditionGroups helper copy', async () => {
@@ -471,6 +576,7 @@ describe('ProcessFlowDesignerView', () => {
       sourceNodeKey: 'branch-1',
       routeName: '分支 C',
       priority: 3,
+      defaultRoute: false,
       attachBelowNodes: false,
       conditionGroups: []
     })
@@ -497,9 +603,7 @@ describe('ProcessFlowDesignerView', () => {
     await wrapper.get('[data-testid="add-route-lane"]').trigger('click')
     await flushPromises()
 
-    const routePills = wrapper.findAll('.route-pill')
-    expect(routePills).toHaveLength(3)
-    expect(routePills[2]?.classes()).toContain('is-selected')
+    expect(wrapper.find('[data-testid="designer-side-panel"] input[value*="条件分支"]').exists()).toBe(true)
   })
 
   it('confirms before moving a node to a new insert position', async () => {
@@ -522,6 +626,122 @@ describe('ProcessFlowDesignerView', () => {
     expect(mocks.elMessage.success).toHaveBeenCalledWith('节点位置已调整')
   })
 
+  it('copies an approval node through the existing drop slot and preserves the original node on save', async () => {
+    const wrapper = await mountView('Travel Approval Flow')
+
+    await wrapper.get('[data-testid="copy-lane-node-to-root"]').trigger('click')
+    await wrapper.get('[data-testid="drop-lane-node-to-root"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="flow-canvas-toolbar"]').findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).not.toHaveBeenCalled()
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('节点副本已添加')
+    expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
+
+    const payload = mocks.processApi.updateFlow.mock.calls[0][1]
+    const originalNode = payload.nodes.find((item: any) => item.nodeKey === 'approval-lane')
+    const copiedNode = payload.nodes.find((item: any) => (
+      item.nodeName === '泳道审批节点' &&
+      item.nodeKey !== 'approval-lane'
+    ))
+
+    expect(originalNode).toBeTruthy()
+    expect(copiedNode).toBeTruthy()
+    expect(copiedNode.nodeType).toBe('APPROVAL')
+    expect(copiedNode.parentNodeKey).toBe('')
+    expect(copiedNode.config).toEqual(originalNode.config)
+  })
+
+  it('passes the expanded branch condition fields into the shared condition editor', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.routes[0].conditionGroups = [
+      {
+        groupNo: 1,
+        conditions: [
+          {
+            fieldKey: 'paymentCompanyId',
+            operator: 'IN',
+            compareValue: ['COMPANY_A']
+          }
+        ]
+      }
+    ]
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
+    await wrapper.get('[data-testid="select-route"]').trigger('click')
+    await flushPromises()
+
+    const editor = wrapper.getComponent(ProcessConditionGroupEditor)
+    expect(editor.props('fields')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'paymentCompanyId', label: '公司抬头', valueType: 'company' }),
+      expect.objectContaining({ key: 'undertakeDeptIdWithChildren', label: '承担部门(含下级部门)', valueType: 'department' }),
+      expect.objectContaining({ key: 'undertakeDeptIdExact', label: '承担部门(不含下级部门)', valueType: 'department' })
+    ]))
+    expect(editor.props('optionSources')).toMatchObject({
+      company: [{ label: '广州远智教育科技有限公司', value: 'COMPANY_A' }],
+      department: [{ label: '广州团队', value: '15' }]
+    })
+  })
+
+  it('shows the else branch helper and hides condition editing when the selected route is a default route', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.routes[0].defaultRoute = true
+    detail.routes[0].conditionGroups = [
+      {
+        groupNo: 1,
+        conditions: [
+          {
+            fieldKey: 'paymentCompanyId',
+            operator: 'IN',
+            compareValue: ['COMPANY_A']
+          }
+        ]
+      }
+    ]
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
+    await wrapper.get('[data-testid="select-route"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="default-route-switch"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('不满足所有条件时进入该分支')
+    expect(wrapper.text()).toContain('当前分支已作为 else 分支')
+    expect(wrapper.findComponent(ProcessConditionGroupEditor).exists()).toBe(false)
+  })
+
+  it('saves the selected route as the only default branch after enabling else mode', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.routes[0].conditionGroups = [
+      {
+        groupNo: 1,
+        conditions: [
+          {
+            fieldKey: 'paymentCompanyId',
+            operator: 'IN',
+            compareValue: ['COMPANY_A']
+          }
+        ]
+      }
+    ]
+
+    const wrapper = await mountView('Travel Approval Flow', detail)
+    await wrapper.get('[data-testid="select-route"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="default-route-switch"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="flow-canvas-toolbar"]').findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
+    const payload = mocks.processApi.updateFlow.mock.calls[0][1]
+    expect(payload.routes.find((item: any) => item.routeKey === 'route-1')).toMatchObject({
+      defaultRoute: true,
+      conditionGroups: []
+    })
+    expect(payload.routes.find((item: any) => item.routeKey === 'route-2')?.defaultRoute).toBe(false)
+  })
+
   it('moves the attached lane to the left and shows the attach badge after enabling attach below nodes', async () => {
     const wrapper = await mountView('Travel Approval Flow')
 
@@ -530,9 +750,10 @@ describe('ProcessFlowDesignerView', () => {
     await wrapper.get('[data-testid="attach-below-switch"]').trigger('click')
     await flushPromises()
 
-    const routePills = wrapper.findAll('.route-pill').map((item) => item.text())
-    expect(routePills[0]).toContain('分支 B')
-    expect(routePills[1]).toContain('分支 A')
+    await wrapper.get('[data-testid="select-branch"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="designer-side-panel"] input[value="分支 B"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('附带下方节点')
     expect(wrapper.text()).not.toContain('开启后，当前泳道会自动排到最左侧，并承接当前分支块后方的公共尾部节点。')
     expect(wrapper.text()).not.toContain('已开启')
@@ -546,7 +767,7 @@ describe('ProcessFlowDesignerView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="attach-below-switch"]').trigger('click')
     await flushPromises()
-    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0].trigger('click')
+    await wrapper.get('[data-testid="flow-canvas-toolbar"]').findAll('button')[0].trigger('click')
     await flushPromises()
 
     expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
@@ -564,7 +785,7 @@ describe('ProcessFlowDesignerView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="attach-below-switch"]').trigger('click')
     await flushPromises()
-    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0].trigger('click')
+    await wrapper.get('[data-testid="flow-canvas-toolbar"]').findAll('button')[0].trigger('click')
     await flushPromises()
 
     expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
@@ -579,9 +800,9 @@ describe('ProcessFlowDesignerView', () => {
     })
 
     expect(wrapper.getComponent(SwitchStub).props('modelValue')).toBe(true)
-    const routePills = wrapper.findAll('.route-pill').map((item) => item.text())
-    expect(routePills[0]).toContain('B')
-    expect(routePills[1]).toContain('A')
+    await wrapper.get('[data-testid="select-branch"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="designer-side-panel"] input[value="分支 B"]').exists()).toBe(true)
   })
 
   it('keeps flow name, flow description, and flow code in the shared top row and still saves flowDescription', async () => {
@@ -596,7 +817,7 @@ describe('ProcessFlowDesignerView', () => {
     const descriptionInput = wrapper.findAll('input').find((item) => (item.element as HTMLInputElement).value === 'flow description')
     expect(descriptionInput).toBeTruthy()
     await descriptionInput!.setValue('updated flow description')
-    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0].trigger('click')
+    await wrapper.get('[data-testid="flow-canvas-toolbar"]').findAll('button')[0].trigger('click')
     await flushPromises()
 
     expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
@@ -629,12 +850,51 @@ describe('ProcessFlowDesignerView', () => {
 
     expect(wrapper.text()).toContain('第 1..N 级主管共同审批')
 
-    await wrapper.get('[data-testid="process-flow-designer-floating-bar"]').findAll('button')[0]!.trigger('click')
+    await wrapper.get('[data-testid="flow-canvas-toolbar"]').findAll('button')[0]!.trigger('click')
     await flushPromises()
 
     expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
     const payload = mocks.processApi.updateFlow.mock.calls[0][1]
     expect(payload.nodes.find((item: any) => item.nodeKey === 'approval-root')?.config.approvalMode).toBe('AND_SIGN')
+  })
+
+  it('keeps designated user-group approval in AND_SIGN and shows the user-group countersign hint', async () => {
+    const detail = buildFlowDetail('Travel Approval Flow')
+    detail.nodes[0]!.config = {
+      approverType: 'DESIGNATED_USER_GROUP',
+      missingHandler: 'AUTO_SKIP',
+      approvalMode: 'OR_SIGN',
+      opinionDefaults: [],
+      specialSettings: [],
+      managerConfig: {},
+      designatedMemberConfig: { userIds: [] },
+      designatedUserGroupConfig: { groupId: 2001 },
+      manualSelectConfig: { candidateScope: 'ALL_ACTIVE_USERS' }
+    }
+
+    const wrapper = await mountView('Travel Approval Flow', detail, {
+      meta: {
+        userGroupOptions: [
+          { label: '行政中心 / 差旅分配组', value: '2001' }
+        ]
+      }
+    })
+
+    await wrapper.get('[data-testid="select-approval-root"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('指定用户组模式固定按会签处理')
+
+    await wrapper.get('[data-testid="flow-canvas-toolbar"]').findAll('button')[0]!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFlow).toHaveBeenCalledTimes(1)
+    const payload = mocks.processApi.updateFlow.mock.calls[0][1]
+    expect(payload.nodes.find((item: any) => item.nodeKey === 'approval-root')?.config).toMatchObject({
+      approverType: 'DESIGNATED_USER_GROUP',
+      approvalMode: 'AND_SIGN',
+      designatedUserGroupConfig: { groupId: 2001 }
+    })
   })
 
 

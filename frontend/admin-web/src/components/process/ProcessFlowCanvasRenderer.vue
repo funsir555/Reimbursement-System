@@ -1,12 +1,22 @@
 <template>
-  <div class="flow-stack" :class="props.layoutMode === 'lane' ? 'is-lane-layout' : 'is-root-layout'">
+  <div
+    class="flow-stack"
+    :class="[
+      props.layoutMode === 'lane' ? 'is-lane-layout' : 'is-root-layout',
+      laneNeedsCenterRail(props.blocks) ? 'is-center-rail-only' : '',
+      props.layoutMode === 'lane' && laneUsesDistributedSpacing(props.blocks) ? 'is-distributed-spacing' : ''
+    ]"
+  >
     <div
-      v-for="block in blocks"
+      v-for="(block, blockIndex) in blocks"
       :key="block.key"
       class="flow-step"
       :class="[
         block.kind === 'branch' ? 'is-branch-step' : '',
-        props.layoutMode === 'lane' ? 'is-lane-layout' : 'is-root-layout'
+        props.layoutMode === 'lane' ? 'is-lane-layout' : 'is-root-layout',
+        props.layoutMode === 'lane' && laneUsesDistributedSpacing(props.blocks)
+          ? laneDistributedStepClass(props.blocks, blockIndex)
+          : ''
       ]"
     >
       <template v-if="block.kind === 'insert'">
@@ -24,6 +34,7 @@
             <button
               type="button"
               class="insert-trigger"
+              data-flow-interactive="true"
               :aria-label="insertButtonAriaLabel(block)"
             >
               +
@@ -63,9 +74,10 @@
               selectedNodeKey === block.node.nodeKey ? 'is-selected' : '',
               draggingNodeKey === block.node.nodeKey ? 'is-dragging' : ''
             ]"
-            draggable="true"
+            data-flow-interactive="true"
+            :draggable="isNodeDraggable(block.node.nodeType)"
             @click="emit('select-node', block.node.nodeKey)"
-            @dragstart="handleNodeDragStart($event, block.node.nodeKey)"
+            @dragstart="handleNodeDragStart($event, block.node.nodeKey, block.node.nodeType)"
             @dragend="emit('drag-node-end')"
           >
             <div class="flex items-start justify-between gap-3">
@@ -73,7 +85,7 @@
                 <p class="truncate text-lg font-semibold">{{ block.node.nodeName }}</p>
                 <p class="mt-2 text-sm opacity-80">{{ nodeTypeLabel(block.node.nodeType) }}</p>
               </div>
-              <el-tag size="small" effect="plain" round>
+              <el-tag v-if="block.node.nodeType !== 'APPROVAL'" size="small" effect="plain" round>
                 {{ sceneNameById(block.node.sceneId) || '默认场景' }}
               </el-tag>
             </div>
@@ -92,22 +104,20 @@
           :style="branchShellStyle(block.routes.length, block.depth)"
         >
           <div class="branch-top-rail">
-            <div class="branch-top-rail__line" aria-hidden="true"></div>
+            <div class="branch-top-rail__line flow-connector flow-connector--vertical" aria-hidden="true"></div>
             <button
               type="button"
               class="branch-drag-handle"
               :class="isBranchActive(block) ? 'is-selected' : ''"
-              aria-label="拖动整个流程分支"
-              draggable="true"
+              data-flow-interactive="true"
+              aria-label="选中流程分支"
               @click="emit('select-node', block.node.nodeKey)"
-              @dragstart="handleNodeDragStart($event, block.node.nodeKey)"
-              @dragend="emit('drag-node-end')"
             >
               <span class="branch-drag-handle__grip"></span>
             </button>
           </div>
 
-          <div class="branch-split-line" aria-hidden="true"></div>
+          <div class="branch-split-line flow-connector flow-connector--horizontal" data-testid="branch-split-line" aria-hidden="true"></div>
 
           <div class="branch-lanes">
             <div
@@ -116,7 +126,7 @@
               class="branch-lane"
               :class="lane.route.attachBelowNodes ? 'has-attached-tail' : ''"
             >
-              <div class="branch-lane-entry" aria-hidden="true"></div>
+              <div class="branch-lane-entry flow-connector flow-connector--vertical" aria-hidden="true"></div>
               <div class="route-head-row" :class="laneIndex === block.routes.length - 1 ? 'is-last-lane' : ''">
                 <button
                   type="button"
@@ -125,24 +135,19 @@
                     selectedRouteKey === lane.route.routeKey ? 'is-selected' : '',
                     lane.route.attachBelowNodes ? 'is-attached' : ''
                   ]"
+                  data-flow-interactive="true"
                   @click="emit('select-route', lane.route.routeKey)"
                 >
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 text-left">
-                      <div class="flex items-center gap-2">
-                        <p class="truncate text-sm font-semibold text-slate-800">{{ lane.route.routeName || '\u672a\u547d\u540d\u5206\u652f' }}</p>
-                        <span
-                          v-if="lane.route.attachBelowNodes"
-                          class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-600"
-                        >
-                          {{ '\u9644\u5e26\u4e0b\u65b9\u8282\u70b9' }}
-                        </span>
-                      </div>
-                      <p class="mt-1 text-xs text-slate-400">
-                        {{ `\u4f18\u5148\u7ea7 ${lane.route.priority || 1} / ${countConditions(lane.route)} \u6761\u6761\u4ef6` }}
-                      </p>
+                  <div class="min-w-0 text-left">
+                    <div class="flex items-center gap-2">
+                      <p class="truncate text-sm font-semibold text-slate-800">{{ lane.route.routeName || '\u672a\u547d\u540d\u5206\u652f' }}</p>
+                      <span
+                        v-if="lane.route.attachBelowNodes"
+                        class="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-600"
+                      >
+                        {{ '\u9644\u5e26\u4e0b\u65b9\u8282\u70b9' }}
+                      </span>
                     </div>
-                    <span class="route-head-link">{{ '\u6761\u4ef6\u8bbe\u7f6e' }}</span>
                   </div>
                 </button>
                 <button
@@ -150,6 +155,7 @@
                   type="button"
                   class="route-lane-add-trigger"
                   data-testid="branch-add-route-trigger"
+                  data-flow-interactive="true"
                   :aria-label="'\u65b0\u589e\u6761\u4ef6\u5206\u652f'"
                   @click.stop="emit('add-route-lane', block.node.nodeKey)"
                 >
@@ -157,38 +163,54 @@
                 </button>
               </div>
 
-              <div class="branch-lane-card-connector" aria-hidden="true"></div>
-              <div class="branch-lane-body">
-                <ProcessFlowCanvasRenderer
-                  :blocks="lane.blocks"
-                  layout-mode="lane"
-                  :selected-node-key="selectedNodeKey"
-                  :selected-route-key="selectedRouteKey"
-                  :dragging-node-key="draggingNodeKey"
-                  :drop-target-key="dropTargetKey"
-                  :scene-name-by-id="sceneNameById"
-                  :node-type-label="nodeTypeLabel"
-                  :node-card-class="nodeCardClass"
-                  @insert-node="emit('insert-node', $event)"
-                  @select-node="emit('select-node', $event)"
-                  @select-route="emit('select-route', $event)"
-                  @add-route-lane="emit('add-route-lane', $event)"
-                  @drag-node-start="emit('drag-node-start', $event)"
-                  @drag-node-end="emit('drag-node-end')"
-                  @drag-node-over="emit('drag-node-over', $event)"
-                  @drop-node="emit('drop-node', $event)"
-                />
+              <div class="branch-lane-card-connector flow-connector flow-connector--vertical" aria-hidden="true"></div>
+              <div class="branch-lane-body" data-testid="branch-lane-body">
+                <div
+                  class="branch-lane-center-rail flow-connector flow-connector--vertical"
+                  data-testid="branch-lane-center-rail"
+                  aria-hidden="true"
+                ></div>
+                <div
+                  class="branch-lane-stack is-lane-stack"
+                  :class="laneUsesDistributedSpacing(lane.blocks) ? 'is-distributed-lane-stack' : ''"
+                  :data-spacing-mode="laneUsesDistributedSpacing(lane.blocks) ? 'distributed' : 'compact'"
+                >
+                  <ProcessFlowCanvasRenderer
+                    :blocks="lane.blocks"
+                    layout-mode="lane"
+                    :selected-node-key="selectedNodeKey"
+                    :selected-route-key="selectedRouteKey"
+                    :dragging-node-key="draggingNodeKey"
+                    :drop-target-key="dropTargetKey"
+                    :scene-name-by-id="sceneNameById"
+                    :node-type-label="nodeTypeLabel"
+                    :node-card-class="nodeCardClass"
+                    @insert-node="emit('insert-node', $event)"
+                    @select-node="emit('select-node', $event)"
+                    @select-route="emit('select-route', $event)"
+                    @add-route-lane="emit('add-route-lane', $event)"
+                    @drag-node-start="emit('drag-node-start', $event)"
+                    @drag-node-end="emit('drag-node-end')"
+                    @drag-node-over="emit('drag-node-over', $event)"
+                    @drop-node="emit('drop-node', $event)"
+                  />
+                </div>
               </div>
-              <div class="branch-lane-exit" aria-hidden="true"></div>
+              <div class="branch-lane-exit flow-connector flow-connector--vertical" aria-hidden="true"></div>
             </div>
           </div>
 
-          <div class="branch-merge-line" aria-hidden="true"></div>
+          <div class="branch-merge-line flow-connector flow-connector--horizontal" data-testid="branch-merge-line" aria-hidden="true"></div>
           <div class="branch-merge">
-            <div class="branch-merge-entry" aria-hidden="true"></div>
+            <div class="branch-merge-entry flow-connector flow-connector--vertical" aria-hidden="true"></div>
             <span>分支汇合</span>
           </div>
           <div v-if="block.postMergeInsert" class="branch-post-merge-insert">
+            <div
+              class="branch-post-merge-connector flow-connector flow-connector--vertical"
+              data-testid="branch-post-merge-connector"
+              aria-hidden="true"
+            ></div>
             <div
               class="insert-trigger-shell is-post-merge"
               :class="dropTargetKey === block.postMergeInsert.key ? 'is-drop-target' : ''"
@@ -212,6 +234,7 @@
                 <button
                   type="button"
                   class="insert-trigger"
+                  data-flow-interactive="true"
                   :aria-label="insertButtonAriaLabel(block.postMergeInsert)"
                 >
                   +
@@ -245,6 +268,13 @@
           </div>
         </div>
       </template>
+
+      <div
+        v-if="!laneNeedsCenterRail(props.blocks)"
+        class="flow-step-connector flow-connector flow-connector--vertical flow-step-connector--after"
+        data-testid="flow-step-connector"
+        aria-hidden="true"
+      ></div>
     </div>
   </div>
 </template>
@@ -274,6 +304,11 @@ type CanvasDropPayload = {
   blockKey: string
 }
 
+type CanvasDragStartPayload = {
+  nodeKey: string
+  mode: 'move' | 'copy'
+}
+
 type InsertGroup = {
   key: string
   label: string
@@ -301,7 +336,7 @@ const emit = defineEmits<{
   (event: 'select-node', nodeKey: string): void
   (event: 'select-route', routeKey: string): void
   (event: 'add-route-lane', branchNodeKey: string): void
-  (event: 'drag-node-start', nodeKey: string): void
+  (event: 'drag-node-start', payload: CanvasDragStartPayload): void
   (event: 'drag-node-end'): void
   (event: 'drag-node-over', payload: CanvasDropPayload): void
   (event: 'drop-node', payload: CanvasDropPayload): void
@@ -316,17 +351,22 @@ function handleInsertCommand(command: string | number | object) {
   emit('insert-node', command as InsertCommand)
 }
 
-function handleNodeDragStart(event: DragEvent, nodeKey: string) {
+function isNodeDraggable(nodeType: string) {
+  return nodeType !== 'BRANCH'
+}
+
+function handleNodeDragStart(event: DragEvent, nodeKey: string, nodeType: string) {
+  if (!isNodeDraggable(nodeType)) {
+    event.preventDefault()
+    return
+  }
+  const mode = event.ctrlKey && nodeType === 'APPROVAL' ? 'copy' : 'move'
   event.dataTransfer?.setData('text/plain', nodeKey)
   event.dataTransfer?.setDragImage?.((event.currentTarget as HTMLElement) || new Image(), 24, 24)
   if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.effectAllowed = mode === 'copy' ? 'copy' : 'move'
   }
-  emit('drag-node-start', nodeKey)
-}
-
-function countConditions(route: { conditionGroups?: Array<{ conditions?: unknown[] }> }) {
-  return (route.conditionGroups || []).reduce((total, group) => total + (group.conditions?.length || 0), 0)
+  emit('drag-node-start', { nodeKey, mode })
 }
 
 function resolveInsertGroups(block: FlowCanvasInsertBlock): InsertGroup[] {
@@ -382,7 +422,30 @@ function isBranchActive(block: FlowCanvasBranchBlock) {
   return props.selectedNodeKey === block.node.nodeKey || block.routes.some((lane) => lane.route.routeKey === props.selectedRouteKey)
 }
 
+function laneNeedsCenterRail(blocks: FlowCanvasBlock[]) {
+  return !blocks.some((block) => block.kind !== 'insert')
+}
+
+function laneUsesDistributedSpacing(blocks: FlowCanvasBlock[]) {
+  return !laneNeedsCenterRail(blocks) && blocks.length > 1
+}
+
+function laneDistributedStepClass(blocks: FlowCanvasBlock[], index: number) {
+  const currentBlock = blocks[index]
+  const previousBlock = index > 0 ? blocks[index - 1] ?? null : null
+  const nextBlock = index < blocks.length - 1 ? blocks[index + 1] ?? null : null
+  const shouldStretchBelowInsert = currentBlock?.kind === 'insert' && previousBlock !== null && previousBlock.kind !== 'insert'
+  const shouldStretchBelowCurrent = currentBlock?.kind !== 'insert' && nextBlock !== null && nextBlock.kind !== 'insert'
+  return shouldStretchBelowInsert || shouldStretchBelowCurrent ? 'is-distributed-gap-step' : 'is-fixed-gap-step'
+}
+
 function branchShellStyle(routeCount: number, depth: number) {
+  const grayStrength = Math.min(Math.max(depth, 0) * 3, 36)
+  const laneSurfaceTop = `rgba(255, 255, 255, ${Math.max(0.98 - grayStrength * 0.003, 0.86).toFixed(2)})`
+  const laneSurfaceBottom = `rgba(226, 232, 240, ${(0.14 + grayStrength / 100).toFixed(2)})`
+  const laneBorderColor = `rgba(148, 163, 184, ${(0.14 + grayStrength / 120).toFixed(2)})`
+  const laneMaskTone = Math.max(248 - grayStrength, 212)
+  const laneMaskSurface = `rgb(${laneMaskTone}, ${laneMaskTone}, ${Math.min(laneMaskTone + 3, 251)})`
   const compact = depth > 0
   if (compact) {
     return {
@@ -393,7 +456,12 @@ function branchShellStyle(routeCount: number, depth: number) {
       '--branch-shell-width': 'max-content',
       '--branch-shell-max-width': 'none',
       '--branch-shell-min-width': '0px',
-      '--branch-lane-padding': '8px'
+      '--branch-lane-padding': '8px',
+      '--branch-lane-gray-strength': `${grayStrength}%`,
+      '--branch-lane-surface-top': laneSurfaceTop,
+      '--branch-lane-surface-bottom': laneSurfaceBottom,
+      '--branch-lane-border-color': laneBorderColor,
+      '--branch-lane-mask-surface': laneMaskSurface
     }
   }
 
@@ -406,7 +474,12 @@ function branchShellStyle(routeCount: number, depth: number) {
       '--branch-shell-width': 'max-content',
       '--branch-shell-max-width': 'none',
       '--branch-shell-min-width': '0px',
-      '--branch-lane-padding': '8px'
+      '--branch-lane-padding': '8px',
+      '--branch-lane-gray-strength': `${grayStrength}%`,
+      '--branch-lane-surface-top': laneSurfaceTop,
+      '--branch-lane-surface-bottom': laneSurfaceBottom,
+      '--branch-lane-border-color': laneBorderColor,
+      '--branch-lane-mask-surface': laneMaskSurface
     }
   }
 
@@ -418,19 +491,29 @@ function branchShellStyle(routeCount: number, depth: number) {
     '--branch-shell-width': 'max-content',
     '--branch-shell-max-width': 'none',
     '--branch-shell-min-width': '0px',
-    '--branch-lane-padding': '8px'
+    '--branch-lane-padding': '8px',
+    '--branch-lane-gray-strength': `${grayStrength}%`,
+    '--branch-lane-surface-top': laneSurfaceTop,
+    '--branch-lane-surface-bottom': laneSurfaceBottom,
+    '--branch-lane-border-color': laneBorderColor,
+    '--branch-lane-mask-surface': laneMaskSurface
   }
 }
 </script>
 
 <style scoped>
 .flow-stack {
+  --flow-connector-size: 2px;
+  --flow-connector-paint: #a8b6c7;
+  --flow-connector-gap: 18px;
+  --flow-connector-center-offset: calc(50% - (var(--flow-connector-size) / 2));
+  --flow-mask-surface: #f8fafc;
   display: flex;
   width: 100%;
   min-width: 0;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: var(--flow-connector-gap);
 }
 
 .flow-step {
@@ -441,29 +524,33 @@ function branchShellStyle(routeCount: number, depth: number) {
   justify-content: center;
 }
 
-.flow-step::before,
-.flow-step::after {
+.flow-connector {
+  pointer-events: none;
+  border-radius: 999px;
+  background: var(--flow-connector-paint);
+}
+
+.flow-connector--vertical {
+  width: var(--flow-connector-size);
+}
+
+.flow-connector--horizontal {
+  height: var(--flow-connector-size);
+}
+
+.flow-step-connector {
   position: absolute;
-  left: 50%;
-  width: 2px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, #cbd5e1, #94a3b8);
-  content: '';
-}
-
-.flow-step::before {
-  top: -18px;
-  height: 18px;
-}
-
-.flow-step::after {
-  bottom: -18px;
-  height: 18px;
-}
-
-.flow-step.is-branch-step::before,
-.flow-step.is-branch-step::after {
+  left: var(--flow-connector-center-offset);
   z-index: 0;
+  height: var(--flow-connector-gap);
+}
+
+.flow-step-connector--after {
+  top: 100%;
+}
+
+.flow-stack.is-center-rail-only .flow-step-connector {
+  display: none;
 }
 
 .node-shell {
@@ -546,24 +633,24 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .insert-trigger {
   display: inline-flex;
-  height: 60px;
-  width: 60px;
+  height: 42px;
+  width: 42px;
   align-items: center;
   justify-content: center;
   border: 0;
   border-radius: 999px;
   background: linear-gradient(135deg, #0f172a, #334155);
   color: #fff;
-  font-size: 34px;
+  font-size: 24px;
   font-weight: 300;
   line-height: 1;
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .insert-trigger:hover {
   transform: scale(1.05);
-  box-shadow: 0 20px 42px rgba(15, 23, 42, 0.24);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.24);
 }
 
 .insert-trigger-group-label {
@@ -584,10 +671,32 @@ function branchShellStyle(routeCount: number, depth: number) {
   gap: 0;
   padding-inline: 6px;
   z-index: 1;
+  isolation: isolate;
+}
+
+.branch-shell::before {
+  position: absolute;
+  inset: 0;
+  border-radius: 32px;
+  background: transparent;
+  content: '';
+  pointer-events: none;
+  z-index: 0;
 }
 
 .branch-shell.is-compact {
   padding-inline: 0;
+}
+
+.branch-shell.is-compact::before {
+  inset: -4px;
+  border-radius: 28px;
+  background: var(--branch-lane-mask-surface, #f8fafc);
+}
+
+.branch-shell > * {
+  position: relative;
+  z-index: 1;
 }
 
 .branch-top-rail {
@@ -601,12 +710,9 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .branch-top-rail__line {
   position: absolute;
-  left: 50%;
+  left: var(--flow-connector-center-offset);
   top: 0;
   bottom: 0;
-  width: 2px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, #cbd5e1, #94a3b8);
 }
 
 .branch-drag-handle {
@@ -647,10 +753,9 @@ function branchShellStyle(routeCount: number, depth: number) {
 
 .branch-split-line,
 .branch-merge-line {
-  height: 2px;
+  position: relative;
+  height: var(--flow-connector-size);
   width: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #cbd5e1, #94a3b8 50%, #cbd5e1);
 }
 
 .branch-lanes {
@@ -673,13 +778,17 @@ function branchShellStyle(routeCount: number, depth: number) {
   align-items: center;
   gap: 0;
   border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.86));
+  border: 1px solid var(--branch-lane-border-color, rgba(148, 163, 184, 0.14));
+  background: linear-gradient(
+    180deg,
+    var(--branch-lane-surface-top, rgba(255, 255, 255, 0.96)),
+    var(--branch-lane-surface-bottom, rgba(248, 250, 252, 0.86))
+  );
   padding: var(--branch-lane-padding);
 }
 
 .branch-shell.is-compact .branch-lane {
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.9));
 }
 
 .branch-shell.is-compact .branch-lanes {
@@ -690,8 +799,8 @@ function branchShellStyle(routeCount: number, depth: number) {
 .branch-lane-card-connector,
 .branch-lane-exit,
 .branch-merge-entry {
-  width: 2px;
-  background: linear-gradient(180deg, #cbd5e1, #94a3b8);
+  position: relative;
+  z-index: 1;
 }
 
 .branch-lane-entry {
@@ -738,13 +847,6 @@ function branchShellStyle(routeCount: number, depth: number) {
   max-width: var(--branch-element-width, var(--branch-lane-min-width));
 }
 
-.route-head-link {
-  flex-shrink: 0;
-  color: #0284c7;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .route-lane-add-trigger {
   position: absolute;
   left: calc(100% + 8px);
@@ -773,6 +875,7 @@ function branchShellStyle(routeCount: number, depth: number) {
 }
 
 .branch-lane-body {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   width: max-content;
@@ -782,6 +885,59 @@ function branchShellStyle(routeCount: number, depth: number) {
   flex-direction: column;
   align-items: center;
   gap: 0;
+  overflow: hidden;
+}
+
+.branch-lane-center-rail {
+  position: absolute;
+  left: var(--flow-connector-center-offset);
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+}
+
+.branch-lane-stack {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.branch-lane-stack.is-lane-stack {
+  display: flex;
+  flex: 1 1 auto;
+  align-self: stretch;
+  --flow-mask-surface: var(--branch-lane-mask-surface, #f8fafc);
+}
+
+.branch-lane-stack.is-lane-stack .insert-trigger-shell {
+  position: relative;
+  z-index: 1;
+  background: var(--flow-mask-surface);
+}
+
+.branch-lane-stack.is-distributed-lane-stack > .flow-stack.is-lane-layout.is-distributed-spacing {
+  flex: 1 1 auto;
+  min-height: 100%;
+  gap: 0;
+}
+
+.branch-lane-stack.is-distributed-lane-stack > .flow-stack.is-lane-layout.is-distributed-spacing > .flow-step {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.branch-lane-stack.is-distributed-lane-stack > .flow-stack.is-lane-layout.is-distributed-spacing > .flow-step.is-distributed-gap-step {
+  flex: 1 1 0;
+}
+
+.branch-lane-stack.is-distributed-lane-stack > .flow-stack.is-lane-layout.is-distributed-spacing > .flow-step.is-distributed-gap-step > .flow-step-connector {
+  position: relative;
+  left: auto;
+  top: auto;
+  flex: 1 1 auto;
+  min-height: var(--flow-connector-gap);
+  align-self: center;
 }
 
 .branch-shell.is-compact .branch-lane-body {
@@ -825,7 +981,14 @@ function branchShellStyle(routeCount: number, depth: number) {
 .branch-post-merge-insert {
   display: flex;
   width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
   justify-content: center;
+}
+
+.branch-post-merge-connector {
+  height: 18px;
 }
 
 @media (max-width: 1279px) {
@@ -842,9 +1005,8 @@ function branchShellStyle(routeCount: number, depth: number) {
 
   .branch-split-line,
   .branch-merge-line {
-    width: 2px;
+    width: var(--flow-connector-size);
     height: 18px;
-    background: linear-gradient(180deg, #cbd5e1, #94a3b8);
   }
 
   .branch-lanes {

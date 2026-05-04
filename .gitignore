@@ -47,6 +47,12 @@ download-*.xlsx
 backend/sql/backup/
 backend/sql/backup_local/
 backend/auth-service/storage/downloads/
+tools/codex_thread_repair/backups/
+执行记录/db-backups/
+
+# 本地虚拟环境
+.venv/
+**/.venv/
 
 # 测试报告
 test-output/

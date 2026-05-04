@@ -51,14 +51,12 @@
           </template>
         </el-input>
 
-        <el-select v-model="filters.parentId" clearable filterable placeholder="上级部门">
-          <el-option
-            v-for="item in parentDepartmentOptions"
-            :key="item.id"
-            :label="item.label"
-            :value="item.id"
-          />
-        </el-select>
+        <department-tree-select
+          v-model="filters.parentId"
+          :options="meta.departments"
+          value-type="number"
+          placeholder="上级部门"
+        />
 
         <el-select v-model="filters.status" clearable placeholder="状态">
           <el-option
@@ -155,16 +153,11 @@ import {
   financeArchiveApi,
   type FinanceDepartmentArchiveMeta,
   type FinanceDepartmentQueryPayload,
-  type FinanceDepartmentSummary,
-  type FinanceDepartmentTreeNode
+  type FinanceDepartmentSummary
 } from '@/api'
+import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
 import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
-
-type DepartmentOption = {
-  id: number
-  label: string
-}
 
 const loading = ref(false)
 const departments = ref<FinanceDepartmentSummary[]>([])
@@ -193,7 +186,6 @@ const sourceLabelMap: Record<string, string> = {
 
 const currentCompanyName = computed(() => financeCompany.currentCompanyName)
 const currentCompanyLabel = computed(() => financeCompany.currentCompanyLabel)
-const parentDepartmentOptions = computed(() => flattenDepartments(meta.value.departments))
 const enabledCount = computed(() => departments.value.filter((item) => item.status === 1).length)
 const disabledCount = computed(() => departments.value.filter((item) => item.status !== 1).length)
 const syncManagedCount = computed(() => departments.value.filter((item) => item.syncManaged).length)
@@ -261,19 +253,6 @@ function openDetail(row: FinanceDepartmentSummary) {
 function normalizeText(value?: string) {
   const text = String(value || '').trim()
   return text || undefined
-}
-
-function flattenDepartments(items: FinanceDepartmentTreeNode[], level = 0, result: DepartmentOption[] = []) {
-  items.forEach((item) => {
-    result.push({
-      id: item.id,
-      label: `${'--'.repeat(level)}${level > 0 ? ' ' : ''}${item.deptName}`
-    })
-    if (item.children?.length) {
-      flattenDepartments(item.children, level + 1, result)
-    }
-  })
-  return result
 }
 
 function sourceTagType(sourceType?: string) {

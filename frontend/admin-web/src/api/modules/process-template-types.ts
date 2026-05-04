@@ -17,6 +17,9 @@ export interface ProcessTemplateTypeOption {
 export interface ProcessFormOption {
   label: string
   value: string
+  code?: string
+  name?: string
+  parentValue?: string
 }
 
 export interface ProcessTemplateFormOptions {

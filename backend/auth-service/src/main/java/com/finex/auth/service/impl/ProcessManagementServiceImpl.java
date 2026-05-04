@@ -36,6 +36,10 @@ import com.finex.auth.dto.ProcessTemplateFormOptionsVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.dto.ProcessTemplateSaveResultVO;
 import com.finex.auth.dto.ProcessTemplateTypeVO;
+import com.finex.auth.dto.ProcessUserGroupDetailVO;
+import com.finex.auth.dto.ProcessUserGroupMetaVO;
+import com.finex.auth.dto.ProcessUserGroupSaveDTO;
+import com.finex.auth.dto.ProcessUserGroupTreeVO;
 import com.finex.auth.mapper.CodeSequenceMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveDesignMapper;
 import com.finex.auth.mapper.ProcessCustomArchiveItemMapper;
@@ -44,6 +48,8 @@ import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
 import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.ProcessTemplateCategoryMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
+import com.finex.auth.mapper.ProcessUserGroupMapper;
+import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.ProcessExpenseDetailDesignService;
@@ -53,6 +59,8 @@ import com.finex.auth.service.ProcessManagementService;
 import com.finex.auth.service.impl.process.ProcessCenterDomainSupport;
 import com.finex.auth.service.impl.process.ProcessCustomArchiveDomainSupport;
 import com.finex.auth.service.impl.process.ProcessExpenseTypeDomainSupport;
+import com.finex.auth.service.impl.process.ProcessUserGroupDomainSupport;
+import com.finex.auth.service.impl.process.ProcessUserGroupResolverSupport;
 import com.finex.auth.service.impl.process.ProcessTemplateDomainSupport;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +79,7 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     private final ProcessTemplateDomainSupport processTemplateDomainSupport;
     private final ProcessCustomArchiveDomainSupport processCustomArchiveDomainSupport;
     private final ProcessExpenseTypeDomainSupport processExpenseTypeDomainSupport;
+    private final ProcessUserGroupDomainSupport processUserGroupDomainSupport;
     private final ProcessFormDesignService processFormDesignService;
     private final ProcessExpenseDetailDesignService processExpenseDetailDesignService;
     private final ProcessFlowDesignService processFlowDesignService;
@@ -87,6 +96,8 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             ProcessCustomArchiveItemMapper customArchiveItemMapper,
             ProcessCustomArchiveRuleMapper customArchiveRuleMapper,
             ProcessExpenseTypeMapper processExpenseTypeMapper,
+            ProcessUserGroupMapper processUserGroupMapper,
+            SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
             UserMapper userMapper,
             ProcessFormDesignService processFormDesignService,
@@ -94,6 +105,13 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
             ProcessFlowDesignService processFlowDesignService,
             ObjectMapper objectMapper
     ) {
+        ProcessUserGroupResolverSupport userGroupResolverSupport = new ProcessUserGroupResolverSupport(
+                processUserGroupMapper,
+                null,
+                systemDepartmentMapper,
+                userMapper,
+                objectMapper
+        );
         this.processCenterDomainSupport = new ProcessCenterDomainSupport(
                 categoryMapper,
                 templateMapper,
@@ -157,6 +175,25 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
                 processExpenseDetailDesignService,
                 processFlowDesignService,
                 objectMapper
+        );
+        this.processUserGroupDomainSupport = new ProcessUserGroupDomainSupport(
+                categoryMapper,
+                templateMapper,
+                codeSequenceMapper,
+                scopeMapper,
+                customArchiveDesignMapper,
+                customArchiveItemMapper,
+                customArchiveRuleMapper,
+                processExpenseTypeMapper,
+                systemDepartmentMapper,
+                userMapper,
+                processFormDesignService,
+                processExpenseDetailDesignService,
+                processFlowDesignService,
+                objectMapper,
+                processUserGroupMapper,
+                systemCompanyMapper,
+                userGroupResolverSupport
         );
         this.processFormDesignService = processFormDesignService;
         this.processExpenseDetailDesignService = processExpenseDetailDesignService;
@@ -354,6 +391,39 @@ public class ProcessManagementServiceImpl implements ProcessManagementService {
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteExpenseType(Long id) {
         return processExpenseTypeDomainSupport.deleteExpenseType(id);
+    }
+
+    @Override
+    public List<ProcessUserGroupTreeVO> listUserGroupTree() {
+        return processUserGroupDomainSupport.listUserGroupTree();
+    }
+
+    @Override
+    public ProcessUserGroupMetaVO getUserGroupMeta() {
+        return processUserGroupDomainSupport.getUserGroupMeta();
+    }
+
+    @Override
+    public ProcessUserGroupDetailVO getUserGroupDetail(Long id) {
+        return processUserGroupDomainSupport.getUserGroupDetail(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessUserGroupDetailVO createUserGroup(ProcessUserGroupSaveDTO dto) {
+        return processUserGroupDomainSupport.createUserGroup(dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ProcessUserGroupDetailVO updateUserGroup(Long id, ProcessUserGroupSaveDTO dto) {
+        return processUserGroupDomainSupport.updateUserGroup(id, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean deleteUserGroup(Long id) {
+        return processUserGroupDomainSupport.deleteUserGroup(id);
     }
 
     /**

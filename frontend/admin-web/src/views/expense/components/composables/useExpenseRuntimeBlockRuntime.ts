@@ -24,6 +24,7 @@ import {
   validateRuntimeRequiredValues,
   validateRuntimeTitleValues
 } from '@/views/process/pmValidation'
+import { buildDepartmentLabelMap, normalizeDepartmentValue } from '@/utils/departmentTree'
 
 export function useExpenseRuntimeBlockRuntime(params: {
   schema: ComputedRef<ProcessFormDesignSchema>
@@ -59,6 +60,7 @@ export function useExpenseRuntimeBlockRuntime(params: {
   )
   const companyOptions = computed(() => companyOptionsSource.value || [])
   const departmentOptions = computed(() => departmentOptionsSource.value || [])
+  const departmentLabelMap = computed(() => buildDepartmentLabelMap(departmentOptions.value || []))
 
   function handleAmountInput(block: ProcessFormDesignBlock, nextValue: string | number) {
     applyExpenseDetailAmountInput(
@@ -159,7 +161,8 @@ export function useExpenseRuntimeBlockRuntime(params: {
   }
 
   function departmentLabel(value: string) {
-    return departmentOptions.value.find((item) => item.value === value)?.label || value
+    const normalizedValue = normalizeDepartmentValue(value)
+    return (normalizedValue === undefined ? '' : departmentLabelMap.value.get(normalizedValue)) || value
   }
 
   function sharedArchiveItems(block: ProcessFormDesignBlock) {

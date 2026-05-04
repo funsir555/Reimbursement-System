@@ -49,34 +49,34 @@
       </div>
     </el-card>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div class="grid auto-rows-min grid-cols-1 items-start gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <el-card
         v-for="item in filteredItems"
         :key="item.id"
         class="template-card resource-card !rounded-3xl !shadow-sm"
       >
-        <div class="flex items-start justify-between gap-3">
+        <div class="flex items-start justify-between gap-1">
           <div class="min-w-0">
-            <p class="truncate text-base font-semibold text-slate-800">{{ item.detailName }}</p>
-            <p class="mt-1 truncate text-xs text-slate-400">{{ item.detailCode }}</p>
+            <p class="truncate text-[15px] font-semibold leading-[18px] text-slate-800">{{ item.detailName }}</p>
+            <p class="mt-px truncate text-[11px] leading-[14px] text-slate-400">{{ item.detailCode }}</p>
           </div>
           <el-tag size="small" type="primary" effect="plain">{{ resolveDetailTypeLabel(item.detailType, item.detailTypeLabel) }}</el-tag>
         </div>
 
-        <p class="mt-3 min-h-[40px] text-sm leading-5 text-slate-500">{{ item.detailDescription || '暂无说明' }}</p>
+        <p class="mt-1 text-[13px] leading-4 text-slate-500">{{ item.detailDescription || '暂无说明' }}</p>
 
-        <div class="mt-4 space-y-2 rounded-2xl bg-slate-50 px-3.5 py-3">
-          <div class="flex items-center justify-between text-sm">
+        <div class="mt-1.5 space-y-0.5 rounded-2xl bg-slate-50 px-2.5 py-1">
+          <div class="flex items-center justify-between text-[12px] leading-4">
             <span class="text-slate-400">明细类型</span>
             <span class="font-medium text-slate-700">{{ resolveDetailTypeLabel(item.detailType, item.detailTypeLabel) }}</span>
           </div>
-          <div class="flex items-center justify-between text-sm">
+          <div class="flex items-center justify-between text-[12px] leading-4">
             <span class="text-slate-400">更新时间</span>
             <span class="text-slate-700">{{ item.updatedAt || '-' }}</span>
           </div>
         </div>
 
-        <div class="mt-4 flex flex-wrap justify-end gap-2 process-card-footer expense-detail-design-card__footer" data-testid="expense-detail-card-footer">
+        <div class="mt-1.5 flex flex-wrap justify-end gap-1.5 process-card-footer expense-detail-design-card__footer" data-testid="expense-detail-card-footer">
           <el-button text type="danger" @click="removeItem(item)">删除</el-button>
           <el-button type="primary" text @click="goEdit(item.id)">编辑</el-button>
           <el-button
@@ -294,10 +294,11 @@ function resolveErrorMessage(error: unknown, fallback: string) {
 
 .template-card {
   border: 1px solid #e2e8f0 !important;
+  align-self: start;
 }
 
 :deep(.resource-card .el-card__body) {
-  padding: 18px;
+  padding: 9px 10px;
 }
 
 .resource-card {

@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     CustomArchiveManagementPanel: typeof import('./src/components/process/CustomArchiveManagementPanel.vue')['default']
+    DepartmentTreeSelect: typeof import('./src/components/inputs/DepartmentTreeSelect.vue')['default']
     DownloadCenterDrawer: typeof import('./src/components/DownloadCenterDrawer.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
@@ -78,6 +79,7 @@ declare module 'vue' {
     PersonalBankAccountDialog: typeof import('./src/components/profile/PersonalBankAccountDialog.vue')['default']
     PixelDuckBotIcon: typeof import('./src/components/icons/PixelDuckBotIcon.vue')['default']
     PixelWhaleBrandIcon: typeof import('./src/components/icons/PixelWhaleBrandIcon.vue')['default']
+    ProcessConditionGroupEditor: typeof import('./src/components/process/ProcessConditionGroupEditor.vue')['default']
     ProcessFlowCanvasRenderer: typeof import('./src/components/process/ProcessFlowCanvasRenderer.vue')['default']
     ProcessWorkbenchSidebar: typeof import('./src/components/process/ProcessWorkbenchSidebar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
@@ -85,6 +87,7 @@ declare module 'vue' {
     SupplierPaymentInfoFields: typeof import('./src/components/finance/SupplierPaymentInfoFields.vue')['default']
     TemplateTypeDialog: typeof import('./src/components/process/TemplateTypeDialog.vue')['default']
     TheWelcome: typeof import('./src/components/TheWelcome.vue')['default']
+    UserGroupManagementPanel: typeof import('./src/components/process/UserGroupManagementPanel.vue')['default']
     WelcomeItem: typeof import('./src/components/WelcomeItem.vue')['default']
   }
   export interface GlobalDirectives {

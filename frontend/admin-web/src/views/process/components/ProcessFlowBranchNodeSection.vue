@@ -21,16 +21,13 @@
           v-for="routeItem in state.currentBranchRoutes"
           :key="routeItem.routeKey"
           type="button"
-          class="route-summary-card"
+          class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:-translate-y-0.5 hover:border-sky-300"
+          data-flow-interactive="true"
           @click="actions.selectRoute(routeItem.routeKey)"
         >
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0 text-left">
               <p class="truncate text-sm font-semibold text-slate-800">{{ routeItem.routeName || '未命名分支' }}</p>
-              <p class="mt-1 text-xs text-slate-400">
-                优先级 {{ routeItem.priority }} · {{ helpers.describeRouteConditions(routeItem).groups }} 组条件 ·
-                {{ helpers.describeRouteConditions(routeItem).conditions }} 条条件
-              </p>
             </div>
             <el-tag size="small" effect="plain">{{ state.currentFlowLabel }}</el-tag>
           </div>
@@ -59,12 +56,6 @@ defineProps({
       node: ProcessFlowNode
       currentBranchRoutes: EditableProcessFlowRoute[]
       currentFlowLabel: string
-    }>,
-    required: true
-  },
-  helpers: {
-    type: Object as PropType<{
-      describeRouteConditions: (route?: EditableProcessFlowRoute) => { groups: number; conditions: number }
     }>,
     required: true
   },

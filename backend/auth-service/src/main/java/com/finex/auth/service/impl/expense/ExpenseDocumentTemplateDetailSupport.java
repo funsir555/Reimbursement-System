@@ -5,11 +5,11 @@ import com.finex.auth.entity.ProcessDocumentTemplate;
 import com.finex.auth.entity.ProcessExpenseDetailDesign;
 import com.finex.auth.entity.ProcessFormDesign;
 import com.finex.auth.entity.SystemCompany;
-import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.UserDepartmentSupport;
 import com.finex.auth.service.impl.ExpenseDetailSystemFieldSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -90,12 +90,31 @@ class ExpenseDocumentTemplateDetailSupport {
                 }
             }
         }
-        if (currentUser != null && currentUser.getDeptId() != null) {
-            detail.setCurrentUserDeptId(String.valueOf(currentUser.getDeptId()));
-            SystemDepartment department = systemDepartmentMapper.selectById(currentUser.getDeptId());
-            if (department != null) {
-                detail.setCurrentUserDeptName(department.getDeptName());
+        if (currentUser != null && currentUser.getId() != null) {
+            List<com.finex.auth.dto.EmployeeDepartmentRefVO> departments =
+                    UserDepartmentSupport.loadDepartmentRefsByUserId(
+                            userMapper,
+                            systemDepartmentMapper,
+                            List.of(currentUser.getId())
+                    ).getOrDefault(currentUser.getId(), Collections.emptyList());
+            if (departments.isEmpty() && currentUser.getDeptId() != null) {
+                com.finex.auth.dto.EmployeeDepartmentRefVO fallbackDepartment = new com.finex.auth.dto.EmployeeDepartmentRefVO();
+                fallbackDepartment.setDeptId(currentUser.getDeptId());
+                com.finex.auth.entity.SystemDepartment department = systemDepartmentMapper.selectById(currentUser.getDeptId());
+                fallbackDepartment.setDeptName(department == null ? "" : department.getDeptName());
+                departments = List.of(fallbackDepartment);
             }
+            detail.setCurrentUserDeptIds(
+                    departments.stream().map(item -> String.valueOf(item.getDeptId())).toList()
+            );
+            detail.setCurrentUserDeptNames(
+                    departments.stream().map(item -> support.trimToNull(item.getDeptName())).filter(java.util.Objects::nonNull).toList()
+            );
+            Long primaryDeptId = UserDepartmentSupport.resolvePrimaryDepartmentId(departments);
+            if (primaryDeptId != null) {
+                detail.setCurrentUserDeptId(String.valueOf(primaryDeptId));
+            }
+            detail.setCurrentUserDeptName(UserDepartmentSupport.joinDepartmentNames(departments));
         }
         return detail;
     }

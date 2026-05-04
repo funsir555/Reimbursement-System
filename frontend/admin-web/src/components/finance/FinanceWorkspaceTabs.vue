@@ -72,7 +72,7 @@
         <span class="finance-tools-label">当前公司</span>
         <el-select
           :model-value="currentCompanyId"
-          filterable
+          filterable v-bind="globalFilterableSelectProps"
           :filter-method="handleCompanyFilter"
           :loading="companyLoading || companySwitching"
           :disabled="companyLoading || companySwitching"
@@ -97,6 +97,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 type FinanceTabItem = {
   path: string

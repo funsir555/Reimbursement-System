@@ -131,7 +131,7 @@
           <el-card v-if="wizardForm.createMode === 'REFERENCE'" class="!rounded-2xl !shadow-sm">
             <el-form label-position="top">
               <el-form-item label="参照账套">
-                <el-select v-model="wizardForm.referenceCompanyId" clearable filterable placeholder="请选择参照账套公司" class="w-full">
+                <el-select v-model="wizardForm.referenceCompanyId" clearable filterable v-bind="globalFilterableSelectProps" placeholder="请选择参照账套公司" class="w-full">
                   <el-option
                     v-for="item in referenceOptions"
                     :key="item.companyId"
@@ -151,7 +151,7 @@
         <section v-else-if="currentStep === 1" class="space-y-4">
           <el-form label-position="top" class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <el-form-item label="目标公司" class="!mb-0">
-              <el-select v-model="wizardForm.targetCompanyId" filterable placeholder="请选择公司" class="w-full">
+              <el-select v-model="wizardForm.targetCompanyId" filterable v-bind="globalFilterableSelectProps" placeholder="请选择公司" class="w-full">
                 <el-option
                   v-for="item in companyOptions"
                   :key="item.companyId"
@@ -178,7 +178,7 @@
             <el-form-item label="账套模板" class="!mb-0">
               <el-select
                 v-model="wizardForm.templateCode"
-                filterable
+                filterable v-bind="globalFilterableSelectProps"
                 placeholder="请选择账套模板"
                 class="w-full"
                 :disabled="isReferenceMode"
@@ -192,7 +192,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="账套主管" class="!mb-0">
-              <el-select v-model="wizardForm.supervisorUserId" filterable placeholder="请选择账套主管" class="w-full">
+              <el-select v-model="wizardForm.supervisorUserId" filterable v-bind="globalFilterableSelectProps" placeholder="请选择账套主管" class="w-full">
                 <el-option
                   v-for="item in supervisorOptions"
                   :key="item.value"
@@ -302,6 +302,8 @@ import {
 } from '@/api'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 const financeCompany = useFinanceCompanyStore()
 const financeCompanyState = financeCompany as typeof financeCompany & { currentCompanyLabel?: string }

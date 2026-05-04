@@ -146,13 +146,13 @@
 
     <el-dialog v-model="templatePolicyDialog.visible" :title="templatePolicyDialog.editingId ? '编辑模板策略' : '新增模板策略'" width="720px" destroy-on-close>
       <div class="grid gap-4 md:grid-cols-2">
-        <el-select v-model="templatePolicyDialog.form.companyId" filterable placeholder="公司">
+        <el-select v-model="templatePolicyDialog.form.companyId" filterable v-bind="globalFilterableSelectProps" placeholder="公司">
           <el-option v-for="item in meta.companyOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="templatePolicyDialog.form.templateCode" filterable placeholder="报销模板">
+        <el-select v-model="templatePolicyDialog.form.templateCode" filterable v-bind="globalFilterableSelectProps" placeholder="报销模板">
           <el-option v-for="item in meta.templateOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="templatePolicyDialog.form.creditAccountCode" filterable placeholder="统一贷方科目">
+        <el-select v-model="templatePolicyDialog.form.creditAccountCode" filterable v-bind="globalFilterableSelectProps" placeholder="统一贷方科目">
           <el-option v-for="item in meta.accountOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-select v-model="templatePolicyDialog.form.voucherType" placeholder="凭证类别">
@@ -169,16 +169,16 @@
 
     <el-dialog v-model="subjectMappingDialog.visible" :title="subjectMappingDialog.editingId ? '编辑费用映射' : '新增费用映射'" width="720px" destroy-on-close>
       <div class="grid gap-4 md:grid-cols-2">
-        <el-select v-model="subjectMappingDialog.form.companyId" filterable placeholder="公司">
+        <el-select v-model="subjectMappingDialog.form.companyId" filterable v-bind="globalFilterableSelectProps" placeholder="公司">
           <el-option v-for="item in meta.companyOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="subjectMappingDialog.form.templateCode" filterable placeholder="报销模板">
+        <el-select v-model="subjectMappingDialog.form.templateCode" filterable v-bind="globalFilterableSelectProps" placeholder="报销模板">
           <el-option v-for="item in meta.templateOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="subjectMappingDialog.form.expenseTypeCode" filterable placeholder="费用类型">
+        <el-select v-model="subjectMappingDialog.form.expenseTypeCode" filterable v-bind="globalFilterableSelectProps" placeholder="费用类型">
           <el-option v-for="item in meta.expenseTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="subjectMappingDialog.form.debitAccountCode" filterable placeholder="借方科目">
+        <el-select v-model="subjectMappingDialog.form.debitAccountCode" filterable v-bind="globalFilterableSelectProps" placeholder="借方科目">
           <el-option v-for="item in meta.accountOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-switch v-model="subjectMappingDialog.form.enabled" :active-value="1" :inactive-value="0" inline-prompt active-text="启用" inactive-text="停用" />
@@ -236,6 +236,8 @@ import {
 } from '@/api'
 import { formatMoney } from '@/utils/money'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const canMappingView = computed(() => hasPermission('expense:voucher_generation:mapping:view', permissionCodes.value) || hasPermission('expense:voucher_generation:view', permissionCodes.value))

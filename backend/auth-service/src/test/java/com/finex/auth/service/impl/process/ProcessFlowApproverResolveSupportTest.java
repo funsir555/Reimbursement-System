@@ -42,6 +42,7 @@ class ProcessFlowApproverResolveSupportTest {
     @Mock private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     @Mock private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
+    @Mock private ProcessUserGroupResolverSupport userGroupResolverSupport;
 
     private ProcessFlowApproverResolveSupport support;
 
@@ -59,7 +60,8 @@ class ProcessFlowApproverResolveSupportTest {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
-                new ObjectMapper()
+                new ObjectMapper(),
+                userGroupResolverSupport
         );
         support = new ProcessFlowApproverResolveSupport(
                 processFlowMapper,
@@ -74,7 +76,8 @@ class ProcessFlowApproverResolveSupportTest {
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
                 new ObjectMapper(),
-                structureSupport
+                structureSupport,
+                userGroupResolverSupport
         );
     }
 

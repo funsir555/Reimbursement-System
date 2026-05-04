@@ -27,6 +27,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,11 +44,13 @@ class ProcessFlowMetaSupportTest {
     @Mock private ProcessExpenseTypeMapper processExpenseTypeMapper;
     @Mock private ProcessCustomArchiveDesignMapper processCustomArchiveDesignMapper;
     @Mock private ProcessDocumentTemplateMapper processDocumentTemplateMapper;
+    @Mock private ProcessUserGroupResolverSupport userGroupResolverSupport;
 
     private ProcessFlowMetaSupport support;
 
     @BeforeEach
     void setUp() {
+        lenient().when(userGroupResolverSupport.listSecondLevelGroupOptions()).thenReturn(List.of());
         support = new ProcessFlowMetaSupport(
                 processFlowMapper,
                 processFlowVersionMapper,
@@ -60,7 +63,8 @@ class ProcessFlowMetaSupportTest {
                 processExpenseTypeMapper,
                 processCustomArchiveDesignMapper,
                 processDocumentTemplateMapper,
-                new ObjectMapper()
+                new ObjectMapper(),
+                userGroupResolverSupport
         );
     }
 
@@ -82,6 +86,20 @@ class ProcessFlowMetaSupportTest {
 
         assertEquals("COMPANY_A", meta.getCompanyOptions().get(0).getValue());
         assertEquals("广州远智教育科技有限公司", meta.getCompanyOptions().get(0).getLabel());
+        assertEquals(
+                List.of(
+                        "MANAGER",
+                        "DESIGNATED_MEMBER",
+                        "DESIGNATED_USER_GROUP",
+                        "MANUAL_SELECT"
+                ),
+                meta.getApprovalApproverTypeOptions().stream()
+                        .map(item -> item.getValue())
+                        .toList()
+        );
+        assertTrue(meta.getBranchConditionFields().stream().anyMatch(item -> "paymentCompanyId".equals(item.getKey())));
+        assertTrue(meta.getBranchConditionFields().stream().anyMatch(item -> "undertakeDeptIdWithChildren".equals(item.getKey())));
+        assertTrue(meta.getBranchConditionFields().stream().anyMatch(item -> "undertakeDeptIdExact".equals(item.getKey())));
         assertTrue(meta.getDefaultApprovalOpinions().contains("通过"));
     }
 

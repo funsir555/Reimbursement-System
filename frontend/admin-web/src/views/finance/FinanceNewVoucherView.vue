@@ -116,7 +116,7 @@
                 <div class="voucher-cell">
                   <el-select
                     v-model="row.ccode"
-                    filterable
+                    filterable v-bind="globalFilterableSelectProps"
                     clearable
                     placeholder="请选择科目"
                     :disabled="isReadonlyMode"
@@ -129,10 +129,10 @@
                   </el-select>
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index, 'md')" @keydown="handleAmountKeydown($event, index, 'md')" />
+                  <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index)" @keydown="handleAmountKeydown($event, index, 'md')" />
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.mc" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index, 'mc')" @keydown="handleAmountKeydown($event, index, 'mc')" />
+                  <money-input v-model="row.mc" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index)" @keydown="handleAmountKeydown($event, index, 'mc')" />
                 </div>
               </div>
             </div>
@@ -156,7 +156,7 @@
                   :data="departmentTreeOptions"
                   node-key="value"
                   check-strictly
-                  filterable
+                  filterable v-bind="globalFilterableSelectProps"
                   clearable
                   placeholder="请选择部门"
                   :disabled="assistDisabledState.department"
@@ -167,31 +167,31 @@
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">人员</span>
-                <el-select v-model="selectedRow.cpersonId" filterable clearable placeholder="请选择人员" :disabled="assistDisabledState.employee" @focus="handleAssistFieldFocus">
+                <el-select v-model="selectedRow.cpersonId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择人员" :disabled="assistDisabledState.employee" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in voucherMeta?.employeeOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">客户</span>
-                <el-select v-model="selectedRow.ccusId" filterable clearable placeholder="请选择客户" :disabled="assistDisabledState.customer" @focus="handleAssistFieldFocus">
+                <el-select v-model="selectedRow.ccusId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择客户" :disabled="assistDisabledState.customer" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in voucherMeta?.customerOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">供应商</span>
-                <el-select v-model="selectedRow.csupId" filterable clearable placeholder="请选择供应商" :disabled="assistDisabledState.supplier" @focus="handleAssistFieldFocus">
+                <el-select v-model="selectedRow.csupId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择供应商" :disabled="assistDisabledState.supplier" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in voucherMeta?.supplierOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">项目分类</span>
-                <el-select v-model="selectedRow.citemClass" filterable clearable placeholder="请选择项目分类" :disabled="assistDisabledState.projectClass" @focus="handleAssistFieldFocus">
+                <el-select v-model="selectedRow.citemClass" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择项目分类" :disabled="assistDisabledState.projectClass" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in projectClassOptionsForDisplay" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">项目</span>
-                <el-select v-model="selectedRow.citemId" filterable clearable placeholder="请选择项目" :disabled="assistDisabledState.project" @focus="handleAssistFieldFocus">
+                <el-select v-model="selectedRow.citemId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择项目" :disabled="assistDisabledState.project" @focus="handleAssistFieldFocus">
                   <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
                 </el-select>
               </label>
@@ -286,6 +286,8 @@ import {
 import { useFinanceNewVoucherValidationPayload } from './composables/useFinanceNewVoucherValidationPayload'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { formatMoney } from '@/utils/money'
+import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+
 
 type ToolbarActionKey = FinanceNewVoucherToolbarActionKey
 type VoucherFormState = Omit<FinanceVoucherForm, 'entries'> & { entries: VoucherEntryRow[] }
@@ -790,7 +792,7 @@ function markCommitted() {
 
 function parseVoucherCompanyId(voucherNo: string) {
   const parts = String(voucherNo || '').split('~')
-  return parts.length === 4 || parts.length === 5 ? parts[0] : ''
+  return parts.length === 4 || parts.length === 5 ? parts[0] ?? '' : ''
 }
 
 function moneyText(value: string) {
