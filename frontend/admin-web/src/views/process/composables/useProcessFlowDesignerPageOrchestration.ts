@@ -374,6 +374,7 @@ export function useProcessFlowDesignerPageOrchestration() {
       companyOptions: metaOptions.value.companyOptions,
       departmentOptions: metaOptions.value.departmentOptions,
       userOptions: metaOptions.value.userOptions,
+      employeeDirectory: metaOptions.value.employeeDirectory,
       expenseTypeOptions: metaOptions.value.expenseTypeOptions,
       archiveOptions: metaOptions.value.archiveOptions,
       branchConditionValueOptions: metaOptions.value.branchConditionValueOptions
@@ -548,6 +549,7 @@ function emptyMeta(): ProcessFlowMeta {
     companyOptions: [],
     departmentOptions: [],
     userOptions: [],
+    employeeDirectory: [],
     userGroupOptions: [],
     expenseTypeOptions: [],
     archiveOptions: []

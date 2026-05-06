@@ -75,10 +75,11 @@ class ExpenseDocumentTemplateDetailSupport {
             detail.setExpenseDetailSchema(support.defaultSchema());
             detail.setExpenseDetailSharedArchives(Collections.emptyList());
         }
-        detail.setCompanyOptions(support.loadCompanyOptions());
-        detail.setDepartmentOptions(support.loadDepartmentOptions());
-        detail.setUserOptions(support.loadUserOptions(detail.getFlowSnapshot()));
-        detail.setExpenseTypeOptions(expenseDetailSystemFieldSupport.loadExpenseTypeOptions());
+       detail.setCompanyOptions(support.loadCompanyOptions());
+       detail.setDepartmentOptions(support.loadDepartmentOptions());
+       detail.setUserOptions(support.loadUserOptions(detail.getFlowSnapshot()));
+       detail.setEmployeeDirectory(support.loadEmployeeDirectory());
+       detail.setExpenseTypeOptions(expenseDetailSystemFieldSupport.loadExpenseTypeOptions());
         detail.setExpenseTypeInvoiceFreeModeMap(expenseDetailSystemFieldSupport.loadExpenseTypeInvoiceFreeModeMap());
         User currentUser = userId == null ? null : userMapper.selectById(userId);
         if (currentUser != null) {

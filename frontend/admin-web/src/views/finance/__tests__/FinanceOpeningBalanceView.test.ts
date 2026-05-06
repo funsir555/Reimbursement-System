@@ -108,7 +108,13 @@ const TableStub = defineComponent({
   props: {
     data: { type: Array, default: () => [] }
   },
-  template: '<div class="table-stub"><slot /><div v-for="row in data" :key="row.subjectCode">{{ row.subjectCode }}</div></div>'
+  methods: {
+    flattenRows(rows: Array<{ subjectCode: string; visibleChildren?: Array<unknown> }>) {
+      return rows.flatMap((row) => [row, ...this.flattenRows((row.visibleChildren as Array<{ subjectCode: string; visibleChildren?: Array<unknown> }>) || [])])
+    }
+  },
+  template:
+    '<div class="table-stub"><slot /><div v-for="row in flattenRows(data)" :key="row.subjectCode">{{ row.subjectCode }}</div></div>'
 })
 
 const TableColumnStub = defineComponent({
@@ -128,7 +134,10 @@ async function mountView() {
         'el-option': OptionStub,
         'el-table': TableStub,
         'el-table-column': TableColumnStub,
-        'el-dialog': defineComponent({ template: '<div><slot /><slot name="footer" /></div>' })
+        'el-dialog': defineComponent({ template: '<div><slot /><slot name="footer" /></div>' }),
+        'finance-customer-archive-dialog': defineComponent({ template: '<div />' }),
+        'finance-supplier-archive-dialog': defineComponent({ template: '<div />' }),
+        'finance-project-archive-dialog': defineComponent({ template: '<div />' })
       }
     }
   })
@@ -161,6 +170,8 @@ function buildRows() {
     {
       subjectCode: '5601',
       subjectName: '管理费用',
+      subjectCategory: 'PROFIT',
+      subjectCategoryLabel: '损益',
       subjectLevel: 1,
       sortOrder: 5601,
       leafFlag: 0,
@@ -175,6 +186,8 @@ function buildRows() {
           subjectCode: '560101',
           parentSubjectCode: '5601',
           subjectName: '广告宣传费',
+          subjectCategory: 'PROFIT',
+          subjectCategoryLabel: '损益',
           subjectLevel: 2,
           sortOrder: 560101,
           leafFlag: 1,
@@ -194,6 +207,8 @@ function buildRows() {
     {
       subjectCode: '100201',
       subjectName: '银行存款',
+      subjectCategory: 'ASSET',
+      subjectCategoryLabel: '资产',
       subjectLevel: 1,
       sortOrder: 100201,
       leafFlag: 1,
@@ -243,9 +258,18 @@ describe('FinanceOpeningBalanceView', () => {
     const wrapper = await mountView()
 
     expect(wrapper.find('.ob-summary-card').exists()).toBe(true)
-    expect(wrapper.find('.ob-filter-card').exists()).toBe(false)
+    expect(wrapper.find('.ob-toolbar').exists()).toBe(true)
     expect(wrapper.text()).toContain('保存')
+    expect(wrapper.text()).toContain('高级筛选')
     expect(wrapper.text()).toContain('测试公司A')
+    expect(wrapper.text()).toContain('试算结果')
+    expect(wrapper.text()).toContain('尚未试算')
+    expect(wrapper.text()).not.toContain('末级科目')
+    expect(wrapper.text()).not.toContain('辅助科目')
+    expect(wrapper.text()).not.toContain('保存状态')
+    expect(wrapper.text()).not.toContain('筛选与检索')
+    expect(wrapper.text()).not.toContain('总科目')
+    expect(wrapper.text()).not.toContain('当前显示')
     expect(mocks.openingBalanceApi.listRows).toHaveBeenCalledWith({
       companyId: 'COMPANY_A',
       iyear: 2026,
@@ -269,6 +293,36 @@ describe('FinanceOpeningBalanceView', () => {
 
     await vm.saveAll()
     expect(mocks.openingBalanceApi.commit).toHaveBeenCalled()
+  })
+
+  it('allows negative balances for editable opening balance rows', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ subjectCode: string; draftBalance: string; mb: string }>
+      handleRowDraftChange: (row: { subjectCode: string; draftBalance: string; mb: string }, value: string) => void
+      saveAll: () => Promise<void>
+    }
+
+    const bankRow = vm.rows.find((item) => item.subjectCode === '100201')
+    expect(bankRow).toBeTruthy()
+
+    vm.handleRowDraftChange(bankRow!, '-99.25')
+
+    expect(bankRow?.draftBalance).toBe('-99.25')
+    expect(bankRow?.mb).toBe('-99.25')
+
+    await vm.saveAll()
+
+    expect(mocks.openingBalanceApi.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rows: expect.arrayContaining([
+          expect.objectContaining({
+            subjectCode: '100201',
+            mb: '-99.25'
+          })
+        ])
+      })
+    )
   })
 
   it('warns before open book for direct balance entry', async () => {
@@ -325,6 +379,37 @@ describe('FinanceOpeningBalanceView', () => {
     expect(mocks.openingBalanceApi.saveAssistBalances).not.toHaveBeenCalled()
   })
 
+  it('allows negative balances in assist opening balance lines', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ children?: Array<{ subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string }> }>
+      openAssistDialog: (row: { subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string }) => Promise<void>
+      saveAssistDialog: () => void
+      assistLines: Array<{ mb: string }>
+    }
+
+    await vm.openAssistDialog(vm.rows[0].children?.[0] as { subjectCode: string; cassItem?: string; mb?: string; draftBalance?: string })
+    vm.assistLines[0].mb = '-120.50'
+    vm.saveAssistDialog()
+
+    await vm.saveAll()
+
+    expect(mocks.openingBalanceApi.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assistLines: expect.arrayContaining([
+          expect.objectContaining({
+            subjectCode: '560101',
+            lines: expect.arrayContaining([
+              expect.objectContaining({
+                mb: '-120.50'
+              })
+            ])
+          })
+        ])
+      })
+    )
+  })
+
   it('uses carry-forward preview instead of direct carry-forward task', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
@@ -359,6 +444,51 @@ describe('FinanceOpeningBalanceView', () => {
     expect(mocks.openingBalanceApi.trialBalance).not.toHaveBeenCalled()
     expect(mocks.openingBalanceApi.reconcile).not.toHaveBeenCalled()
     expect(mocks.message.warning).toHaveBeenCalled()
+  })
+
+  it('treats negative-balance subjects as balanced success when trial difference is zero', async () => {
+    mocks.openingBalanceApi.trialBalance.mockResolvedValueOnce({
+      data: {
+        balanced: true,
+        totalDebit: '-100.00',
+        totalCredit: '-100.00',
+        difference: '0.00',
+        abnormalSubjects: [{ subjectCode: '100201', subjectName: '银行存款', editable: true, assistRequired: false, mb: '-100.00' }]
+      }
+    })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      runTrial: () => Promise<void>
+    }
+
+    await vm.runTrial()
+
+    expect(mocks.message.success).toHaveBeenCalledWith('期初试算平衡')
+  })
+
+  it('filters opening balance rows through advanced filters without breaking tree display', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filterDraft: {
+        subjectType: '' | 'ASSET' | 'LIABILITY' | 'EQUITY' | 'COST' | 'PROFIT'
+        subjectCode: string
+        subjectName: string
+        direction: '' | '借' | '贷'
+        balance: '' | 'POSITIVE' | 'ZERO' | 'NEGATIVE'
+      }
+      applyFilters: () => void
+    }
+
+    vm.filterDraft.subjectType = 'PROFIT'
+    vm.filterDraft.subjectCode = '560101'
+    vm.applyFilters()
+    await nextTick()
+
+    const tableText = wrapper.find('.table-stub').text()
+    expect(tableText).toContain('5601')
+    expect(tableText).toContain('560101')
+    expect(tableText).not.toContain('100201')
   })
 
   it('updates save status after commit success', async () => {
@@ -398,9 +528,14 @@ describe('FinanceOpeningBalanceView', () => {
 
     expect(vm.expandedRowKeys).toEqual(['5601'])
 
-    vm.handleExpandChange(vm.rows[0] as { subjectCode: string }, [])
+    vm.handleExpandChange(vm.rows[0] as { subjectCode: string }, false)
 
     const persisted = JSON.parse(localStorage.getItem(EXPANDED_STORAGE_KEY) || '{}')
     expect(persisted['COMPANY_A:202606']).toEqual([])
+
+    vm.handleExpandChange(vm.rows[0] as { subjectCode: string }, true)
+
+    expect(vm.expandedRowKeys).toEqual(['5601'])
+    expect(JSON.parse(localStorage.getItem(EXPANDED_STORAGE_KEY) || '{}')['COMPANY_A:202606']).toEqual(['5601'])
   })
 })

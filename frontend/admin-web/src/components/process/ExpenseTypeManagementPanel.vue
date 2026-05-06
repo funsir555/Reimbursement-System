@@ -146,22 +146,13 @@
               </el-form-item>
 
               <el-form-item label="限定以下人员使用">
-                <el-select
+                <employee-tree-select
                   v-model="form.scopeUserIds"
+                  :departments="meta?.departmentOptions || []"
+                  :employees="meta?.employeeDirectory || []"
                   multiple
-                  filterable v-bind="globalFilterableSelectProps"
-                  collapse-tags
-                  collapse-tags-tooltip
-                  :tag-tooltip="globalCollapseTagTooltipProps"
                   placeholder="不选则默认全部人员可用"
-                >
-                  <el-option
-                    v-for="item in meta?.userOptions || []"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </el-select>
+                />
               </el-form-item>
             </div>
           </el-card>
@@ -246,9 +237,8 @@ import {
   type ProcessExpenseTypeTreeNode
 } from '@/api'
 import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
-import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { PM_NAME_MAX_LENGTH, validateMaxLength } from '@/views/process/pmValidation'
-import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 
 type ExpenseTypeTreeInstance = {

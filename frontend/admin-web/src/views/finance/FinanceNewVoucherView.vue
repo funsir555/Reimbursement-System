@@ -167,33 +167,58 @@
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">人员</span>
-                <el-select v-model="selectedRow.cpersonId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择人员" :disabled="assistDisabledState.employee" @focus="handleAssistFieldFocus">
-                  <el-option v-for="item in voucherMeta?.employeeOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
-                </el-select>
+                <employee-tree-select v-model="selectedRow.cpersonId" :departments="voucherMeta?.departmentOptions || []" :employees="voucherMeta?.employeeDirectory || []" clearable placeholder="请选择人员" :disabled="assistDisabledState.employee" label-mode="finance-assist" @focus="handleAssistFieldFocus" />
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">客户</span>
-                <el-select v-model="selectedRow.ccusId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择客户" :disabled="assistDisabledState.customer" @focus="handleAssistFieldFocus">
-                  <el-option v-for="item in voucherMeta?.customerOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
-                </el-select>
+                <finance-assist-option-select
+                  v-model="selectedRow.ccusId"
+                  :options="voucherMeta?.customerOptions || []"
+                  placeholder="请选择客户"
+                  :disabled="assistDisabledState.customer"
+                  addable
+                  add-text="增加"
+                  @focus="handleAssistFieldFocus"
+                  @request-add="openVoucherCustomerCreateDialog"
+                />
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">供应商</span>
-                <el-select v-model="selectedRow.csupId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择供应商" :disabled="assistDisabledState.supplier" @focus="handleAssistFieldFocus">
-                  <el-option v-for="item in voucherMeta?.supplierOptions || []" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
-                </el-select>
+                <finance-assist-option-select
+                  v-model="selectedRow.csupId"
+                  :options="voucherMeta?.supplierOptions || []"
+                  placeholder="请选择供应商"
+                  :disabled="assistDisabledState.supplier"
+                  addable
+                  add-text="增加"
+                  @focus="handleAssistFieldFocus"
+                  @request-add="openVoucherSupplierCreateDialog"
+                />
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">项目分类</span>
-                <el-select v-model="selectedRow.citemClass" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择项目分类" :disabled="assistDisabledState.projectClass" @focus="handleAssistFieldFocus">
-                  <el-option v-for="item in projectClassOptionsForDisplay" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
-                </el-select>
+                <finance-assist-option-select
+                  v-model="selectedRow.citemClass"
+                  :options="projectClassOptionsForDisplay"
+                  placeholder="请选择项目分类"
+                  :disabled="assistDisabledState.projectClass"
+                  @focus="handleAssistFieldFocus"
+                />
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">项目</span>
-                <el-select v-model="selectedRow.citemId" filterable v-bind="globalFilterableSelectProps" clearable placeholder="请选择项目" :disabled="assistDisabledState.project" @focus="handleAssistFieldFocus">
-                  <el-option v-for="item in filteredProjectOptions" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
-                </el-select>
+                <finance-assist-option-select
+                  v-model="selectedRow.citemId"
+                  :options="filteredProjectOptions"
+                  placeholder="请选择项目"
+                  :disabled="assistDisabledState.project"
+                  addable
+                  add-text="增加"
+                  :add-disabled="!resolvedVoucherProjectClassCode"
+                  add-disabled-message="请先选择项目分类"
+                  @focus="handleAssistFieldFocus"
+                  @request-add="openVoucherProjectCreateDialog"
+                />
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">现金流量</span>
@@ -237,6 +262,25 @@
         <el-button @click="actionDialog.visible = false">知道了</el-button>
       </template>
     </el-dialog>
+    <finance-customer-archive-dialog
+      ref="customerArchiveDialogRef"
+      :company-id="financeCompany.currentCompanyId || form.companyId"
+      :company-name="currentCompanyName"
+      @saved="handleVoucherCustomerCreated"
+    />
+    <finance-supplier-archive-dialog
+      ref="supplierArchiveDialogRef"
+      :company-id="financeCompany.currentCompanyId || form.companyId"
+      :company-name="currentCompanyName"
+      @saved="handleVoucherSupplierCreated"
+    />
+    <finance-project-archive-dialog
+      ref="projectArchiveDialogRef"
+      :company-id="financeCompany.currentCompanyId || form.companyId"
+      :company-name="currentCompanyName"
+      :project-class-options="voucherMeta?.projectClassOptions || []"
+      @saved="handleVoucherProjectCreated"
+    />
   </div>
 </template>
 
@@ -244,6 +288,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import {
   CircleClose,
   Coin,
@@ -262,12 +307,18 @@ import {
   Tools
 } from '@element-plus/icons-vue'
 import {
+  financeApi,
   type FinanceVoucherDetail,
   type FinanceVoucherForm,
   type FinanceVoucherMeta,
   type FinanceVoucherOption,
   type FinanceVoucherSavePayload
 } from '@/api'
+import FinanceAssistOptionSelect from '@/components/finance/FinanceAssistOptionSelect.vue'
+import FinanceCustomerArchiveDialog from '@/components/finance/FinanceCustomerArchiveDialog.vue'
+import FinanceProjectArchiveDialog from '@/components/finance/FinanceProjectArchiveDialog.vue'
+import FinanceSupplierArchiveDialog from '@/components/finance/FinanceSupplierArchiveDialog.vue'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
@@ -287,6 +338,7 @@ import { useFinanceNewVoucherValidationPayload } from './composables/useFinanceN
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { formatMoney } from '@/utils/money'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+import { formatFinanceAssistOptionLabel } from '@/utils/financeAssistOptions'
 
 
 type ToolbarActionKey = FinanceNewVoucherToolbarActionKey
@@ -375,6 +427,9 @@ const {
 const validationErrors = ref<string[]>([])
 const selectedRowIndex = ref(0)
 const lastCommittedSnapshot = ref('')
+const customerArchiveDialogRef = ref<InstanceType<typeof FinanceCustomerArchiveDialog> | null>(null)
+const supplierArchiveDialogRef = ref<InstanceType<typeof FinanceSupplierArchiveDialog> | null>(null)
+const projectArchiveDialogRef = ref<InstanceType<typeof FinanceProjectArchiveDialog> | null>(null)
 
 const form = reactive<VoucherFormState>({
   companyId: '',
@@ -655,6 +710,9 @@ const accountOptionsForDisplay = computed(() => {
   })
   return options
 })
+const resolvedVoucherProjectClassCode = computed(
+  () => currentAssistCapability.value.lockedProjectClassCode || selectedRow.value?.citemClass || ''
+)
 
 watch(() => form.entries.length, () => {
   if (selectedRowIndex.value >= form.entries.length) {
@@ -775,11 +833,55 @@ function selectRow(index: number) {
 }
 
 function formatVoucherOptionLabel(option?: FinanceVoucherOption | null) {
-  if (!option) return ''
-  if (option.code && option.name) return `${option.code}  ${option.name}`
-  if (option.name) return option.name
-  if (option.code) return option.code
-  return option.label || option.value
+  return formatFinanceAssistOptionLabel(option)
+}
+
+async function refreshVoucherAssistMeta() {
+  const companyId = financeCompany.currentCompanyId || form.companyId
+  if (!companyId) {
+    return
+  }
+  try {
+    const res = await financeApi.getVoucherMeta({
+      companyId,
+      billDate: form.dbillDate,
+      csign: form.csign
+    })
+    voucherMeta.value = res.data
+    resetLeafSubjectHistory(form.entries, res.data.accountOptions)
+  } catch (error: unknown) {
+    ElMessage.error(resolveErrorMessage(error, '刷新辅助核算选项失败'))
+  }
+}
+
+function openVoucherCustomerCreateDialog() {
+  customerArchiveDialogRef.value?.openCreateDialog()
+}
+
+function openVoucherSupplierCreateDialog() {
+  supplierArchiveDialogRef.value?.openCreateDialog()
+}
+
+function openVoucherProjectCreateDialog() {
+  projectArchiveDialogRef.value?.openCreateDialog(resolvedVoucherProjectClassCode.value)
+}
+
+async function handleVoucherCustomerCreated(customerCode: string) {
+  await refreshVoucherAssistMeta()
+  selectedRow.value.ccusId = customerCode
+}
+
+async function handleVoucherSupplierCreated(vendorCode: string) {
+  await refreshVoucherAssistMeta()
+  selectedRow.value.csupId = vendorCode
+}
+
+async function handleVoucherProjectCreated(projectCode: string) {
+  await refreshVoucherAssistMeta()
+  if (resolvedVoucherProjectClassCode.value) {
+    selectedRow.value.citemClass = resolvedVoucherProjectClassCode.value
+  }
+  selectedRow.value.citemId = projectCode
 }
 
 function buildDraftStorageKey(companyId = financeCompany.currentCompanyId) {

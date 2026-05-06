@@ -193,23 +193,17 @@
     <el-dialog v-model="userActionDialogVisible" :title="userActionDialogTitle" width="520px">
       <div class="space-y-4">
         <el-form-item :label="userActionDialogLabel" required>
-          <el-select
+          <employee-tree-select
             v-model="userActionForm.targetUserId"
             class="w-full"
-            filterable v-bind="globalFilterableSelectProps"
+            :departments="[]"
+            :employees="userOptions"
             remote
             clearable
+            value-type="number"
             placeholder="搜索并选择处理人"
             :remote-method="loadActionUsers"
-            :loading="userOptionsLoading"
-          >
-            <el-option
-              v-for="item in userOptions"
-              :key="item.userId"
-              :label="item.deptName ? `${item.name}（${item.deptName}）` : item.name"
-              :value="item.userId"
-            />
-          </el-select>
+          />
         </el-form-item>
 
         <el-form-item label="备注">
@@ -248,6 +242,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { type ProcessFormDesignSchema } from '@/api'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import ExpenseDocumentApprovalPanel from './components/ExpenseDocumentApprovalPanel.vue'
 import ExpenseDocumentBankSection from './components/ExpenseDocumentBankSection.vue'
 import ExpenseDocumentBindingPanels from './components/ExpenseDocumentBindingPanels.vue'
@@ -260,7 +255,6 @@ import { useExpenseDocumentDetailApprovalRuntime } from './composables/useExpens
 import { useExpenseDocumentDetailActionOwner } from './composables/useExpenseDocumentDetailActionOwner'
 import { useExpenseDocumentDetailDisplayOwner } from './composables/useExpenseDocumentDetailDisplayOwner'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
-import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 
 const route = useRoute()
@@ -453,7 +447,6 @@ const {
   userActionDialogVisible,
   userActionMode,
   userActionSubmitting,
-  userOptionsLoading,
   userOptions,
   userActionForm,
   taskActionDialogTitle,

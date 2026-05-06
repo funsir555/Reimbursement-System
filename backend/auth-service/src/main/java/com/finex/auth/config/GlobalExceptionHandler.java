@@ -1,5 +1,6 @@
 package com.finex.auth.config;
 
+import com.finex.auth.support.ExpenseAttachmentLimitSupport;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -8,6 +9,9 @@ import org.apache.ibatis.exceptions.PersistenceException;
 import org.mybatis.spring.MyBatisSystemException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.BadSqlGrammarException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -23,6 +27,9 @@ public class GlobalExceptionHandler {
     private static final String LEGACY_EXPENSE_DETAIL_INDEX_MESSAGE = "\u8d39\u7528\u660e\u7ec6\u7f16\u53f7\u7d22\u5f15\u4ecd\u662f\u65e7\u7ed3\u6784\uff0c\u8bf7\u5148\u6267\u884c backend/sql/migrate_expense_detail_detail_no_unique_index.sql \u540e\u91cd\u8bd5";
     private static final String DUPLICATE_RELATION_MESSAGE = "\u5173\u8054\u5355\u636e\u8bb0\u5f55\u5df2\u5b58\u5728\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5";
     private static final String DUPLICATE_WRITEOFF_MESSAGE = "\u6838\u9500\u5355\u636e\u8bb0\u5f55\u5df2\u5b58\u5728\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5";
+
+    @Value("${finex.expense.attachments.max-file-size-mb:50}")
+    private long expenseAttachmentMaxFileSizeMb = 50L;
 
     @ExceptionHandler(IllegalArgumentException.class)
     public Result<Void> handleIllegalArgument(IllegalArgumentException ex) {
@@ -71,6 +78,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(SecurityException.class)
     public Result<Void> handleSecurityException(SecurityException ex) {
         return Result.forbidden(ex.getMessage());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        log.warn("Multipart file size exceeded on {}: {}", request.getRequestURI(), ex.getMessage());
+        return Result.badRequest(buildExpenseAttachmentSizeExceededMessage());
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public Result<Void> handleMultipartException(MultipartException ex, HttpServletRequest request) {
+        if (isMultipartSizeExceeded(ex)) {
+            log.warn("Multipart request size exceeded on {}: {}", request.getRequestURI(), ex.getMessage());
+            return Result.badRequest(buildExpenseAttachmentSizeExceededMessage());
+        }
+        return handleException(ex, request);
     }
 
     @ExceptionHandler(BadSqlGrammarException.class)
@@ -335,5 +357,30 @@ public class GlobalExceptionHandler {
         }
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String buildExpenseAttachmentSizeExceededMessage() {
+        return ExpenseAttachmentLimitSupport.buildSizeExceededMessage(expenseAttachmentMaxFileSizeMb);
+    }
+
+    private boolean isMultipartSizeExceeded(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof MaxUploadSizeExceededException) {
+                return true;
+            }
+            String message = trimToNull(current.getMessage());
+            if (message != null) {
+                String normalized = message.toLowerCase();
+                if (normalized.contains("maximum upload size exceeded")
+                        || normalized.contains("max upload size exceeded")
+                        || normalized.contains("request was rejected because its size")
+                        || normalized.contains("file size exceeded")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

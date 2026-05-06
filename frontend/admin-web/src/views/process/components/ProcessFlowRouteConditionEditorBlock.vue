@@ -59,6 +59,7 @@
         :fields="meta.branchConditionFields"
         :operator-options="meta.branchOperatorOptions"
         :option-sources="optionSources"
+        :employee-directory="meta.employeeDirectory"
         title="条件设置"
         summary=""
         :handlers="conditionHandlers"
@@ -97,6 +98,7 @@ const props = defineProps({
       companyOptions: ProcessFlowMeta['companyOptions']
       departmentOptions: ProcessFlowMeta['departmentOptions']
       userOptions: ProcessFlowMeta['userOptions']
+      employeeDirectory: ProcessFlowMeta['employeeDirectory']
       expenseTypeOptions: ProcessFlowMeta['expenseTypeOptions']
       archiveOptions: ProcessFlowMeta['archiveOptions']
       branchConditionValueOptions?: ProcessFlowMeta['branchConditionValueOptions']

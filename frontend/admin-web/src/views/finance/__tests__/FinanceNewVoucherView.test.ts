@@ -202,7 +202,10 @@ const mountOptions = {
       'el-radio-group': defineComponent({ props: { modelValue: { type: [String, Number], default: '' } }, emits: ['update:modelValue'], template: '<div><slot /></div>' }),
       'el-radio': defineComponent({ props: { label: { type: [String, Number], default: '' } }, template: '<label><input type=\"radio\" :value=\"label\" /><slot /></label>' }),
       'el-icon': true,
-      'money-input': MoneyInputStub
+      'money-input': MoneyInputStub,
+      'finance-customer-archive-dialog': defineComponent({ template: '<div />' }),
+      'finance-supplier-archive-dialog': defineComponent({ template: '<div />' }),
+      'finance-project-archive-dialog': defineComponent({ template: '<div />' })
     }
   }
 }

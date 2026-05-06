@@ -261,6 +261,7 @@ export function useExpenseCreateBootstrap(options: UseExpenseCreateBootstrapOpti
       companyOptions: context.companyOptions || [],
       departmentOptions: context.departmentOptions || [],
       userOptions: context.userOptions || [],
+      employeeDirectory: context.employeeDirectory || [],
       currentUserCompanyId: context.currentUserCompanyId,
       currentUserCompanyName: context.currentUserCompanyName,
       currentUserDeptId: context.currentUserDeptId,

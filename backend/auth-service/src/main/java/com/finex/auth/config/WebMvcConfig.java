@@ -39,7 +39,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/auth/**")
-                .excludePathPatterns("/auth/login", "/auth/test", "/auth/expenses/attachments/*/content");
+                .excludePathPatterns(
+                        "/auth/login",
+                        "/auth/test",
+                        "/auth/expenses/attachments/*/content",
+                        "/auth/expenses/*/attachments/*/content"
+                );
         registry.addInterceptor(templateSaveTraceInterceptor)
                 .addPathPatterns("/auth/process-management/templates", "/auth/process-management/templates/**");
     }

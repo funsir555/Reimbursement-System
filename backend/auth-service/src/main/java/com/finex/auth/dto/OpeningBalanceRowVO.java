@@ -26,9 +26,17 @@ public class OpeningBalanceRowVO {
 
     private Boolean assistRequired;
 
+    private String subjectCategory;
+
+    private String subjectCategoryLabel;
+
     private String balanceDirection;
 
     private String balanceDirectionLabel;
+
+    private String actualBalanceDirection;
+
+    private String actualBalanceDirectionLabel;
 
     private String cexchName;
 
@@ -47,6 +55,8 @@ public class OpeningBalanceRowVO {
     private String cassItem;
 
     private BigDecimal mb;
+
+    private BigDecimal displayBalance;
 
     private List<OpeningBalanceRowVO> children = new ArrayList<>();
 }

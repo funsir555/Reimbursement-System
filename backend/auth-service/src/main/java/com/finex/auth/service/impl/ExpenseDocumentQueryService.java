@@ -13,6 +13,7 @@ import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
 import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
+import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.impl.expense.ExpenseQueryDomainSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,15 @@ public class ExpenseDocumentQueryService {
      */
     public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         return expenseQueryDomainSupport.getExpenseDetail(userId, documentCode, detailNo, allowCrossView);
+    }
+
+    public ExpenseAttachmentService.StoredExpenseAttachment loadDocumentAttachment(
+            Long userId,
+            String documentCode,
+            String attachmentId,
+            boolean allowCrossView
+    ) {
+        return expenseQueryDomainSupport.loadDocumentAttachment(userId, documentCode, attachmentId, allowCrossView);
     }
 
     /**

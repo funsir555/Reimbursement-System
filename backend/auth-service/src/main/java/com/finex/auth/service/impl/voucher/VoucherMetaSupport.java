@@ -21,8 +21,10 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -75,7 +77,13 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
         FinanceVoucherMetaVO meta = new FinanceVoucherMetaVO();
         meta.setCompanyOptions(contextMeta.getCompanyOptions().stream().map(this::toVoucherCompanyOption).toList());
         meta.setDepartmentOptions(loadEnabledDepartments().stream().map(this::toDepartmentOption).toList());
-        meta.setEmployeeOptions(loadEnabledUsers().stream().map(this::toEmployeeOption).toList());
+        List<User> employees = loadEnabledUsers();
+        meta.setEmployeeOptions(employees.stream().map(this::toEmployeeOption).toList());
+        meta.setEmployeeDirectory(EmployeeDirectorySupport.buildEmployeeDirectory(
+                employees,
+                getUserMapper(),
+                getSystemDepartmentMapper()
+        ));
         meta.setVoucherTypeOptions(toOptions(VOUCHER_TYPE_SEEDS));
         meta.setCurrencyOptions(toOptions(CURRENCY_SEEDS));
         meta.setAccountOptions(loadAccountOptions(effectiveCompanyId));

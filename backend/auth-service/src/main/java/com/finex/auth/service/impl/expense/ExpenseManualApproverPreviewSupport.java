@@ -39,6 +39,7 @@ class ExpenseManualApproverPreviewSupport {
     private static final String APPROVER_TYPE_MANAGER = "MANAGER";
     private static final String APPROVER_TYPE_MANUAL_SELECT = "MANUAL_SELECT";
     private static final String CANDIDATE_SCOPE_ALL_ACTIVE_USERS = "ALL_ACTIVE_USERS";
+    private final ExpenseMatchedFlowTraversalSupport matchedFlowTraversalSupport = new ExpenseMatchedFlowTraversalSupport();
 
     private final AbstractExpenseDocumentSupport support;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
@@ -103,7 +104,7 @@ class ExpenseManualApproverPreviewSupport {
         }
     }
 
-    private ExpenseManualApproverPreviewVO buildPreview(String flowSnapshotJson, Map<String, Object> runtimeContext) {
+    ExpenseManualApproverPreviewVO buildPreview(String flowSnapshotJson, Map<String, Object> runtimeContext) {
         FlowRuntimeSnapshot snapshot = support.readFlowRuntimeSnapshot(flowSnapshotJson);
         ExpenseManualApproverPreviewVO result = new ExpenseManualApproverPreviewVO();
         Map<String, Object> flowSnapshotMap = support.readMap(flowSnapshotJson);
@@ -111,160 +112,93 @@ class ExpenseManualApproverPreviewSupport {
                 toSelectionMap(runtimeContext == null ? null : runtimeContext.get("manualApproverSelections"))
         );
         ProcessFlowNodeDTO resumeNode = resolveResumeNode(snapshot, runtimeContext);
-        if (resumeNode != null) {
-            collectMatchedNodes(
-                    snapshot,
-                    runtimeContext,
-                    flowSnapshotMap,
-                    normalizedSelections,
-                    resumeNode.getParentNodeKey(),
-                    snapshot.indexInContainer(resumeNode.getParentNodeKey(), resumeNode.getNodeKey()),
-                    result
-            );
-        } else {
-            collectMatchedNodes(snapshot, runtimeContext, flowSnapshotMap, normalizedSelections, null, 0, result);
+        String startContainerKey = resumeNode == null ? null : resumeNode.getParentNodeKey();
+        int startIndex = resumeNode == null
+                ? 0
+                : snapshot.indexInContainer(resumeNode.getParentNodeKey(), resumeNode.getNodeKey());
+        List<ExpenseMatchedFlowTraversalSupport.MatchedPathStep> matchedPathSteps = matchedFlowTraversalSupport.collectMatchedPath(
+                snapshot,
+                startContainerKey,
+                startIndex,
+                branchNode -> {
+                    ProcessFlowRouteDTO matchedRoute = expenseWorkflowRuntimeSupport.previewMatchedRoute(
+                            snapshot.routes(branchNode.getNodeKey()),
+                            runtimeContext
+                    );
+                    if (matchedRoute == null) {
+                        throw new IllegalStateException("节点【" + defaultText(branchNode.getNodeName(), branchNode.getNodeKey()) + "】未命中任何分支条件");
+                    }
+                    return matchedRoute;
+                }
+        );
+        for (ExpenseMatchedFlowTraversalSupport.MatchedPathStep step : matchedPathSteps) {
+            appendMatchedStep(step, runtimeContext, flowSnapshotMap, normalizedSelections, result);
         }
         return result;
     }
 
-    private void collectMatchedNodes(
-            FlowRuntimeSnapshot snapshot,
+    private void appendMatchedStep(
+            ExpenseMatchedFlowTraversalSupport.MatchedPathStep step,
             Map<String, Object> runtimeContext,
             Map<String, Object> flowSnapshotMap,
             Map<String, List<Long>> normalizedSelections,
-            String containerKey,
-            int startIndex,
             ExpenseManualApproverPreviewVO result
     ) {
-        collectContainer(snapshot, runtimeContext, flowSnapshotMap, normalizedSelections, containerKey, startIndex, result);
-        ProcessFlowRouteDTO route = snapshot.routeByKey(containerKey);
-        if (route == null) {
+        if (step == null || step.node() == null) {
             return;
         }
-        ProcessFlowNodeDTO branchNode = snapshot.node(route.getSourceNodeKey());
-        if (branchNode == null) {
+        if (step.branch()) {
             return;
         }
-        boolean branchHasAttachedTail = snapshot.routes(route.getSourceNodeKey()).stream()
-                .anyMatch(item -> Boolean.TRUE.equals(item.getAttachBelowNodes()));
-        if (!branchHasAttachedTail || Boolean.TRUE.equals(route.getAttachBelowNodes())) {
-            collectMatchedNodes(
-                    snapshot,
-                    runtimeContext,
-                    flowSnapshotMap,
-                    normalizedSelections,
-                    branchNode.getParentNodeKey(),
-                    nextIndex(snapshot, branchNode),
-                    result
-            );
-            return;
-        }
-        String parentContainerKey = branchNode.getParentNodeKey();
-        collectMatchedNodes(
-                snapshot,
-                runtimeContext,
-                flowSnapshotMap,
-                normalizedSelections,
-                parentContainerKey,
-                snapshot.children(parentContainerKey).size(),
-                result
-        );
-    }
-
-    private void collectContainer(
-            FlowRuntimeSnapshot snapshot,
-            Map<String, Object> runtimeContext,
-            Map<String, Object> flowSnapshotMap,
-            Map<String, List<Long>> normalizedSelections,
-            String containerKey,
-            int startIndex,
-            ExpenseManualApproverPreviewVO result
-    ) {
-        List<ProcessFlowNodeDTO> nodes = snapshot.children(containerKey);
-        for (int index = startIndex; index < nodes.size(); index++) {
-            ProcessFlowNodeDTO node = nodes.get(index);
-            String nodeType = defaultText(asText(node.getNodeType()), "");
-            switch (nodeType) {
-                case NODE_TYPE_BRANCH -> {
-                    ProcessFlowRouteDTO matchedRoute = expenseWorkflowRuntimeSupport.previewMatchedRoute(
-                            snapshot.routes(node.getNodeKey()),
-                            runtimeContext
-                    );
-                    if (matchedRoute == null) {
-                        throw new IllegalStateException("节点【" + defaultText(node.getNodeName(), node.getNodeKey()) + "】未命中任何分支条件");
-                    }
-                    result.getApprovalTimeline().add(buildTimelineItem(
-                            "route-" + matchedRoute.getRouteKey(),
+        ProcessFlowNodeDTO node = step.node();
+        String nodeType = defaultText(asText(node.getNodeType()), "");
+        switch (nodeType) {
+            case NODE_TYPE_APPROVAL -> {
+                if (isManualSelectApprovalNode(node)) {
+                    ExpenseManualApproverPreviewNodeVO manualNode = buildManualNode(
                             node,
-                            NODE_TYPE_BRANCH,
-                            "命中分支",
-                            "命中分支：" + defaultText(matchedRoute.getRouteName(), matchedRoute.getRouteKey())
-                    ));
-                    collectMatchedNodes(
-                            snapshot,
-                            runtimeContext,
                             flowSnapshotMap,
-                            normalizedSelections,
-                            matchedRoute.getRouteKey(),
-                            0,
-                            result
+                            normalizedSelections.getOrDefault(node.getNodeKey(), Collections.emptyList())
                     );
-                    return;
-                }
-                case NODE_TYPE_APPROVAL -> {
-                    if (isManualSelectApprovalNode(node)) {
-                        ExpenseManualApproverPreviewNodeVO manualNode = buildManualNode(
-                                node,
-                                flowSnapshotMap,
-                                normalizedSelections.getOrDefault(node.getNodeKey(), Collections.emptyList())
-                        );
-                        result.getManualNodes().add(manualNode);
-                        result.getApprovalTimeline().add(buildTimelineItem(
-                                "manual-" + node.getNodeKey(),
-                                node,
-                                NODE_TYPE_APPROVAL,
-                                manualNode.getSelectedUserIds().isEmpty() ? "待选择审批人" : "已完成手动选人",
-                                manualNode.getSelectedUserIds().isEmpty()
-                                        ? "提交前需要为该节点指定审批人"
-                                        : "已选审批人：" + resolveSelectedLabels(manualNode)
-                        ));
-                        continue;
-                    }
-                    List<String> approverNames = expenseWorkflowRuntimeSupport.previewResolvedApprovers(node, runtimeContext).stream()
-                            .map(user -> defaultText(support.resolveUserDisplayName(user, null), String.valueOf(user.getId())))
-                            .distinct()
-                            .toList();
+                    result.getManualNodes().add(manualNode);
                     result.getApprovalTimeline().add(buildTimelineItem(
-                            "approval-" + node.getNodeKey(),
+                            "manual-" + node.getNodeKey(),
                             node,
                             NODE_TYPE_APPROVAL,
-                            "审批节点",
-                            approverNames.isEmpty() ? "提交后按节点规则解析审批人" : "审批人：" + String.join("、", approverNames)
+                            manualNode.getSelectedUserIds().isEmpty() ? "待选择审批人" : "已完成手动选人",
+                            manualNode.getSelectedUserIds().isEmpty()
+                                    ? "提交前需要为该节点指定审批人"
+                                    : "已选审批人：" + resolveSelectedLabels(manualNode)
                     ));
-                    continue;
+                    return;
                 }
-                case NODE_TYPE_CC -> {
-                    result.getApprovalTimeline().add(buildTimelineItem(
-                            "cc-" + node.getNodeKey(),
-                            node,
-                            NODE_TYPE_CC,
-                            "抄送节点",
-                            "当前轨迹会经过该抄送节点"
-                    ));
-                    continue;
-                }
-                case NODE_TYPE_PAYMENT -> {
-                    result.getApprovalTimeline().add(buildTimelineItem(
-                            "payment-" + node.getNodeKey(),
-                            node,
-                            NODE_TYPE_PAYMENT,
-                            "支付节点",
-                            "当前轨迹会进入支付处理"
-                    ));
-                    continue;
-                }
-                default -> {
-                }
+                List<String> approverNames = expenseWorkflowRuntimeSupport.previewResolvedApprovers(node, runtimeContext).stream()
+                        .map(user -> defaultText(support.resolveUserDisplayName(user, null), String.valueOf(user.getId())))
+                        .distinct()
+                        .toList();
+                result.getApprovalTimeline().add(buildTimelineItem(
+                        "approval-" + node.getNodeKey(),
+                        node,
+                        NODE_TYPE_APPROVAL,
+                        "审批节点",
+                        approverNames.isEmpty() ? "提交后按节点规则解析审批人" : "审批人：" + String.join("、", approverNames)
+                ));
+            }
+            case NODE_TYPE_CC -> result.getApprovalTimeline().add(buildTimelineItem(
+                    "cc-" + node.getNodeKey(),
+                    node,
+                    NODE_TYPE_CC,
+                    "抄送节点",
+                    "当前轨迹会经过该抄送节点"
+            ));
+            case NODE_TYPE_PAYMENT -> result.getApprovalTimeline().add(buildTimelineItem(
+                    "payment-" + node.getNodeKey(),
+                    node,
+                    NODE_TYPE_PAYMENT,
+                    "支付节点",
+                    "当前轨迹会进入支付处理"
+            ));
+            default -> {
             }
         }
     }
@@ -412,9 +346,5 @@ class ExpenseManualApproverPreviewSupport {
 
     private String defaultText(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
-    }
-
-    private int nextIndex(FlowRuntimeSnapshot snapshot, ProcessFlowNodeDTO node) {
-        return snapshot.indexInContainer(node.getParentNodeKey(), node.getNodeKey()) + 1;
     }
 }

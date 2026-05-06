@@ -119,6 +119,62 @@
               </div>
             </div>
           </div>
+          <div
+            v-else-if="isReadonlyAttachmentBlock(block) && readonlyAttachmentItems(block).length"
+            class="mt-4 space-y-3"
+          >
+            <div
+              v-for="item in readonlyAttachmentItems(block)"
+              :key="`${block.blockId}-${item.id}`"
+              class="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-slate-300"
+              data-testid="readonly-attachment-item"
+              @dblclick="handleReadonlyAttachmentDoubleClick(item)"
+            >
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="break-all text-sm font-semibold text-slate-800" data-testid="readonly-attachment-file-name">
+                    {{ item.fileName }}
+                  </p>
+                  <p class="mt-1 text-xs text-slate-500">
+                    {{ item.previewable ? '双击预览，或使用下方按钮操作' : '双击下载，或使用下方按钮下载' }}
+                  </p>
+                </div>
+                <div class="flex flex-wrap justify-end gap-2">
+                  <button
+                    v-if="item.previewable && item.actionUrl"
+                    type="button"
+                    class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-sky-300 hover:text-sky-700"
+                    data-testid="readonly-attachment-preview-button"
+                    @click="openReadonlyAttachment(item)"
+                  >
+                    预览
+                  </button>
+                  <button
+                    v-if="item.actionUrl"
+                    type="button"
+                    class="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-sky-300 hover:text-sky-700"
+                    data-testid="readonly-attachment-download-button"
+                    @click="downloadReadonlyAttachment(item)"
+                  >
+                    下载
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            v-else-if="isInvoiceAttachmentBlock(block) && invoiceAttachmentFileNames(block).length"
+            class="mt-4 flex flex-wrap gap-2"
+            data-testid="invoice-attachment-file-list"
+          >
+            <span
+              v-for="fileName in invoiceAttachmentFileNames(block)"
+              :key="`${block.blockId}-${fileName}`"
+              class="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+            >
+              {{ fileName }}
+            </span>
+          </div>
           <div v-else class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3">
             <template v-if="displayLines(block).length">
               <p
@@ -154,7 +210,15 @@ import {
   getControlType,
   getOptionItems
 } from '@/views/process/formDesignerHelper'
-import { isExpenseDetailBlockVisible } from '@/views/expense/expenseDetailRuntime'
+import { FIELD_INVOICE_ATTACHMENTS, isExpenseDetailBlockVisible } from '@/views/expense/expenseDetailRuntime'
+import {
+  buildExpenseReadonlyAttachmentItems,
+  downloadExpenseReadonlyAttachment,
+  isExpenseReadonlyAttachmentBlock,
+  normalizeExpenseReadonlyAttachments,
+  openExpenseReadonlyAttachmentPreview,
+  type ExpenseReadonlyAttachmentItem
+} from '@/views/expense/expenseReadonlyAttachment'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 
 type PayeeAccountCard = {
@@ -168,6 +232,7 @@ const props = withDefaults(defineProps<{
   formData: Record<string, unknown>
   companyOptions?: ProcessFormOption[]
   departmentOptions?: ProcessFormOption[]
+  documentCode?: string
   detailType?: string
   defaultBusinessScenario?: string
   summaryVisible?: boolean
@@ -288,6 +353,40 @@ function controlDisplayLines(block: ProcessFormDesignBlock, rawValue: unknown) {
     return rawValue.map((item) => String(item))
   }
   return normalizeLines(rawValue)
+}
+
+function isReadonlyAttachmentBlock(block: ProcessFormDesignBlock) {
+  return isExpenseReadonlyAttachmentBlock(block)
+}
+
+function isInvoiceAttachmentBlock(block: ProcessFormDesignBlock) {
+  return String(block.fieldKey || '').trim() === FIELD_INVOICE_ATTACHMENTS
+}
+
+function readonlyAttachmentItems(block: ProcessFormDesignBlock) {
+  return buildExpenseReadonlyAttachmentItems(block, props.formData?.[block.fieldKey], props.documentCode)
+}
+
+function invoiceAttachmentFileNames(block: ProcessFormDesignBlock) {
+  return normalizeExpenseReadonlyAttachments(props.formData?.[block.fieldKey]).map((item) => item.fileName)
+}
+
+function handleReadonlyAttachmentDoubleClick(item: ExpenseReadonlyAttachmentItem) {
+  if (item.actionKind === 'preview') {
+    openReadonlyAttachment(item)
+    return
+  }
+  if (item.actionKind === 'download') {
+    downloadReadonlyAttachment(item)
+  }
+}
+
+function openReadonlyAttachment(item: ExpenseReadonlyAttachmentItem) {
+  openExpenseReadonlyAttachmentPreview(item.actionUrl ? `${item.actionUrl}?disposition=inline` : '')
+}
+
+function downloadReadonlyAttachment(item: ExpenseReadonlyAttachmentItem) {
+  downloadExpenseReadonlyAttachment(item.actionUrl ? `${item.actionUrl}?disposition=attachment` : '', item.fileName)
 }
 
 function resolvePayeeAccountCard(block: ProcessFormDesignBlock): PayeeAccountCard | null {

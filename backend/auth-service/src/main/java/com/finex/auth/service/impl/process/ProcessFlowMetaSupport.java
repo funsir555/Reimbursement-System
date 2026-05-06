@@ -161,6 +161,7 @@ public class ProcessFlowMetaSupport extends AbstractProcessFlowDesignSupport {
         meta.setCompanyOptions(loadCompanyOptions());
         meta.setDepartmentOptions(loadDepartmentOptions());
         meta.setUserOptions(loadUserOptions());
+        meta.setEmployeeDirectory(loadEmployeeDirectory());
         meta.setExpenseTypeOptions(loadExpenseTypeOptions());
         meta.setArchiveOptions(loadArchiveOptions());
         meta.setUserGroupOptions(userGroupResolverSupport.listSecondLevelGroupOptions());

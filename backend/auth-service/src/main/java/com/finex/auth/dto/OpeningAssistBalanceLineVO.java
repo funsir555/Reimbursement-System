@@ -20,6 +20,12 @@ public class OpeningAssistBalanceLineVO {
 
     private BigDecimal mb;
 
+    private String actualBalanceDirection;
+
+    private String actualBalanceDirectionLabel;
+
+    private BigDecimal displayBalance;
+
     private BigDecimal mbF;
 
     private BigDecimal nbS;

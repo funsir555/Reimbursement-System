@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseTypeManagementPanel from '@/components/process/ExpenseTypeManagementPanel.vue'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 
 const mocks = vi.hoisted(() => ({
@@ -146,6 +147,7 @@ async function mountView() {
   mocks.processApi.getExpenseTypeMeta.mockResolvedValue({
     data: {
       departmentOptions: [],
+      employeeDirectory: [],
       userOptions: [],
       invoiceFreeOptions: [],
       taxDeductionOptions: [],
@@ -217,7 +219,7 @@ describe('ExpenseTypeManagementPanel', () => {
   it('uses the global collapsed tag tooltip config for multi-select user scope', async () => {
     const wrapper = await mountView()
 
-    const multiSelect = wrapper.findAllComponents(SelectStub).find((item) => item.props('multiple') === true)
+    const multiSelect = wrapper.findAllComponents(EmployeeTreeSelect).find((item) => item.props('multiple') === true)
 
     expect(multiSelect).toBeTruthy()
     expect(multiSelect!.props('tagTooltip')).toEqual(globalCollapseTagTooltipProps)

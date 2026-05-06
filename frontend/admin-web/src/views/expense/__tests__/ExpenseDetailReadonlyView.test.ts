@@ -63,7 +63,13 @@ const InvoiceWorkbenchStub = defineComponent({
 })
 
 const ReadonlyRendererStub = defineComponent({
-  template: '<div data-testid="readonly-renderer" />'
+  props: {
+    documentCode: {
+      type: String,
+      default: ''
+    }
+  },
+  template: '<div data-testid="readonly-renderer" :data-document-code="documentCode" />'
 })
 
 async function mountView() {
@@ -133,5 +139,11 @@ describe('ExpenseDetailReadonlyView', () => {
         documentCode: 'DOC-001'
       }
     })
+  })
+
+  it('passes the parent document code into the shared readonly renderer', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="readonly-renderer"]').attributes('data-document-code')).toBe('DOC-001')
   })
 })

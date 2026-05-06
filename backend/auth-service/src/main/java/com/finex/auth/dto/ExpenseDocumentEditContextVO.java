@@ -62,6 +62,8 @@ public class ExpenseDocumentEditContextVO {
 
     private List<ProcessFormOptionVO> userOptions = new ArrayList<>();
 
+    private List<EmployeeDirectoryOptionVO> employeeDirectory = new ArrayList<>();
+
     private List<ProcessFormOptionVO> expenseTypeOptions = new ArrayList<>();
 
     private Map<String, String> expenseTypeInvoiceFreeModeMap = new LinkedHashMap<>();

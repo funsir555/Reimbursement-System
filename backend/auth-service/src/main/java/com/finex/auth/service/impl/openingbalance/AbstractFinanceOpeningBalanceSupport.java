@@ -33,6 +33,8 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
+import com.finex.auth.support.FinanceBalanceDirectionSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -51,6 +53,11 @@ import java.util.stream.Collectors;
 
 abstract class AbstractFinanceOpeningBalanceSupport {
 
+    protected static final String CATEGORY_ASSET = "ASSET";
+    protected static final String CATEGORY_LIABILITY = "LIABILITY";
+    protected static final String CATEGORY_EQUITY = "EQUITY";
+    protected static final String CATEGORY_COST = "COST";
+    protected static final String CATEGORY_PROFIT = "PROFIT";
     protected static final String STATUS_NOT_OPENED = "NOT_OPENED";
     protected static final String STATUS_OPENING = "OPENING";
     protected static final String STATUS_OPENED = "OPENED";
@@ -109,7 +116,9 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         OpeningBalanceMetaVO meta = new OpeningBalanceMetaVO();
         meta.setCompanyOptions(companies.stream().map(this::toCompanyOption).toList());
         meta.setDepartmentOptions(loadEnabledDepartments().stream().map(this::toDepartmentOption).toList());
-        meta.setEmployeeOptions(loadEnabledUsers().stream().map(this::toUserOption).toList());
+        List<User> employees = loadEnabledUsers();
+        meta.setEmployeeOptions(employees.stream().map(this::toUserOption).toList());
+        meta.setEmployeeDirectory(EmployeeDirectorySupport.buildEmployeeDirectory(employees, userMapper, systemDepartmentMapper));
         meta.setCustomerOptions(loadCustomers(effectiveCompanyId).stream().map(this::toCustomerOption).toList());
         meta.setSupplierOptions(loadVendors(effectiveCompanyId).stream().map(this::toVendorOption).toList());
         meta.setProjectClassOptions(loadProjectClasses(effectiveCompanyId).stream().map(this::toProjectClassOption).toList());
@@ -139,7 +148,7 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         requireLeafSubject(subject);
         requireAssistSubject(subject);
         return loadAssistRows(companyId, normalizeYear(iyear), normalizePeriod(iperiod), subjectCode).stream()
-                .map(this::toAssistLineVO)
+                .map(item -> toAssistLineVO(subject, item))
                 .toList();
     }
 
@@ -379,7 +388,9 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         result.setTotalDebit(debit);
         result.setTotalCredit(credit);
         result.setDifference(debit.subtract(credit).setScale(2, RoundingMode.HALF_UP));
-        result.setBalanced(result.getDifference().compareTo(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)) == 0 && abnormal.isEmpty());
+        // Negative balances are kept as abnormal-direction hints, but they do not mean
+        // the opening trial balance itself is out of balance as long as debit equals credit.
+        result.setBalanced(result.getDifference().compareTo(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)) == 0);
         result.setAbnormalSubjects(abnormal);
         return result;
     }
@@ -964,6 +975,8 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         vo.setHasChildren(!leaf);
         vo.setEditable(leaf);
         vo.setAssistRequired(hasAssist(subject));
+        vo.setSubjectCategory(resolveSubjectCategory(subject.getSubjectCategory()));
+        vo.setSubjectCategoryLabel(resolveSubjectCategoryLabel(subject.getSubjectCategory()));
         vo.setBalanceDirection(subject.getBalanceDirection());
         vo.setBalanceDirectionLabel(isDebitDirection(subject.getBalanceDirection()) ? "借" : "贷");
         vo.setCexchName(trimToNull(subject.getCexchName()) == null ? "人民币" : subject.getCexchName());
@@ -975,10 +988,13 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         vo.setBitem(subject.getBitem());
         vo.setCassItem(subject.getCassItem());
         vo.setMb(row == null ? ZERO : money(row.getMb()));
+        vo.setActualBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), vo.getMb()));
+        vo.setActualBalanceDirectionLabel(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), vo.getMb()));
+        vo.setDisplayBalance(FinanceBalanceDirectionSupport.displayAmount(vo.getMb()));
         return vo;
     }
 
-    protected OpeningAssistBalanceLineVO toAssistLineVO(GlAccass entity) {
+    protected OpeningAssistBalanceLineVO toAssistLineVO(FinanceAccountSubject subject, GlAccass entity) {
         OpeningAssistBalanceLineVO vo = new OpeningAssistBalanceLineVO();
         vo.setCdeptId(entity.getCdeptId());
         vo.setCpersonId(entity.getCpersonId());
@@ -987,6 +1003,9 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         vo.setCitemClass(entity.getCitemClass());
         vo.setCitemId(entity.getCitemId());
         vo.setMb(money(entity.getMb()));
+        vo.setActualBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), vo.getMb()));
+        vo.setActualBalanceDirectionLabel(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), vo.getMb()));
+        vo.setDisplayBalance(FinanceBalanceDirectionSupport.displayAmount(vo.getMb()));
         vo.setMbF(money(entity.getMbF()));
         vo.setNbS(qty(entity.getNbS()));
         return vo;
@@ -1067,10 +1086,6 @@ abstract class AbstractFinanceOpeningBalanceSupport {
     }
 
     protected void fillOpeningAmounts(GlAccsum row, FinanceAccountSubject subject, BigDecimal mb, BigDecimal mbF, BigDecimal nbS, BigDecimal md, BigDecimal mc, BigDecimal ndS) {
-        row.setCbegindC(isDebitDirection(subject.getBalanceDirection()) ? "借" : "贷");
-        row.setCbegindCEngl(isDebitDirection(subject.getBalanceDirection()) ? "DEBIT" : "CREDIT");
-        row.setCenddC(row.getCbegindC());
-        row.setCenddCEngl(row.getCbegindCEngl());
         row.setCexchName(trimToNull(subject.getCexchName()) == null ? "人民币" : subject.getCexchName());
         row.setCurrencyCode(resolveCurrencyCode(subject.getCexchName()));
         row.setMb(money(mb));
@@ -1085,13 +1100,13 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         row.setMe(row.getMb().add(row.getMd()).subtract(row.getMc()));
         row.setMeF(row.getMbF().add(money(row.getMdF())).subtract(money(row.getMcF())));
         row.setNeS(row.getNbS().add(row.getNdS()).subtract(qty(row.getNcS())));
+        row.setCbegindC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMb()));
+        row.setCbegindCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMb()));
+        row.setCenddC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMe()));
+        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMe()));
     }
 
     protected void fillOpeningAmounts(GlAccass row, FinanceAccountSubject subject, BigDecimal mb, BigDecimal mbF, BigDecimal nbS, BigDecimal md, BigDecimal mc, BigDecimal ndS) {
-        row.setCbegindC(isDebitDirection(subject.getBalanceDirection()) ? "借" : "贷");
-        row.setCbegindCEngl(isDebitDirection(subject.getBalanceDirection()) ? "DEBIT" : "CREDIT");
-        row.setCenddC(row.getCbegindC());
-        row.setCenddCEngl(row.getCbegindCEngl());
         row.setCexchName(trimToNull(subject.getCexchName()) == null ? "人民币" : subject.getCexchName());
         row.setCurrencyCode(resolveCurrencyCode(subject.getCexchName()));
         row.setMb(money(mb));
@@ -1106,15 +1121,14 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         row.setMe(row.getMb().add(row.getMd()).subtract(row.getMc()));
         row.setMeF(row.getMbF().add(money(row.getMdF())).subtract(money(row.getMcF())));
         row.setNeS(row.getNbS().add(row.getNdS()).subtract(qty(row.getNcS())));
+        row.setCbegindC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMb()));
+        row.setCbegindCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMb()));
+        row.setCenddC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMe()));
+        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMe()));
     }
 
     protected boolean isDebitDirection(String balanceDirection) {
-        String normalized = trimToNull(balanceDirection);
-        if (normalized == null) {
-            return true;
-        }
-        return normalized.toUpperCase(Locale.ROOT).contains("DEBIT")
-                || normalized.contains("借");
+        return FinanceBalanceDirectionSupport.isDebitDirection(balanceDirection);
     }
 
     protected String resolveStatusLabel(String status) {
@@ -1141,6 +1155,28 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         return normalized.toUpperCase(Locale.ROOT);
     }
 
+    protected String resolveSubjectCategory(String subjectCategory) {
+        String normalized = trimToNull(subjectCategory);
+        if (normalized == null) {
+            return CATEGORY_ASSET;
+        }
+        return switch (normalized.toUpperCase(Locale.ROOT)) {
+            case CATEGORY_ASSET, CATEGORY_LIABILITY, CATEGORY_EQUITY, CATEGORY_COST, CATEGORY_PROFIT ->
+                    normalized.toUpperCase(Locale.ROOT);
+            default -> CATEGORY_ASSET;
+        };
+    }
+
+    protected String resolveSubjectCategoryLabel(String subjectCategory) {
+        return switch (resolveSubjectCategory(subjectCategory)) {
+            case CATEGORY_LIABILITY -> "负债";
+            case CATEGORY_EQUITY -> "权益";
+            case CATEGORY_COST -> "成本";
+            case CATEGORY_PROFIT -> "损益";
+            default -> "资产";
+        };
+    }
+
     protected BigDecimal money(BigDecimal value) {
         return value == null ? ZERO : value.setScale(2, RoundingMode.HALF_UP);
     }
@@ -1150,11 +1186,7 @@ abstract class AbstractFinanceOpeningBalanceSupport {
     }
 
     protected BigDecimal sanitizeAmount(BigDecimal value) {
-        BigDecimal normalized = money(value);
-        if (normalized.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("期初余额不能为负数");
-        }
-        return normalized;
+        return money(value);
     }
 
     protected BigDecimal sanitizeQty(BigDecimal value) {

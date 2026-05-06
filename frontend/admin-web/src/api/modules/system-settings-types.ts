@@ -68,6 +68,18 @@ export interface EmployeeRecord {
   roleCodes: string[]
 }
 
+export interface EmployeeDirectoryEntry {
+  userId: number
+  username?: string
+  name: string
+  phone?: string
+  email?: string
+  deptId?: number
+  deptName?: string
+  departments?: EmployeeDepartmentRef[]
+  status?: number
+}
+
 export interface EmployeeSavePayload {
   username: string
   name: string

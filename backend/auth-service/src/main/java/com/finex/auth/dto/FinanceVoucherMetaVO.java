@@ -14,6 +14,8 @@ public class FinanceVoucherMetaVO {
 
     private List<FinanceVoucherOptionVO> employeeOptions = new ArrayList<>();
 
+    private List<EmployeeDirectoryOptionVO> employeeDirectory = new ArrayList<>();
+
     private List<FinanceVoucherOptionVO> voucherTypeOptions = new ArrayList<>();
 
     private List<FinanceVoucherOptionVO> currencyOptions = new ArrayList<>();

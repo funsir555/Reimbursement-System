@@ -41,6 +41,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -143,6 +144,7 @@ public abstract class AbstractFinanceVoucherSupport {
         meta.setCompanyOptions(companies.stream().map(this::toCompanyOption).toList());
         meta.setDepartmentOptions(departments.stream().map(this::toDepartmentOption).toList());
         meta.setEmployeeOptions(employees.stream().map(this::toEmployeeOption).toList());
+        meta.setEmployeeDirectory(EmployeeDirectorySupport.buildEmployeeDirectory(employees, userMapper, systemDepartmentMapper));
         meta.setVoucherTypeOptions(toOptions(VOUCHER_TYPE_SEEDS));
         meta.setCurrencyOptions(toOptions(CURRENCY_SEEDS));
         meta.setAccountOptions(loadAccountOptions(effectiveCompanyId));
@@ -1889,6 +1891,14 @@ public abstract class AbstractFinanceVoucherSupport {
             return currentUser.getName().trim();
         }
         return normalize(currentUsername, "财务制单员");
+    }
+
+    protected UserMapper getUserMapper() {
+        return userMapper;
+    }
+
+    protected SystemDepartmentMapper getSystemDepartmentMapper() {
+        return systemDepartmentMapper;
     }
 
     /**

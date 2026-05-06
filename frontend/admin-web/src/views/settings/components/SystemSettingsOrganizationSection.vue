@@ -16,8 +16,10 @@
       :selected-department="state.selectedDepartment"
       :selected-department-sync-locked="state.selectedDepartmentSyncLocked"
       :department-config-form="state.departmentConfigForm"
+      :department-options="state.departmentOptions"
       :department-parent-options="state.departmentParentOptions"
       :company-options="state.companyOptions"
+      :employees="state.employees"
       :employee-options="state.employeeOptions"
       :department-core-fields-readonly="state.departmentCoreFieldsReadonly"
       :department-stat-editable="state.departmentStatEditable"
@@ -73,14 +75,13 @@
           </el-select>
         </el-form-item>
         <el-form-item label="部门负责人">
-          <el-select v-model="state.departmentForm.leaderUserId" clearable filterable v-bind="globalFilterableSelectProps" class="w-full">
-            <el-option
-              v-for="item in state.employeeOptions"
-              :key="item.userId"
-              :label="item.label"
-              :value="item.userId"
-            />
-          </el-select>
+          <employee-tree-select
+            v-model="state.departmentForm.leaderUserId"
+            :departments="state.departmentOptions"
+            :employees="state.employees"
+            value-type="number"
+            class="w-full"
+          />
         </el-form-item>
         <el-form-item label="统计部门归属">
           <el-input v-model="state.departmentForm.statDepartmentBelong" />
@@ -103,6 +104,7 @@
 
 <script setup lang="ts">
 import type { DepartmentTreeNode, EmployeeRecord, SyncConnectorConfig, SyncJobRecord } from '@/api'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import type {
   CompanyOption,
   DepartmentConfigFormState,
@@ -111,7 +113,6 @@ import type {
 } from '../systemSettingsShared'
 import type { OrganizationTreeNode } from '../systemSettingsOrganizationTree'
 import SystemSettingsOrganizationTab from './SystemSettingsOrganizationTab.vue'
-import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 
 defineProps<{
@@ -135,6 +136,7 @@ defineProps<{
     departmentConfigForm: DepartmentConfigFormState
     departmentParentOptions: DepartmentTreeNode[]
     companyOptions: CompanyOption[]
+    employees: EmployeeRecord[]
     employeeOptions: EmployeeOption[]
     departmentCoreFieldsReadonly: boolean
     departmentStatEditable: boolean

@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ExpenseFormReadonlyRenderer from '@/views/expense/components/ExpenseFormReadonlyRenderer.vue'
 
 function createPermission() {
@@ -29,7 +29,27 @@ function createBusinessBlock(fieldKey: string, label: string, componentCode: str
   }
 }
 
+function createAttachmentBlock(fieldKey: string, label = '附件', controlType: 'ATTACHMENT' | 'IMAGE' = 'ATTACHMENT') {
+  return {
+    blockId: fieldKey,
+    fieldKey,
+    kind: 'CONTROL' as const,
+    label,
+    span: 1,
+    required: false,
+    props: {
+      controlType
+    },
+    permission: createPermission()
+  }
+}
+
 describe('ExpenseFormReadonlyRenderer', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
   it('renders counterparty label instead of raw supplier code', () => {
     const wrapper = mount(ExpenseFormReadonlyRenderer, {
       props: {
@@ -376,5 +396,180 @@ describe('ExpenseFormReadonlyRenderer', () => {
     expect(wrapper.text()).toContain('120.00')
     expect(wrapper.text()).toContain('核销后余额')
     expect(wrapper.text()).toContain('380.00')
+  })
+
+  it('renders generic attachments as structured actions instead of raw json', () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        documentCode: 'DOC-001',
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createAttachmentBlock('attachments')
+          ]
+        },
+        formData: {
+          attachments: [
+            {
+              attachmentId: 'ATT-001',
+              fileName: 'hotel.pdf',
+              contentType: 'application/pdf'
+            },
+            {
+              attachmentId: 'ATT-002',
+              fileName: 'statement.xlsx',
+              contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+          ]
+        }
+      },
+      global: {
+        stubs: {
+          'el-tag': {
+            template: '<span><slot /></span>'
+          }
+        }
+      }
+    })
+
+    expect(wrapper.findAll('[data-testid="readonly-attachment-item"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="readonly-attachment-preview-button"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="readonly-attachment-download-button"]')).toHaveLength(2)
+    expect(wrapper.text()).toContain('hotel.pdf')
+    expect(wrapper.text()).toContain('statement.xlsx')
+    expect(wrapper.text()).not.toContain('{"attachmentId"')
+  })
+
+  it('opens previewable generic attachments in a new tab on double click', async () => {
+    window.localStorage.setItem('token', 'token-001')
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        documentCode: 'DOC-001',
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createAttachmentBlock('attachments')
+          ]
+        },
+        formData: {
+          attachments: [
+            {
+              attachmentId: 'ATT-001',
+              fileName: 'hotel.pdf',
+              contentType: 'application/pdf'
+            }
+          ]
+        }
+      }
+    })
+
+    await wrapper.get('[data-testid="readonly-attachment-item"]').trigger('dblclick')
+
+    expect(openSpy).toHaveBeenCalledWith(
+      '/api/auth/expenses/DOC-001/attachments/ATT-001/content?disposition=inline&token=token-001',
+      '_blank',
+      'noopener'
+    )
+  })
+
+  it('downloads non-previewable generic attachments on double click', async () => {
+    window.localStorage.setItem('token', 'token-001')
+    const originalCreateElement = document.createElement.bind(document)
+    let createdAnchor: HTMLAnchorElement | null = null
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      const element = originalCreateElement(tagName)
+      if (tagName.toLowerCase() === 'a') {
+        createdAnchor = element as HTMLAnchorElement
+      }
+      return element
+    }) as typeof document.createElement)
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        documentCode: 'DOC-001',
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createAttachmentBlock('attachments')
+          ]
+        },
+        formData: {
+          attachments: [
+            {
+              attachmentId: 'ATT-002',
+              fileName: 'statement.xlsx',
+              contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
+          ]
+        }
+      }
+    })
+
+    await wrapper.get('[data-testid="readonly-attachment-item"]').trigger('dblclick')
+
+    expect(clickSpy).toHaveBeenCalledTimes(1)
+    expect(createdAnchor).not.toBeNull()
+    expect(createdAnchor?.getAttribute('download')).toBe('statement.xlsx')
+    expect(createdAnchor?.href).toContain('/api/auth/expenses/DOC-001/attachments/ATT-002/content?disposition=attachment&token=token-001')
+
+    createElementSpy.mockRestore()
+  })
+
+  it('renders legacy string attachments without action buttons', () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        documentCode: 'DOC-001',
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createAttachmentBlock('attachments')
+          ]
+        },
+        formData: {
+          attachments: ['legacy-only.zip']
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('legacy-only.zip')
+    expect(wrapper.find('[data-testid="readonly-attachment-preview-button"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="readonly-attachment-download-button"]').exists()).toBe(false)
+  })
+
+  it('keeps invoice attachments out of the generic readonly attachment renderer', () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        documentCode: 'DOC-001',
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createAttachmentBlock('invoiceAttachments', '发票附件')
+          ]
+        },
+        formData: {
+          invoiceAttachments: [
+            {
+              attachmentId: 'INV-001',
+              fileName: 'invoice.pdf',
+              contentType: 'application/pdf',
+              previewUrl: '/api/auth/expenses/attachments/INV-001/content',
+              ocr: {
+                status: 'SUCCESS',
+                invoiceNumber: '26447000000582449336'
+              }
+            }
+          ]
+        }
+      }
+    })
+
+    expect(wrapper.find('[data-testid="readonly-attachment-item"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="invoice-attachment-file-list"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('invoice.pdf')
+    expect(wrapper.text()).not.toContain('attachmentId')
+    expect(wrapper.text()).not.toContain('previewUrl')
+    expect(wrapper.text()).not.toContain('26447000000582449336')
   })
 })

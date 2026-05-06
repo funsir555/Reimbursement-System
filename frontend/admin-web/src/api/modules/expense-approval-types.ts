@@ -4,6 +4,8 @@
 
 import type { MoneyValue } from './core'
 
+import type { EmployeeDepartmentRef } from './system-settings-types'
+
 export interface ExpenseApprovalPendingItem {
   taskId: number
   documentCode: string
@@ -49,6 +51,10 @@ export interface ExpenseActionUserOption {
   userId: number
   name: string
   username?: string
+  deptId?: number
   deptName?: string
+  departments?: EmployeeDepartmentRef[]
   phone?: string
+  email?: string
+  status?: number
 }

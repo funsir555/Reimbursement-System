@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.dto.EmployeeDirectoryOptionVO;
 import com.finex.auth.dto.ProcessFlowConditionFieldVO;
 import com.finex.auth.dto.ProcessFlowConditionGroupDTO;
 import com.finex.auth.dto.ProcessFlowConfigOptionVO;
@@ -29,6 +30,7 @@ import com.finex.auth.mapper.ProcessFlowVersionMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -293,6 +295,15 @@ abstract class AbstractProcessFlowDesignSupport {
                         .eq(User::getStatus, 1)
                         .orderByAsc(User::getId)
         ).stream().map(item -> option(normalizeUserName(item), item.getId())).toList();
+    }
+
+    protected List<EmployeeDirectoryOptionVO> loadEmployeeDirectory() {
+        List<User> users = userMapper.selectList(
+                Wrappers.<User>lambdaQuery()
+                        .eq(User::getStatus, 1)
+                        .orderByAsc(User::getId)
+        );
+        return EmployeeDirectorySupport.buildEmployeeDirectory(users, userMapper, systemDepartmentMapper);
     }
 
     protected List<ProcessFormOptionVO> loadExpenseTypeOptions() {

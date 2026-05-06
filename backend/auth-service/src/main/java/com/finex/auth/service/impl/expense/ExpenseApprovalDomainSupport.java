@@ -17,6 +17,7 @@ import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
 import com.finex.auth.dto.ExpenseTaskAddSignDTO;
 import com.finex.auth.dto.ExpenseTaskTransferDTO;
+import com.finex.auth.dto.EmployeeDepartmentRefVO;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.SystemDepartment;
@@ -25,6 +26,7 @@ import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
 import com.finex.auth.support.UserDepartmentSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -268,14 +270,19 @@ public ExpenseDocumentDetailVO transferTask(Long userId, String username, Long t
         return users.stream()
                 .filter(item -> matchesKeyword(normalizedKeyword, item.getName(), item.getUsername(), item.getPhone(), item.getEmail()))
                 .map(item -> {
-                    ExpenseActionUserOptionVO option = new ExpenseActionUserOptionVO();
-                    option.setUserId(item.getId());
-                    option.setName(item.getName());
-                    option.setUsername(item.getUsername());
-                    option.setPhone(item.getPhone());
-                    String deptName = UserDepartmentSupport.joinDepartmentNames(
+                    List<EmployeeDepartmentRefVO> departments = new ArrayList<>(
                             departmentsByUserId.getOrDefault(item.getId(), Collections.emptyList())
                     );
+                    ExpenseActionUserOptionVO option = new ExpenseActionUserOptionVO();
+                    option.setUserId(item.getId());
+                    option.setName(EmployeeDirectorySupport.buildEmployeeDirectoryOption(item, departments, departmentNameMap).getName());
+                    option.setUsername(item.getUsername());
+                    option.setPhone(item.getPhone());
+                    option.setEmail(item.getEmail());
+                    option.setStatus(item.getStatus());
+                    option.setDeptId(item.getDeptId() != null ? item.getDeptId() : UserDepartmentSupport.resolvePrimaryDepartmentId(departments));
+                    option.setDepartments(departments);
+                    String deptName = UserDepartmentSupport.joinDepartmentNames(departments);
                     option.setDeptName(
                             trimToNull(deptName) == null && item.getDeptId() != null
                                     ? departmentNameMap.get(item.getDeptId())

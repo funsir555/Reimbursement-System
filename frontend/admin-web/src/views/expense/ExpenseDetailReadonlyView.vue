@@ -43,6 +43,7 @@
 
           <ExpenseFormReadonlyRenderer
             v-if="detail"
+            :document-code="documentCode"
             :schema="detail.schemaSnapshot"
             :form-data="detail.formData"
             :company-options="companyOptions"

@@ -117,6 +117,16 @@ public interface ExpenseDocumentService {
     ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView);
 
     /**
+     * 加载单据作用域内的通用附件。
+     */
+    ExpenseAttachmentService.StoredExpenseAttachment loadDocumentAttachment(
+            Long userId,
+            String documentCode,
+            String attachmentId,
+            boolean allowCrossView
+    );
+
+    /**
      * 获取单据Picker。
      */
     ExpenseDocumentPickerVO getDocumentPicker(

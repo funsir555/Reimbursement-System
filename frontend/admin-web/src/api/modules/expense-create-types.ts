@@ -7,6 +7,7 @@ import type { ProcessCustomArchiveDetail } from './process-archive-types'
 import type { ProcessFlowNode, ProcessFlowRoute } from './process-flow-types'
 import type { ProcessFormDesignSchema } from './process-form-types'
 import type { ProcessFormOption } from './process-template-types'
+import type { EmployeeDirectoryEntry } from './system-settings-types'
 
 export interface ExpenseCreateTemplateSummary {
   templateCode: string
@@ -98,6 +99,7 @@ export interface ExpenseCreateTemplateDetail {
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
   userOptions: ProcessFormOption[]
+  employeeDirectory: EmployeeDirectoryEntry[]
   currentUserCompanyId?: string
   currentUserCompanyName?: string
   currentUserDeptId?: string

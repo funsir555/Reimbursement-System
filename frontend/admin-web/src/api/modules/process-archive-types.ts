@@ -3,6 +3,7 @@
 // 如果改错，最容易影响列表、表单和接口联调。
 
 import type { ProcessFormOption } from './process-template-types'
+import type { EmployeeDirectoryEntry } from './system-settings-types'
 
 export interface ProcessCustomArchiveRule {
   id?: number
@@ -78,6 +79,7 @@ export interface ProcessCustomArchiveMeta {
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
   userOptions: ProcessFormOption[]
+  employeeDirectory: EmployeeDirectoryEntry[]
   expenseTypeOptions: ProcessFormOption[]
   archiveOptions: ProcessFormOption[]
   tagArchiveCode: string

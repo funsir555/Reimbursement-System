@@ -120,6 +120,7 @@ const InputStub = defineComponent({
 })
 
 const SelectStub = defineComponent({
+  inheritAttrs: false,
   props: {
     modelValue: {
       type: [String, Number, Array],
@@ -127,7 +128,7 @@ const SelectStub = defineComponent({
     }
   },
   emits: ['update:modelValue'],
-  template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
+  template: '<select v-bind="$attrs" :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>'
 })
 
 const SwitchStub = defineComponent({
@@ -214,9 +215,14 @@ async function mountView(options?: {
   formDesignError?: Error
   expenseDetailDesignDetail?: Record<string, unknown>
   expenseDetailDesignError?: Error
+  customArchives?: Array<Record<string, unknown>>
+  customArchiveDetails?: Record<number, Record<string, unknown>>
 }) {
   mocks.processApi.getFlowMeta.mockResolvedValue({ data: buildFlowMeta() })
-  mocks.processApi.listCustomArchives.mockResolvedValue({ data: [] })
+  mocks.processApi.listCustomArchives.mockResolvedValue({ data: options?.customArchives || [] })
+  mocks.processApi.getCustomArchiveDetail.mockImplementation(async (id: number) => ({
+    data: options?.customArchiveDetails?.[id] || { id, items: [] }
+  }))
   if (options?.formDesignError) {
     mocks.processApi.getFormDesignDetail.mockRejectedValue(options.formDesignError)
   } else {
@@ -561,6 +567,158 @@ describe('ProcessFormDesignerView', () => {
     expect(optionLabels).toContain('\u4e0d\u8bbe\u7f6e\u9ed8\u8ba4\u4ed8\u6b3e\u516c\u53f8')
     expect(optionLabels).toContain('\u63d0\u5355\u4eba\u6240\u5728\u516c\u53f8')
     expect(optionLabels).toContain('\u5e7f\u5dde\u516c\u53f8')
+  })
+
+  it('shows shared archive default options and persists the selected default value', async () => {
+    mocks.route.name = 'expense-workbench-process-form-edit'
+    mocks.route.params = { id: '8' }
+    mocks.processApi.updateFormDesign.mockResolvedValue({
+      data: buildFormDesignDetail({ id: 8 })
+    })
+
+    const wrapper = await mountView({
+      customArchives: [
+        {
+          id: 101,
+          archiveCode: 'CUSTOM_ARCHIVE_001',
+          archiveName: '项目标签',
+          archiveType: 'SELECT',
+          itemCount: 2,
+          status: 1
+        }
+      ],
+      customArchiveDetails: {
+        101: {
+          id: 101,
+          items: [
+            { itemCode: 'TAG_A', itemName: '标签A' },
+            { itemCode: 'TAG_B', itemName: '标签B' }
+          ]
+        }
+      },
+      formDesignDetail: {
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-shared-field',
+              fieldKey: 'projectTag',
+              label: '项目标签',
+              kind: 'SHARED_FIELD',
+              span: 1,
+              required: false,
+              defaultValue: '',
+              helpText: '',
+              props: {
+                archiveCode: 'CUSTOM_ARCHIVE_001'
+              },
+              permission: {
+                fixedStages: {
+                  DRAFT_BEFORE_SUBMIT: 'EDITABLE',
+                  RESUBMIT_AFTER_RETURN: 'EDITABLE',
+                  IN_APPROVAL: 'READONLY',
+                  ARCHIVED: 'READONLY'
+                },
+                sceneOverrides: []
+              }
+            }
+          ]
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('默认选项')
+    const optionLabels = wrapper.findAll('el-option-stub').map((item) => item.attributes('label'))
+    expect(optionLabels).toContain('不设置默认选项')
+    expect(optionLabels).toContain('标签A')
+    expect(optionLabels).toContain('标签B')
+
+    wrapper.getComponent('[data-testid="shared-field-default-select"]').vm.$emit('update:modelValue', 'TAG_B')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text().includes('保存表单设计'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFormDesign).toHaveBeenCalledWith(8, expect.objectContaining({
+      schema: expect.objectContaining({
+        blocks: [
+          expect.objectContaining({
+            blockId: 'block-shared-field',
+            defaultValue: 'TAG_B'
+          })
+        ]
+      })
+    }))
+  })
+
+  it('clears stale shared archive default values that are no longer in archive options before saving', async () => {
+    mocks.route.name = 'expense-workbench-process-form-edit'
+    mocks.route.params = { id: '8' }
+    mocks.processApi.updateFormDesign.mockResolvedValue({
+      data: buildFormDesignDetail({ id: 8 })
+    })
+
+    const wrapper = await mountView({
+      customArchives: [
+        {
+          id: 101,
+          archiveCode: 'CUSTOM_ARCHIVE_001',
+          archiveName: '项目标签',
+          archiveType: 'SELECT',
+          itemCount: 2,
+          status: 1
+        }
+      ],
+      customArchiveDetails: {
+        101: {
+          id: 101,
+          items: [
+            { itemCode: 'TAG_A', itemName: '标签A' },
+            { itemCode: 'TAG_B', itemName: '标签B' }
+          ]
+        }
+      },
+      formDesignDetail: {
+        schema: {
+          blocks: [
+            {
+              blockId: 'block-shared-field',
+              fieldKey: 'projectTag',
+              label: '项目标签',
+              kind: 'SHARED_FIELD',
+              span: 1,
+              required: false,
+              defaultValue: 'STALE_TAG',
+              helpText: '',
+              props: {
+                archiveCode: 'CUSTOM_ARCHIVE_001'
+              },
+              permission: {
+                fixedStages: {
+                  DRAFT_BEFORE_SUBMIT: 'EDITABLE',
+                  RESUBMIT_AFTER_RETURN: 'EDITABLE',
+                  IN_APPROVAL: 'READONLY',
+                  ARCHIVED: 'READONLY'
+                },
+                sceneOverrides: []
+              }
+            }
+          ]
+        }
+      }
+    })
+
+    await wrapper.findAll('button').find((item) => item.text().includes('保存表单设计'))!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.processApi.updateFormDesign).toHaveBeenCalledWith(8, expect.objectContaining({
+      schema: expect.objectContaining({
+        blocks: [
+          expect.objectContaining({
+            blockId: 'block-shared-field',
+            defaultValue: ''
+          })
+        ]
+      })
+    }))
   })
 
   it('renders required expense detail business blocks with the protected dashed state and blocks delete button removal', async () => {

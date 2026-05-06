@@ -36,6 +36,7 @@ import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.dto.ExpenseTaskAddSignDTO;
 import com.finex.auth.dto.ExpenseTaskTransferDTO;
+import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.auth.service.impl.expense.ExpenseRelationWriteOffService;
 import lombok.RequiredArgsConstructor;
@@ -190,6 +191,16 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     @Override
     public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         return expenseDocumentQueryService.getExpenseDetail(userId, documentCode, detailNo, allowCrossView);
+    }
+
+    @Override
+    public ExpenseAttachmentService.StoredExpenseAttachment loadDocumentAttachment(
+            Long userId,
+            String documentCode,
+            String attachmentId,
+            boolean allowCrossView
+    ) {
+        return expenseDocumentQueryService.loadDocumentAttachment(userId, documentCode, attachmentId, allowCrossView);
     }
 
     /**

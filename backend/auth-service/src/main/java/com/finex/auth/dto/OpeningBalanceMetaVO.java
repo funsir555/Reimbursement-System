@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import java.util.ArrayList;
 import java.util.List;
 import lombok.Data;
 
@@ -11,6 +12,8 @@ public class OpeningBalanceMetaVO {
     private List<FinanceVoucherOptionVO> departmentOptions;
 
     private List<FinanceVoucherOptionVO> employeeOptions;
+
+    private List<EmployeeDirectoryOptionVO> employeeDirectory = new ArrayList<>();
 
     private List<FinanceVoucherOptionVO> customerOptions;
 

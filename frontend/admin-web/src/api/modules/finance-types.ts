@@ -3,6 +3,7 @@
 // 如果改错，最容易影响列表、表单和接口联调。
 
 import type { MoneyValue } from './core'
+import type { EmployeeDirectoryEntry } from './system-settings-types'
 
 export interface FinanceVoucherOption {
   value: string
@@ -63,6 +64,7 @@ export interface FinanceVoucherMeta {
   companyOptions: FinanceVoucherOption[]
   departmentOptions: FinanceVoucherOption[]
   employeeOptions: FinanceVoucherOption[]
+  employeeDirectory: EmployeeDirectoryEntry[]
   voucherTypeOptions: FinanceVoucherOption[]
   currencyOptions: FinanceVoucherOption[]
   accountOptions: FinanceVoucherOption[]

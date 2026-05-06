@@ -206,20 +206,14 @@
               </el-select>
             </el-form-item>
             <el-form-item label="部门负责人">
-              <el-select
+              <employee-tree-select
                 v-model="departmentConfigForm.leaderUserId"
-                clearable
-                filterable v-bind="globalFilterableSelectProps"
+                :departments="departmentOptions"
+                :employees="employees"
+                value-type="number"
                 class="w-full"
                 :disabled="departmentCoreFieldsReadonly"
-              >
-                <el-option
-                  v-for="item in employeeOptions"
-                  :key="item.userId"
-                  :label="item.label"
-                  :value="item.userId"
-                />
-              </el-select>
+              />
             </el-form-item>
             <el-form-item label="部门编码">
               <el-input :model-value="selectedDepartment.deptCode" disabled />
@@ -285,6 +279,7 @@
 
 <script setup lang="ts">
 import type { DepartmentTreeNode, EmployeeRecord, SyncConnectorConfig, SyncJobRecord } from '@/api'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import {
   formatEmployeeDepartmentNames,
   type CompanyOption,
@@ -297,7 +292,6 @@ import {
 } from '../systemSettingsOrganizationTree'
 import SystemSettingsSyncConnectorList from './SystemSettingsSyncConnectorList.vue'
 import SystemSettingsSyncJobTable from './SystemSettingsSyncJobTable.vue'
-import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 
 const props = defineProps<{
@@ -316,8 +310,10 @@ const props = defineProps<{
   selectedDepartment?: DepartmentTreeNode
   selectedDepartmentSyncLocked: boolean
   departmentConfigForm: DepartmentConfigFormState
+  departmentOptions: DepartmentTreeNode[]
   departmentParentOptions: DepartmentTreeNode[]
   companyOptions: CompanyOption[]
+  employees: EmployeeRecord[]
   employeeOptions: EmployeeOption[]
   departmentCoreFieldsReadonly: boolean
   departmentStatEditable: boolean

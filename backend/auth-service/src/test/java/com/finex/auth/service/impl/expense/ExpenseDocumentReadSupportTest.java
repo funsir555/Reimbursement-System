@@ -4,6 +4,7 @@ import com.finex.auth.dto.ExpenseDetailInstanceDTO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.service.ExpenseAttachmentService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -62,6 +63,20 @@ class ExpenseDocumentReadSupportTest {
         assertSame(details, readSupport.loadExpenseDetails("DOC-1"));
         assertSame(detail, readSupport.requireExpenseDetail("DOC-1", "D1"));
         assertSame(runtimeDetail, readSupport.toRuntimeExpenseDetailDTO(detail));
+    }
+
+    @Test
+    void documentAttachmentReadDelegatesToSharedSupport() {
+        ExpenseDocumentReadSupport readSupport = new ExpenseDocumentReadSupport(support, detailViewSupport, expenseRelationWriteOffService);
+        ExpenseAttachmentService.StoredExpenseAttachment attachment = new ExpenseAttachmentService.StoredExpenseAttachment(
+                null,
+                "hotel.pdf",
+                "application/pdf",
+                12L
+        );
+        when(support.loadDocumentAttachment(3L, "DOC-1", "ATT-1", true)).thenReturn(attachment);
+
+        assertSame(attachment, readSupport.loadDocumentAttachment(3L, "DOC-1", "ATT-1", true));
     }
 
     @Test

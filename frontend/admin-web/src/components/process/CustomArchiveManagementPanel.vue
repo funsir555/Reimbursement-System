@@ -279,6 +279,23 @@
                             :placeholder="singleValuePlaceholder(rule)"
                           />
 
+                          <employee-tree-select
+                            v-else-if="isUserField(rule) && isMultipleRule(rule)"
+                            v-model="rule.compareValue"
+                            :departments="optionSources.department"
+                            :employees="meta?.employeeDirectory || []"
+                            multiple
+                            :placeholder="multiValuePlaceholder(rule)"
+                          />
+
+                          <employee-tree-select
+                            v-else-if="isUserField(rule)"
+                            v-model="rule.compareValue"
+                            :departments="optionSources.department"
+                            :employees="meta?.employeeDirectory || []"
+                            :placeholder="singleValuePlaceholder(rule)"
+                          />
+
                           <div
                             v-else-if="rule.operator === 'BETWEEN'"
                             class="grid grid-cols-[minmax(0,1fr),24px,minmax(0,1fr)] items-center gap-2"
@@ -405,6 +422,7 @@ import {
   type ProcessCustomArchiveSummary
 } from '@/api'
 import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 import { PM_NAME_MAX_LENGTH, validateArchiveRuleFieldKey, validateMaxLength } from '@/views/process/pmValidation'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
@@ -744,6 +762,10 @@ function defaultCompareValue(fieldKey: string, operator: string) {
 
 function isDepartmentField(rule: ProcessCustomArchiveRule) {
   return fieldType(rule) === 'department'
+}
+
+function isUserField(rule: ProcessCustomArchiveRule) {
+  return fieldType(rule) === 'user'
 }
 
 function isNumberField(rule: ProcessCustomArchiveRule) {

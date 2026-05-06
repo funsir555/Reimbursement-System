@@ -132,6 +132,7 @@ export function useExpenseDocumentDetailDisplayOwner(
       return null
     }
     return {
+      documentCode: options.detail.value.documentCode || '',
       schema: options.detail.value.formSchemaSnapshot,
       formData: options.detail.value.formData,
       companyOptions: options.detail.value.companyOptions,

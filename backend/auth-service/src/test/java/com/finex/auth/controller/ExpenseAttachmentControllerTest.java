@@ -90,6 +90,36 @@ class ExpenseAttachmentControllerTest {
     }
 
     @Test
+    void uploadAttachmentReturnsReadableMessageWhenFileSizeExceedsLimit() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "invoice.pdf",
+                "application/pdf",
+                "pdf-body".getBytes()
+        );
+
+        doNothing().when(accessControlService).requireAnyPermission(
+                eq(1L),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+        when(expenseAttachmentService.uploadAttachment(any()))
+                .thenThrow(new IllegalArgumentException("文件大小超出 50MB"));
+
+        mockMvc.perform(multipart("/auth/expenses/attachments")
+                        .file(file)
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("文件大小超出 50MB"));
+
+        verify(expenseAttachmentService).uploadAttachment(any());
+    }
+
+    @Test
     void recognizeAttachmentReturnsStructuredOcrResult() throws Exception {
         ExpenseAttachmentOcrResultVO result = new ExpenseAttachmentOcrResultVO();
         result.setStatus("SUCCESS");

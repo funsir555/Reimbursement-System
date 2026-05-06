@@ -1,5 +1,6 @@
 import type { AsyncTaskSubmitResult } from './async-task-types'
 import type { MoneyValue } from './core'
+import type { EmployeeDirectoryEntry } from './system-settings-types'
 
 export interface OpeningBalanceOption {
   value: string
@@ -13,6 +14,7 @@ export interface OpeningBalanceMeta {
   companyOptions: OpeningBalanceOption[]
   departmentOptions: OpeningBalanceOption[]
   employeeOptions: OpeningBalanceOption[]
+  employeeDirectory: EmployeeDirectoryEntry[]
   customerOptions: OpeningBalanceOption[]
   supplierOptions: OpeningBalanceOption[]
   projectClassOptions: OpeningBalanceOption[]
@@ -36,6 +38,8 @@ export interface OpeningBalanceRow {
   hasChildren?: boolean
   editable: boolean
   assistRequired: boolean
+  subjectCategory?: string
+  subjectCategoryLabel?: string
   balanceDirection?: string
   balanceDirectionLabel?: string
   cexchName?: string

@@ -27,6 +27,7 @@ import com.finex.auth.mapper.ProcessDocumentRelationMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.mapper.ProcessDocumentWriteOffMapper;
 import com.finex.auth.mapper.PmBankPaymentRecordMapper;
+import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -157,6 +158,15 @@ public class ExpenseQueryDomainSupport {
      */
     public ExpenseDetailInstanceDetailVO getExpenseDetail(Long userId, String documentCode, String detailNo, boolean allowCrossView) {
         return expenseDocumentReadSupport.getExpenseDetail(userId, documentCode, detailNo, allowCrossView);
+    }
+
+    public ExpenseAttachmentService.StoredExpenseAttachment loadDocumentAttachment(
+            Long userId,
+            String documentCode,
+            String attachmentId,
+            boolean allowCrossView
+    ) {
+        return expenseDocumentReadSupport.loadDocumentAttachment(userId, documentCode, attachmentId, allowCrossView);
     }
 
     /**

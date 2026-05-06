@@ -98,6 +98,15 @@
                   :placeholder="multiValuePlaceholder(condition)"
                 />
 
+                <employee-tree-select
+                  v-else-if="isUserCondition(condition) && isMultiOperator(condition.operator)"
+                  v-model="condition.compareValue"
+                  :departments="conditionValueOptionsByType('department')"
+                  :employees="props.employeeDirectory"
+                  multiple
+                  :placeholder="multiValuePlaceholder(condition)"
+                />
+
                 <el-select
                   v-else-if="isMultiOperator(condition.operator)"
                   v-model="condition.compareValue"
@@ -123,6 +132,14 @@
                   v-else-if="isDepartmentCondition(condition)"
                   v-model="condition.compareValue"
                   :options="conditionValueOptions(condition)"
+                  :placeholder="singleValuePlaceholder(condition)"
+                />
+
+                <employee-tree-select
+                  v-else-if="isUserCondition(condition)"
+                  v-model="condition.compareValue"
+                  :departments="conditionValueOptionsByType('department')"
+                  :employees="props.employeeDirectory"
                   :placeholder="singleValuePlaceholder(condition)"
                 />
 
@@ -174,8 +191,15 @@
 </template>
 
 <script setup lang="ts">
-import type { ProcessFlowCondition, ProcessFlowConditionField, ProcessFlowConditionGroup, ProcessFormOption } from '@/api'
+import type {
+  EmployeeDirectoryEntry,
+  ProcessFlowCondition,
+  ProcessFlowConditionField,
+  ProcessFlowConditionGroup,
+  ProcessFormOption
+} from '@/api'
 import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
@@ -187,6 +211,7 @@ const props = withDefaults(defineProps<{
   fields: ProcessFlowConditionField[]
   operatorOptions: ProcessFormOption[]
   optionSources?: OptionSourceMap
+  employeeDirectory?: EmployeeDirectoryEntry[]
   title?: string
   summary?: string
   addGroupText?: string
@@ -205,6 +230,7 @@ const props = withDefaults(defineProps<{
   }
 }>(), {
   optionSources: () => ({}),
+  employeeDirectory: () => [],
   title: '条件设置',
   summary: '请配置条件组与条件项。',
   addGroupText: '新增条件组',
@@ -288,6 +314,10 @@ function conditionValueOptions(condition: Pick<ProcessFlowCondition, 'fieldKey'>
   return props.optionSources[field.valueType] || []
 }
 
+function conditionValueOptionsByType(valueType: string) {
+  return props.optionSources[valueType] || []
+}
+
 function usesOptionSelect(condition: Pick<ProcessFlowCondition, 'fieldKey'>) {
   return conditionValueOptions(condition).length > 0
 }
@@ -298,6 +328,10 @@ function isNumberCondition(condition: Pick<ProcessFlowCondition, 'fieldKey'>) {
 
 function isDepartmentCondition(condition: Pick<ProcessFlowCondition, 'fieldKey'>) {
   return getField(condition.fieldKey)?.valueType === 'department'
+}
+
+function isUserCondition(condition: Pick<ProcessFlowCondition, 'fieldKey'>) {
+  return getField(condition.fieldKey)?.valueType === 'user'
 }
 
 function singleValuePlaceholder(condition: Pick<ProcessFlowCondition, 'fieldKey'>) {

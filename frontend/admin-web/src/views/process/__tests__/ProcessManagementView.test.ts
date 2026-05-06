@@ -360,7 +360,8 @@ describe('ProcessManagementView', () => {
     })
     expect(mocks.router.push).toHaveBeenNthCalledWith(2, {
       name: 'expense-workbench-process-form-edit',
-      params: { id: 66 }
+      params: { id: 66 },
+      query: { returnTo: '/expense/workbench/process-management' }
     })
     expect(mocks.router.push).toHaveBeenNthCalledWith(3, {
       name: 'expense-workbench-process-expense-detail-edit',
@@ -370,6 +371,7 @@ describe('ProcessManagementView', () => {
 
   it('renders the form-design section and opens create/edit routes', async () => {
     mocks.route.query = { section: 'form-design' }
+    mocks.route.fullPath = '/expense/workbench/process-management?section=form-design'
     const wrapper = await mountView([buildTemplate()], { forms: [buildFormSummary()] })
 
     expect(wrapper.get('[data-testid="process-form-section"]').text()).toContain('增加费用表单')
@@ -385,7 +387,8 @@ describe('ProcessManagementView', () => {
 
     expect(mocks.router.push).toHaveBeenLastCalledWith({
       name: 'expense-workbench-process-form-edit',
-      params: { id: 66 }
+      params: { id: 66 },
+      query: { returnTo: '/expense/workbench/process-management?section=form-design' }
     })
   })
 

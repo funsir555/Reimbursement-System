@@ -122,7 +122,7 @@ vi.mock('element-plus', async () => ({
         default: () => []
       }
     },
-    emits: ['change', 'remove'],
+    emits: ['change', 'remove', 'exceed'],
     template: '<div v-bind="$attrs" data-testid="upload"><slot /><slot name="tip" /></div>'
   },
   ElButton: {
@@ -417,6 +417,15 @@ function validPersonalBankForm() {
     defaultAccount: 0,
     status: 1
   }
+}
+
+function createFileWithSize(name: string, type: string, size: number) {
+  const file = new File(['stub'], name, { type })
+  Object.defineProperty(file, 'size', {
+    configurable: true,
+    value: size
+  })
+  return file
 }
 
 describe('ExpenseRuntimeFormEditor', () => {
@@ -1917,6 +1926,143 @@ describe('ExpenseRuntimeFormEditor', () => {
 
     expect(mocks.expenseCreateApi.uploadAttachment).not.toHaveBeenCalled()
     expect(mocks.elMessage.warning).toHaveBeenCalledWith('发票附件仅支持 PDF、PNG、JPG、JPEG 文件')
+  })
+
+  it('rejects generic attachments that exceed the block size limit before uploading', async () => {
+    const { wrapper, model } = mountEditor({ attachments: [] }, [
+      createControlBlock('attachments', '附件', 'ATTACHMENT', {
+        maxCount: 30,
+        maxSizeMb: 10,
+        accept: ''
+      })
+    ])
+
+    await flushPromises()
+
+    wrapper.findComponent('[data-testid="upload"]').vm.$emit('change', {
+      raw: createFileWithSize('large.zip', 'application/zip', 11 * 1024 * 1024)
+    })
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.uploadAttachment).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('文件大小超出 10MB')
+    expect(model.value.attachments).toEqual([])
+  })
+
+  it('warns immediately when generic attachments exceed the configured count', async () => {
+    const existingAttachment = {
+      attachmentId: 'ATT-EXISTING',
+      fileName: 'existing.pdf'
+    }
+    const { wrapper, model } = mountEditor({ attachments: [existingAttachment] }, [
+      createControlBlock('attachments', '附件', 'ATTACHMENT', {
+        maxCount: 1,
+        maxSizeMb: 10,
+        accept: ''
+      })
+    ])
+
+    await flushPromises()
+
+    wrapper.findComponent('[data-testid="upload"]').vm.$emit('change', {
+      raw: createFileWithSize('second.zip', 'application/zip', 1024)
+    })
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.uploadAttachment).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('文件数量超出 1 个')
+    expect(model.value.attachments).toEqual([existingAttachment])
+  })
+
+  it('warns immediately when el-upload reports generic attachment count exceeded', async () => {
+    const { wrapper, model } = mountEditor({ attachments: [] }, [
+      createControlBlock('attachments', '附件', 'ATTACHMENT', {
+        maxCount: 1,
+        maxSizeMb: 10,
+        accept: ''
+      })
+    ])
+
+    await flushPromises()
+
+    wrapper.findComponent('[data-testid="upload"]').vm.$emit('exceed')
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.uploadAttachment).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('文件数量超出 1 个')
+    expect(model.value.attachments).toEqual([])
+  })
+
+  it('rejects oversized invoice attachments before upload and OCR side effects', async () => {
+    const { wrapper, model } = mountEditor({
+      invoiceAttachments: [],
+      invoiceAmount: '66.00',
+      actualPaymentAmount: '55.00'
+    }, [
+      createControlBlock('invoiceAmount', '发票金额', 'AMOUNT', {
+        systemFieldCode: 'INVOICE_AMOUNT'
+      }),
+      createControlBlock('actualPaymentAmount', '实际支付金额', 'AMOUNT', {
+        systemFieldCode: 'ACTUAL_PAYMENT_AMOUNT'
+      }),
+      createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', {
+        maxCount: 30,
+        maxSizeMb: 10,
+        accept: '.pdf,.png,.jpg,.jpeg'
+      })
+    ])
+
+    await flushPromises()
+
+    wrapper.findComponent('[data-testid="upload"]').vm.$emit('change', {
+      raw: createFileWithSize('invoice.pdf', 'application/pdf', 11 * 1024 * 1024)
+    })
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.uploadAttachment).not.toHaveBeenCalled()
+    expect(mocks.expenseCreateApi.recognizeAttachmentOcr).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('文件大小超出 10MB')
+    expect(model.value.invoiceAttachments).toEqual([])
+    expect(model.value.invoiceAmount).toBe('66.00')
+    expect(model.value.actualPaymentAmount).toBe('55.00')
+  })
+
+  it('rejects invoice attachments that exceed the configured count before upload and OCR side effects', async () => {
+    const existingInvoiceAttachment = {
+      attachmentId: 'ATT-INVOICE-001',
+      fileName: 'invoice-existing.pdf'
+    }
+    const { wrapper, model } = mountEditor({
+      invoiceAttachments: [existingInvoiceAttachment],
+      invoiceAmount: '66.00',
+      actualPaymentAmount: '55.00'
+    }, [
+      createControlBlock('invoiceAmount', '发票金额', 'AMOUNT', {
+        systemFieldCode: 'INVOICE_AMOUNT'
+      }),
+      createControlBlock('actualPaymentAmount', '实际支付金额', 'AMOUNT', {
+        systemFieldCode: 'ACTUAL_PAYMENT_AMOUNT'
+      }),
+      createControlBlock('invoiceAttachments', '发票附件', 'ATTACHMENT', {
+        maxCount: 1,
+        maxSizeMb: 10,
+        accept: '.pdf,.png,.jpg,.jpeg'
+      })
+    ])
+
+    await flushPromises()
+
+    wrapper.findComponent('[data-testid="upload"]').vm.$emit('change', {
+      raw: createFileWithSize('invoice-next.pdf', 'application/pdf', 1024)
+    })
+    await flushPromises()
+
+    expect(mocks.expenseCreateApi.uploadAttachment).not.toHaveBeenCalled()
+    expect(mocks.expenseCreateApi.recognizeAttachmentOcr).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('文件数量超出 1 个')
+    expect(model.value.invoiceAttachments).toEqual([existingInvoiceAttachment])
+    expect(model.value.invoiceAmount).toBe('66.00')
+    expect(model.value.actualPaymentAmount).toBe('55.00')
   })
 
   it('accepts jpeg invoice attachments, uploads them, and merges OCR snapshot', async () => {

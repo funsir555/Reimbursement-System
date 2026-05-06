@@ -6,14 +6,17 @@ import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentNavigationVO;
 import com.finex.auth.dto.ExpenseManualApproverSelectionDTO;
 import com.finex.auth.service.AccessControlService;
+import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.auth.service.impl.expense.ExpenseDocumentPrintOrientation;
 import com.finex.auth.service.impl.expense.ExpenseDocumentPrintService;
+import com.finex.common.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -22,8 +25,10 @@ import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -248,5 +253,86 @@ class ExpenseDocumentQueryControllerTest {
 
         verify(accessControlService).requireAnyPermission(1L, "expense:list:view", "expense:create:create", "expense:create:submit");
         verify(expenseDocumentService).saveDraftDocument(eq(1L), eq("DOC-001"), any());
+    }
+
+    @Test
+    void attachmentContentUsesDocumentScopedAuthorizationAndInlineDisposition() throws Exception {
+        String token = JwtUtil.generateToken(2L, "tester");
+        ByteArrayResource resource = new ByteArrayResource("pdf-bytes".getBytes());
+
+        doNothing().when(accessControlService).requireAnyPermission(
+                2L,
+                "expense:create:view",
+                "expense:create:create",
+                "expense:create:submit",
+                "expense:list:view",
+                "expense:approval:view",
+                "expense:documents:view"
+        );
+        when(accessControlService.getPermissionCodes(2L)).thenReturn(List.of("expense:documents:view"));
+        when(expenseDocumentService.loadDocumentAttachment(2L, "DOC-001", "ATT-001", true))
+                .thenReturn(new ExpenseAttachmentService.StoredExpenseAttachment(
+                        resource,
+                        "hotel.pdf",
+                        "application/pdf",
+                        "pdf-bytes".getBytes().length
+                ));
+
+        mockMvc.perform(get("/auth/expenses/DOC-001/attachments/ATT-001/content")
+                        .param("token", token)
+                        .param("disposition", "inline"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("inline")))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("hotel.pdf")))
+                .andExpect(content().bytes("pdf-bytes".getBytes()));
+
+        verify(expenseDocumentService).loadDocumentAttachment(2L, "DOC-001", "ATT-001", true);
+    }
+
+    @Test
+    void attachmentContentUsesDownloadDispositionForNonPreviewableFiles() throws Exception {
+        String token = JwtUtil.generateToken(2L, "tester");
+        ByteArrayResource resource = new ByteArrayResource("sheet-bytes".getBytes());
+
+        doNothing().when(accessControlService).requireAnyPermission(
+                2L,
+                "expense:create:view",
+                "expense:create:create",
+                "expense:create:submit",
+                "expense:list:view",
+                "expense:approval:view",
+                "expense:documents:view"
+        );
+        when(accessControlService.getPermissionCodes(2L)).thenReturn(List.of("expense:list:view"));
+        when(expenseDocumentService.loadDocumentAttachment(2L, "DOC-001", "ATT-002", false))
+                .thenReturn(new ExpenseAttachmentService.StoredExpenseAttachment(
+                        resource,
+                        "statement.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "sheet-bytes".getBytes().length
+                ));
+
+        mockMvc.perform(get("/auth/expenses/DOC-001/attachments/ATT-002/content")
+                        .param("token", token)
+                        .param("disposition", "attachment"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("attachment")))
+                .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("statement.xlsx")))
+                .andExpect(content().bytes("sheet-bytes".getBytes()));
+
+        verify(expenseDocumentService).loadDocumentAttachment(2L, "DOC-001", "ATT-002", false);
+    }
+
+    @Test
+    void attachmentContentRejectsInvalidToken() throws Exception {
+        mockMvc.perform(get("/auth/expenses/DOC-001/attachments/ATT-001/content")
+                        .param("token", "invalid-token")
+                        .param("disposition", "inline"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401));
+
+        verify(expenseDocumentService, never()).loadDocumentAttachment(any(), any(), any(), anyBoolean());
     }
 }

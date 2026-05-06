@@ -10,6 +10,7 @@ import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.service.ExpenseAttachmentService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -73,6 +74,15 @@ class ExpenseDocumentReadSupport {
 
     ExpenseDetailInstanceDTO toRuntimeExpenseDetailDTO(ProcessDocumentExpenseDetail detail) {
         return support.toRuntimeExpenseDetailDTO(detail);
+    }
+
+    ExpenseAttachmentService.StoredExpenseAttachment loadDocumentAttachment(
+            Long userId,
+            String documentCode,
+            String attachmentId,
+            boolean allowCrossView
+    ) {
+        return support.loadDocumentAttachment(userId, documentCode, attachmentId, allowCrossView);
     }
 
     /**

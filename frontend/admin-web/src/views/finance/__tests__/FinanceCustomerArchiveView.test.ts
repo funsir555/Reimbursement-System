@@ -53,10 +53,14 @@ vi.mock('@/utils/money', () => ({
   formatMoney: (value: string | number) => String(value || '0.00')
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot name="reference" /><slot /><slot name="footer" /></div>'

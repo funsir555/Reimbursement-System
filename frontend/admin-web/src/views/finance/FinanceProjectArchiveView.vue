@@ -151,32 +151,14 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="projectDialogVisible" :title="projectDialogTitle" width="720px" destroy-on-close>
-      <div class="space-y-4">
-        <div class="grid grid-cols-1 gap-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 xl:grid-cols-4">
-          <div><div class="text-xs text-slate-500">所属公司</div><div class="mt-1 font-semibold text-slate-800">{{ currentCompanyName || currentCompanyId || '未选择' }}</div></div>
-          <div><div class="text-xs text-slate-500">启用状态</div><div class="mt-1 font-semibold text-slate-800">{{ projectForm.status === 1 ? '启用' : '停用' }}</div></div>
-          <div><div class="text-xs text-slate-500">封存状态</div><div class="mt-1 font-semibold text-slate-800">{{ projectForm.bclose === 1 ? '已封存' : '未封存' }}</div></div>
-          <div><div class="text-xs text-slate-500">凭证引用</div><div class="mt-1 font-semibold text-slate-800">{{ projectForm.referenced_by_voucher ? '已引用' : '未引用' }}</div></div>
-        </div>
-
-        <el-form label-position="top" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <el-form-item label="项目编码" class="!mb-0"><el-input v-model="projectForm.citemcode" :disabled="projectDialogMode !== 'create'" maxlength="6" placeholder="请输入1-6位数字项目编码" /></el-form-item>
-          <el-form-item label="项目名称" class="!mb-0"><el-input v-model="projectForm.citemname" :disabled="isProjectDetailMode" placeholder="请输入项目名称" /></el-form-item>
-          <el-form-item label="项目分类" class="!mb-0"><el-select v-model="projectForm.citemccode" :disabled="isProjectDetailMode" placeholder="请选择项目分类"><el-option v-for="item in meta.projectClassOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
-          <el-form-item label="其它系统已使用" class="!mb-0"><el-input-number v-model="projectForm.iotherused" :disabled="isProjectDetailMode" :min="0" class="w-full" /></el-form-item>
-          <el-form-item label="结束日期" class="!mb-0">
-            <el-date-picker v-model="projectForm.d_end_date" type="date" value-format="YYYY-MM-DDTHH:mm:ss" format="YYYY-MM-DD" class="w-full" :disabled="isProjectDetailMode" />
-          </el-form-item>
-        </el-form>
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-3">
-          <el-button @click="closeProjectDialog">{{ isProjectDetailMode ? '关闭' : '取消' }}</el-button>
-          <el-button v-if="!isProjectDetailMode" type="primary" :loading="savingProject" @click="saveProject">保存</el-button>
-        </div>
-      </template>
-    </el-dialog>
+    <finance-project-archive-dialog
+      ref="projectDialogRef"
+      :company-id="currentCompanyId"
+      :company-name="currentCompanyName"
+      :project-class-options="meta.projectClassOptions"
+      @saved="handleProjectSaved"
+      @closed="projectDialogVisible = false"
+    />
 
     <el-drawer v-model="cashFlowDrawerVisible" :title="cashFlowDrawerTitle" size="520px" destroy-on-close>
       <el-form label-position="top" class="grid grid-cols-1 gap-4">
@@ -212,6 +194,7 @@ import {
   type FinanceProjectSavePayload,
   type FinanceProjectSummary
 } from '@/api'
+import FinanceProjectArchiveDialog from '@/components/finance/FinanceProjectArchiveDialog.vue'
 import { useLocalPagination } from '@/composables/useLocalPagination'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
@@ -240,12 +223,12 @@ const classDialogVisible = ref(false)
 const projectDialogVisible = ref(false)
 const cashFlowDrawerVisible = ref(false)
 const classDialogMode = ref<ClassDialogMode>('create')
-const projectDialogMode = ref<ProjectDialogMode>('detail')
 const cashFlowDrawerMode = ref<CashFlowDrawerMode>('create')
 const editingProjectClassCode = ref('')
-const editingProjectCode = ref('')
 const editingCashFlowId = ref<number | null>(null)
 const COMPANY_SWITCH_GUARD_KEY = 'finance-project-archive'
+const projectDialogRef = ref<InstanceType<typeof FinanceProjectArchiveDialog> | null>(null)
+const fallbackProjectForm = reactive<FinanceProjectDetail>(createDefaultProjectForm())
 let guardRegistered = false
 
 const cashFlowDirectionOptions = [
@@ -256,7 +239,6 @@ const classFilters = reactive({ keyword: '', status: undefined as number | undef
 const projectFilters = reactive({ keyword: '', projectClassCode: '', status: undefined as number | undefined, bclose: undefined as number | undefined })
 const cashFlowFilters = reactive({ keyword: '', direction: '' as '' | 'INFLOW' | 'OUTFLOW', status: undefined as number | undefined })
 const classForm = reactive<FinanceProjectClassSavePayload>({ project_class_code: '', project_class_name: '' })
-const projectForm = reactive<FinanceProjectDetail>(createDefaultProjectForm())
 const cashFlowForm = reactive<FinanceCashFlowItem>(createDefaultCashFlowForm())
 
 const canCreate = computed(() => hasPermission('finance:archives:projects:create', permissionCodes.value))
@@ -269,9 +251,8 @@ const paginatedProjectClasses = computed(() => classPagination.paginatedRows.val
 const paginatedProjects = computed(() => projectPagination.paginatedRows.value)
 const paginatedCashFlows = computed(() => cashFlowPagination.paginatedRows.value)
 const classDialogTitle = computed(() => (classDialogMode.value === 'create' ? '新建项目分类' : '编辑项目分类'))
-const projectDialogTitle = computed(() => projectDialogMode.value === 'create' ? '新建项目档案' : projectDialogMode.value === 'edit' ? '编辑项目档案' : '项目档案详情')
 const cashFlowDrawerTitle = computed(() => (cashFlowDrawerMode.value === 'create' ? '新增现金流量' : '编辑现金流量'))
-const isProjectDetailMode = computed(() => projectDialogMode.value === 'detail')
+const projectForm = computed(() => projectDialogRef.value?.projectForm || fallbackProjectForm)
 
 onMounted(registerCompanySwitchGuard)
 onActivated(registerCompanySwitchGuard)
@@ -477,58 +458,27 @@ function openProjectDialog(mode: ProjectDialogMode, row?: FinanceProjectSummary)
     ElMessage.warning('当前财务公司缺失，无法维护项目档案')
     return
   }
-  projectDialogMode.value = mode
-  editingProjectCode.value = row?.citemcode || ''
-  if (!row) {
-    Object.assign(projectForm, createDefaultProjectForm())
-    projectDialogVisible.value = true
+  projectDialogVisible.value = true
+  if (mode === 'create') {
+    projectDialogRef.value?.openCreateDialog()
     return
   }
-  void loadProjectDetail(row.citemcode, mode)
-}
-
-async function loadProjectDetail(projectCode: string, mode: ProjectDialogMode) {
-  if (!currentCompanyId.value) return
-  projectDialogMode.value = mode
-  projectDialogVisible.value = true
-  try {
-    const res = await financeArchiveApi.getProjectDetail(currentCompanyId.value, projectCode)
-    Object.assign(projectForm, createDefaultProjectForm(), res.data)
-  } catch (error: unknown) {
-    projectDialogVisible.value = false
-    ElMessage.error(resolveErrorMessage(error, '加载项目档案详情失败'))
+  if (!row?.citemcode) {
+    return
   }
+  if (mode === 'edit') {
+    void projectDialogRef.value?.openEditDialog(row.citemcode)
+    return
+  }
+  void projectDialogRef.value?.openDetailDialog(row.citemcode)
 }
 function closeProjectDialog() {
   projectDialogVisible.value = false
-  editingProjectCode.value = ''
-  Object.assign(projectForm, createDefaultProjectForm())
+  projectDialogRef.value?.closeProjectDialog()
 }
 
 async function saveProject() {
-  if (!currentCompanyId.value) return ElMessage.warning('当前财务公司缺失，无法保存项目档案')
-  if (!String(projectForm.citemcode || '').trim()) return ElMessage.warning('项目编码不能为空')
-  if (!/^\d{1,6}$/.test(String(projectForm.citemcode || '').trim())) return ElMessage.warning('项目编码必须为1-6位数字文本')
-  if (!String(projectForm.citemname || '').trim()) return ElMessage.warning('项目名称不能为空')
-  if (!String(projectForm.citemccode || '').trim()) return ElMessage.warning('项目分类不能为空')
-  if (!/^\d{1,2}$/.test(String(projectForm.citemccode || '').trim())) return ElMessage.warning('项目分类编码必须为1-2位数字文本')
-  savingProject.value = true
-  try {
-    const payload = buildProjectPayload()
-    if (projectDialogMode.value === 'create') {
-      await financeArchiveApi.createProject(currentCompanyId.value, payload)
-      ElMessage.success('项目档案创建成功')
-    } else {
-      await financeArchiveApi.updateProject(currentCompanyId.value, editingProjectCode.value, payload)
-      ElMessage.success('项目档案更新成功')
-    }
-    closeProjectDialog()
-    await loadProjects()
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '保存项目档案失败'))
-  } finally {
-    savingProject.value = false
-  }
+  await projectDialogRef.value?.saveProject()
 }
 
 async function toggleProjectStatus(row: FinanceProjectSummary) {
@@ -582,13 +532,18 @@ function closeCashFlowDrawer() {
 }
 
 function buildProjectPayload(): FinanceProjectSavePayload {
-  return {
-    citemcode: String(projectForm.citemcode || '').trim(),
-    citemname: String(projectForm.citemname || '').trim(),
-    citemccode: String(projectForm.citemccode || '').trim(),
-    iotherused: normalizeNumber(projectForm.iotherused, 0),
-    d_end_date: trimString(projectForm.d_end_date)
+  return projectDialogRef.value?.buildProjectPayload() || {
+    citemcode: String(projectForm.value.citemcode || '').trim(),
+    citemname: String(projectForm.value.citemname || '').trim(),
+    citemccode: String(projectForm.value.citemccode || '').trim(),
+    iotherused: normalizeNumber(projectForm.value.iotherused, 0),
+    d_end_date: trimString(projectForm.value.d_end_date)
   }
+}
+
+async function handleProjectSaved() {
+  projectDialogVisible.value = false
+  await loadProjects()
 }
 
 function buildCashFlowPayload(): FinanceCashFlowSavePayload {

@@ -45,6 +45,7 @@
               departmentConfigForm,
               departmentParentOptions,
               companyOptions,
+              employees,
               employeeOptions,
               departmentCoreFieldsReadonly,
               departmentStatEditable,

@@ -27,6 +27,7 @@ import com.finex.auth.dto.ProcessTemplateFormOptionsVO;
 import com.finex.auth.dto.ProcessTemplateSaveDTO;
 import com.finex.auth.dto.ProcessTemplateSaveResultVO;
 import com.finex.auth.dto.ProcessTemplateTypeVO;
+import com.finex.auth.dto.EmployeeDirectoryOptionVO;
 import com.finex.auth.entity.ProcessCustomArchiveDesign;
 import com.finex.auth.entity.ProcessCustomArchiveItem;
 import com.finex.auth.entity.ProcessCustomArchiveRule;
@@ -46,6 +47,7 @@ import com.finex.auth.mapper.ProcessTemplateCategoryMapper;
 import com.finex.auth.mapper.ProcessTemplateScopeMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
 import com.finex.auth.service.ProcessExpenseDetailDesignService;
 import com.finex.auth.service.ProcessFlowDesignService;
 import com.finex.auth.service.ProcessFormDesignService;
@@ -199,17 +201,27 @@ abstract class AbstractProcessManagementSupport {
      * 闁告梻濮惧ù鍥偨閵婏箑鐓曢梺顐㈩樀閵嗗秹濡?
      */
     protected List<ProcessFormOptionVO> loadUserOptions() {
-        return userMapper.selectList(
+        List<User> users = userMapper.selectList(
                 Wrappers.<User>lambdaQuery()
                         .eq(User::getStatus, 1)
                         .orderByAsc(User::getId)
-        ).stream().map(user -> {
+        );
+        return users.stream().map(user -> {
             String label = trimToNull(user.getName()) != null ? user.getName() : normalize(user.getUsername(), "\u672a\u547d\u540d\u7528\u6237");
             if (trimToNull(user.getUsername()) != null && !Objects.equals(label, user.getUsername())) {
                 label = label + " (" + user.getUsername() + ")";
             }
             return option(label, String.valueOf(user.getId()));
         }).toList();
+    }
+
+    protected List<EmployeeDirectoryOptionVO> loadEmployeeDirectory() {
+        List<User> users = userMapper.selectList(
+                Wrappers.<User>lambdaQuery()
+                        .eq(User::getStatus, 1)
+                        .orderByAsc(User::getId)
+        );
+        return EmployeeDirectorySupport.buildEmployeeDirectory(users, userMapper, systemDepartmentMapper);
     }
 
     /**

@@ -72,6 +72,7 @@ class ExpenseApprovalProjectionSupport {
     private static final String STATUS_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private final ExpenseMatchedFlowTraversalSupport matchedFlowTraversalSupport = new ExpenseMatchedFlowTraversalSupport();
 
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     private final ObjectMapper objectMapper;
@@ -137,54 +138,15 @@ class ExpenseApprovalProjectionSupport {
             String containerKey,
             int startIndex
     ) {
-        List<ProcessFlowNodeDTO> result = new ArrayList<>();
-        List<TraversalFrame> frames = new ArrayList<>();
-        frames.add(new TraversalFrame(FlowRuntimeSnapshot.normalizeContainerKey(containerKey), Math.max(startIndex, 0)));
-        while (!frames.isEmpty()) {
-            TraversalFrame frame = frames.remove(frames.size() - 1);
-            List<ProcessFlowNodeDTO> children = snapshot.children(frame.containerKey());
-            boolean descended = false;
-            for (int index = Math.max(frame.startIndex(), 0); index < children.size(); index++) {
-                ProcessFlowNodeDTO node = children.get(index);
-                String nodeType = defaultText(node.getNodeType(), "");
-                if (NODE_TYPE_BRANCH.equals(nodeType)) {
-                    ProcessFlowRouteDTO matchedRoute = resolveMatchedRoute(instance, snapshot, runtimeContext, routeHitsByBranchNode, node);
-                    if (matchedRoute == null) {
-                        return result;
-                    }
-                    int resumeIndex = resolveContinuationIndex(snapshot, frame.containerKey(), index, node, matchedRoute);
-                    if (resumeIndex < children.size()) {
-                        frames.add(new TraversalFrame(frame.containerKey(), resumeIndex));
-                    }
-                    frames.add(new TraversalFrame(matchedRoute.getRouteKey(), 0));
-                    descended = true;
-                    break;
-                }
-                if (isBusinessNode(nodeType)) {
-                    result.add(node);
-                }
-            }
-            if (!descended) {
-                continue;
-            }
-        }
-        return result;
-    }
-
-    private int resolveContinuationIndex(
-            FlowRuntimeSnapshot snapshot,
-            String containerKey,
-            int branchIndex,
-            ProcessFlowNodeDTO branchNode,
-            ProcessFlowRouteDTO matchedRoute
-    ) {
-        List<ProcessFlowNodeDTO> siblings = snapshot.children(containerKey);
-        boolean hasAttachedRoute = snapshot.routes(branchNode.getNodeKey()).stream()
-                .anyMatch(item -> Boolean.TRUE.equals(item.getAttachBelowNodes()));
-        if (hasAttachedRoute && !Boolean.TRUE.equals(matchedRoute.getAttachBelowNodes())) {
-            return siblings.size();
-        }
-        return branchIndex + 1;
+        return matchedFlowTraversalSupport.collectMatchedPath(
+                        snapshot,
+                        containerKey,
+                        startIndex,
+                        branchNode -> resolveMatchedRoute(instance, snapshot, runtimeContext, routeHitsByBranchNode, branchNode)
+                ).stream()
+                .filter(step -> !step.branch())
+                .map(ExpenseMatchedFlowTraversalSupport.MatchedPathStep::node)
+                .toList();
     }
 
     private ProcessFlowRouteDTO resolveMatchedRoute(
@@ -791,8 +753,6 @@ class ExpenseApprovalProjectionSupport {
             List<ExpenseApprovalNodeStatusVO> approvalNodeStatuses,
             List<ExpenseApprovalTimelineItemVO> approvalTimeline
     ) {}
-
-    private record TraversalFrame(String containerKey, int startIndex) {}
 
     private record LogEntry(ProcessDocumentActionLog log, Map<String, Object> payload) {}
 }

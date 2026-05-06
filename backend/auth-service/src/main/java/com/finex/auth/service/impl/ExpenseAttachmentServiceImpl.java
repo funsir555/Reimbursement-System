@@ -8,6 +8,7 @@ package com.finex.auth.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ExpenseAttachmentVO;
 import com.finex.auth.service.ExpenseAttachmentService;
+import com.finex.auth.support.ExpenseAttachmentLimitSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -42,6 +43,9 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
     @Value("${finex.expense.attachments.storage-path:${user.dir}/storage/expense-attachments}")
     private String storagePath;
 
+    @Value("${finex.expense.attachments.max-file-size-mb:50}")
+    private long maxFileSizeMb = 50L;
+
     /**
      * 上传附件。
      */
@@ -49,6 +53,9 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
     public ExpenseAttachmentVO uploadAttachment(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("请先选择附件");
+        }
+        if (file.getSize() > ExpenseAttachmentLimitSupport.toMaxFileSizeBytes(maxFileSizeMb)) {
+            throw new IllegalArgumentException(ExpenseAttachmentLimitSupport.buildSizeExceededMessage(maxFileSizeMb));
         }
 
         String attachmentId = UUID.randomUUID().toString().replace("-", "");

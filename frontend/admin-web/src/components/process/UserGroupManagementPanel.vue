@@ -118,23 +118,13 @@
 
                 <template v-if="editor.codeLevel === 3">
                   <el-form-item label="用户组成员" class="xl:col-span-2">
-                    <el-select
+                    <employee-tree-select
                       v-model="editor.memberUserIds"
+                      :departments="meta?.departmentOptions || []"
+                      :employees="meta?.employeeDirectory || []"
                       multiple
-                      filterable v-bind="globalFilterableSelectProps"
-                      clearable
-                      collapse-tags
-                      collapse-tags-tooltip
-                      :tag-tooltip="globalCollapseTagTooltipProps"
                       placeholder="请选择用户组成员"
-                    >
-                      <el-option
-                        v-for="item in meta?.userOptions || []"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="String(item.value)"
-                      />
-                    </el-select>
+                    />
                   </el-form-item>
 
                   <el-form-item label="用户组管理范围" class="xl:col-span-2">
@@ -185,6 +175,7 @@
         :fields="meta?.scopeConditionFields || []"
         :operator-options="meta?.scopeOperatorOptions || []"
         :option-sources="scopeOptionSources"
+        :employee-directory="meta?.employeeDirectory || []"
         title="管理范围"
         :summary="scopeDialogSummary"
         group-label-prefix="范围组"
@@ -218,10 +209,9 @@ import {
   type ProcessUserGroupSavePayload,
   type ProcessUserGroupTreeNode
 } from '@/api'
-import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { PM_NAME_MAX_LENGTH, validateMaxLength } from '@/views/process/pmValidation'
 import ProcessConditionGroupEditor from '@/components/process/ProcessConditionGroupEditor.vue'
-import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 
 type UserGroupTreeInstance = {

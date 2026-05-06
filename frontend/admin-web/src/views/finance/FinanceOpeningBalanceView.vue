@@ -1,12 +1,48 @@
 <template>
   <div class="opening-balance-page">
     <section class="ob-toolbar">
-      <div class="ob-toolbar__actions">
-        <el-button type="primary" :loading="toolbarLoading.save" @click="saveAll">保存</el-button>
-        <el-button :loading="toolbarLoading.openBook" @click="runOpenBook">开账</el-button>
-        <el-button :loading="toolbarLoading.carryForward" @click="runCarryForwardPreview">结转</el-button>
-        <el-button :loading="toolbarLoading.trial" @click="runTrial">试算</el-button>
-        <el-button :loading="toolbarLoading.reconcile" @click="runReconcile">对账</el-button>
+      <div class="ob-toolbar__main">
+        <div class="ob-toolbar__actions">
+          <el-button type="primary" :loading="toolbarLoading.save" @click="saveAll">保存</el-button>
+          <el-button :loading="toolbarLoading.openBook" @click="runOpenBook">开账</el-button>
+          <el-button :loading="toolbarLoading.carryForward" @click="runCarryForwardPreview">结转</el-button>
+          <el-button :loading="toolbarLoading.trial" @click="runTrial">试算</el-button>
+          <el-button :loading="toolbarLoading.reconcile" @click="runReconcile">对账</el-button>
+        </div>
+        <div class="ob-toolbar__filter">
+          <el-button :type="filterPanelVisible ? 'primary' : 'default'" @click="filterPanelVisible = !filterPanelVisible">
+            高级筛选
+          </el-button>
+        </div>
+      </div>
+      <div v-if="filterPanelVisible" class="ob-toolbar__panel">
+        <div class="ob-toolbar__panel-grid">
+          <el-select v-model="filterDraft.subjectType" clearable placeholder="科目类型">
+            <el-option label="全部类型" value="" />
+            <el-option label="资产" value="ASSET" />
+            <el-option label="负债" value="LIABILITY" />
+            <el-option label="权益" value="EQUITY" />
+            <el-option label="成本" value="COST" />
+            <el-option label="损益" value="PROFIT" />
+          </el-select>
+          <el-input v-model="filterDraft.subjectCode" clearable placeholder="科目编码" />
+          <el-input v-model="filterDraft.subjectName" clearable placeholder="科目名称" />
+          <el-select v-model="filterDraft.direction" clearable placeholder="方向">
+            <el-option label="全部方向" value="" />
+            <el-option label="借" value="借" />
+            <el-option label="贷" value="贷" />
+          </el-select>
+          <el-select v-model="filterDraft.balance" clearable placeholder="余额">
+            <el-option label="全部余额" value="" />
+            <el-option label="正数余额" value="POSITIVE" />
+            <el-option label="零余额" value="ZERO" />
+            <el-option label="负数余额" value="NEGATIVE" />
+          </el-select>
+        </div>
+        <div class="ob-toolbar__panel-actions">
+          <el-button type="primary" @click="applyFilters">查询</el-button>
+          <el-button @click="resetFilters">重置</el-button>
+        </div>
       </div>
     </section>
 
@@ -28,18 +64,10 @@
           <span>状态</span>
           <strong>{{ meta?.statusLabel || '未开账' }}</strong>
         </div>
-        <div class="ob-chip">
-          <span>末级科目</span>
-          <strong>{{ editableLeafCount }}</strong>
-        </div>
-        <div class="ob-chip">
-          <span>辅助科目</span>
-          <strong>{{ assistLeafCount }}</strong>
-        </div>
-        <div class="ob-chip" :class="saveStatusClass">
-          <span>保存状态</span>
-          <strong>{{ saveStatusText }}</strong>
-          <em class="ob-chip__hint">{{ saveStatusHint }}</em>
+        <div class="ob-summary-card__item ob-summary-card__item--trial" :class="trialSummaryClass">
+          <span>试算结果</span>
+          <strong>{{ trialSummaryText }}</strong>
+          <em class="ob-summary-card__hint">{{ trialSummaryHint }}</em>
         </div>
       </div>
     </section>
@@ -47,11 +75,12 @@
     <section class="ob-table-card">
       <el-table
         v-loading="loading.rows"
-        :data="rows"
+        :data="visibleRows"
         row-key="subjectCode"
         stripe
+        height="100%"
         :expand-row-keys="expandedRowKeys"
-        :tree-props="{ children: 'children' }"
+        :tree-props="{ children: 'visibleChildren' }"
         @expand-change="handleExpandChange"
       >
         <el-table-column prop="subjectCode" label="科目编码" min-width="140" />
@@ -83,6 +112,7 @@
                 >
                   <money-input
                     v-model="row.draftBalance"
+                    allow-negative
                     :disabled="!canEditOpeningBalance"
                     @update:model-value="handleRowDraftChange(row, $event)"
                     @blur="handleRowDraftChange(row, row.draftBalance)"
@@ -96,14 +126,7 @@
       </el-table>
     </section>
 
-    <section v-if="trialResult || reconcileResult" class="ob-result-card">
-      <div v-if="trialResult" class="ob-result-block">
-        <h2>试算结果</h2>
-        <p>
-          借方 {{ moneyText(trialResult.totalDebit) }}，贷方 {{ moneyText(trialResult.totalCredit) }}，差额
-          {{ moneyText(trialResult.difference) }}
-        </p>
-      </div>
+    <section v-if="reconcileResult" class="ob-result-card">
       <div v-if="reconcileResult" class="ob-result-block">
         <h2>对账结果</h2>
         <p>
@@ -130,48 +153,63 @@
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bperson" label="人员" min-width="140">
           <template #default="{ row }">
-            <el-select v-model="row.cpersonId" filterable v-bind="globalFilterableSelectProps" clearable>
-              <el-option v-for="item in meta?.employeeOptions || []" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
+            <employee-tree-select
+              v-model="row.cpersonId"
+              :departments="meta?.departmentOptions || []"
+              :employees="meta?.employeeDirectory || []"
+              label-mode="finance-assist"
+              clearable
+            />
           </template>
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bcus" label="客户" min-width="160">
           <template #default="{ row }">
-            <el-select v-model="row.ccusId" filterable v-bind="globalFilterableSelectProps" clearable>
-              <el-option v-for="item in meta?.customerOptions || []" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
+            <finance-assist-option-select
+              v-model="row.ccusId"
+              :options="meta?.customerOptions || []"
+              addable
+              add-text="增加"
+              @request-add="openOpeningCustomerCreateDialog(row)"
+            />
           </template>
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bsup" label="供应商" min-width="160">
           <template #default="{ row }">
-            <el-select v-model="row.csupId" filterable v-bind="globalFilterableSelectProps" clearable>
-              <el-option v-for="item in meta?.supplierOptions || []" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
+            <finance-assist-option-select
+              v-model="row.csupId"
+              :options="meta?.supplierOptions || []"
+              addable
+              add-text="增加"
+              @request-add="openOpeningSupplierCreateDialog(row)"
+            />
           </template>
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bitem" label="项目分类" min-width="150">
           <template #default="{ row }">
-            <el-select
+            <finance-assist-option-select
               v-model="row.citemClass"
+              :options="projectClassOptionsForRow(row)"
               :disabled="Boolean(activeAssistRow?.cassItem)"
-              filterable v-bind="globalFilterableSelectProps"
-              clearable
               @change="handleAssistProjectClassChange(row)"
-            >
-              <el-option v-for="item in projectClassOptionsForRow(row)" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
+            />
           </template>
         </el-table-column>
         <el-table-column v-if="activeAssistConfig.bitem" label="项目" min-width="170">
           <template #default="{ row }">
-            <el-select v-model="row.citemId" filterable v-bind="globalFilterableSelectProps" clearable>
-              <el-option v-for="item in projectOptionsForRow(row)" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
+            <finance-assist-option-select
+              v-model="row.citemId"
+              :options="projectOptionsForRow(row)"
+              addable
+              add-text="增加"
+              :add-disabled="!resolvedOpeningProjectClassCode(row)"
+              add-disabled-message="请先选择项目分类"
+              @request-add="openOpeningProjectCreateDialog(row)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="余额" min-width="180">
           <template #default="{ row }">
-            <money-input v-model="row.mb" />
+            <money-input v-model="row.mb" allow-negative />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="90" fixed="right">
@@ -185,6 +223,25 @@
         <el-button type="primary" @click="saveAssistDialog">确定</el-button>
       </template>
     </el-dialog>
+    <finance-customer-archive-dialog
+      ref="customerArchiveDialogRef"
+      :company-id="filters.companyId"
+      :company-name="currentCompanyName"
+      @saved="handleOpeningCustomerCreated"
+    />
+    <finance-supplier-archive-dialog
+      ref="supplierArchiveDialogRef"
+      :company-id="filters.companyId"
+      :company-name="currentCompanyName"
+      @saved="handleOpeningSupplierCreated"
+    />
+    <finance-project-archive-dialog
+      ref="projectArchiveDialogRef"
+      :company-id="filters.companyId"
+      :company-name="currentCompanyName"
+      :project-class-options="meta?.projectClassOptions || []"
+      @saved="handleOpeningProjectCreated"
+    />
   </div>
 </template>
 
@@ -202,18 +259,23 @@ import {
   type OpeningBalanceRow,
   type OpeningBalanceTrialResult
 } from '@/api'
+import FinanceAssistOptionSelect from '@/components/finance/FinanceAssistOptionSelect.vue'
+import FinanceCustomerArchiveDialog from '@/components/finance/FinanceCustomerArchiveDialog.vue'
+import FinanceProjectArchiveDialog from '@/components/finance/FinanceProjectArchiveDialog.vue'
+import FinanceSupplierArchiveDialog from '@/components/finance/FinanceSupplierArchiveDialog.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
-import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 
 type OpeningBalanceTableRow = Omit<OpeningBalanceRow, 'children'> & {
   draftBalance: string
   savedBalance: string
   children?: OpeningBalanceTableRow[]
+  visibleChildren?: OpeningBalanceTableRow[]
 }
 
 type AssistDialogLine = OpeningAssistBalanceLine & {
@@ -222,12 +284,23 @@ type AssistDialogLine = OpeningAssistBalanceLine & {
 }
 
 type DraftSource = '' | 'manual' | 'assist' | 'carry-forward'
+type OpeningBalanceFilterState = {
+  subjectType: '' | 'ASSET' | 'LIABILITY' | 'EQUITY' | 'COST' | 'PROFIT'
+  subjectCode: string
+  subjectName: string
+  direction: '' | '借' | '贷'
+  balance: '' | 'POSITIVE' | 'ZERO' | 'NEGATIVE'
+}
 
 type PersistedExpandedMap = Record<string, string[]>
 
 const SWITCH_GUARD_KEY = 'finance-opening-balance-draft-guard'
 const EXPANDED_STORAGE_KEY = 'finance-opening-balance-expanded-keys'
 const OPEN_BOOK_REQUIRED_MESSAGE = '当前期间尚未开账，请先开账'
+const OPENING_BALANCE_MONEY_OPTIONS = Object.freeze({
+  allowNegative: true,
+  fallback: '0.00'
+})
 
 const financeCompany = useFinanceCompanyStore()
 const financePeriod = useFinancePeriodStore()
@@ -250,15 +323,21 @@ const assistDrafts = ref<Record<string, OpeningAssistBalanceLine[]>>({})
 const persistedBalances = ref<Record<string, string>>({})
 const persistedAssistSignatures = ref<Record<string, string>>({})
 const expandedRowKeys = ref<string[]>([])
+const filterPanelVisible = ref(false)
+const filterDraft = reactive(createOpeningBalanceFilters())
+const appliedFilters = ref<OpeningBalanceFilterState>(createOpeningBalanceFilters())
 const draftSource = ref<DraftSource>('')
 const lastSavedAt = ref('')
 const suppressContextWatch = ref(false)
+const customerArchiveDialogRef = ref<InstanceType<typeof FinanceCustomerArchiveDialog> | null>(null)
+const supplierArchiveDialogRef = ref<InstanceType<typeof FinanceSupplierArchiveDialog> | null>(null)
+const projectArchiveDialogRef = ref<InstanceType<typeof FinanceProjectArchiveDialog> | null>(null)
+const activeAssistLineForCreate = ref<AssistDialogLine | null>(null)
 let assistSeed = 0
 
 const currentCompanyName = computed(() => financeCompany.currentCompanyName)
 const flatRows = computed(() => flattenRows(rows.value))
-const editableLeafCount = computed(() => flatRows.value.filter((item) => item.editable).length)
-const assistLeafCount = computed(() => flatRows.value.filter((item) => item.editable && item.assistRequired).length)
+const visibleRows = computed(() => filterOpeningBalanceRows(rows.value, appliedFilters.value))
 const hasUnsavedChanges = computed(() => hasDraftContent())
 const canEditOpeningBalance = computed(() => Boolean(meta.value?.opened))
 const activeAssistConfig = computed(() => ({
@@ -307,6 +386,22 @@ const saveStatusHint = computed(() => {
 const saveStatusClass = computed(() => ({
   'is-dirty': hasUnsavedChanges.value,
   'is-saved': !hasUnsavedChanges.value && Boolean(lastSavedAt.value)
+}))
+const trialSummaryText = computed(() => {
+  if (!trialResult.value) {
+    return '尚未试算'
+  }
+  return trialResult.value.balanced ? '试算平衡' : '试算不平衡'
+})
+const trialSummaryHint = computed(() => {
+  if (!trialResult.value) {
+    return '请在保存后执行试算'
+  }
+  return `借方 ${moneyText(trialResult.value.totalDebit)}，贷方 ${moneyText(trialResult.value.totalCredit)}，差额 ${moneyText(trialResult.value.difference)}`
+})
+const trialSummaryClass = computed(() => ({
+  'is-success': Boolean(trialResult.value?.balanced),
+  'is-warning': Boolean(trialResult.value) && !trialResult.value?.balanced
 }))
 
 watch(
@@ -409,7 +504,7 @@ async function loadRowsFromServer() {
 
 function decorateRows(source: OpeningBalanceRow[], balanceMap: Record<string, string>): OpeningBalanceTableRow[] {
   return source.map((item) => {
-    const currentBalance = normalizeMoneyValue(String(item.mb ?? '0.00'), { fallback: '0.00' })
+    const currentBalance = normalizeOpeningBalanceMoney(item.mb)
     return {
       ...item,
       mb: currentBalance,
@@ -423,7 +518,7 @@ function decorateRows(source: OpeningBalanceRow[], balanceMap: Record<string, st
 function collectPersistedBalances(source: OpeningBalanceRow[]): Record<string, string> {
   const result: Record<string, string> = {}
   for (const row of flattenRows(source)) {
-    result[row.subjectCode] = normalizeMoneyValue(String(row.mb ?? '0.00'), { fallback: '0.00' })
+    result[row.subjectCode] = normalizeOpeningBalanceMoney(row.mb)
   }
   return result
 }
@@ -437,6 +532,79 @@ function flattenRows<T extends { children?: T[] }>(source: T[]): T[] {
     }
   }
   return result
+}
+
+function createOpeningBalanceFilters(): OpeningBalanceFilterState {
+  return {
+    subjectType: '',
+    subjectCode: '',
+    subjectName: '',
+    direction: '',
+    balance: ''
+  }
+}
+
+function applyFilters() {
+  appliedFilters.value = {
+    subjectType: filterDraft.subjectType,
+    subjectCode: filterDraft.subjectCode.trim(),
+    subjectName: filterDraft.subjectName.trim(),
+    direction: filterDraft.direction,
+    balance: filterDraft.balance
+  }
+}
+
+function resetFilters() {
+  Object.assign(filterDraft, createOpeningBalanceFilters())
+  appliedFilters.value = createOpeningBalanceFilters()
+}
+
+function filterOpeningBalanceRows(source: OpeningBalanceTableRow[], filtersState: OpeningBalanceFilterState) {
+  return source.filter((row) => applyOpeningBalanceRowFilter(row, filtersState))
+}
+
+function applyOpeningBalanceRowFilter(row: OpeningBalanceTableRow, filtersState: OpeningBalanceFilterState) {
+  const childMatches = (row.children || []).filter((child) => applyOpeningBalanceRowFilter(child, filtersState))
+  row.visibleChildren = childMatches
+  if (!hasActiveFilters(filtersState)) {
+    row.visibleChildren = row.children || []
+    return true
+  }
+  return matchesOpeningBalanceFilters(row, filtersState) || childMatches.length > 0
+}
+
+function hasActiveFilters(filtersState: OpeningBalanceFilterState) {
+  return Boolean(
+    filtersState.subjectType ||
+      filtersState.subjectCode ||
+      filtersState.subjectName ||
+      filtersState.direction ||
+      filtersState.balance
+  )
+}
+
+function matchesOpeningBalanceFilters(row: OpeningBalanceTableRow, filtersState: OpeningBalanceFilterState) {
+  const subjectCodeMatched = !filtersState.subjectCode || row.subjectCode.includes(filtersState.subjectCode)
+  const subjectNameMatched = !filtersState.subjectName || row.subjectName.includes(filtersState.subjectName)
+  const directionMatched = !filtersState.direction || row.balanceDirectionLabel === filtersState.direction
+  const subjectTypeMatched = !filtersState.subjectType || row.subjectCategory === filtersState.subjectType
+  const balanceMatched = matchesBalanceFilter(row.mb, filtersState.balance)
+
+  return subjectCodeMatched && subjectNameMatched && directionMatched && subjectTypeMatched && balanceMatched
+}
+
+function matchesBalanceFilter(balance: string | number, balanceFilter: OpeningBalanceFilterState['balance']) {
+  const cents = toCents(balance)
+  if (!balanceFilter) {
+    return true
+  }
+  if (balanceFilter === 'POSITIVE') {
+    return cents > 0
+  }
+  if (balanceFilter === 'ZERO') {
+    return cents === 0
+  }
+  return cents < 0
 }
 
 function ensureOpeningBookReady() {
@@ -462,7 +630,7 @@ function handleRowDraftChange(row: OpeningBalanceTableRow, value: string | numbe
   if (!canEditOpeningBalance.value) {
     return
   }
-  const normalized = normalizeMoneyValue(String(value ?? row.draftBalance ?? '0.00'), { fallback: '0.00' })
+  const normalized = normalizeOpeningBalanceMoney(value ?? row.draftBalance)
   row.draftBalance = normalized
   row.mb = normalized
   if (normalized === row.savedBalance) {
@@ -479,6 +647,7 @@ async function openAssistDialog(row: OpeningBalanceTableRow) {
   if (!ensureOpeningBookReady()) {
     return
   }
+  activeAssistLineForCreate.value = null
   activeAssistRow.value = row
   const draftedLines = assistDrafts.value[row.subjectCode]
   if (draftedLines) {
@@ -523,7 +692,7 @@ function toAssistDialogLine(line: Partial<OpeningAssistBalanceLine> = {}): Assis
     csupId: line.csupId || '',
     citemClass: projectClass,
     citemId: line.citemId || '',
-    mb: normalizeMoneyValue(String(line.mb ?? '0.00'), { fallback: '0.00' }),
+    mb: normalizeOpeningBalanceMoney(line.mb),
     mbF: line.mbF,
     nbS: line.nbS
   }
@@ -545,6 +714,55 @@ function projectOptionsForRow(row: AssistDialogLine) {
   return (meta.value?.projectOptions || []).filter((item) => item.parentValue === projectClass)
 }
 
+function resolvedOpeningProjectClassCode(row?: AssistDialogLine | null) {
+  return activeAssistRow.value?.cassItem || row?.citemClass || ''
+}
+
+async function refreshOpeningAssistMeta() {
+  await loadMeta()
+}
+
+function openOpeningCustomerCreateDialog(row: AssistDialogLine) {
+  activeAssistLineForCreate.value = row
+  customerArchiveDialogRef.value?.openCreateDialog()
+}
+
+function openOpeningSupplierCreateDialog(row: AssistDialogLine) {
+  activeAssistLineForCreate.value = row
+  supplierArchiveDialogRef.value?.openCreateDialog()
+}
+
+function openOpeningProjectCreateDialog(row: AssistDialogLine) {
+  activeAssistLineForCreate.value = row
+  projectArchiveDialogRef.value?.openCreateDialog(resolvedOpeningProjectClassCode(row))
+}
+
+async function handleOpeningCustomerCreated(customerCode: string) {
+  await refreshOpeningAssistMeta()
+  if (activeAssistLineForCreate.value) {
+    activeAssistLineForCreate.value.ccusId = customerCode
+  }
+}
+
+async function handleOpeningSupplierCreated(vendorCode: string) {
+  await refreshOpeningAssistMeta()
+  if (activeAssistLineForCreate.value) {
+    activeAssistLineForCreate.value.csupId = vendorCode
+  }
+}
+
+async function handleOpeningProjectCreated(projectCode: string) {
+  await refreshOpeningAssistMeta()
+  if (!activeAssistLineForCreate.value) {
+    return
+  }
+  const projectClassCode = resolvedOpeningProjectClassCode(activeAssistLineForCreate.value)
+  if (projectClassCode) {
+    activeAssistLineForCreate.value.citemClass = projectClassCode
+  }
+  activeAssistLineForCreate.value.citemId = projectCode
+}
+
 function saveAssistDialog() {
   if (!activeAssistRow.value) return
   const subjectCode = activeAssistRow.value.subjectCode
@@ -563,6 +781,7 @@ function saveAssistDialog() {
   activeAssistRow.value.mb = centsToMoney(total)
   activeAssistRow.value.draftBalance = activeAssistRow.value.mb
   assistDialogVisible.value = false
+  activeAssistLineForCreate.value = null
   syncDraftSource()
   recalculateTreeBalances(rows.value)
 }
@@ -576,7 +795,7 @@ function normalizeAssistPayloadLines(source: AssistDialogLine[]) {
       csupId: item.csupId || undefined,
       citemClass: (activeAssistRow.value?.cassItem || item.citemClass) || undefined,
       citemId: item.citemId || undefined,
-      mb: normalizeMoneyValue(item.mb, { fallback: '0.00' })
+      mb: normalizeOpeningBalanceMoney(item.mb)
     }))
     .filter((item) => {
       const amount = toCents(item.mb)
@@ -593,7 +812,7 @@ function buildAssistSignature(source: OpeningAssistBalanceLine[]) {
       csupId: item.csupId || '',
       citemClass: item.citemClass || '',
       citemId: item.citemId || '',
-      mb: normalizeMoneyValue(String(item.mb ?? '0.00'), { fallback: '0.00' })
+      mb: normalizeOpeningBalanceMoney(item.mb)
     }))
     .sort((left, right) =>
       `${left.cdeptId}|${left.cpersonId}|${left.ccusId}|${left.csupId}|${left.citemClass}|${left.citemId}|${left.mb}`.localeCompare(
@@ -697,7 +916,7 @@ function applyCarryForwardPreview(preview: OpeningBalanceCarryForwardPreviewResu
   assistDrafts.value = {}
 
   for (const row of flatRowsFrom(nextRows)) {
-    const currentBalance = normalizeMoneyValue(String(row.mb ?? '0.00'), { fallback: '0.00' })
+    const currentBalance = normalizeOpeningBalanceMoney(row.mb)
     row.draftBalance = currentBalance
     if (row.editable && !row.assistRequired && currentBalance !== row.savedBalance) {
       manualDrafts.value[row.subjectCode] = currentBalance
@@ -707,7 +926,7 @@ function applyCarryForwardPreview(preview: OpeningBalanceCarryForwardPreviewResu
   for (const item of preview.assistLines || []) {
     assistDrafts.value[item.subjectCode] = (item.lines || []).map((line) => ({
       ...line,
-      mb: normalizeMoneyValue(String(line.mb ?? '0.00'), { fallback: '0.00' })
+      mb: normalizeOpeningBalanceMoney(line.mb)
     }))
   }
 
@@ -731,9 +950,11 @@ async function runTrial() {
       iperiod: filters.iperiod
     })
     trialResult.value = res.data
-    ElMessage[res.data.balanced ? 'success' : 'warning'](
-      res.data.balanced ? '期初试算平衡' : `试算不平衡，差额 ${moneyText(res.data.difference)}`
-    )
+    if (res.data.balanced) {
+      ElMessage.success('期初试算平衡')
+      return
+    }
+    ElMessage.warning(`试算不平衡，差额 ${moneyText(res.data.difference)}`)
   } catch (error: unknown) {
     ElMessage.error(error instanceof Error ? error.message : '试算失败')
   } finally {
@@ -786,6 +1007,7 @@ function discardDrafts(resetView = true) {
   assistDrafts.value = {}
   draftSource.value = ''
   activeAssistRow.value = null
+  activeAssistLineForCreate.value = null
   assistLines.value = []
   assistDialogVisible.value = false
   if (!resetView) {
@@ -828,8 +1050,14 @@ function handleBeforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 
-function handleExpandChange(row: OpeningBalanceTableRow, expandedRows: OpeningBalanceTableRow[]) {
-  const isExpanded = Array.isArray(expandedRows) && expandedRows.some((item) => item.subjectCode === row.subjectCode)
+function handleExpandChange(
+  row: OpeningBalanceTableRow,
+  expandedState: boolean | OpeningBalanceTableRow[]
+) {
+  const isExpanded =
+    typeof expandedState === 'boolean'
+      ? expandedState
+      : Array.isArray(expandedState) && expandedState.some((item) => item.subjectCode === row.subjectCode)
   if (isExpanded) {
     if (!expandedRowKeys.value.includes(row.subjectCode)) {
       expandedRowKeys.value = [...expandedRowKeys.value, row.subjectCode]
@@ -848,7 +1076,7 @@ function recalculateTreeBalances(source: OpeningBalanceTableRow[]): void {
 
 function recalculateNodeBalance(row: OpeningBalanceTableRow): number {
   if (!row.children?.length) {
-    row.mb = normalizeMoneyValue(String(row.mb ?? row.draftBalance ?? '0.00'), { fallback: '0.00' })
+    row.mb = normalizeOpeningBalanceMoney(row.mb ?? row.draftBalance)
     return toCents(row.mb)
   }
   const total: number = row.children.reduce((sum, child) => sum + recalculateNodeBalance(child), 0)
@@ -935,6 +1163,10 @@ function persistExpandedRowKeys() {
   writeExpandedRowKeyMap(map)
 }
 
+function normalizeOpeningBalanceMoney(value?: string | number | null) {
+  return normalizeMoneyValue(value, OPENING_BALANCE_MONEY_OPTIONS)
+}
+
 function formatDateTime(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -946,7 +1178,7 @@ function formatDateTime(date: Date) {
 }
 
 function toCents(value?: string | number) {
-  const normalized = normalizeMoneyValue(String(value ?? '0.00'), { fallback: '0.00' })
+  const normalized = normalizeOpeningBalanceMoney(value)
   return Math.round(Number(normalized) * 100)
 }
 
@@ -961,9 +1193,12 @@ function moneyText(value?: string | number) {
 
 <style scoped>
 .opening-balance-page {
+  height: 100%;
   display: flex;
+  min-height: 0;
   flex-direction: column;
   gap: 16px;
+  overflow: hidden;
 }
 
 .ob-toolbar,
@@ -977,16 +1212,46 @@ function moneyText(value?: string | number) {
 }
 
 .ob-toolbar {
+  padding: 8px 12px;
+}
+
+.ob-toolbar__main {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding: 8px 12px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .ob-toolbar__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.ob-toolbar__filter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.ob-toolbar__panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e6eaf2;
+}
+
+.ob-toolbar__panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.ob-toolbar__panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .ob-summary-card {
@@ -1000,8 +1265,7 @@ function moneyText(value?: string | number) {
   gap: 10px;
 }
 
-.ob-summary-card__item,
-.ob-chip {
+.ob-summary-card__item {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1011,38 +1275,48 @@ function moneyText(value?: string | number) {
   border: 1px solid rgba(210, 222, 239, 0.9);
 }
 
-.ob-summary-card__item span,
-.ob-chip span {
+.ob-summary-card__item span {
   color: #6b7280;
   font-size: 12px;
 }
 
-.ob-summary-card__item strong,
-.ob-chip strong {
+.ob-summary-card__item strong {
   color: #111827;
   font-size: 16px;
   font-weight: 700;
 }
 
-.ob-chip__hint {
+.ob-summary-card__hint {
   color: #64748b;
   font-size: 12px;
   font-style: normal;
   line-height: 1.4;
 }
 
-.ob-chip.is-dirty {
-  background: #fff7ed;
-  border-color: #fdba74;
+.ob-summary-card__item--trial {
+  min-height: 88px;
 }
 
-.ob-chip.is-saved {
+.ob-summary-card__item--trial.is-success {
   background: #f0fdf4;
   border-color: #86efac;
 }
 
+.ob-summary-card__item--trial.is-warning {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
 .ob-table-card {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 8px 10px 12px;
+}
+
+.ob-table-card :deep(.el-table) {
+  height: 100%;
 }
 
 .ob-balance-cell {
@@ -1118,8 +1392,22 @@ function moneyText(value?: string | number) {
 }
 
 @media (max-width: 768px) {
+  .ob-toolbar__main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ob-toolbar__filter {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
   .ob-summary-card__main {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+  }
+
+  .ob-toolbar__panel-actions {
+    justify-content: flex-start;
   }
 }
 </style>

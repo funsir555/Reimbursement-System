@@ -12,6 +12,7 @@
 
     <ExpenseFormReadonlyRenderer
       v-if="display"
+      :document-code="display.documentCode"
       :schema="display.schema"
       :form-data="display.formData"
       :company-options="display.companyOptions"
@@ -35,6 +36,7 @@ import type {
 import ExpenseFormReadonlyRenderer from './ExpenseFormReadonlyRenderer.vue'
 
 type ReadonlyFormDisplay = {
+  documentCode: string
   schema: ProcessFormDesignSchema
   formData: Record<string, unknown>
   companyOptions: ProcessFormOption[]

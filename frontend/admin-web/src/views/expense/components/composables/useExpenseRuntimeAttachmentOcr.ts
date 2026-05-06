@@ -16,6 +16,33 @@ const INVOICE_ATTACHMENT_ALLOWED_EXTENSIONS = new Set(['.pdf', '.png', '.jpg', '
 const INVOICE_ATTACHMENT_ALLOWED_MIME_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg'])
 const INVOICE_ATTACHMENT_INVALID_MESSAGE = '发票附件仅支持 PDF、PNG、JPG、JPEG 文件'
 const INVOICE_ATTACHMENT_DEFAULT_ACCEPT = '.pdf,.png,.jpg,.jpeg'
+const DEFAULT_ATTACHMENT_MAX_COUNT = 1
+const DEFAULT_ATTACHMENT_MAX_SIZE_MB = 1
+const BYTES_PER_MB = 1024 * 1024
+
+export function resolveAttachmentMaxCount(block: ProcessFormDesignBlock) {
+  const parsed = Number(block.props.maxCount)
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed
+  }
+  return DEFAULT_ATTACHMENT_MAX_COUNT
+}
+
+export function buildAttachmentCountExceededMessage(block: ProcessFormDesignBlock) {
+  return `文件数量超出 ${resolveAttachmentMaxCount(block)} 个`
+}
+
+export function resolveAttachmentMaxSizeMb(block: ProcessFormDesignBlock) {
+  const parsed = Number(block.props.maxSizeMb)
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed
+  }
+  return DEFAULT_ATTACHMENT_MAX_SIZE_MB
+}
+
+export function buildAttachmentSizeExceededMessage(block: ProcessFormDesignBlock) {
+  return `文件大小超出 ${resolveAttachmentMaxSizeMb(block)}MB`
+}
 
 export function useExpenseRuntimeAttachmentOcr(params: {
   formData: Ref<Record<string, unknown>>
@@ -48,6 +75,17 @@ export function useExpenseRuntimeAttachmentOcr(params: {
       return
     }
 
+    const current = normalizeAttachments(formData.value[block.fieldKey])
+    if (current.length >= resolveAttachmentMaxCount(block)) {
+      ElMessage.warning(buildAttachmentCountExceededMessage(block))
+      return
+    }
+
+    if (uploadFile.raw.size > resolveAttachmentMaxSizeMb(block) * BYTES_PER_MB) {
+      ElMessage.warning(buildAttachmentSizeExceededMessage(block))
+      return
+    }
+
     if (isInvoiceAttachmentBlock(block) && !isAllowedInvoiceAttachmentFile(uploadFile.raw)) {
       ElMessage.warning(INVOICE_ATTACHMENT_INVALID_MESSAGE)
       return
@@ -61,13 +99,16 @@ export function useExpenseRuntimeAttachmentOcr(params: {
           ? await resolveAttachmentOcrSnapshot(uploadRes.data)
           : undefined
       )
-      const current = normalizeAttachments(formData.value[block.fieldKey])
       const nextAttachments = [...current, uploadedAttachment]
       formData.value[block.fieldKey] = nextAttachments
       syncInvoiceAmountFromAttachments(block, current, nextAttachments)
     } catch (error: unknown) {
       ElMessage.error(resolveErrorMessage(error, '附件上传失败'))
     }
+  }
+
+  function handleFileExceed(block: ProcessFormDesignBlock) {
+    ElMessage.warning(buildAttachmentCountExceededMessage(block))
   }
 
   function handleFileRemove(block: ProcessFormDesignBlock, uploadFile: UploadFile) {
@@ -264,6 +305,7 @@ export function useExpenseRuntimeAttachmentOcr(params: {
     uploadFileList,
     uploadAccept,
     handleFileChange,
+    handleFileExceed,
     handleFileRemove
   }
 }

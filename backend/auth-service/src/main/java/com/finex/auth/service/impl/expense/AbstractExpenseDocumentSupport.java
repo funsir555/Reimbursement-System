@@ -32,6 +32,7 @@ import com.finex.auth.dto.ExpensePaymentOrderVO;
 import com.finex.auth.dto.ExpenseDocumentReminderDTO;
 import com.finex.auth.dto.ExpenseTaskAddSignDTO;
 import com.finex.auth.dto.ExpenseTaskTransferDTO;
+import com.finex.auth.dto.EmployeeDirectoryOptionVO;
 import com.finex.auth.dto.ProcessCustomArchiveDetailVO;
 import com.finex.auth.dto.ProcessCustomArchiveItemDTO;
 import com.finex.auth.dto.ProcessCustomArchiveRuleDTO;
@@ -90,6 +91,7 @@ import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
 import com.finex.auth.support.UserDepartmentSupport;
 import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.FinanceVendorService;
@@ -116,6 +118,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -157,6 +161,10 @@ class AbstractExpenseDocumentSupport {
     private static final String FIELD_PENDING_WRITE_OFF_AMOUNT = ExpenseDetailSystemFieldSupport.FIELD_PENDING_WRITE_OFF_AMOUNT;
     private static final String RELATED_DOCUMENT_COMPONENT_CODE = "related-document";
     private static final String WRITEOFF_DOCUMENT_COMPONENT_CODE = "writeoff-document";
+    private static final Pattern LEGACY_ATTACHMENT_CONTENT_URL_PATTERN = Pattern.compile(
+            "(?:^|/)(?:api/)?auth/expenses/attachments/([A-Za-z0-9]{16,64})/content(?:$|[?#])",
+            Pattern.CASE_INSENSITIVE
+    );
     private static final String RELATION_TYPE_RELATED = "RELATED";
     private static final String RELATION_TYPE_WRITEOFF = "WRITEOFF";
     private static final String RELATION_STATUS_ACTIVE = "ACTIVE";
@@ -1922,6 +1930,25 @@ class AbstractExpenseDocumentSupport {
         }
     }
 
+    ExpenseAttachmentService.StoredExpenseAttachment loadDocumentAttachment(
+            Long userId,
+            String documentCode,
+            String attachmentId,
+            boolean allowCrossView
+    ) {
+        ProcessDocumentInstance instance = requireDocument(documentCode);
+        assertCanViewDocument(instance, userId, allowCrossView);
+
+        String normalizedAttachmentId = trimToNull(attachmentId);
+        if (normalizedAttachmentId == null) {
+            throw new IllegalArgumentException("附件标识无效");
+        }
+        if (!containsGenericDocumentAttachment(instance, normalizedAttachmentId)) {
+            throw new IllegalStateException("当前附件不属于该单据");
+        }
+        return expenseAttachmentService.loadAttachment(normalizedAttachmentId);
+    }
+
     LocalDateTime resolveDisplaySubmittedAt(ProcessDocumentInstance instance) {
         if (instance == null) {
             return null;
@@ -1945,6 +1972,88 @@ class AbstractExpenseDocumentSupport {
         if (!Objects.equals(instance.getSubmitterUserId(), userId)) {
             throw new IllegalStateException("\u53ea\u6709\u63d0\u5355\u4eba\u672c\u4eba\u53ef\u4ee5\u64cd\u4f5c\u5f53\u524d\u5355\u636e");
         }
+    }
+
+    private boolean containsGenericDocumentAttachment(ProcessDocumentInstance instance, String attachmentId) {
+        Map<String, Object> documentSchema = readMap(instance.getFormSchemaSnapshotJson());
+        Map<String, Object> documentFormData = readFormData(instance.getFormDataJson());
+        if (containsGenericAttachmentInForm(documentSchema, documentFormData, attachmentId)) {
+            return true;
+        }
+
+        for (ProcessDocumentExpenseDetail detail : loadExpenseDetails(instance.getDocumentCode())) {
+            Map<String, Object> detailSchema = readMap(detail.getSchemaSnapshotJson());
+            Map<String, Object> detailFormData = readFormData(detail.getFormDataJson());
+            if (containsGenericAttachmentInForm(detailSchema, detailFormData, attachmentId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean containsGenericAttachmentInForm(
+            Map<String, Object> schema,
+            Map<String, Object> formData,
+            String attachmentId
+    ) {
+        Object rawBlocks = schema.get("blocks");
+        if (!(rawBlocks instanceof List<?> blocks) || blocks.isEmpty()) {
+            return false;
+        }
+
+        for (Object rawBlock : blocks) {
+            Map<String, Object> block = toObjectMap(rawBlock);
+            if (!Objects.equals(asText(block.get("kind")), "CONTROL")) {
+                continue;
+            }
+            Map<String, Object> props = toObjectMap(block.get("props"));
+            String controlType = trimToNull(asText(props.get("controlType")));
+            if (!Objects.equals(controlType, "ATTACHMENT") && !Objects.equals(controlType, "IMAGE")) {
+                continue;
+            }
+
+            String fieldKey = trimToNull(asText(block.get("fieldKey")));
+            if (fieldKey == null || Objects.equals(fieldKey, FIELD_INVOICE_ATTACHMENTS)) {
+                continue;
+            }
+
+            if (containsAttachmentId(formData.get(fieldKey), attachmentId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsAttachmentId(Object value, String attachmentId) {
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                if (containsAttachmentId(item, attachmentId)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> normalized = toObjectMap(map);
+            return Objects.equals(trimToNull(asText(normalized.get("attachmentId"))), attachmentId)
+                    || Objects.equals(trimToNull(asText(normalized.get("id"))), attachmentId)
+                    || containsAttachmentIdInLegacyUrl(normalized.get("previewUrl"), attachmentId)
+                    || containsAttachmentIdInLegacyUrl(normalized.get("fileUrl"), attachmentId)
+                    || containsAttachmentIdInLegacyUrl(normalized.get("url"), attachmentId);
+        }
+
+        return false;
+    }
+
+    private boolean containsAttachmentIdInLegacyUrl(Object value, String attachmentId) {
+        String url = trimToNull(asText(value));
+        if (url == null) {
+            return false;
+        }
+        Matcher matcher = LEGACY_ATTACHMENT_CONTENT_URL_PATTERN.matcher(url);
+        return matcher.find() && Objects.equals(trimToNull(matcher.group(1)), attachmentId);
     }
 
     private List<String> normalizeStringList(List<String> values) {
@@ -2392,6 +2501,15 @@ class AbstractExpenseDocumentSupport {
             option.setValue(String.valueOf(user.getId()));
             return option;
         }).toList();
+    }
+
+    List<EmployeeDirectoryOptionVO> loadEmployeeDirectory() {
+        List<User> users = userMapper.selectList(
+                Wrappers.<User>lambdaQuery()
+                        .eq(User::getStatus, 1)
+                        .orderByAsc(User::getName, User::getId)
+        );
+        return EmployeeDirectorySupport.buildEmployeeDirectory(users, userMapper, systemDepartmentMapper);
     }
 
     private void putSubmitterDepartmentConditionContext(Map<String, Object> context, User user) {

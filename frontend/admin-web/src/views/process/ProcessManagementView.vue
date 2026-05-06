@@ -755,14 +755,16 @@ const openBoundForm = (template: ProcessTemplateCard) => {
   }
   router.push({
     name: 'expense-workbench-process-form-edit',
-    params: { id: formId }
+    params: { id: formId },
+    query: buildReturnToQuery(route.fullPath)
   })
 }
 
 const openFormDesignEditor = (id: number) => {
   router.push({
     name: 'expense-workbench-process-form-edit',
-    params: { id }
+    params: { id },
+    query: buildReturnToQuery(route.fullPath)
   })
 }
 

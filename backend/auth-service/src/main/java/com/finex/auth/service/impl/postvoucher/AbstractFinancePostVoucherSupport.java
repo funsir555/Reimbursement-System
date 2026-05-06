@@ -26,6 +26,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.AsyncTaskSupport;
+import com.finex.auth.support.FinanceBalanceDirectionSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -851,48 +852,39 @@ abstract class AbstractFinancePostVoucherSupport {
     }
 
     protected void fillEndingAmounts(GlAccsum row, FinanceAccountSubject subject) {
-        row.setCbegindC(resolveBeginDirection(subject));
-        row.setCbegindCEngl(resolveBeginDirectionEn(subject));
+        row.setCbegindC(resolveBeginDirection(row.getMb(), subject));
+        row.setCbegindCEngl(resolveBeginDirectionEn(row.getMb(), subject));
         row.setMe(money(row.getMb()).add(money(row.getMd())).subtract(money(row.getMc())));
         row.setMeF(money(row.getMbF()).add(money(row.getMdF())).subtract(money(row.getMcF())));
         row.setNeS(qty(row.getNbS()).add(qty(row.getNdS())).subtract(qty(row.getNcS())));
         row.setCenddC(resolveEndDirection(row.getMe(), subject));
-        row.setCenddCEngl("借".equals(row.getCenddC()) ? "DEBIT" : "CREDIT");
+        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject == null ? null : subject.getBalanceDirection(), row.getMe()));
     }
 
     protected void fillEndingAmounts(GlAccass row, FinanceAccountSubject subject) {
-        row.setCbegindC(resolveBeginDirection(subject));
-        row.setCbegindCEngl(resolveBeginDirectionEn(subject));
+        row.setCbegindC(resolveBeginDirection(row.getMb(), subject));
+        row.setCbegindCEngl(resolveBeginDirectionEn(row.getMb(), subject));
         row.setMe(money(row.getMb()).add(money(row.getMd())).subtract(money(row.getMc())));
         row.setMeF(money(row.getMbF()).add(money(row.getMdF())).subtract(money(row.getMcF())));
         row.setNeS(qty(row.getNbS()).add(qty(row.getNdS())).subtract(qty(row.getNcS())));
         row.setCenddC(resolveEndDirection(row.getMe(), subject));
-        row.setCenddCEngl("借".equals(row.getCenddC()) ? "DEBIT" : "CREDIT");
+        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject == null ? null : subject.getBalanceDirection(), row.getMe()));
     }
 
-    protected String resolveBeginDirection(FinanceAccountSubject subject) {
-        return isDebitDirection(subject == null ? null : subject.getBalanceDirection()) ? "借" : "贷";
+    protected String resolveBeginDirection(BigDecimal beginningAmount, FinanceAccountSubject subject) {
+        return FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject == null ? null : subject.getBalanceDirection(), beginningAmount);
     }
 
-    protected String resolveBeginDirectionEn(FinanceAccountSubject subject) {
-        return isDebitDirection(subject == null ? null : subject.getBalanceDirection()) ? "DEBIT" : "CREDIT";
+    protected String resolveBeginDirectionEn(BigDecimal beginningAmount, FinanceAccountSubject subject) {
+        return FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject == null ? null : subject.getBalanceDirection(), beginningAmount);
     }
 
     protected String resolveEndDirection(BigDecimal endingAmount, FinanceAccountSubject subject) {
-        boolean debitDirection = isDebitDirection(subject == null ? null : subject.getBalanceDirection());
-        BigDecimal amount = money(endingAmount);
-        if (amount.compareTo(BigDecimal.ZERO) >= 0) {
-            return debitDirection ? "借" : "贷";
-        }
-        return debitDirection ? "贷" : "借";
+        return FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject == null ? null : subject.getBalanceDirection(), endingAmount);
     }
 
     protected boolean isDebitDirection(String balanceDirection) {
-        String normalized = trimToNull(balanceDirection);
-        if (normalized == null) {
-            return true;
-        }
-        return normalized.toUpperCase(Locale.ROOT).contains("DEBIT") || normalized.contains("借");
+        return FinanceBalanceDirectionSupport.isDebitDirection(balanceDirection);
     }
 
     protected int resolveYear(String businessKey) {

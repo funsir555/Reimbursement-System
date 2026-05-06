@@ -139,6 +139,7 @@ abstract class AbstractProcessUserGroupSupport extends AbstractProcessManagement
         meta.setCompanyOptions(loadCompanyOptions());
         meta.setDepartmentOptions(loadDepartmentOptions());
         meta.setUserOptions(loadUserOptions());
+        meta.setEmployeeDirectory(loadEmployeeDirectory());
         return meta;
     }
 

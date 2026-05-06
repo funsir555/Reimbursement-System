@@ -51,6 +51,7 @@ public final class ProcessExpenseTypeLifecycleSupport extends AbstractProcessExp
         ProcessExpenseTypeMetaVO meta = new ProcessExpenseTypeMetaVO();
         meta.setDepartmentOptions(loadDepartmentOptions());
         meta.setUserOptions(loadUserOptions());
+        meta.setEmployeeDirectory(loadEmployeeDirectory());
         meta.setInvoiceFreeOptions(List.of(
                 configOption(EXPENSE_TYPE_INVOICE_FREE, "免票", "默认无需上传发票，且费用自动标记为免票"),
                 configOption(EXPENSE_TYPE_INVOICE_REQUIRED, "不免票", "根据费用表单中发票组件的必填性进行判断")

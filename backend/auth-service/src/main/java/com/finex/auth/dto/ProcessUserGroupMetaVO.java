@@ -17,4 +17,6 @@ public class ProcessUserGroupMetaVO {
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
 
     private List<ProcessFormOptionVO> userOptions = new ArrayList<>();
+
+    private List<EmployeeDirectoryOptionVO> employeeDirectory = new ArrayList<>();
 }

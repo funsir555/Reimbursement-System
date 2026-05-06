@@ -12,6 +12,10 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
+  servlet:
+    multipart:
+      max-file-size: ${FINEX_EXPENSE_ATTACHMENT_MAX_FILE_SIZE:50MB}
+      max-request-size: ${FINEX_EXPENSE_ATTACHMENT_MAX_REQUEST_SIZE:50MB}
 
 mybatis-plus:
   configuration:
@@ -36,6 +40,7 @@ finex:
   expense:
     attachments:
       storage-path: ${FINEX_EXPENSE_ATTACHMENT_STORAGE_PATH:${user.dir}/storage/expense-attachments}
+      max-file-size-mb: ${FINEX_EXPENSE_ATTACHMENT_MAX_FILE_SIZE_MB:50}
     payment:
       receipt-query-cron: ${FINEX_EXPENSE_PAYMENT_RECEIPT_QUERY_CRON:0 0 9 * * *}
       receipt-query-zone: ${FINEX_EXPENSE_PAYMENT_RECEIPT_QUERY_ZONE:Asia/Shanghai}

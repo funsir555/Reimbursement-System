@@ -94,10 +94,11 @@ class ExpenseDocumentEditContextSupport {
         target.setExpenseDetailSchema(source.getExpenseDetailSchema());
         target.setSharedArchives(source.getSharedArchives());
         target.setExpenseDetailSharedArchives(source.getExpenseDetailSharedArchives());
-        target.setCompanyOptions(source.getCompanyOptions());
-        target.setDepartmentOptions(source.getDepartmentOptions());
-        target.setUserOptions(source.getUserOptions());
-        target.setExpenseTypeOptions(source.getExpenseTypeOptions());
+    target.setCompanyOptions(source.getCompanyOptions());
+    target.setDepartmentOptions(source.getDepartmentOptions());
+    target.setUserOptions(source.getUserOptions());
+    target.setEmployeeDirectory(source.getEmployeeDirectory());
+    target.setExpenseTypeOptions(source.getExpenseTypeOptions());
         target.setExpenseTypeInvoiceFreeModeMap(source.getExpenseTypeInvoiceFreeModeMap());
         target.setCurrentUserCompanyId(source.getCurrentUserCompanyId());
         target.setCurrentUserCompanyName(source.getCurrentUserCompanyName());

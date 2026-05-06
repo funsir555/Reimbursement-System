@@ -211,7 +211,7 @@
           <span>使用部门</span>
           <department-tree-select v-model="cardForm.useDeptId" :options="meta?.departmentOptions || []" value-type="number" />
         </label>
-        <label><span>保管人</span><el-select v-model="cardForm.keeperUserId" filterable v-bind="globalFilterableSelectProps" clearable><el-option v-for="item in meta?.employeeOptions || []" :key="item.value" :label="item.label" :value="Number(item.value)" /></el-select></label>
+        <label><span>保管人</span><employee-tree-select v-model="cardForm.keeperUserId" :departments="meta?.departmentOptions || []" :employees="meta?.employeeDirectory || []" value-type="number" clearable /></label>
         <label><span>原值</span><money-input v-model="cardForm.originalAmount" class="full" /></label>
         <label><span>累计折旧</span><money-input v-model="cardForm.accumDeprAmount" class="full" /></label>
         <label><span>净残值</span><money-input v-model="cardForm.salvageAmount" class="full" /></label>
@@ -269,6 +269,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { fixedAssetApi, type FixedAssetCard, type FixedAssetCardPayload, type FixedAssetCategory, type FixedAssetCategoryPayload, type FixedAssetChangeBill, type FixedAssetChangeBillPayload, type FixedAssetChangeLinePayload, type FixedAssetDeprPreviewPayload, type FixedAssetDeprRun, type FixedAssetDisposalBill, type FixedAssetDisposalBillPayload, type FixedAssetDisposalLinePayload, type FixedAssetMeta, type FixedAssetOpeningImportResult, type FixedAssetOpeningImportRow } from '@/api'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'

@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.sql.SQLDataException;
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -236,5 +238,31 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(500, result.getCode());
         assertEquals("\u6a21\u677f\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26", result.getMessage());
+    }
+
+    @Test
+    void handleMaxUploadSizeExceededReturnsReadableBusinessMessage() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+        Result<Void> result = handler.handleMaxUploadSizeExceeded(
+                new MaxUploadSizeExceededException(50L * 1024L * 1024L),
+                new MockHttpServletRequest("POST", "/auth/expenses/attachments")
+        );
+
+        assertEquals(400, result.getCode());
+        assertEquals("文件大小超出 50MB", result.getMessage());
+    }
+
+    @Test
+    void handleMultipartExceptionReturnsReadableBusinessMessageForSizeOverflow() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+        Result<Void> result = handler.handleMultipartException(
+                new MultipartException("Maximum upload size exceeded"),
+                new MockHttpServletRequest("POST", "/auth/expenses/attachments")
+        );
+
+        assertEquals(400, result.getCode());
+        assertEquals("文件大小超出 50MB", result.getMessage());
     }
 }

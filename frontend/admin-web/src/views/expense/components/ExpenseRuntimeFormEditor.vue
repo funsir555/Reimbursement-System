@@ -292,7 +292,7 @@
 
             :multiple="true"
 
-            :limit="Number(block.props.maxCount || 1)"
+            :limit="resolveAttachmentMaxCount(block)"
 
             :show-file-list="true"
 
@@ -301,6 +301,8 @@
             :disabled="isReadOnly(block)"
 
             @change="handleFileChange(block, $event)"
+
+            @exceed="handleFileExceed(block)"
 
             @remove="handleFileRemove(block, $event)"
 
@@ -312,7 +314,7 @@
 
               <div class="mt-2 text-xs text-slate-400">
 
-                最多 {{ Number(block.props.maxCount || 1) }} 个文件，单个不超过 {{ Number(block.props.maxSizeMb || 1) }} MB
+                最多 {{ resolveAttachmentMaxCount(block) }} 个文件，单个不超过 {{ resolveAttachmentMaxSizeMb(block) }} MB
 
               </div>
 
@@ -1048,7 +1050,11 @@ import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import DepartmentTreeSelect from '@/components/inputs/DepartmentTreeSelect.vue'
 import PersonalBankAccountDialog from '@/components/profile/PersonalBankAccountDialog.vue'
 import { globalCollapseTagTooltipProps } from '@/utils/collapseTagTooltip'
-import { useExpenseRuntimeAttachmentOcr } from '@/views/expense/components/composables/useExpenseRuntimeAttachmentOcr'
+import {
+  resolveAttachmentMaxCount,
+  resolveAttachmentMaxSizeMb,
+  useExpenseRuntimeAttachmentOcr
+} from '@/views/expense/components/composables/useExpenseRuntimeAttachmentOcr'
 import { useExpenseRuntimeBlockRuntime } from '@/views/expense/components/composables/useExpenseRuntimeBlockRuntime'
 import { useExpenseRuntimeDocumentPicker } from '@/views/expense/components/composables/useExpenseRuntimeDocumentPicker'
 import { useExpenseRuntimePageUtils } from '@/views/expense/components/composables/useExpenseRuntimePageUtils'
@@ -1239,6 +1245,7 @@ const {
   uploadFileList,
   uploadAccept,
   handleFileChange,
+  handleFileExceed,
   handleFileRemove
 } = useExpenseRuntimeAttachmentOcr({
   formData,

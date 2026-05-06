@@ -3,6 +3,7 @@
 // 如果改错，最容易影响列表、表单和接口联调。
 
 import type { MoneyValue } from './core'
+import type { EmployeeDirectoryEntry } from './system-settings-types'
 
 export interface FixedAssetOption {
   value: string
@@ -17,6 +18,7 @@ export interface FixedAssetMeta {
   companyOptions: FixedAssetOption[]
   departmentOptions: FixedAssetOption[]
   employeeOptions: FixedAssetOption[]
+  employeeDirectory: EmployeeDirectoryEntry[]
   categoryOptions: FixedAssetOption[]
   depreciationMethodOptions: FixedAssetOption[]
   cardStatusOptions: FixedAssetOption[]

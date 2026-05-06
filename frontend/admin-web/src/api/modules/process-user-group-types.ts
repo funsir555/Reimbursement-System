@@ -1,3 +1,4 @@
+import type { EmployeeDirectoryEntry } from './system-settings-types'
 import type { ProcessFlowConditionField, ProcessFlowConditionGroup } from './process-flow-types'
 import type { ProcessFormOption } from './process-template-types'
 
@@ -26,6 +27,7 @@ export interface ProcessUserGroupMeta {
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
   userOptions: ProcessFormOption[]
+  employeeDirectory: EmployeeDirectoryEntry[]
 }
 
 export interface ProcessUserGroupSavePayload {

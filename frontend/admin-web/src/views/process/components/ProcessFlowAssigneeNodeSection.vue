@@ -106,21 +106,15 @@
       class="rounded-[24px] border border-slate-200 bg-slate-50 p-5"
     >
       <el-form-item label="指定成员" class="!mb-0">
-        <el-select
+        <employee-tree-select
           v-model="designatedMemberConfig.userIds"
+          :departments="state.meta.departmentOptions"
+          :employees="state.meta.employeeDirectory"
+          :extra-options="designatedMemberExtraOptions"
           multiple
-          filterable
-          v-bind="globalFilterableSelectProps"
-          clearable
+          value-type="raw"
           placeholder="请选择固定审批成员"
-        >
-          <el-option
-            v-for="item in designatedMemberOptions"
-            :key="item.value"
-            :label="item.label"
-            :value="toDesignatedMemberOptionValue(item.value)"
-          />
-        </el-select>
+        />
       </el-form-item>
     </div>
 
@@ -241,6 +235,7 @@
 <script setup lang="ts">
 import { computed, type PropType } from 'vue'
 import type { ProcessFlowMeta, ProcessFlowNode, ProcessFormOption } from '@/api'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 import {
   buildApprovalDesignatedMemberOptions,
@@ -336,6 +331,13 @@ const legacyApproverTypeLabel = computed(() => {
 })
 
 const designatedMemberOptions = computed(() => buildApprovalDesignatedMemberOptions(props.state.meta.userOptions))
+const designatedMemberExtraOptions = computed(() => designatedMemberOptions.value
+  .filter((item) => String(item.value || '').trim() === 'SUBMITTER')
+  .map((item) => ({
+    label: item.label,
+    value: toDesignatedMemberOptionValue(item.value),
+    groupLabel: '系统内置'
+  })))
 
 const designatedMemberConfig = computed<DesignatedMemberConfig>(() => {
   if (props.state.node.config.designatedMemberConfig) {

@@ -350,7 +350,8 @@ export function useExpenseDocumentDetailActionOwner(
     }
     await router.push({
       name: 'expense-approval-task-modify',
-      params: { taskId: task.id }
+      params: { taskId: task.id },
+      query: options.buildReturnToQuery()
     })
   }
 
@@ -383,6 +384,7 @@ export function useExpenseDocumentDetailActionOwner(
     try {
       const res = await expenseApprovalApi.listActionUsers(keyword)
       userOptions.value = res.data
+      return res.data
     } finally {
       userOptionsLoading.value = false
     }

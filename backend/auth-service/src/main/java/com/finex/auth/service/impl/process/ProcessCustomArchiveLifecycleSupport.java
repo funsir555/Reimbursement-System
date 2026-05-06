@@ -174,6 +174,7 @@ public final class ProcessCustomArchiveLifecycleSupport extends AbstractProcessC
         meta.setCompanyOptions(flowMeta.getCompanyOptions());
         meta.setDepartmentOptions(flowMeta.getDepartmentOptions());
         meta.setUserOptions(flowMeta.getUserOptions());
+        meta.setEmployeeDirectory(flowMeta.getEmployeeDirectory());
         meta.setExpenseTypeOptions(flowMeta.getExpenseTypeOptions());
         meta.setArchiveOptions(flowMeta.getArchiveOptions());
         meta.setTagArchiveCode(DEFAULT_TAG_ARCHIVE_CODE);

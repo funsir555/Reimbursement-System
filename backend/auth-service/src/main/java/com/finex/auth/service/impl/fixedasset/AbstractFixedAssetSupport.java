@@ -67,6 +67,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.EmployeeDirectorySupport;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -203,7 +204,9 @@ public abstract class AbstractFixedAssetSupport {
         FixedAssetMetaVO meta = new FixedAssetMetaVO();
         meta.setCompanyOptions(companies.stream().map(this::toCompanyOption).toList());
         meta.setDepartmentOptions(loadEnabledDepartments(effectiveCompanyId).stream().map(this::toDepartmentOption).toList());
-        meta.setEmployeeOptions(loadEnabledUsers(effectiveCompanyId).stream().map(this::toUserOption).toList());
+        List<User> employees = loadEnabledUsers(effectiveCompanyId);
+        meta.setEmployeeOptions(employees.stream().map(this::toUserOption).toList());
+        meta.setEmployeeDirectory(EmployeeDirectorySupport.buildEmployeeDirectory(employees, userMapper, systemDepartmentMapper));
         meta.setCategoryOptions(listAccessibleCategories(effectiveCompanyId).stream().map(this::toCategoryOption).toList());
         meta.setDepreciationMethodOptions(List.of(
                 option(METHOD_STRAIGHT_LINE, "骞冲潎骞撮檺娉?"),

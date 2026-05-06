@@ -187,7 +187,8 @@ const globalStubs = {
   'el-form-item': SimpleContainer,
   'el-icon': SimpleContainer,
   ExpenseFormReadonlyRenderer: {
-    template: '<div data-testid="readonly-form" />'
+    props: ['documentCode'],
+    template: '<div data-testid="readonly-form" :data-document-code="documentCode" />'
   },
   ExpenseDocumentPrintSheet: {
     props: ['detail', 'expenseDetails'],
@@ -361,6 +362,7 @@ describe('ExpenseDocumentDetailView', () => {
 
     expect(mocks.expenseApi.getExpenseDetail).toHaveBeenCalledTimes(1)
     expect(mocks.expenseApi.getExpenseDetail).toHaveBeenCalledWith('DOC-001', 'D001')
+    expect(wrapper.get('[data-testid="readonly-form"]').attributes('data-document-code')).toBe('DOC-001')
     expect(wrapper.get('[data-testid="expense-invoice-preview-file"]').text()).toContain('hotel.pdf')
     expect(wrapper.find('[data-testid="expense-invoice-preview-pdf"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="expense-invoice-verify-panel"]').text()).toContain('发票验真（预留）')
@@ -382,6 +384,7 @@ describe('ExpenseDocumentDetailView', () => {
     await flushPromises()
 
     expect(mocks.expenseApi.getExpenseDetail).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-testid="readonly-form"]').attributes('data-document-code')).toBe('DOC-001')
     expect(wrapper.get('[data-testid="expense-invoice-preview-file"]').text()).toContain('taxi.png')
     expect(wrapper.find('[data-testid="expense-invoice-preview-image"]').exists()).toBe(true)
   })
@@ -1489,6 +1492,37 @@ describe('ExpenseDocumentDetailView', () => {
     expect(mocks.router.push).toHaveBeenCalledWith({
       path: '/expense/documents/DOC-001/resubmit',
       query: { entry: 'draft' }
+    })
+  })
+
+  it('opens the approval modify page with the inherited returnTo query from the entry page', async () => {
+    mocks.route.query = { returnTo: '/expense/approval?tab=pending' }
+    mocks.expenseApi.getDetail.mockResolvedValue({
+      data: buildDocumentDetail(1880.5, {
+        currentTasks: [
+          {
+            id: 101,
+            documentCode: 'DOC-001',
+            nodeKey: 'finance',
+            nodeName: '财务审批',
+            nodeType: 'APPROVAL',
+            assigneeUserId: 1,
+            assigneeName: '张三'
+          }
+        ]
+      })
+    })
+    mocks.resolveExpenseDetailActions.mockReturnValue([
+      { key: 'modify', label: '修改', primary: true, type: 'primary' }
+    ])
+
+    const wrapper = await mountView()
+    await wrapper.get('.detail-floating-button').trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith({
+      name: 'expense-approval-task-modify',
+      params: { taskId: 101 },
+      query: { returnTo: '/expense/approval?tab=pending' }
     })
   })
 

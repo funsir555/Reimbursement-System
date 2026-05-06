@@ -400,10 +400,29 @@
                     </div>
                   </div>
 
-                  <div v-if="controlType(selectedBlock) === 'ATTACHMENT' || controlType(selectedBlock) === 'IMAGE'" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                    <el-form-item label="数量上限" class="!mb-0"><el-input-number :model-value="numberProp(selectedBlock, 'maxCount', 1)" :min="1" :controls="false" class="w-full" @update:model-value="setSelectedBlockProp('maxCount', $event ?? 1)" /></el-form-item>
-                    <el-form-item label="单文件大小 (MB)" class="!mb-0"><el-input-number :model-value="numberProp(selectedBlock, 'maxSizeMb', 1)" :min="1" :controls="false" class="w-full" @update:model-value="setSelectedBlockProp('maxSizeMb', $event ?? 1)" /></el-form-item>
-                    <el-form-item label="文件类型限制" class="xl:col-span-2 !mb-0"><el-input :model-value="stringProp(selectedBlock, 'accept')" placeholder=".jpg,.png,.pdf" @update:model-value="setSelectedBlockProp('accept', $event)" /></el-form-item>
+                  <div
+                    v-if="controlType(selectedBlock) === 'ATTACHMENT' || controlType(selectedBlock) === 'IMAGE'"
+                    class="grid grid-cols-1 gap-4"
+                  >
+                    <el-form-item label="数量上限" class="attachment-limit-item !mb-0">
+                      <el-input-number
+                        :model-value="numberProp(selectedBlock, 'maxCount', 1)"
+                        :min="1"
+                        :controls="false"
+                        class="attachment-limit-input w-full"
+                        @update:model-value="setSelectedBlockProp('maxCount', $event ?? 1)"
+                      />
+                    </el-form-item>
+                    <el-form-item label="单文件大小 (MB)" class="attachment-limit-item !mb-0">
+                      <el-input-number
+                        :model-value="numberProp(selectedBlock, 'maxSizeMb', 1)"
+                        :min="1"
+                        :controls="false"
+                        class="attachment-limit-input w-full"
+                        @update:model-value="setSelectedBlockProp('maxSizeMb', $event ?? 1)"
+                      />
+                    </el-form-item>
+                    <el-form-item label="文件类型限制" class="!mb-0"><el-input :model-value="stringProp(selectedBlock, 'accept')" placeholder=".jpg,.png,.pdf" @update:model-value="setSelectedBlockProp('accept', $event)" /></el-form-item>
                   </div>
 
                   <el-form-item v-if="controlType(selectedBlock) === 'SECTION'" label="说明内容" class="!mb-0">
@@ -505,6 +524,25 @@
                     <p class="text-base font-semibold text-slate-800">{{ sharedArchiveName(selectedBlock) }}</p>
                     <p class="mt-2 text-sm leading-6 text-slate-500">共享字段采用引用关系保存，schema 中只保留档案编码。</p>
                     <p class="mt-3 text-xs text-slate-400">档案编码：{{ getSharedArchiveCode(selectedBlock) }}</p>
+                    <el-form-item label="默认选项" class="!mb-0 mt-4">
+                      <el-select
+                        data-testid="shared-field-default-select"
+                        :model-value="sharedFieldDefaultValue(selectedBlock)"
+                        class="w-full"
+                        clearable
+                        placeholder="请选择默认选项"
+                        :disabled="isSharedArchiveLoading(selectedBlock) || sharedArchiveLoadFailed(selectedBlock) || !sharedArchiveSelectableItems(selectedBlock).length"
+                        @update:model-value="setSharedFieldDefaultValue"
+                      >
+                        <el-option label="不设置默认选项" value="" />
+                        <el-option
+                          v-for="item in sharedArchiveSelectableItems(selectedBlock)"
+                          :key="`${selectedBlock.blockId}-${sharedArchiveOptionValue(item)}`"
+                          :label="item.itemName || sharedArchiveOptionValue(item)"
+                          :value="sharedArchiveOptionValue(item)"
+                        />
+                      </el-select>
+                    </el-form-item>
                     <div v-if="sharedArchiveItems(selectedBlock).length" class="mt-4 flex flex-wrap gap-2">
                       <span
                         v-for="item in sharedArchiveItems(selectedBlock)"
@@ -926,6 +964,7 @@ async function ensureSharedArchiveDetailsByCodes(archiveCodes: string[]) {
         ...customArchiveDetailMap.value,
         [archiveCode]: res.data
       }
+      syncSharedFieldDefaultValuesByArchiveCode(archiveCode)
       clearArchiveLoadFailed(archiveCode)
     } catch {
       markArchiveLoadFailed(archiveCode)
@@ -1331,12 +1370,82 @@ function sharedArchiveItems(block: ProcessFormDesignBlock) {
   return customArchiveDetailMap.value[archiveCode]?.items || []
 }
 
+function sharedArchiveOptionValue(item: { itemCode?: string | null; itemName?: string | null }) {
+  const itemCode = String(item.itemCode || '').trim()
+  if (itemCode) {
+    return itemCode
+  }
+  return String(item.itemName || '').trim()
+}
+
+function sharedArchiveSelectableItems(block: ProcessFormDesignBlock) {
+  return sharedArchiveItems(block).filter((item) => Boolean(sharedArchiveOptionValue(item)))
+}
+
 function isSharedArchiveLoading(block: ProcessFormDesignBlock) {
   return customArchiveDetailLoadingCodes.value.includes(getSharedArchiveCode(block))
 }
 
 function sharedArchiveLoadFailed(block: ProcessFormDesignBlock) {
   return customArchiveDetailErrorCodes.value.includes(getSharedArchiveCode(block))
+}
+
+function sanitizeSharedFieldDefaultValue(
+  value: unknown,
+  items: Array<{ itemCode?: string | null; itemName?: string | null }>
+) {
+  const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+  if (!normalized) {
+    return ''
+  }
+  const availableValues = new Set(items.map((item) => sharedArchiveOptionValue(item)).filter(Boolean))
+  return availableValues.has(normalized) ? normalized : ''
+}
+
+function syncSharedFieldDefaultValue(block: ProcessFormDesignBlock) {
+  if (block.kind !== 'SHARED_FIELD') {
+    return
+  }
+  const items = sharedArchiveSelectableItems(block)
+  if (!items.length) {
+    if (isSharedArchiveLoading(block) || sharedArchiveLoadFailed(block)) {
+      return
+    }
+    if (stringDefaultValue(block)) {
+      block.defaultValue = ''
+    }
+    return
+  }
+  const nextValue = sanitizeSharedFieldDefaultValue(block.defaultValue, items)
+  if (stringDefaultValue(block) !== nextValue) {
+    block.defaultValue = nextValue
+  }
+}
+
+function syncSharedFieldDefaultValuesByArchiveCode(archiveCode: string) {
+  if (!archiveCode) {
+    return
+  }
+  working.schema.blocks
+    .filter((block) => block.kind === 'SHARED_FIELD' && getSharedArchiveCode(block) === archiveCode)
+    .forEach((block) => syncSharedFieldDefaultValue(block))
+}
+
+function syncSharedFieldDefaultValuesInSchema(schema: ProcessFormDesignSchema) {
+  schema.blocks
+    .filter((block) => block.kind === 'SHARED_FIELD')
+    .forEach((block) => {
+      const archiveDetail = customArchiveDetailMap.value[getSharedArchiveCode(block)]
+      if (!archiveDetail) {
+        return
+      }
+      const items = (archiveDetail.items || []).filter((item) => Boolean(sharedArchiveOptionValue(item)))
+      const nextValue = sanitizeSharedFieldDefaultValue(block.defaultValue, items)
+      if (stringDefaultValue(block) !== nextValue) {
+        block.defaultValue = nextValue
+      }
+    })
+  return schema
 }
 
 function optionItems(block: ProcessFormDesignBlock) {
@@ -1461,6 +1570,17 @@ function stringDefaultValue(block: ProcessFormDesignBlock) {
   return block.defaultValue === undefined || block.defaultValue === null ? '' : String(block.defaultValue)
 }
 
+function sharedFieldDefaultValue(block: ProcessFormDesignBlock) {
+  if (block.kind !== 'SHARED_FIELD') {
+    return ''
+  }
+  const items = sharedArchiveSelectableItems(block)
+  if (!items.length) {
+    return stringDefaultValue(block)
+  }
+  return sanitizeSharedFieldDefaultValue(block.defaultValue, items)
+}
+
 function arrayDefaultValue(block: ProcessFormDesignBlock) {
   return Array.isArray(block.defaultValue) ? block.defaultValue.map((item) => String(item)) : []
 }
@@ -1468,6 +1588,14 @@ function arrayDefaultValue(block: ProcessFormDesignBlock) {
 function setSelectedBlockDefaultValue(value: unknown) {
   if (!selectedBlock.value) return
   selectedBlock.value.defaultValue = value
+}
+
+function setSharedFieldDefaultValue(value: string | number | boolean) {
+  if (!selectedBlock.value || selectedBlock.value.kind !== 'SHARED_FIELD') {
+    return
+  }
+  const items = sharedArchiveSelectableItems(selectedBlock.value)
+  selectedBlock.value.defaultValue = sanitizeSharedFieldDefaultValue(value, items)
 }
 
 function blockKindLabel(block: ProcessFormDesignBlock) {
@@ -1523,6 +1651,7 @@ async function saveFormDesign(mode: 'draft' | 'final' = 'final') {
     working.schema,
     isExpenseDetailDesigner.value ? { detailType: working.detailType || 'NORMAL_REIMBURSEMENT' } : {}
   )
+  syncSharedFieldDefaultValuesInSchema(schema)
   const schemaIssues = validateSchemaFieldKeys(
     schema,
     isExpenseDetailDesigner.value ? '费用明细表单' : '表单设计',
@@ -1682,6 +1811,9 @@ function goBack() {
 .palette-scroll::-webkit-scrollbar { width: 8px; }
 .palette-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(148,163,184,.85); }
 .palette-scroll::-webkit-scrollbar-track { background: rgba(241,245,249,.92); }
+.attachment-limit-item { min-width: 0; }
+:deep(.attachment-limit-input.el-input-number) { width: 100%; }
+:deep(.attachment-limit-input .el-input__inner) { text-align: center; }
 .designer-side-scroll { max-height: calc(100vh - 220px); overflow-y: auto; padding-right: 4px; }
 .process-form-designer-floating-bar { display: flex; justify-content: center; width: 100%; }
 .process-form-designer-floating-bar__inner {

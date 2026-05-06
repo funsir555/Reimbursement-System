@@ -58,10 +58,14 @@ vi.mock('@/utils/permissions', () => ({
   })
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 const SimpleStub = defineComponent({
   template: '<div><slot /><slot name="append" /><slot name="footer" /><slot name="title" /></div>'

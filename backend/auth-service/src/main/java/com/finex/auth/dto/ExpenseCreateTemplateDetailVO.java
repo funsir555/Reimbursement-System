@@ -33,6 +33,7 @@ public class ExpenseCreateTemplateDetailVO {
     private List<ProcessFormOptionVO> companyOptions = new ArrayList<>();
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
     private List<ProcessFormOptionVO> userOptions = new ArrayList<>();
+    private List<EmployeeDirectoryOptionVO> employeeDirectory = new ArrayList<>();
     private List<ProcessFormOptionVO> expenseTypeOptions = new ArrayList<>();
     private Map<String, String> expenseTypeInvoiceFreeModeMap = new LinkedHashMap<>();
     private String currentUserCompanyId;

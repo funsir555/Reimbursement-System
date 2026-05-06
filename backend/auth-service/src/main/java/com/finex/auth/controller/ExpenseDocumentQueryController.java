@@ -17,7 +17,9 @@ import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
 import com.finex.auth.dto.ExpenseSummaryVO;
 import com.finex.auth.service.AccessControlService;
+import com.finex.auth.service.ExpenseAttachmentService;
 import com.finex.auth.service.ExpenseDocumentService;
+import com.finex.common.JwtUtil;
 import com.finex.auth.service.impl.expense.ExpenseDocumentPrintOrientation;
 import com.finex.auth.service.impl.expense.ExpenseDocumentPrintService;
 import com.finex.common.Result;
@@ -25,8 +27,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -136,6 +140,39 @@ public class ExpenseDocumentQueryController {
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
         return Result.success(expenseDocumentService.getExpenseDetail(userId, documentCode, detailNo, allowCrossView));
+    }
+
+    @GetMapping("/{documentCode}/attachments/{attachmentId}/content")
+    public ResponseEntity<?> attachmentContent(
+            @PathVariable String documentCode,
+            @PathVariable String attachmentId,
+            @RequestParam("token") String token,
+            @RequestParam(name = "disposition", required = false) String disposition
+    ) {
+        if (!JwtUtil.verify(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Result.unauthorized("未登录或登录已过期"));
+        }
+
+        Long userId = JwtUtil.getUserId(token);
+        accessControlService.requireAnyPermission(
+                userId,
+                EXPENSE_CREATE_VIEW,
+                EXPENSE_CREATE_CREATE,
+                EXPENSE_CREATE_SUBMIT,
+                EXPENSE_LIST_VIEW,
+                EXPENSE_APPROVAL_VIEW,
+                EXPENSE_DOCUMENTS_VIEW
+        );
+        List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
+
+        ExpenseAttachmentService.StoredExpenseAttachment attachment = expenseDocumentService.loadDocumentAttachment(
+                userId,
+                documentCode,
+                attachmentId,
+                allowCrossView
+        );
+        return buildAttachmentResponse(attachment, resolveAttachmentDisposition(disposition, attachment.fileName()));
     }
 
     // 澶勭悊 documentPicker 璇锋眰銆?
@@ -344,6 +381,33 @@ public class ExpenseDocumentQueryController {
         headers.setContentDisposition(ContentDisposition.inline().filename(result.getFileName(), StandardCharsets.UTF_8).build());
         headers.setCacheControl("no-store");
         return ResponseEntity.ok().headers(headers).body(resource);
+    }
+
+    private ResponseEntity<Resource> buildAttachmentResponse(
+            ExpenseAttachmentService.StoredExpenseAttachment attachment,
+            ContentDisposition disposition
+    ) {
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        try {
+            mediaType = MediaType.parseMediaType(attachment.contentType());
+        } catch (Exception ignored) {
+            // Fallback to octet-stream when the stored content type is invalid.
+        }
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .contentLength(attachment.fileSize())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(attachment.resource());
+    }
+
+    private ContentDisposition resolveAttachmentDisposition(String disposition, String fileName) {
+        String normalized = disposition == null ? "" : disposition.trim().toLowerCase();
+        if ("attachment".equals(normalized)) {
+            return ContentDisposition.attachment().filename(fileName, StandardCharsets.UTF_8).build();
+        }
+        return ContentDisposition.inline().filename(fileName, StandardCharsets.UTF_8).build();
     }
 
 }
