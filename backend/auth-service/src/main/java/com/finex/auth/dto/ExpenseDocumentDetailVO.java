@@ -56,6 +56,8 @@ public class ExpenseDocumentDetailVO {
 
     private List<ProcessFormOptionVO> departmentOptions = new ArrayList<>();
 
+    private List<ProcessCustomArchiveDetailVO> sharedArchives = new ArrayList<>();
+
     private List<ExpenseDetailInstanceSummaryVO> expenseDetails = new ArrayList<>();
 
     private List<ExpenseApprovalTaskVO> currentTasks = new ArrayList<>();

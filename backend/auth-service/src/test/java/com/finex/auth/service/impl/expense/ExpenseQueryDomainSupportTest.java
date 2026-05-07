@@ -194,34 +194,27 @@ class ExpenseQueryDomainSupportTest {
         instance.setStatus("DRAFT");
         ExpenseQueryDomainSupport support = newSupport();
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
-        when(processDocumentActionLogMapper.selectCount(any())).thenReturn(0L);
 
-        assertTrue(support.deleteDraftDocument(1L, "DOC-001"));
+        assertTrue(support.deleteDraftDocument(1L, "DOC-001", false));
 
         verify(expenseDocumentReadSupport).requireSubmitter(instance, 1L);
-        verify(pmBankPaymentRecordMapper).delete(any());
-        verify(processDocumentWriteOffMapper).delete(any());
-        verify(processDocumentRelationMapper).delete(any());
-        verify(processDocumentTaskMapper).delete(any());
-        verify(processDocumentActionLogMapper).delete(any());
-        verify(processDocumentExpenseDetailMapper).delete(any());
-        verify(processDocumentInstanceMapper).deleteById(10L);
+        verify(processDocumentInstanceMapper).update(isNull(), any(com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper.class));
+        assertTrue(Boolean.TRUE.equals(instance.getDeleted()));
+        assertEquals(1L, instance.getDeletedBy());
     }
 
     @Test
-    void deleteDraftDocumentRejectsRecalledDraftsWithHistory() {
+    void deleteDraftDocumentAllowsCrossDeleteForExceptionDocuments() {
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setId(10L);
         instance.setDocumentCode("DOC-001");
-        instance.setSubmitterUserId(1L);
-        instance.setStatus("DRAFT");
+        instance.setSubmitterUserId(2L);
+        instance.setStatus("EXCEPTION");
         ExpenseQueryDomainSupport support = newSupport();
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
-        when(processDocumentActionLogMapper.selectCount(any())).thenReturn(2L);
 
-        IllegalStateException error = assertThrows(IllegalStateException.class, () -> support.deleteDraftDocument(1L, "DOC-001"));
-
-        assertTrue(error.getMessage().contains("已提交过的单据召回后不允许删除"));
+        assertTrue(support.deleteDraftDocument(1L, "DOC-001", true));
+        verify(expenseDocumentReadSupport, never()).requireSubmitter(instance, 1L);
     }
 
     @Test
@@ -234,9 +227,9 @@ class ExpenseQueryDomainSupportTest {
         ExpenseQueryDomainSupport support = newSupport();
         when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
 
-        IllegalStateException error = assertThrows(IllegalStateException.class, () -> support.deleteDraftDocument(1L, "DOC-001"));
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> support.deleteDraftDocument(1L, "DOC-001", false));
 
-        assertTrue(error.getMessage().contains("仅草稿状态单据允许删除"));
+        assertTrue(error.getMessage().contains("仅草稿或流程异常状态单据允许删除"));
     }
 
     private ExpenseQueryDomainSupport newSupport() {

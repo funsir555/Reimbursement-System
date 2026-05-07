@@ -5,6 +5,7 @@ import type {
   ExpenseCreateVendorOption,
   ExpenseDetailInstanceDetail,
   ExpenseDocumentDetail,
+  ProcessCustomArchiveDetail,
   ProcessFormDesignSchema
 } from '@/api'
 import type {
@@ -137,6 +138,7 @@ export function useExpenseDocumentDetailDisplayOwner(
       formData: options.detail.value.formData,
       companyOptions: options.detail.value.companyOptions,
       departmentOptions: options.detail.value.departmentOptions,
+      sharedArchives: options.detail.value.sharedArchives || ([] as ProcessCustomArchiveDetail[]),
       vendorOptionMap: options.vendorOptionMap.value,
       payeeOptionMap: options.payeeOptionMap.value,
       payeeAccountOptionMap: options.payeeAccountOptionMap.value

@@ -213,7 +213,7 @@ public interface ExpenseDocumentService {
     /**
      * 删除草稿单据。
      */
-    boolean deleteDraftDocument(Long userId, String documentCode);
+    boolean deleteDraftDocument(Long userId, String documentCode, boolean allowCrossDelete);
 
     /**
      * 审批通过任务。

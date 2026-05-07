@@ -419,7 +419,7 @@ describe('ExpenseListView', () => {
     })
   })
 
-  it('confirms and deletes draft documents before refreshing the list', async () => {
+  it('confirms and deletes documents before refreshing the list', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {
       handleDelete: (row: { documentCode: string; no: string }) => Promise<void>
@@ -431,7 +431,31 @@ describe('ExpenseListView', () => {
     expect(mocks.elMessageBox.confirm).toHaveBeenCalled()
     expect(mocks.expenseApi.deleteDocument).toHaveBeenCalledWith('DOC-002')
     expect(mocks.expenseApi.list).toHaveBeenCalledTimes(2)
-    expect(mocks.elMessage.success).toHaveBeenCalledWith('草稿已删除')
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('单据已删除')
+  })
+
+  it('allows deleting draft and exception rows but not rejected rows', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      canDeleteDocument: (row: { status?: string; documentStatus?: string; documentStatusLabel?: string; draftDeletable?: boolean }) => boolean
+    }
+
+    expect(vm.canDeleteDocument({
+      status: 'DRAFT',
+      documentStatus: 'DRAFT',
+      documentStatusLabel: '草稿',
+      draftDeletable: true
+    })).toBe(true)
+    expect(vm.canDeleteDocument({
+      status: 'EXCEPTION',
+      documentStatus: 'EXCEPTION',
+      documentStatusLabel: '流程异常'
+    })).toBe(true)
+    expect(vm.canDeleteDocument({
+      status: 'REJECTED',
+      documentStatus: 'REJECTED',
+      documentStatusLabel: '已驳回'
+    })).toBe(false)
   })
 
   it('hides the delete action for recalled drafts that are no longer deletable', async () => {

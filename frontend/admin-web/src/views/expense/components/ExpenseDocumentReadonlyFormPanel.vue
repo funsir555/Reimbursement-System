@@ -17,6 +17,7 @@
       :form-data="display.formData"
       :company-options="display.companyOptions"
       :department-options="display.departmentOptions"
+      :shared-archives="display.sharedArchives"
       :vendor-option-map="display.vendorOptionMap"
       :payee-option-map="display.payeeOptionMap"
       :payee-account-option-map="display.payeeAccountOptionMap"
@@ -30,6 +31,7 @@ import type {
   ExpenseCreatePayeeAccountOption,
   ExpenseCreatePayeeOption,
   ExpenseCreateVendorOption,
+  ProcessCustomArchiveDetail,
   ProcessFormDesignSchema,
   ProcessFormOption
 } from '@/api'
@@ -41,6 +43,7 @@ type ReadonlyFormDisplay = {
   formData: Record<string, unknown>
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
+  sharedArchives: ProcessCustomArchiveDetail[]
   vendorOptionMap: Record<string, ExpenseCreateVendorOption>
   payeeOptionMap: Record<string, ExpenseCreatePayeeOption>
   payeeAccountOptionMap: Record<string, ExpenseCreatePayeeAccountOption>

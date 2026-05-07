@@ -44,6 +44,21 @@ function createAttachmentBlock(fieldKey: string, label = '附件', controlType: 
   }
 }
 
+function createSharedFieldBlock(fieldKey: string, label: string, archiveCode: string) {
+  return {
+    blockId: fieldKey,
+    fieldKey,
+    kind: 'SHARED_FIELD' as const,
+    label,
+    span: 1,
+    required: false,
+    props: {
+      archiveCode
+    },
+    permission: createPermission()
+  }
+}
+
 describe('ExpenseFormReadonlyRenderer', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -316,6 +331,45 @@ describe('ExpenseFormReadonlyRenderer', () => {
 
     expect(wrapper.text()).toContain('上海分公司')
     expect(wrapper.text()).not.toContain('COMPANY-001')
+  })
+
+  it('renders shared archive select fields with item names instead of stored codes', () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createSharedFieldBlock('customArchive', '自定义档案', 'ARCHIVE-CITY')
+          ]
+        },
+        formData: {
+          customArchive: 'GZ'
+        },
+        sharedArchives: [
+          {
+            archiveCode: 'ARCHIVE-CITY',
+            archiveName: '城市档案',
+            archiveType: 'SELECT',
+            items: [
+              {
+                itemCode: 'GZ',
+                itemName: '广州'
+              }
+            ]
+          }
+        ]
+      },
+      global: {
+        stubs: {
+          'el-tag': {
+            template: '<span><slot /></span>'
+          }
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('广州')
+    expect(wrapper.text()).not.toContain('GZ')
   })
 
   it('renders related document cards without falling back to raw json', () => {

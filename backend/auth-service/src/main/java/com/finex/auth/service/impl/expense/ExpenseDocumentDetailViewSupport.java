@@ -70,6 +70,7 @@ class ExpenseDocumentDetailViewSupport {
         detail.setFormSchemaSnapshot(formSchemaSnapshot);
         detail.setFormData(formData);
         detail.setFlowSnapshot(flowSnapshot);
+        detail.setSharedArchives(support.loadSharedArchives(formSchemaSnapshot));
 
         long companyOptionsStartedAt = System.nanoTime();
         List<ProcessFormOptionVO> companyOptions = support.loadCompanyOptionsForDetail(formSchemaSnapshot, formData);

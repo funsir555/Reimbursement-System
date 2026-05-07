@@ -188,9 +188,20 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="120" fixed="right" :resizable="false">
+        <el-table-column label="操作" width="180" fixed="right" :resizable="false">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click.stop="openDetail(row)" @dblclick.stop>查看详情</el-button>
+            <el-button
+              v-if="canDeleteDocument(row)"
+              link
+              type="danger"
+              size="small"
+              :data-testid="`expense-documents-delete-${row.documentCode || row.no}`"
+              @click.stop="handleDelete(row)"
+              @dblclick.stop
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -211,7 +222,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleCheckFilled,
   Clock,
@@ -222,6 +233,7 @@ import {
   WarningFilled
 } from '@element-plus/icons-vue'
 import { asyncTaskApi, expenseApi, type ExpenseSummary } from '@/api'
+import { hasPermission, readStoredUser } from '@/utils/permissions'
 import {
   EXPENSE_WORKBENCH_COLUMN_ORDER_STORAGE_KEYS,
   EXPENSE_WORKBENCH_DEFAULT_COLUMNS,
@@ -257,6 +269,7 @@ const exporting = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const expenseList = ref<ExpenseSummary[]>([])
+const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const filters = ref(createExpenseWorkbenchFilters())
 const showAdvancedFilters = ref(false)
 const route = useRoute()
@@ -283,7 +296,8 @@ const visibleColumns = ref<ExpenseWorkbenchColumnKey[]>(
 const draggingColumnKey = ref<ExpenseWorkbenchColumnKey | ''>('')
 const dropTargetColumnKey = ref<ExpenseWorkbenchColumnKey | ''>('')
 
-const statusOptions = EXPENSE_WORKBENCH_STATUS_OPTIONS.filter((item) => item !== '草稿')
+const statusOptions = EXPENSE_WORKBENCH_STATUS_OPTIONS
+const can = (code: string) => hasPermission(code, permissionCodes.value)
 
 onMounted(async () => {
   await loadExpenseList()
@@ -436,12 +450,55 @@ function openDetail(row: ExpenseSummary) {
   })
 }
 
+function isDraftDocument(row: ExpenseSummary) {
+  return String(row.documentStatus || row.status || '').trim() === 'DRAFT'
+    || resolveDocumentStatusLabel(row) === '草稿'
+}
+
+function isExceptionDocument(row: ExpenseSummary) {
+  return String(row.documentStatus || row.status || '').trim() === 'EXCEPTION'
+    || resolveDocumentStatusLabel(row) === '流程异常'
+}
+
+function canDeleteDocument(row: ExpenseSummary) {
+  return can('expense:documents:delete') && (isDraftDocument(row) || isExceptionDocument(row))
+}
+
 function handleRowDblClick(row: ExpenseSummary) {
   openDetail(row)
 }
 
 async function reloadList() {
   await loadExpenseList()
+}
+
+async function handleDelete(row: ExpenseSummary) {
+  const documentCode = row.documentCode || row.no
+  if (!documentCode) {
+    ElMessage.warning('未找到单据编码')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认删除单据 ${documentCode} 吗？删除后将不再显示在列表中。`,
+      '删除单据',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+      }
+    )
+  } catch {
+    return
+  }
+
+  try {
+    await expenseApi.deleteDocument(documentCode)
+    ElMessage.success('单据已删除')
+    await reloadList()
+  } catch (error: unknown) {
+    ElMessage.error(error instanceof Error ? error.message : '删除单据失败')
+  }
 }
 
 async function handleExport() {
@@ -473,7 +530,7 @@ async function loadExpenseList() {
   loading.value = true
   try {
     const res = await expenseApi.queryDocuments()
-    expenseList.value = (res.data || []).filter((item) => resolveDocumentStatusLabel(item) !== '草稿')
+    expenseList.value = res.data || []
   } catch (error: unknown) {
     ElMessage.error(error instanceof Error ? error.message : '加载单据查询列表失败')
   } finally {

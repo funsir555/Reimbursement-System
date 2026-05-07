@@ -1,4 +1,5 @@
 import type {
+  ProcessCustomArchiveDetail,
   ProcessCustomArchiveSummary,
   ProcessFormDesignBlock,
   ProcessFormDesignSchema,
@@ -415,6 +416,37 @@ export function getOptionItems(block: ProcessFormDesignBlock): Array<{ label: st
     )
   }
   return Array.isArray(block.props.options) ? (block.props.options as Array<{ label: string; value: string }>) : []
+}
+
+export function getSharedFieldOptionItems(
+  block: ProcessFormDesignBlock,
+  sharedArchives: ProcessCustomArchiveDetail[] = []
+): Array<{ label: string; value: string }> {
+  if (block.kind !== 'SHARED_FIELD') {
+    return []
+  }
+  const archiveCode = getSharedArchiveCode(block)
+  if (!archiveCode) {
+    return []
+  }
+  const archive = sharedArchives.find((item) => item.archiveCode === archiveCode)
+  if (!archive) {
+    return []
+  }
+  return (archive.items || []).map((item) => ({
+    label: item.itemName,
+    value: item.itemCode || item.itemName
+  }))
+}
+
+export function getResolvedOptionItems(
+  block: ProcessFormDesignBlock,
+  sharedArchives: ProcessCustomArchiveDetail[] = []
+): Array<{ label: string; value: string }> {
+  if (block.kind === 'SHARED_FIELD') {
+    return getSharedFieldOptionItems(block, sharedArchives)
+  }
+  return getOptionItems(block)
 }
 
 export function normalizeBusinessScenarioEnabledModes(

@@ -65,6 +65,7 @@ INSERT INTO tmp_permission_seed (
     ('expense:payment:payment_order:view', '付款单', 'MENU', 'expense:payment:menu', 'expense', '/expense/payment/orders', 3042, 1),
     ('expense:payment:payment_order:execute', '执行付款', 'BUTTON', 'expense:payment:payment_order:view', 'expense', NULL, 30421, 1),
         ('expense:documents:view', '单据查询', 'MENU', 'expense:menu', 'expense', '/expense/documents', 305, 1),
+        ('expense:documents:delete', '删除单据', 'BUTTON', 'expense:documents:view', 'expense', NULL, 3051, 1),
     ('expense:voucher_generation:view', '凭证生成', 'MENU', 'expense:menu', 'expense', '/expense/workbench/process-management', 306, 1),
     ('expense:voucher_generation:generate', '生成凭证', 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3061, 1),
     ('expense:voucher_generation:mapping:view', '凭证科目映射', 'BUTTON', 'expense:voucher_generation:view', 'expense', NULL, 3062, 1),

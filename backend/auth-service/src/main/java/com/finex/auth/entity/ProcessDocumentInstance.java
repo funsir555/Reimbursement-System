@@ -35,6 +35,9 @@ public class ProcessDocumentInstance {
     private String templateSnapshotJson;
     private String formSchemaSnapshotJson;
     private String flowSnapshotJson;
+    private Boolean deleted;
+    private LocalDateTime deletedAt;
+    private Long deletedBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime finishedAt;

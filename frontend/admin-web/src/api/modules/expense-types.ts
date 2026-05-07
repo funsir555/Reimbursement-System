@@ -3,6 +3,7 @@
 // 如果改错，最容易影响列表、表单和接口联调。
 
 import type { MoneyValue } from './core'
+import type { ProcessCustomArchiveDetail } from './process-archive-types'
 import type { ProcessFlowNode, ProcessFlowRoute } from './process-flow-types'
 import type { ProcessFormDesignSchema } from './process-form-types'
 import type { ProcessFormOption } from './process-template-types'
@@ -142,6 +143,7 @@ export interface ExpenseDocumentDetail {
   }
   companyOptions: ProcessFormOption[]
   departmentOptions: ProcessFormOption[]
+  sharedArchives?: ProcessCustomArchiveDetail[]
   expenseDetails: ExpenseDetailInstanceSummary[]
   currentTasks: ExpenseApprovalTask[]
   actionLogs: ExpenseApprovalLog[]
@@ -219,6 +221,7 @@ export interface ExpenseDetailInstanceDetail {
   sortOrder?: number
   schemaSnapshot: ProcessFormDesignSchema
   formData: Record<string, unknown>
+  sharedArchives?: ProcessCustomArchiveDetail[]
   createdAt?: string
   updatedAt?: string
 }

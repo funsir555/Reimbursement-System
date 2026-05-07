@@ -65,6 +65,7 @@ public class ExpenseDocumentQueryController {
     private static final String EXPENSE_CREATE_VIEW = "expense:create:view";
     private static final String EXPENSE_PAYMENT_ORDER_VIEW = "expense:payment:payment_order:view";
     private static final String EXPENSE_LIST_DELETE = "expense:list:delete";
+    private static final String EXPENSE_DOCUMENTS_DELETE = "expense:documents:delete";
 
     private final ExpenseDocumentService expenseDocumentService;
     private final ExpenseDocumentPrintService expenseDocumentPrintService;
@@ -338,10 +339,12 @@ public class ExpenseDocumentQueryController {
     @DeleteMapping("/{documentCode}")
     public Result<Boolean> deleteDraft(@PathVariable String documentCode, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
-        accessControlService.requirePermission(userId, EXPENSE_LIST_DELETE);
+        accessControlService.requireAnyPermission(userId, EXPENSE_LIST_DELETE, EXPENSE_DOCUMENTS_DELETE);
+        List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        boolean allowCrossDelete = permissionCodes.contains(EXPENSE_DOCUMENTS_DELETE);
         return Result.success(
-                "草稿已删除",
-                expenseDocumentService.deleteDraftDocument(userId, documentCode)
+                "单据已删除",
+                expenseDocumentService.deleteDraftDocument(userId, documentCode, allowCrossDelete)
         );
     }
 

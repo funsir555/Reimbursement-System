@@ -196,6 +196,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type {
+  ProcessCustomArchiveDetail,
   ExpenseCreateVendorOption,
   ExpenseRelatedDocumentValue,
   ExpenseCreatePayeeAccountOption,
@@ -208,7 +209,7 @@ import type {
 import {
   getBusinessComponentDefinition,
   getControlType,
-  getOptionItems
+  getResolvedOptionItems
 } from '@/views/process/formDesignerHelper'
 import { FIELD_INVOICE_ATTACHMENTS, isExpenseDetailBlockVisible } from '@/views/expense/expenseDetailRuntime'
 import {
@@ -232,6 +233,7 @@ const props = withDefaults(defineProps<{
   formData: Record<string, unknown>
   companyOptions?: ProcessFormOption[]
   departmentOptions?: ProcessFormOption[]
+  sharedArchives?: ProcessCustomArchiveDetail[]
   documentCode?: string
   detailType?: string
   defaultBusinessScenario?: string
@@ -242,6 +244,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   companyOptions: () => [],
   departmentOptions: () => [],
+  sharedArchives: () => [],
   detailType: '',
   defaultBusinessScenario: '',
   summaryVisible: true,
@@ -312,6 +315,10 @@ function displayLines(block: ProcessFormDesignBlock) {
     return controlDisplayLines(block, rawValue)
   }
 
+  if (block.kind === 'SHARED_FIELD') {
+    return sharedFieldDisplayLines(block, rawValue)
+  }
+
   if (block.kind === 'BUSINESS_COMPONENT') {
     return businessDisplayLines(block, rawValue)
   }
@@ -343,7 +350,7 @@ function businessDisplayLines(block: ProcessFormDesignBlock, rawValue: unknown) 
 function controlDisplayLines(block: ProcessFormDesignBlock, rawValue: unknown) {
   const type = controlType(block)
   if (['SELECT', 'MULTI_SELECT', 'RADIO', 'CHECKBOX'].includes(type)) {
-    const optionMap = new Map(getOptionItems(block).map((item) => [String(item.value), item.label]))
+    const optionMap = new Map(getResolvedOptionItems(block, props.sharedArchives || []).map((item) => [String(item.value), item.label]))
     return normalizeLines(rawValue).map((item) => optionMap.get(item) || item)
   }
   if (type === 'SWITCH') {
@@ -353,6 +360,11 @@ function controlDisplayLines(block: ProcessFormDesignBlock, rawValue: unknown) {
     return rawValue.map((item) => String(item))
   }
   return normalizeLines(rawValue)
+}
+
+function sharedFieldDisplayLines(block: ProcessFormDesignBlock, rawValue: unknown) {
+  const optionMap = new Map(getResolvedOptionItems(block, props.sharedArchives || []).map((item) => [String(item.value), item.label]))
+  return normalizeLines(rawValue).map((item) => optionMap.get(item) || item)
 }
 
 function isReadonlyAttachmentBlock(block: ProcessFormDesignBlock) {

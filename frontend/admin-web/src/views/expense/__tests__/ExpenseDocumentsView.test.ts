@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
     push: vi.fn()
   },
   expenseApi: {
-    queryDocuments: vi.fn()
+    queryDocuments: vi.fn(),
+    deleteDocument: vi.fn()
   },
   asyncTaskApi: {
     exportExpenseScene: vi.fn()
@@ -20,6 +21,9 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn(),
     warning: vi.fn(),
     success: vi.fn()
+  },
+  elMessageBox: {
+    confirm: vi.fn()
   },
   downloadCenter: {
     openDownloadCenter: vi.fn()
@@ -40,12 +44,18 @@ vi.mock('element-plus', async () => {
   const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
   return {
     ...actual,
-    ElMessage: mocks.elMessage
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
   }
 })
 
 vi.mock('@/utils/downloadCenter', () => ({
   openDownloadCenter: mocks.downloadCenter.openDownloadCenter
+}))
+
+vi.mock('@/utils/permissions', () => ({
+  hasPermission: (code: string, source?: string[]) => (source || []).includes(code),
+  readStoredUser: () => ({ permissionCodes: ['expense:documents:delete'] })
 }))
 
 const SimpleContainer = defineComponent({
@@ -54,7 +64,7 @@ const SimpleContainer = defineComponent({
 
 const ButtonStub = defineComponent({
   emits: ['click'],
-  template: '<button type="button" @click="$emit(\'click\')"><slot /></button>'
+  template: '<button type="button" v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>'
 })
 
 const InputStub = defineComponent({
@@ -201,9 +211,11 @@ describe('ExpenseDocumentsView', () => {
       ]
     })
     mocks.asyncTaskApi.exportExpenseScene.mockResolvedValue({ code: 200 })
+    mocks.expenseApi.deleteDocument.mockResolvedValue({ data: true })
+    mocks.elMessageBox.confirm.mockResolvedValue('confirm')
   })
 
-  it('loads query documents data and keeps only non-draft rows', async () => {
+  it('loads query documents data and keeps draft rows visible', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as { filteredExpenseList: Array<{ no: string; documentStatusLabel: string }> }
 
@@ -213,8 +225,8 @@ describe('ExpenseDocumentsView', () => {
     expect(wrapper.text()).toContain('下载')
     expect(wrapper.text()).not.toContain('刷新列表')
     expect(wrapper.text()).not.toContain('返回待我审批')
-    expect(wrapper.text()).toContain('总数 1')
-    expect(wrapper.text()).toContain('已过滤 1')
+    expect(wrapper.text()).toContain('总数 2')
+    expect(wrapper.text()).toContain('已过滤 2')
     expect(wrapper.text()).not.toContain('单据查询列表')
     expect(wrapper.find('[data-testid="expense-advanced-panel"]').exists()).toBe(false)
     expect(wrapper.classes()).toContain('expense-wb-page--dense-list')
@@ -232,8 +244,8 @@ describe('ExpenseDocumentsView', () => {
     expect(wrapper.get('[data-testid="expense-toolbar-heading"]').classes()).toContain('expense-wb-toolbar__heading--inline')
     expect(wrapper.get('[data-testid="expense-advanced-panel"]').classes()).toContain('expense-wb-advanced-panel--dropdown')
     expect(wrapper.get('[data-testid="expense-advanced-grid"]').classes()).toContain('expense-wb-advanced-grid--four-column')
-    expect(vm.filteredExpenseList.map((item) => item.no)).toEqual(['DOC-001'])
-    expect(vm.filteredExpenseList.some((item) => item.documentStatusLabel === '草稿')).toBe(false)
+    expect(vm.filteredExpenseList.map((item) => item.no)).toEqual(['DOC-001', 'DOC-002'])
+    expect(vm.filteredExpenseList.some((item) => item.documentStatusLabel === '草稿')).toBe(true)
   })
 
   it('supports allowed advanced filters, drag sorting, and restoring default columns', async () => {
@@ -274,7 +286,7 @@ describe('ExpenseDocumentsView', () => {
     ])
   })
 
-  it('filters query rows by clicked stat cards while keeping draft rows excluded', async () => {
+  it('filters query rows by clicked stat cards while keeping draft rows queryable', async () => {
     mocks.expenseApi.queryDocuments.mockResolvedValue({
       data: [
         {
@@ -363,14 +375,16 @@ describe('ExpenseDocumentsView', () => {
     await flushPromises()
     expect(vm.filters.documentStatusLabel).toBe('流程异常')
     expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-004'])
-    expect(vm.filteredExpenseList.some((item) => item.documentStatusLabel === '草稿')).toBe(false)
+    vm.filters.documentStatusLabel = '草稿'
+    await flushPromises()
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-002'])
 
     vm.currentPage = 3
     await wrapper.get('[data-testid="expense-documents-stat-all"]').trigger('click')
     await flushPromises()
     expect(vm.filters.documentStatusLabel).toBe('')
     expect(vm.currentPage).toBe(1)
-    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001', 'DOC-003', 'DOC-004'])
+    expect(vm.filteredExpenseList.map((item) => item.documentCode)).toEqual(['DOC-001', 'DOC-003', 'DOC-004', 'DOC-002'])
   })
 
   it('opens the existing document detail page when clicking a document number', async () => {
@@ -415,5 +429,66 @@ describe('ExpenseDocumentsView', () => {
     })
     expect(mocks.downloadCenter.openDownloadCenter).toHaveBeenCalledTimes(1)
     expect(mocks.elMessage.success).toHaveBeenCalledWith('导出任务已提交，请到下载中心查看进度')
+  })
+
+  it('shows delete action for draft and exception rows when the delete permission is present', async () => {
+    mocks.expenseApi.queryDocuments.mockResolvedValue({
+      data: [
+        {
+          documentCode: 'DOC-DRAFT',
+          no: 'DOC-DRAFT',
+          documentTitle: '草稿单据',
+          amount: 10,
+          status: 'DRAFT',
+          documentStatus: 'DRAFT',
+          documentStatusLabel: '草稿'
+        },
+        {
+          documentCode: 'DOC-EXCEPTION',
+          no: 'DOC-EXCEPTION',
+          documentTitle: '异常单据',
+          amount: 20,
+          status: 'EXCEPTION',
+          documentStatus: 'EXCEPTION',
+          documentStatusLabel: '流程异常'
+        }
+      ]
+    })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filteredExpenseList: Array<{
+        documentCode: string
+        no: string
+        status?: string
+        documentStatus?: string
+        documentStatusLabel?: string
+      }>
+      canDeleteDocument: (row: {
+        documentCode: string
+        no: string
+        status?: string
+        documentStatus?: string
+        documentStatusLabel?: string
+      }) => boolean
+    }
+
+    expect(vm.canDeleteDocument(vm.filteredExpenseList[0])).toBe(true)
+    expect(vm.canDeleteDocument(vm.filteredExpenseList[1])).toBe(true)
+  })
+
+  it('confirms and deletes a query-visible document before refreshing the list', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      handleDelete: (row: { documentCode: string; no: string }) => Promise<void>
+    }
+
+    await vm.handleDelete({ documentCode: 'DOC-002', no: 'DOC-002' })
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalled()
+    expect(mocks.expenseApi.deleteDocument).toHaveBeenCalledWith('DOC-002')
+    expect(mocks.expenseApi.queryDocuments).toHaveBeenCalledTimes(2)
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('单据已删除')
   })
 })

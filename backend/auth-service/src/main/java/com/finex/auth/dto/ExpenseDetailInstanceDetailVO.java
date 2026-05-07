@@ -2,6 +2,8 @@ package com.finex.auth.dto;
 
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -33,6 +35,8 @@ public class ExpenseDetailInstanceDetailVO {
     private Map<String, Object> schemaSnapshot = new LinkedHashMap<>();
 
     private Map<String, Object> formData = new LinkedHashMap<>();
+
+    private List<ProcessCustomArchiveDetailVO> sharedArchives = new ArrayList<>();
 
     private String createdAt;
 

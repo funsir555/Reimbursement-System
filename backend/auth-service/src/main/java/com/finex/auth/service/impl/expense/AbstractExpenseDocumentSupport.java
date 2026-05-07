@@ -1444,6 +1444,7 @@ class AbstractExpenseDocumentSupport {
         readonlyPayeeAccountSnapshotEnhancer.enhanceFormData(schemaSnapshot, formData, fallbackPaymentCompanyId);
         vo.setSchemaSnapshot(schemaSnapshot);
         vo.setFormData(formData);
+        vo.setSharedArchives(loadSharedArchives(schemaSnapshot));
         vo.setCreatedAt(formatTime(detail.getCreatedAt()));
         vo.setUpdatedAt(formatTime(detail.getUpdatedAt()));
         return vo;
@@ -2126,10 +2127,14 @@ class AbstractExpenseDocumentSupport {
                         .eq(ProcessDocumentInstance::getDocumentCode, normalizedCode)
                         .last("limit 1")
         );
-        if (instance == null) {
+        if (instance == null || isSoftDeleted(instance)) {
             throw new IllegalStateException("\u672a\u627e\u5230\u5bf9\u5e94\u5355\u636e");
         }
         return instance;
+    }
+
+    boolean isSoftDeleted(ProcessDocumentInstance instance) {
+        return instance != null && Boolean.TRUE.equals(instance.getDeleted());
     }
 
     private ProcessDocumentTask requireOpenPaymentTask(Long taskId, Long userId) {

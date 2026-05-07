@@ -48,6 +48,7 @@
             :form-data="detail.formData"
             :company-options="companyOptions"
             :department-options="departmentOptions"
+            :shared-archives="detail.sharedArchives || []"
             :detail-type="detail.detailType"
             :default-business-scenario="detail.businessSceneMode || ''"
             :vendor-option-map="vendorOptionMap"

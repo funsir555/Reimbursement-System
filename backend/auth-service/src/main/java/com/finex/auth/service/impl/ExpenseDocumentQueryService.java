@@ -114,7 +114,7 @@ public class ExpenseDocumentQueryService {
         return expenseQueryDomainSupport.getDocumentEditContext(userId, documentCode);
     }
 
-    public boolean deleteDraftDocument(Long userId, String documentCode) {
-        return expenseQueryDomainSupport.deleteDraftDocument(userId, documentCode);
+    public boolean deleteDraftDocument(Long userId, String documentCode, boolean allowCrossDelete) {
+        return expenseQueryDomainSupport.deleteDraftDocument(userId, documentCode, allowCrossDelete);
     }
 }

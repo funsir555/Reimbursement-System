@@ -5,6 +5,7 @@
 
 package com.finex.auth.service.impl.expense;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.ExpenseDetailInstanceDetailVO;
 import com.finex.auth.dto.ExpenseDocumentCommentDTO;
@@ -90,7 +91,7 @@ public class ExpenseQueryDomainSupport {
      */
     public List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                activeDocumentQuery()
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
         );
@@ -102,8 +103,7 @@ public class ExpenseQueryDomainSupport {
      */
     public List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .ne(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_DRAFT)
+                activeDocumentQuery()
                         .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
         );
         return sortSummaries(expenseSummaryAssembler.toExpenseSummaries(instances));
@@ -116,7 +116,7 @@ public class ExpenseQueryDomainSupport {
         String normalizedKind = normalizeOutstandingKind(kind);
         String templateType = Objects.equals(normalizedKind, OUTSTANDING_KIND_LOAN) ? "loan" : "report";
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                activeDocumentQuery()
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
@@ -304,57 +304,30 @@ public class ExpenseQueryDomainSupport {
         return expenseDocumentTemplateSupport.getDocumentEditContext(userId, documentCode);
     }
 
-    public boolean deleteDraftDocument(Long userId, String documentCode) {
+    public boolean deleteDraftDocument(Long userId, String documentCode, boolean allowCrossDelete) {
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(documentCode);
-        expenseDocumentReadSupport.requireSubmitter(instance, userId);
-        if (!Objects.equals(trimToNull(instance.getStatus()), DOCUMENT_STATUS_DRAFT)) {
-            throw new IllegalStateException("\u4ec5\u8349\u7a3f\u72b6\u6001\u5355\u636e\u5141\u8bb8\u5220\u9664");
+        if (!allowCrossDelete) {
+            expenseDocumentReadSupport.requireSubmitter(instance, userId);
         }
-        if (hasFormalProcessHistory(instance.getDocumentCode())) {
-            throw new IllegalStateException("\u5df2\u63d0\u4ea4\u8fc7\u7684\u5355\u636e\u53ec\u56de\u540e\u4e0d\u5141\u8bb8\u5220\u9664");
+        String status = trimToNull(instance.getStatus());
+        if (!Objects.equals(status, DOCUMENT_STATUS_DRAFT) && !Objects.equals(status, DOCUMENT_STATUS_EXCEPTION)) {
+            throw new IllegalStateException("\u4ec5\u8349\u7a3f\u6216\u6d41\u7a0b\u5f02\u5e38\u72b6\u6001\u5355\u636e\u5141\u8bb8\u5220\u9664");
         }
-        String normalizedDocumentCode = instance.getDocumentCode();
-        pmBankPaymentRecordMapper.delete(
-                Wrappers.<com.finex.auth.entity.PmBankPaymentRecord>lambdaQuery()
-                        .eq(com.finex.auth.entity.PmBankPaymentRecord::getDocumentCode, normalizedDocumentCode)
+        LocalDateTime deletedAt = LocalDateTime.now();
+        instance.setDeleted(Boolean.TRUE);
+        instance.setDeletedAt(deletedAt);
+        instance.setDeletedBy(userId);
+        instance.setUpdatedAt(deletedAt);
+        processDocumentInstanceMapper.update(
+                null,
+                new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<ProcessDocumentInstance>()
+                        .eq("id", instance.getId())
+                        .set("deleted", true)
+                        .set("deleted_at", deletedAt)
+                        .set("deleted_by", userId)
+                        .set("updated_at", deletedAt)
         );
-        processDocumentWriteOffMapper.delete(
-                Wrappers.<ProcessDocumentWriteOff>lambdaQuery()
-                        .and(wrapper -> wrapper
-                                .eq(ProcessDocumentWriteOff::getSourceDocumentCode, normalizedDocumentCode)
-                                .or()
-                                .eq(ProcessDocumentWriteOff::getTargetDocumentCode, normalizedDocumentCode))
-        );
-        processDocumentRelationMapper.delete(
-                Wrappers.<ProcessDocumentRelation>lambdaQuery()
-                        .and(wrapper -> wrapper
-                                .eq(ProcessDocumentRelation::getSourceDocumentCode, normalizedDocumentCode)
-                                .or()
-                                .eq(ProcessDocumentRelation::getTargetDocumentCode, normalizedDocumentCode))
-        );
-        processDocumentTaskMapper.delete(
-                Wrappers.<ProcessDocumentTask>lambdaQuery()
-                        .eq(ProcessDocumentTask::getDocumentCode, normalizedDocumentCode)
-        );
-        processDocumentActionLogMapper.delete(
-                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
-                        .eq(ProcessDocumentActionLog::getDocumentCode, normalizedDocumentCode)
-        );
-        processDocumentExpenseDetailMapper.delete(
-                Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
-                        .eq(ProcessDocumentExpenseDetail::getDocumentCode, normalizedDocumentCode)
-        );
-        processDocumentInstanceMapper.deleteById(instance.getId());
         return true;
-    }
-
-    private boolean hasFormalProcessHistory(String documentCode) {
-        Long lifecycleLogCount = processDocumentActionLogMapper.selectCount(
-                Wrappers.<ProcessDocumentActionLog>lambdaQuery()
-                        .eq(ProcessDocumentActionLog::getDocumentCode, documentCode)
-                        .in(ProcessDocumentActionLog::getActionType, List.of(LOG_SUBMIT, LOG_RESUBMIT, LOG_RECALL))
-        );
-        return lifecycleLogCount != null && lifecycleLogCount > 0;
     }
 
     private List<ExpenseSummaryVO> sortSummaries(List<ExpenseSummaryVO> summaries) {
@@ -518,7 +491,7 @@ public class ExpenseQueryDomainSupport {
         }
 
         return processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                activeDocumentQuery()
                         .in(ProcessDocumentInstance::getDocumentCode, visibleDocumentCodes)
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_PENDING,
@@ -531,6 +504,15 @@ public class ExpenseQueryDomainSupport {
                         ))
                         .orderByDesc(ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
         ).stream().map(ProcessDocumentInstance::getDocumentCode).toList();
+    }
+
+    private LambdaQueryWrapper<ProcessDocumentInstance> activeDocumentQuery() {
+        return Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                .and(wrapper -> wrapper
+                        .isNull(ProcessDocumentInstance::getDeleted)
+                        .or()
+                        .eq(ProcessDocumentInstance::getDeleted, false)
+                );
     }
 
     private String defaultUsername(String username) {

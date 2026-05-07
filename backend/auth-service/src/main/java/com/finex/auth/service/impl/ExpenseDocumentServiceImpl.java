@@ -324,8 +324,8 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean deleteDraftDocument(Long userId, String documentCode) {
-        return expenseDocumentQueryService.deleteDraftDocument(userId, documentCode);
+    public boolean deleteDraftDocument(Long userId, String documentCode, boolean allowCrossDelete) {
+        return expenseDocumentQueryService.deleteDraftDocument(userId, documentCode, allowCrossDelete);
     }
 
     /**

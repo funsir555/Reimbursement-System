@@ -117,11 +117,11 @@ class ExpenseDocumentServiceImplTest {
     @Test
     void deleteDraftDocumentDelegatesToQueryService() {
         ExpenseDocumentServiceImpl service = newService();
-        when(expenseDocumentQueryService.deleteDraftDocument(1L, "DOC-001")).thenReturn(true);
+        when(expenseDocumentQueryService.deleteDraftDocument(1L, "DOC-001", false)).thenReturn(true);
 
-        org.junit.jupiter.api.Assertions.assertTrue(service.deleteDraftDocument(1L, "DOC-001"));
+        org.junit.jupiter.api.Assertions.assertTrue(service.deleteDraftDocument(1L, "DOC-001", false));
 
-        verify(expenseDocumentQueryService).deleteDraftDocument(1L, "DOC-001");
+        verify(expenseDocumentQueryService).deleteDraftDocument(1L, "DOC-001", false);
     }
 
     @Test

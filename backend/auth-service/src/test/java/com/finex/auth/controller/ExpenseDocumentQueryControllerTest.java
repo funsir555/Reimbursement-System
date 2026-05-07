@@ -222,16 +222,32 @@ class ExpenseDocumentQueryControllerTest {
 
     @Test
     void deleteDraftDelegatesToService() throws Exception {
-        doNothing().when(accessControlService).requirePermission(1L, "expense:list:delete");
-        when(expenseDocumentService.deleteDraftDocument(1L, "DOC-001")).thenReturn(true);
+        doNothing().when(accessControlService).requireAnyPermission(1L, "expense:list:delete", "expense:documents:delete");
+        when(accessControlService.getPermissionCodes(1L)).thenReturn(List.of("expense:list:delete"));
+        when(expenseDocumentService.deleteDraftDocument(1L, "DOC-001", false)).thenReturn(true);
 
         mockMvc.perform(delete("/auth/expenses/DOC-001").requestAttr("currentUserId", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data").value(true));
 
-        verify(accessControlService).requirePermission(1L, "expense:list:delete");
-        verify(expenseDocumentService).deleteDraftDocument(1L, "DOC-001");
+        verify(accessControlService).requireAnyPermission(1L, "expense:list:delete", "expense:documents:delete");
+        verify(expenseDocumentService).deleteDraftDocument(1L, "DOC-001", false);
+    }
+
+    @Test
+    void deleteDraftAllowsCrossDeleteWhenDocumentQueryDeletePermissionIsPresent() throws Exception {
+        doNothing().when(accessControlService).requireAnyPermission(1L, "expense:list:delete", "expense:documents:delete");
+        when(accessControlService.getPermissionCodes(1L)).thenReturn(List.of("expense:documents:delete"));
+        when(expenseDocumentService.deleteDraftDocument(1L, "DOC-009", true)).thenReturn(true);
+
+        mockMvc.perform(delete("/auth/expenses/DOC-009").requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("单据已删除"))
+                .andExpect(jsonPath("$.data").value(true));
+
+        verify(expenseDocumentService).deleteDraftDocument(1L, "DOC-009", true);
     }
 
     @Test

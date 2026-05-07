@@ -117,12 +117,16 @@ CREATE TABLE IF NOT EXISTS pm_document_instance (
     template_snapshot_json LONGTEXT NOT NULL COMMENT '模板快照',
     form_schema_snapshot_json LONGTEXT NOT NULL COMMENT '表单schema快照',
     flow_snapshot_json LONGTEXT NULL COMMENT '流程快照',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '是否软删除:1是 0否',
+    deleted_at DATETIME NULL COMMENT '删除时间',
+    deleted_by BIGINT NULL COMMENT '删除人用户ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_pm_document_instance_code (document_code),
     KEY idx_pm_document_instance_submitter (submitter_user_id, created_at),
     KEY idx_pm_document_instance_template (template_code),
-    KEY idx_pm_document_instance_status (status)
+    KEY idx_pm_document_instance_status (status),
+    KEY idx_pm_document_instance_deleted (deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='审批单实例表';
 
 -- comment standardization begin

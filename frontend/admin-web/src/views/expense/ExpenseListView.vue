@@ -211,7 +211,7 @@
               编辑
             </el-button>
             <el-button
-              v-if="canDeleteDraft(row)"
+              v-if="canDeleteDocument(row)"
               link
               type="danger"
               size="small"
@@ -533,8 +533,18 @@ function isEditableDraftLike(row: ExpenseSummary) {
   return statusCode === 'DRAFT' || statusCode === 'REJECTED'
 }
 
-function canDeleteDraft(row: ExpenseSummary) {
-  return isDraftDocument(row) && row.draftDeletable !== false && can('expense:list:delete')
+function isExceptionDocument(row: ExpenseSummary) {
+  return resolveExpenseWorkbenchStatusCode(row) === 'EXCEPTION'
+}
+
+function canDeleteDocument(row: ExpenseSummary) {
+  if (!can('expense:list:delete')) {
+    return false
+  }
+  if (isDraftDocument(row)) {
+    return row.draftDeletable !== false
+  }
+  return isExceptionDocument(row)
 }
 
 function buildReturnToQuery(extraQuery: Record<string, string> = {}) {
@@ -581,8 +591,8 @@ async function handleDelete(row: ExpenseSummary) {
   }
   try {
     await ElMessageBox.confirm(
-      `确认删除草稿单据 ${documentCode} 吗？删除后无法恢复。`,
-      '删除草稿',
+      `确认删除单据 ${documentCode} 吗？删除后将不再显示在列表中。`,
+      '删除单据',
       {
         type: 'warning',
         confirmButtonText: '确认删除',
@@ -595,10 +605,10 @@ async function handleDelete(row: ExpenseSummary) {
 
   try {
     await expenseApi.deleteDocument(documentCode)
-    ElMessage.success('草稿已删除')
+    ElMessage.success('单据已删除')
     await reloadList()
   } catch (error: any) {
-    ElMessage.error(error.message || '删除草稿失败')
+    ElMessage.error(error.message || '删除单据失败')
   }
 }
 
