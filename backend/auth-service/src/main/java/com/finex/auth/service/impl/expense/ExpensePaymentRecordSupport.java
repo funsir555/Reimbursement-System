@@ -94,7 +94,7 @@ class ExpensePaymentRecordSupport extends AbstractExpensePaymentSupport {
         ExpenseSummaryAssembler.SummaryMetadata metadata = expenseSummaryAssembler
                 .buildSummaryEnrichmentData(List.of(instance))
                 .metadata(instance.getDocumentCode());
-        String paymentCompanyId = trimToNull(metadata.paymentCompanyId());
+        String paymentCompanyId = trimToNull(metadata == null ? null : metadata.paymentCompanyId());
         if (paymentCompanyId == null) {
             if (required) {
                 throw new IllegalStateException("单据未配置付款公司，无法推送银行");

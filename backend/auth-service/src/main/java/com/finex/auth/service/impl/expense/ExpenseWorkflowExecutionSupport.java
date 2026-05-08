@@ -140,4 +140,30 @@ class ExpenseWorkflowExecutionSupport {
     ) {
         support.markPaymentException(instance, task, userId, username, comment, allowRetry);
     }
+
+    void revertPaymentToPending(
+            ProcessDocumentInstance instance,
+            ProcessDocumentTask task,
+            Long userId,
+            String username,
+            String comment
+    ) {
+        support.revertPaymentToPending(instance, task, userId, username, comment);
+    }
+
+    void revertPaymentToStatus(
+            ProcessDocumentInstance instance,
+            ProcessDocumentTask task,
+            Long userId,
+            String username,
+            String comment,
+            String returnedFrom,
+            String returnedTo
+    ) {
+        support.revertPaymentToStatus(instance, task, userId, username, comment, returnedFrom, returnedTo);
+    }
+
+    String resolvePaymentVoidTargetStatus(ProcessDocumentInstance instance) {
+        return support.resolvePaymentVoidTargetStatus(instance);
+    }
 }

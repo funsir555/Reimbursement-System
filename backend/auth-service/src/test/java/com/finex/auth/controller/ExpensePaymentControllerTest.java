@@ -92,11 +92,14 @@ class ExpensePaymentControllerTest {
     void exportOrdersSubmitsAsyncTask() throws Exception {
         AsyncTaskSubmitResultVO result = new AsyncTaskSubmitResultVO();
         result.setTaskNo("TASK-PAY-001");
-        doNothing().when(accessControlService).requirePermission(1L, "expense:payment:payment_order:view");
+        doNothing().when(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
+        when(expenseDocumentService.validatePaymentTasksExportable(1L, List.of(7L, 8L))).thenReturn(true);
         when(asyncTaskService.submitExpenseExport(eq(1L), any())).thenReturn(result);
+        when(expenseDocumentService.markPaymentTasksAsPaying(1L, "tester", List.of(7L, 8L))).thenReturn(true);
 
         mockMvc.perform(post("/auth/expense-payment/orders/export")
                         .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "tester")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -107,8 +110,10 @@ class ExpensePaymentControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.taskNo").value("TASK-PAY-001"));
 
-        verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:view");
+        verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
+        verify(expenseDocumentService).validatePaymentTasksExportable(1L, List.of(7L, 8L));
         verify(asyncTaskService).submitExpenseExport(eq(1L), any());
+        verify(expenseDocumentService).markPaymentTasksAsPaying(1L, "tester", List.of(7L, 8L));
     }
 
     @Test
@@ -133,6 +138,28 @@ class ExpensePaymentControllerTest {
 
         verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
         verify(expenseDocumentService).rejectPaymentTasks(eq(1L), eq("tester"), eq(List.of(7L, 8L)), any(ExpenseApprovalActionDTO.class));
+    }
+
+    @Test
+    void voidTasksUsesCurrentUserIdentity() throws Exception {
+        doNothing().when(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
+        when(expenseDocumentService.voidPaymentTasks(1L, "tester", List.of(7L, 8L))).thenReturn(true);
+
+        mockMvc.perform(post("/auth/expense-payment/tasks/void")
+                        .requestAttr("currentUserId", 1L)
+                        .requestAttr("currentUsername", "tester")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskIds":[7,8]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data").value(true));
+
+        verify(accessControlService).requirePermission(1L, "expense:payment:payment_order:execute");
+        verify(expenseDocumentService).voidPaymentTasks(1L, "tester", List.of(7L, 8L));
     }
 
     @Test

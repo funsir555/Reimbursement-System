@@ -59,13 +59,16 @@ public class ExpensePaymentController {
             HttpServletRequest request
     ) {
         Long userId = getCurrentUserId(request);
-        accessControlService.requirePermission(userId, EXPENSE_PAYMENT_VIEW);
+        accessControlService.requirePermission(userId, EXPENSE_PAYMENT_EXECUTE);
         ExpenseExportSubmitDTO payload = new ExpenseExportSubmitDTO();
         payload.setScene(AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING);
         payload.setTaskIds(dto.getTaskIds());
+        expenseDocumentService.validatePaymentTasksExportable(userId, dto.getTaskIds());
+        AsyncTaskSubmitResultVO result = asyncTaskService.submitExpenseExport(userId, payload);
+        expenseDocumentService.markPaymentTasksAsPaying(userId, getCurrentUsername(request), dto.getTaskIds());
         return Result.success(
                 "导出任务已提交，请到下载中心查看进度",
-                asyncTaskService.submitExpenseExport(userId, payload)
+                result
         );
     }
 
@@ -133,6 +136,23 @@ public class ExpensePaymentController {
                         getCurrentUsername(request),
                         dto.getTaskIds(),
                         actionDTO
+                )
+        );
+    }
+
+    @PostMapping("/tasks/void")
+    public Result<Boolean> voidTasks(
+            @Valid @RequestBody ExpensePaymentBatchTaskDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, EXPENSE_PAYMENT_EXECUTE);
+        return Result.success(
+                "付款任务已作废并返回待支付",
+                expenseDocumentService.voidPaymentTasks(
+                        userId,
+                        getCurrentUsername(request),
+                        dto.getTaskIds()
                 )
         );
     }

@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -314,6 +315,73 @@ class ExpensePaymentDomainSupportTest {
         assertSame(detail, actual);
         verify(expenseWorkflowRuntimeSupport).completePaymentRuntime(eq(instance), eq(task), eq(1L), eq("tester"), eq("done"), eq(true), any());
         verify(expenseRelationWriteOffService).finalizeEffectiveWriteOffs("DOC-003");
+    }
+
+    @Test
+    void markPaymentTasksAsPayingMovesPendingTasksToPaying() {
+        ExpensePaymentDomainSupport support = newSupport();
+
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(60L);
+        task.setDocumentCode("DOC-EXPORT");
+        task.setNodeType("PAYMENT");
+        task.setNodeName("Pay");
+        task.setStatus("PENDING");
+        task.setAssigneeUserId(1L);
+
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-EXPORT");
+        instance.setStatus("PENDING_PAYMENT");
+
+        when(processDocumentTaskMapper.selectById(60L)).thenReturn(task);
+        when(expenseDocumentReadSupport.requireDocument("DOC-EXPORT")).thenReturn(instance);
+
+        boolean actual = support.markPaymentTasksAsPaying(1L, "tester", List.of(60L));
+
+        assertEquals(true, actual);
+        verify(expenseWorkflowRuntimeSupport).markPaymentStarted(
+                eq(instance),
+                eq(task),
+                eq(1L),
+                eq("tester"),
+                eq(false),
+                isNull(),
+                isNull(),
+                isNull()
+        );
+    }
+
+    @Test
+    void voidPaymentTasksReturnsPayingTasksToPending() {
+        ExpensePaymentDomainSupport support = newSupport();
+
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(61L);
+        task.setDocumentCode("DOC-VOID");
+        task.setNodeType("PAYMENT");
+        task.setNodeName("Pay");
+        task.setStatus("PENDING");
+        task.setAssigneeUserId(1L);
+
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-VOID");
+        instance.setStatus("PAYING");
+
+        PmBankPaymentRecord record = new PmBankPaymentRecord();
+        record.setId(6L);
+        record.setDocumentCode("DOC-VOID");
+        record.setManualPaid(1);
+        record.setReceiptStatus("PENDING");
+
+        when(processDocumentTaskMapper.selectById(61L)).thenReturn(task);
+        when(expenseDocumentReadSupport.requireDocument("DOC-VOID")).thenReturn(instance);
+        when(pmBankPaymentRecordMapper.selectOne(any())).thenReturn(record);
+
+        boolean actual = support.voidPaymentTasks(1L, "tester", List.of(61L));
+
+        assertEquals(true, actual);
+        verify(expenseWorkflowRuntimeSupport).revertPaymentToPending(eq(instance), eq(task), eq(1L), eq("tester"), eq("作废后返回待支付"));
+        verify(pmBankPaymentRecordMapper).updateById(record);
     }
 
     @Test

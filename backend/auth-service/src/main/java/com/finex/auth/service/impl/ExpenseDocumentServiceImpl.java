@@ -433,6 +433,23 @@ public class ExpenseDocumentServiceImpl implements ExpenseDocumentService {
     }
 
     @Override
+    public boolean validatePaymentTasksExportable(Long userId, List<Long> taskIds) {
+        return expensePaymentWorkflowService.validatePaymentTasksExportable(userId, taskIds);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markPaymentTasksAsPaying(Long userId, String username, List<Long> taskIds) {
+        return expensePaymentWorkflowService.markPaymentTasksAsPaying(userId, username, taskIds);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean voidPaymentTasks(Long userId, String username, List<Long> taskIds) {
+        return expensePaymentWorkflowService.voidPaymentTasks(userId, username, taskIds);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto) {
         return expensePaymentWorkflowService.rejectPaymentTasks(userId, username, taskIds, dto);

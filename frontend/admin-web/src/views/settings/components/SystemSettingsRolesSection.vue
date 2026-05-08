@@ -13,7 +13,6 @@
       :role-permission-readonly="state.rolePermissionReadonly"
       :role-user-assignment-readonly="state.roleUserAssignmentReadonly"
       :permissions="state.permissions"
-      :permission-tree-ref="state.permissionTreeRef"
       :selected-role-user-ids="state.selectedRoleUserIds"
       :employees="state.employees"
       :is-super-admin-role="state.isSuperAdminRole"
@@ -21,7 +20,7 @@
       @create="actions.openRoleDialog()"
       @edit="actions.openRoleDialog($event)"
       @delete-selected="actions.handleDeleteRole()"
-      @save-permissions="actions.saveRolePermissions()"
+      @save-permissions="actions.saveRolePermissions($event)"
       @save-users="actions.saveRoleUsers()"
       @update:selected-role-user-ids="$emit('update:selectedRoleUserIds', $event)"
     />
@@ -84,7 +83,6 @@ defineProps<{
     rolePermissionReadonly: boolean
     roleUserAssignmentReadonly: boolean
     permissions: PermissionTreeNode[]
-    permissionTreeRef: unknown
     selectedRoleUserIds: number[]
     employees: EmployeeRecord[]
     isSuperAdminRole: (role?: Pick<RoleRecord, 'roleCode'>) => boolean
@@ -100,7 +98,7 @@ defineProps<{
     handleRoleSelect: (role?: RoleRecord) => void
     openRoleDialog: (role?: RoleRecord) => void
     handleDeleteRole: () => Promise<void>
-    saveRolePermissions: () => Promise<void>
+    saveRolePermissions: (permissionCodes: string[]) => Promise<void>
     saveRoleUsers: () => Promise<void>
     saveRole: (closeAfterSave: boolean) => Promise<void>
   }

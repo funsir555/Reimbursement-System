@@ -134,7 +134,6 @@
               rolePermissionReadonly,
               roleUserAssignmentReadonly,
               permissions,
-              permissionTreeRef,
               selectedRoleUserIds,
               employees,
               isSuperAdminRole,
@@ -422,7 +421,6 @@ const {
 const {
   selectedRole,
   selectedRoleUserIds,
-  permissionTreeRef,
   roleDialogVisible,
   roleForm,
   selectedRoleProtected,

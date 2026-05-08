@@ -39,6 +39,11 @@ export const expensePaymentApi = {
         comment: payload.comment || ''
       })
     }),
+  voidTasks: (taskIds: number[]) =>
+    request<boolean>('/auth/expense-payment/tasks/void', {
+      method: 'POST',
+      body: JSON.stringify({ taskIds })
+    }),
   listBankLinks: () => request<ExpenseBankLinkSummary[]>('/auth/expense-payment/bank-links'),
   getBankLink: (companyBankAccountId: number) =>
     request<ExpenseBankLinkConfig>(`/auth/expense-payment/bank-links/${companyBankAccountId}`),

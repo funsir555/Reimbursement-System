@@ -56,7 +56,7 @@
               v-if="canAssignPermissions"
               :disabled="!selectedRole || rolePermissionReadonly"
               type="primary"
-              @click="$emit('save-permissions')"
+              @click="emitSavePermissions"
             >
               保存权限
             </el-button>
@@ -73,7 +73,7 @@
           />
           <div :class="{ 'pointer-events-none opacity-60': rolePermissionReadonly }">
             <el-tree
-              :ref="permissionTreeRef"
+              ref="permissionTreeRef"
               :data="permissions"
               node-key="permissionCode"
               show-checkbox
@@ -132,9 +132,9 @@
 <script setup lang="ts">
 import type { EmployeeRecord, PermissionTreeNode, RoleRecord } from '@/api'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+import { nextTick, ref, watch } from 'vue'
 
-
-defineProps<{
+const props = defineProps<{
   canCreate: boolean
   canEdit: boolean
   canDelete: boolean
@@ -147,19 +147,36 @@ defineProps<{
   rolePermissionReadonly: boolean
   roleUserAssignmentReadonly: boolean
   permissions: PermissionTreeNode[]
-  permissionTreeRef: unknown
   selectedRoleUserIds: number[]
   employees: EmployeeRecord[]
   isSuperAdminRole: (role?: Pick<RoleRecord, 'roleCode'>) => boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'select-role', role?: RoleRecord): void
   (e: 'create'): void
   (e: 'edit', role?: RoleRecord): void
   (e: 'delete-selected'): void
-  (e: 'save-permissions'): void
+  (e: 'save-permissions', permissionCodes: string[]): void
   (e: 'save-users'): void
   (e: 'update:selectedRoleUserIds', value: number[]): void
 }>()
+
+const permissionTreeRef = ref<{
+  setCheckedKeys?: (keys: string[]) => void
+  getCheckedKeys?: (leafOnly?: boolean) => string[]
+}>()
+
+watch(
+  [() => props.selectedRole?.id, () => props.permissions],
+  async () => {
+    await nextTick()
+    permissionTreeRef.value?.setCheckedKeys?.(props.selectedRole?.permissionCodes || [])
+  },
+  { immediate: true }
+)
+
+function emitSavePermissions() {
+  emit('save-permissions', permissionTreeRef.value?.getCheckedKeys?.(false) || [])
+}
 </script>

@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, h, inject, provide } from 'vue'
+import { defineComponent, h, inject, provide, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SystemSettingsView from '@/views/settings/SystemSettingsView.vue'
 
@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     createEmployee: vi.fn(),
     updateEmployee: vi.fn(),
     deleteEmployee: vi.fn(),
+    assignRolePermissions: vi.fn(),
     assignUserRoles: vi.fn(),
     createCompanyBankAccount: vi.fn(),
     updateCompanyBankAccount: vi.fn(),
@@ -33,6 +34,9 @@ const mocks = vi.hoisted(() => ({
   },
   elMessageBox: {
     confirm: vi.fn()
+  },
+  permissionTreeState: {
+    checkedKeys: [] as string[]
   }
 }))
 
@@ -140,7 +144,23 @@ const TreeStub = defineComponent({
     }
   },
   emits: ['node-click', 'node-expand', 'node-collapse'],
-  setup(props, { slots, emit }) {
+  setup(props, { slots, emit, expose }) {
+    const checkedKeys = ref<string[]>([])
+
+    function setCheckedKeys(keys: string[]) {
+      checkedKeys.value = Array.isArray(keys) ? [...keys] : []
+      mocks.permissionTreeState.checkedKeys = [...checkedKeys.value]
+    }
+
+    function getCheckedKeys() {
+      return [...mocks.permissionTreeState.checkedKeys]
+    }
+
+    expose({
+      setCheckedKeys,
+      getCheckedKeys
+    })
+
     function renderNodes(nodes: any[]) {
       return nodes.map((item) =>
         h('div', { key: item.nodeKey || item.id, class: 'tree-node-group' }, [
@@ -160,7 +180,11 @@ const TreeStub = defineComponent({
       )
     }
 
-    return () => h('div', {}, renderNodes(props.data as any[]))
+    return () =>
+      h('div', { 'data-testid': 'tree-stub' }, [
+        h('div', { 'data-testid': 'tree-checked-keys' }, checkedKeys.value.join(',')),
+        ...renderNodes(props.data as any[])
+      ])
   }
 })
 
@@ -562,6 +586,114 @@ function createOrganizationEnhancementBootstrap() {
   return bootstrap
 }
 
+function createRolesBootstrap() {
+  const bootstrap = createBootstrap()
+  bootstrap.currentUser.roles = ['ADMIN']
+  bootstrap.currentUser.permissionCodes = [
+    'settings:menu',
+    'settings:roles:view',
+    'settings:roles:assign_permissions',
+    'settings:roles:assign_users'
+  ]
+  bootstrap.permissions = [
+    {
+      permissionCode: 'settings:menu',
+      permissionName: '系统设置',
+      children: [
+        {
+          permissionCode: 'settings:roles:view',
+          permissionName: '查看权限管理',
+          children: []
+        },
+        {
+          permissionCode: 'settings:roles:assign_permissions',
+          permissionName: '分配权限',
+          children: []
+        },
+        {
+          permissionCode: 'settings:roles:assign_users',
+          permissionName: '分配用户',
+          children: []
+        },
+        {
+          permissionCode: 'settings:companies:view',
+          permissionName: '查看公司管理',
+          children: []
+        }
+      ]
+    }
+  ]
+  bootstrap.employees = [
+    {
+      userId: 201,
+      username: 'zhangsan',
+      name: '张三',
+      phone: '13800000011',
+      email: 'zhangsan@finex.com',
+      companyId: 'COMPANY_A',
+      companyName: '测试公司A',
+      deptId: 11,
+      deptName: '财务中心',
+      departments: [{ deptId: 11, deptName: '财务中心' }],
+      position: '会计',
+      laborRelationBelong: '总部',
+      statDepartmentBelong: '财务共享',
+      statRegionBelong: '华东',
+      statAreaBelong: '上海',
+      status: 1,
+      sourceType: 'MANUAL',
+      syncManaged: false,
+      lastSyncAt: '',
+      roleCodes: ['ACCOUNTANT']
+    },
+    {
+      userId: 202,
+      username: 'lisi',
+      name: '李四',
+      phone: '13800000012',
+      email: 'lisi@finex.com',
+      companyId: 'COMPANY_A',
+      companyName: '测试公司A',
+      deptId: 11,
+      deptName: '财务中心',
+      departments: [{ deptId: 11, deptName: '财务中心' }],
+      position: '出纳',
+      laborRelationBelong: '总部',
+      statDepartmentBelong: '财务共享',
+      statRegionBelong: '华东',
+      statAreaBelong: '上海',
+      status: 1,
+      sourceType: 'MANUAL',
+      syncManaged: false,
+      lastSyncAt: '',
+      roleCodes: ['CASHIER']
+    }
+  ]
+  bootstrap.roles = [
+    {
+      id: 71,
+      roleCode: 'ACCOUNTANT',
+      roleName: '会计',
+      roleDescription: '会计权限',
+      status: 1,
+      permissionCodes: ['settings:roles:view', 'settings:roles:assign_permissions'],
+      userIds: [201],
+      userNames: ['张三']
+    },
+    {
+      id: 72,
+      roleCode: 'CASHIER',
+      roleName: '出纳',
+      roleDescription: '出纳权限',
+      status: 1,
+      permissionCodes: ['settings:roles:view', 'settings:roles:assign_users'],
+      userIds: [202],
+      userNames: ['李四']
+    }
+  ]
+  return bootstrap
+}
+
 async function mountView() {
   const wrapper = mount(SystemSettingsView, {
     global: {
@@ -606,6 +738,7 @@ describe('SystemSettingsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.clear()
+    mocks.permissionTreeState.checkedKeys = []
     mocks.router.replace.mockResolvedValue(undefined)
     mocks.router.push.mockResolvedValue(undefined)
     mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: createBootstrap() })
@@ -613,6 +746,7 @@ describe('SystemSettingsView', () => {
     mocks.systemSettingsApi.createEmployee.mockResolvedValue({ data: { userId: 88 } })
     mocks.systemSettingsApi.updateEmployee.mockResolvedValue({ data: { userId: 88 } })
     mocks.systemSettingsApi.deleteEmployee.mockResolvedValue({})
+    mocks.systemSettingsApi.assignRolePermissions.mockResolvedValue({})
     mocks.systemSettingsApi.assignUserRoles.mockResolvedValue({})
     mocks.systemSettingsApi.createCompanyBankAccount.mockResolvedValue({})
     mocks.systemSettingsApi.updateCompanyBankAccount.mockResolvedValue({})
@@ -639,6 +773,63 @@ describe('SystemSettingsView', () => {
     expect(hero.classes()).toContain('px-5')
     expect(hero.classes()).toContain('py-4')
     expect(wrapper.text()).toContain('\u7cfb\u7edf\u8bbe\u7f6e\u4e2d\u5fc3')
+  })
+
+  it('syncs checked permissions and selected users when switching roles', async () => {
+    mocks.route.query = { tab: 'roles' }
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: createRolesBootstrap() })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    vm.handleRoleSelect(vm.roles[0])
+    await flushPromises()
+
+    expect(mocks.permissionTreeState.checkedKeys).toEqual([
+      'settings:roles:view',
+      'settings:roles:assign_permissions'
+    ])
+    expect(vm.selectedRoleUserIds).toEqual([201])
+
+    vm.handleRoleSelect(vm.roles[1])
+    await flushPromises()
+
+    expect(mocks.permissionTreeState.checkedKeys).toEqual([
+      'settings:roles:view',
+      'settings:roles:assign_users'
+    ])
+    expect(vm.selectedRoleUserIds).toEqual([202])
+  })
+
+  it('saves the current checked permission keys from the role permission tree', async () => {
+    mocks.route.query = { tab: 'roles' }
+    mocks.systemSettingsApi.getBootstrap.mockResolvedValue({ data: createRolesBootstrap() })
+
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+
+    vm.handleRoleSelect(vm.roles[0])
+    await flushPromises()
+
+    mocks.permissionTreeState.checkedKeys = [
+      'settings:roles:view',
+      'settings:companies:view'
+    ]
+
+    const savePermissionsButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === '保存权限')
+
+    expect(savePermissionsButton).toBeTruthy()
+
+    await savePermissionsButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.systemSettingsApi.assignRolePermissions).toHaveBeenCalledWith(71, [
+      'settings:roles:view',
+      'settings:companies:view'
+    ])
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('角色权限已更新')
   })
 
   it('renders employee sync connector cards with local platform labels', async () => {

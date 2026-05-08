@@ -92,6 +92,18 @@ public class ExpensePaymentWorkflowService {
         return expensePaymentDomainSupport.markPaymentTaskException(userId, username, taskId, dto);
     }
 
+    public boolean validatePaymentTasksExportable(Long userId, List<Long> taskIds) {
+        return expensePaymentDomainSupport.validatePaymentTasksExportable(userId, taskIds);
+    }
+
+    public boolean markPaymentTasksAsPaying(Long userId, String username, List<Long> taskIds) {
+        return expensePaymentDomainSupport.markPaymentTasksAsPaying(userId, username, taskIds);
+    }
+
+    public boolean voidPaymentTasks(Long userId, String username, List<Long> taskIds) {
+        return expensePaymentDomainSupport.voidPaymentTasks(userId, username, taskIds);
+    }
+
     public boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto) {
         return expensePaymentDomainSupport.rejectPaymentTasks(userId, username, taskIds, dto);
     }

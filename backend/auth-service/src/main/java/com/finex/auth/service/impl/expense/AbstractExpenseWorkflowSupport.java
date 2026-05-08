@@ -1077,18 +1077,7 @@ public void markPaymentStarted(
 
         );
 
-                appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_PAYMENT_START, userId, resolveActorDisplayName(userId, username), retrying ? "重试支付" : null, Map.of(
-                "taskId", task.getId(),
-
-                "pushRequestNo", defaultText(trimToNull(pushRequestNo), ""),
-
-                "companyBankAccountId", companyBankAccountId,
-
-                "companyBankAccountName", defaultText(trimToNull(companyBankAccountName), ""),
-
-                "retry", retrying
-
-        ));
+                appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_PAYMENT_START, userId, resolveActorDisplayName(userId, username), retrying ? "重试支付" : null, buildPaymentStartLogPayload(task, retrying, companyBankAccountId, companyBankAccountName, pushRequestNo));
 
     }
 
@@ -1227,6 +1216,118 @@ public void markPaymentException(
 
         ));
 
+    }
+
+
+
+            /**
+     * 将付款任务恢复为待支付。
+     */
+    public void revertPaymentToPending(
+
+            ProcessDocumentInstance instance,
+
+            ProcessDocumentTask task,
+
+            Long userId,
+
+            String username,
+
+            String comment
+
+    ) {
+        revertPaymentToStatus(
+                instance,
+                task,
+                userId,
+                username,
+                comment,
+                DOCUMENT_STATUS_PAYING,
+                DOCUMENT_STATUS_PENDING_PAYMENT
+        );
+    }
+
+    public void revertPaymentToStatus(
+
+            ProcessDocumentInstance instance,
+
+            ProcessDocumentTask task,
+
+            Long userId,
+
+            String username,
+
+            String comment,
+
+            String returnedFrom,
+
+            String returnedTo
+
+    ) {
+
+        String targetStatus = normalizePaymentRevertTargetStatus(returnedTo);
+
+        LocalDateTime now = LocalDateTime.now();
+
+        persistDocumentRuntimeState(
+
+                instance,
+
+                targetStatus,
+
+                task.getNodeKey(),
+
+                task.getNodeName(),
+
+                NODE_TYPE_PAYMENT,
+
+                null,
+
+                now
+
+        );
+
+        appendLog(instance.getDocumentCode(), task.getNodeKey(), task.getNodeName(), LOG_PAYMENT_PENDING, userId, resolveActorDisplayName(userId, username), trimToNull(comment), Map.of(
+
+                "taskId", task.getId(),
+
+                "returnedFrom", defaultText(trimToNull(returnedFrom), DOCUMENT_STATUS_PAYING),
+
+                "returnedTo", targetStatus
+
+        ));
+
+    }
+
+    public String resolvePaymentVoidTargetStatus(ProcessDocumentInstance instance) {
+        String currentStatus = trimToNull(instance == null ? null : instance.getStatus());
+        if (DOCUMENT_STATUS_PAYING.equals(currentStatus)) {
+            return DOCUMENT_STATUS_PENDING_PAYMENT;
+        }
+        if (!DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(currentStatus)
+                && !DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(currentStatus)) {
+            return DOCUMENT_STATUS_PENDING_PAYMENT;
+        }
+        String anchorAction = DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(currentStatus)
+                ? LOG_PAYMENT_COMPLETE
+                : LOG_PAYMENT_EXCEPTION;
+        List<ProcessDocumentActionLog> logs = loadActionLogs(instance.getDocumentCode());
+        int anchorIndex = findLastPaymentActionIndex(logs, anchorAction);
+        if (anchorIndex < 0) {
+            return DOCUMENT_STATUS_PENDING_PAYMENT;
+        }
+        for (int index = anchorIndex - 1; index >= 0; index--) {
+            String actionType = trimToNull(logs.get(index).getActionType());
+            if (LOG_PAYMENT_START.equals(actionType)) {
+                return DOCUMENT_STATUS_PAYING;
+            }
+            if (LOG_PAYMENT_PENDING.equals(actionType)
+                    || LOG_PAYMENT_COMPLETE.equals(actionType)
+                    || LOG_PAYMENT_EXCEPTION.equals(actionType)) {
+                return DOCUMENT_STATUS_PENDING_PAYMENT;
+            }
+        }
+        return DOCUMENT_STATUS_PENDING_PAYMENT;
     }
 
 
@@ -3641,6 +3742,42 @@ private List<ProcessDocumentActionLog> loadActionLogs(String documentCode) {
 
     }
 
+    private int findLastPaymentActionIndex(List<ProcessDocumentActionLog> logs, String actionType) {
+
+        if (logs == null || logs.isEmpty() || trimToNull(actionType) == null) {
+
+            return -1;
+
+        }
+
+        for (int index = logs.size() - 1; index >= 0; index--) {
+
+            if (Objects.equals(trimToNull(logs.get(index).getActionType()), actionType)) {
+
+                return index;
+
+            }
+
+        }
+
+        return -1;
+
+    }
+
+    private String normalizePaymentRevertTargetStatus(String status) {
+
+        String normalized = trimToNull(status);
+
+        if (DOCUMENT_STATUS_PAYING.equals(normalized)) {
+
+            return DOCUMENT_STATUS_PAYING;
+
+        }
+
+        return DOCUMENT_STATUS_PENDING_PAYMENT;
+
+    }
+
 
 
     private void cancelOpenTasks(List<ProcessDocumentTask> tasks, Long keepTaskId, LocalDateTime handledAt) {
@@ -4896,6 +5033,30 @@ private LeaderResolution resolveLeader(SystemDepartment startDept, Map<Long, Sys
 
         return normalized == null ? "SYSTEM" : normalized;
 
+    }
+
+    private Map<String, Object> buildPaymentStartLogPayload(
+            ProcessDocumentTask task,
+            boolean retrying,
+            Long companyBankAccountId,
+            String companyBankAccountName,
+            String pushRequestNo
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("taskId", task == null ? null : task.getId());
+        payload.put("retry", retrying);
+        String normalizedPushRequestNo = trimToNull(pushRequestNo);
+        if (normalizedPushRequestNo != null) {
+            payload.put("pushRequestNo", normalizedPushRequestNo);
+        }
+        if (companyBankAccountId != null) {
+            payload.put("companyBankAccountId", companyBankAccountId);
+        }
+        String normalizedCompanyBankAccountName = trimToNull(companyBankAccountName);
+        if (normalizedCompanyBankAccountName != null) {
+            payload.put("companyBankAccountName", normalizedCompanyBankAccountName);
+        }
+        return payload;
     }
 
 }

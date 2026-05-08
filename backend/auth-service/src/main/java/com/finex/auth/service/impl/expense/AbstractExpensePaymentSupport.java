@@ -38,6 +38,8 @@ abstract class AbstractExpensePaymentSupport {
 
     protected static final String BANK_PROVIDER_CMB = "CMB";
     protected static final String BANK_CHANNEL_CMB_CLOUD = "CMB_CLOUD";
+    protected static final String BANK_PROVIDER_MANUAL = "MANUAL";
+    protected static final String BANK_CHANNEL_MANUAL_CONFIRM = "MANUAL_CONFIRM";
     protected static final String SYSTEM_OPERATOR = "SYSTEM";
     protected static final String PAYEE_ACCOUNT_COMPONENT_CODE = "payee-account";
     protected static final String BANK_PUSH_SUMMARY_COMPONENT_CODE = "bank-push-summary";

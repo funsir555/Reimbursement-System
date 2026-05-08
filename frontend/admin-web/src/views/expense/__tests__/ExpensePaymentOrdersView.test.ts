@@ -20,7 +20,8 @@ const mocks = vi.hoisted(() => ({
     completeTask: vi.fn(),
     markException: vi.fn(),
     submitOrderExport: vi.fn(),
-    rejectTasks: vi.fn()
+    rejectTasks: vi.fn(),
+    voidTasks: vi.fn()
   },
   elMessage: {
     success: vi.fn(),
@@ -231,6 +232,7 @@ describe('ExpensePaymentOrdersView', () => {
     mocks.expensePaymentApi.markException.mockResolvedValue({ data: {} })
     mocks.expensePaymentApi.submitOrderExport.mockResolvedValue({ data: { taskNo: 'TASK-001' } })
     mocks.expensePaymentApi.rejectTasks.mockResolvedValue({ data: true })
+    mocks.expensePaymentApi.voidTasks.mockResolvedValue({ data: true })
     mocks.elMessageBox.confirm.mockResolvedValue(undefined)
     mocks.elMessageBox.prompt.mockResolvedValue({ value: '批量驳回原因' })
     vi.stubGlobal('open', vi.fn(() => ({ opener: null })))
@@ -310,6 +312,14 @@ describe('ExpensePaymentOrdersView', () => {
     await wrapper.get('[data-testid="expense-payment-start-option-export"]').trigger('click')
     await flushPromises()
 
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '导出支付单后，单据状态会变更为“支付中”，确认导出吗？',
+      '导出支付单',
+      expect.objectContaining({
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    )
     expect(mocks.expensePaymentApi.submitOrderExport).toHaveBeenCalledWith([1])
     expect(mocks.elMessage.success).toHaveBeenCalledWith('下载任务已提交，请到下载中心查看进度')
     expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').text()).toContain('未选择单据')
@@ -340,8 +350,98 @@ describe('ExpensePaymentOrdersView', () => {
     await wrapper.get('[data-testid="expense-payment-bulk-download"]').trigger('click')
     await flushPromises()
 
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '导出支付单后，单据状态会变更为“支付中”，确认导出吗？',
+      '导出支付单',
+      expect.objectContaining({
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    )
     expect(mocks.expensePaymentApi.submitOrderExport).toHaveBeenCalledWith([1])
     expect(mocks.elMessage.success).toHaveBeenCalledWith('下载任务已提交，请到下载中心查看进度')
+  })
+
+  it('shows bulk actions and selection in paying tab without bulk start or reject', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=paying'
+    mocks.route.query.tab = 'paying'
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="expense-payment-select-row-21"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('下载')
+    expect(wrapper.text()).toContain('手动已支付')
+    expect(wrapper.text()).toContain('打印')
+    expect(wrapper.text()).toContain('作废')
+    expect(wrapper.find('[data-testid="expense-payment-bulk-start"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-reject"]').exists()).toBe(false)
+  })
+
+  it('shows paid tab bulk actions without manual paid and keeps row actions unchanged', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=paid'
+    mocks.route.query.tab = 'paid'
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="expense-payment-select-row-31"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('下载')
+    expect(wrapper.text()).toContain('打印')
+    expect(wrapper.text()).toContain('作废')
+    expect(wrapper.find('[data-testid="expense-payment-bulk-start"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-manual-paid"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-reject"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('查看')
+    expect(wrapper.text()).not.toContain('手动已支付')
+  })
+
+  it('shows finished tab bulk actions with download and print only', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=finished'
+    mocks.route.query.tab = 'finished'
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="expense-payment-select-row-41"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-download"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-print"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-manual-paid"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-void"]').exists()).toBe(false)
+  })
+
+  it('shows exception tab bulk actions without manual paid or bulk start', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=exception'
+    mocks.route.query.tab = 'exception'
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="expense-payment-select-row-51"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-download"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-print"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-void"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-start"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-manual-paid"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('发起支付')
+  })
+
+  it('submits export directly for paying tasks without the pending confirmation', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=paying'
+    mocks.route.query.tab = 'paying'
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-payment-select-row-21"]').setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="expense-payment-bulk-download"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.expensePaymentApi.submitOrderExport).toHaveBeenCalledWith([21])
+    expect(mocks.elMessageBox.confirm).not.toHaveBeenCalledWith(
+      '导出支付单后，单据状态会变更为“支付中”，确认导出吗？',
+      '导出支付单',
+      expect.anything()
+    )
   })
 
   it('rejects selected pending payment tasks with a textarea prompt', async () => {
@@ -357,7 +457,73 @@ describe('ExpensePaymentOrdersView', () => {
     expect(mocks.elMessage.success).toHaveBeenCalledWith('付款任务已驳回')
   })
 
-  it('clears selection after switching away from pending tab and keeps other tabs row actions', async () => {
+  it('confirms and completes selected paying tasks in bulk', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=paying'
+    mocks.route.query.tab = 'paying'
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-payment-select-row-21"]').setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="expense-payment-bulk-manual-paid"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '点击确认后，单据状态变更为“已支付”',
+      '手动标记已支付',
+      expect.objectContaining({
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    )
+    expect(mocks.expensePaymentApi.completeTask).toHaveBeenCalledWith(21, { comment: '' })
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('付款任务已标记为已支付')
+  })
+
+  it('voids selected paying tasks after confirmation', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=paying'
+    mocks.route.query.tab = 'paying'
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-payment-select-row-21"]').setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="expense-payment-bulk-void"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '作废后，单据会返回“待支付”状态，确认作废吗？',
+      '作废付款单',
+      expect.objectContaining({
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    )
+    expect(mocks.expensePaymentApi.voidTasks).toHaveBeenCalledWith([21])
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('付款任务已返回待支付')
+  })
+
+  it('voids selected paid tasks with the previous-status confirmation copy', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=paid'
+    mocks.route.query.tab = 'paid'
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="expense-payment-select-row-31"]').setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="expense-payment-bulk-void"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '作废后，单据会返回上一个支付状态，确认作废吗？',
+      '作废付款单',
+      expect.objectContaining({
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    )
+    expect(mocks.expensePaymentApi.voidTasks).toHaveBeenCalledWith([31])
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('付款任务已作废')
+  })
+
+  it('clears selection after switching away from pending tab and keeps paid tab bulk actions plus row actions', async () => {
     const wrapper = await mountView()
 
     await wrapper.get('[data-testid="expense-payment-select-row-1"]').setValue(true)
@@ -372,9 +538,27 @@ describe('ExpensePaymentOrdersView', () => {
     mocks.route.query.tab = 'paid'
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-payment-floating-bar"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('查看')
+    expect(wrapper.find('[data-testid="expense-payment-select-row-31"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="expense-payment-select-row-1"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-void"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="expense-payment-bulk-manual-paid"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="expense-payment-floating-bar"]').text()).toContain('未选择单据')
+  })
+
+  it('confirms row-level manual paid on paying rows without prompting for remarks', async () => {
+    mocks.route.fullPath = '/expense/payment/orders?tab=paying'
+    mocks.route.query.tab = 'paying'
+    const wrapper = await mountView()
+
+    const manualPaidButton = wrapper.findAll('button').find((item) => item.text() === '手动已支付')
+    expect(manualPaidButton).toBeTruthy()
+    await manualPaidButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.prompt).not.toHaveBeenCalled()
+    expect(mocks.expensePaymentApi.completeTask).toHaveBeenCalledWith(21, { comment: '' })
   })
   it('opens document detail with the current workbench route as returnTo', async () => {
     const wrapper = await mountView()

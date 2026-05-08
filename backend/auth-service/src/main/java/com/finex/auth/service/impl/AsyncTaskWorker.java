@@ -37,6 +37,8 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
@@ -235,11 +237,26 @@ public class AsyncTaskWorker {
      */
     private List<ExpensePaymentOrderVO> loadPaymentPendingRows(Long userId, ExpenseExportSubmitDTO payload) {
         Set<Long> taskIds = payload.getTaskIds() == null ? Set.of() : Set.copyOf(payload.getTaskIds());
-        List<ExpensePaymentOrderVO> filtered = expenseDocumentService.listPaymentOrders(userId, "PENDING_PAYMENT").stream()
+        Map<Long, ExpensePaymentOrderVO> rowMap = List.of(
+                        "PENDING_PAYMENT",
+                        "PAYING",
+                        "PAYMENT_COMPLETED",
+                        "PAYMENT_FINISHED",
+                        "PAYMENT_EXCEPTION"
+                ).stream()
+                .flatMap(status -> expenseDocumentService.listPaymentOrders(userId, status).stream())
                 .filter(item -> item.getTaskId() != null && taskIds.contains(item.getTaskId()))
+                .collect(Collectors.toMap(
+                        ExpensePaymentOrderVO::getTaskId,
+                        item -> item,
+                        (left, right) -> left
+                ));
+        List<ExpensePaymentOrderVO> filtered = (payload.getTaskIds() == null ? List.<Long>of() : payload.getTaskIds()).stream()
+                .map(rowMap::get)
+                .filter(Objects::nonNull)
                 .toList();
         if (filtered.isEmpty()) {
-            throw new IllegalArgumentException("\u5f53\u524d\u6ca1\u6709\u53ef\u5bfc\u51fa\u7684\u6570\u636e");
+                throw new IllegalArgumentException("\u5f53\u524d\u6ca1\u6709\u53ef\u5bfc\u51fa\u7684\u6570\u636e");
         }
         return filtered;
     }
@@ -267,7 +284,7 @@ public class AsyncTaskWorker {
                 writeCell(row, cellIndex++, item.getPayeeBankName());
                 writeCell(row, cellIndex++, item.getPayeeBankProvince());
                 writeCell(row, cellIndex++, item.getPayeeBankCity());
-                writeCell(row, cellIndex++, item.getBankPushSummary());
+                writeCell(row, cellIndex++, buildBankPushSummaryText(item));
                 writeCell(row, cellIndex++, decimalText(item.getActualPaymentAmount()));
                 writeCell(row, cellIndex, firstNonBlank(item.getPaymentStatusLabel(), item.getDocumentStatusLabel()));
             }
@@ -453,10 +470,22 @@ public class AsyncTaskWorker {
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_MY_EXPENSES -> "我的报销";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PENDING_APPROVAL -> "待我审批";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_DOCUMENT_QUERY -> "单据查询";
-            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING -> "待支付付款单";
+            case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING -> "支付单";
             case AsyncTaskSupport.EXPENSE_EXPORT_SCENE_OUTSTANDING -> "LOAN".equals(payload.getKind()) ? "待还款" : "待核销";
             default -> "导出结果";
         };
+    }
+
+    private String buildBankPushSummaryText(ExpensePaymentOrderVO item) {
+        String documentCode = trimToNull(item == null ? null : item.getDocumentCode());
+        String summary = trimToNull(item == null ? null : item.getBankPushSummary());
+        if (summary == null) {
+            return defaultText(documentCode, "");
+        }
+        if (documentCode == null) {
+            return summary;
+        }
+        return documentCode + "," + summary;
     }
 
     private String firstNonBlank(String... values) {
@@ -466,6 +495,18 @@ public class AsyncTaskWorker {
             }
         }
         return "";
+    }
+
+    private String defaultText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private AsyncTaskRecord requireTask(Long taskId) {

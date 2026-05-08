@@ -231,6 +231,12 @@ public interface ExpenseDocumentService {
 
     ExpenseDocumentDetailVO markPaymentTaskException(Long userId, String username, Long taskId, ExpenseApprovalActionDTO dto);
 
+    boolean validatePaymentTasksExportable(Long userId, List<Long> taskIds);
+
+    boolean markPaymentTasksAsPaying(Long userId, String username, List<Long> taskIds);
+
+    boolean voidPaymentTasks(Long userId, String username, List<Long> taskIds);
+
     boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto);
 
     /**

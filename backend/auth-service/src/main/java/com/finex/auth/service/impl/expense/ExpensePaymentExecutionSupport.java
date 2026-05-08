@@ -43,12 +43,14 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         if (!DOCUMENT_STATUS_PAYING.equals(status) && !DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)) {
             throw new IllegalStateException("当前付款任务不在可完成状态");
         }
+        SystemCompanyBankAccount account = recordSupport.findActiveBankAccountForDocument(instance, false);
         PmBankPaymentRecord record = recordSupport.findOrCreateBankPaymentRecord(
                 task,
                 instance,
-                recordSupport.findActiveBankAccountForDocument(instance)
+                account
         );
         record.setManualPaid(1);
+        applyManualPaymentChannel(record, account);
         record.setLastErrorMessage(null);
         if (trimToNull(record.getReceiptStatus()) == null) {
             record.setReceiptStatus(RECEIPT_STATUS_PENDING);
@@ -101,6 +103,66 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         );
     }
 
+    boolean validatePaymentTasksExportable(Long userId, List<Long> taskIds) {
+        validateExportablePaymentTasks(userId, taskIds);
+        return true;
+    }
+
+    boolean markPaymentTasksAsPaying(Long userId, String username, List<Long> taskIds) {
+        for (PaymentTaskContext paymentTask : validateExportablePaymentTasks(userId, taskIds)) {
+            String status = trimToNull(paymentTask.instance().getStatus());
+            if (DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)) {
+                expenseWorkflowRuntimeSupport.markPaymentStarted(
+                        paymentTask.instance(),
+                        paymentTask.task(),
+                        userId,
+                        username,
+                        false,
+                        null,
+                        null,
+                        null
+                );
+                continue;
+            }
+        }
+        return true;
+    }
+
+    boolean voidPaymentTasks(Long userId, String username, List<Long> taskIds) {
+        List<Long> normalizedTaskIds = normalizeTaskIds(taskIds);
+        if (normalizedTaskIds.isEmpty()) {
+            throw new IllegalArgumentException("请选择可作废的付款单");
+        }
+        for (Long taskId : normalizedTaskIds) {
+            ProcessDocumentTask task = requireAccessiblePaymentTask(taskId, userId);
+            ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
+            String currentStatus = trimToNull(instance.getStatus());
+            if (!isVoidableStatus(currentStatus)) {
+                throw new IllegalStateException("当前付款任务不在可作废状态");
+            }
+            String targetStatus = expenseWorkflowRuntimeSupport.resolvePaymentVoidTargetStatus(instance);
+            reopenPaymentTaskIfNeeded(task);
+            expenseWorkflowRuntimeSupport.revertPaymentToStatus(
+                    instance,
+                    task,
+                    userId,
+                    username,
+                    buildVoidComment(targetStatus),
+                    currentStatus,
+                    targetStatus
+            );
+            PmBankPaymentRecord record = recordSupport.findLatestBankPaymentRecord(instance.getDocumentCode());
+            if (record != null) {
+                record.setManualPaid(0);
+                record.setPaidAt(null);
+                record.setReceiptStatus(RECEIPT_STATUS_PENDING);
+                record.setLastErrorMessage(null);
+                pmBankPaymentRecordMapper.updateById(record);
+            }
+        }
+        return true;
+    }
+
     boolean rejectPaymentTasks(Long userId, String username, List<Long> taskIds, ExpenseApprovalActionDTO dto) {
         List<Long> normalizedTaskIds = normalizeTaskIds(taskIds);
         if (normalizedTaskIds.isEmpty()) {
@@ -142,7 +204,11 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
                 record.setCompanyBankAccountId(account.getId());
                 record.setBankProvider(BANK_PROVIDER_CMB);
                 record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
+            } else if (manualPaid) {
+                applyManualPaymentChannel(record, null);
             }
+        } else if (manualPaid) {
+            applyManualPaymentChannel(record, null);
         }
         record.setManualPaid(manualPaid ? 1 : 0);
         record.setPaidAt(paidAt == null ? LocalDateTime.now() : paidAt);
@@ -171,6 +237,24 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         );
     }
 
+    private void applyManualPaymentChannel(PmBankPaymentRecord record, SystemCompanyBankAccount account) {
+        if (record == null) {
+            return;
+        }
+        if (account != null) {
+            record.setCompanyBankAccountId(account.getId());
+            record.setBankProvider(BANK_PROVIDER_CMB);
+            record.setBankChannel(BANK_CHANNEL_CMB_CLOUD);
+            return;
+        }
+        if (trimToNull(record.getBankProvider()) == null) {
+            record.setBankProvider(BANK_PROVIDER_MANUAL);
+        }
+        if (trimToNull(record.getBankChannel()) == null) {
+            record.setBankChannel(BANK_CHANNEL_MANUAL_CONFIRM);
+        }
+    }
+
     private List<Long> normalizeTaskIds(List<Long> taskIds) {
         if (taskIds == null || taskIds.isEmpty()) {
             return List.of();
@@ -181,7 +265,53 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
                 .toList();
     }
 
-    private ProcessDocumentTask requireOpenPaymentTask(Long taskId, Long userId) {
+    private List<PaymentTaskContext> validateExportablePaymentTasks(Long userId, List<Long> taskIds) {
+        List<Long> normalizedTaskIds = normalizeTaskIds(taskIds);
+        if (normalizedTaskIds.isEmpty()) {
+            throw new IllegalArgumentException("请选择付款单");
+        }
+        return normalizedTaskIds.stream()
+                .map(taskId -> {
+                    ProcessDocumentTask task = requireAccessiblePaymentTask(taskId, userId);
+                    ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
+                    String status = trimToNull(instance.getStatus());
+                    if (!isExportableStatus(status)) {
+                        throw new IllegalStateException("当前付款任务不在可导出状态");
+                    }
+                    return new PaymentTaskContext(task, instance);
+                })
+                .toList();
+    }
+
+    private boolean isExportableStatus(String status) {
+        return DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)
+                || DOCUMENT_STATUS_PAYING.equals(status)
+                || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(status)
+                || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(status)
+                || DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status);
+    }
+
+    private boolean isVoidableStatus(String status) {
+        return DOCUMENT_STATUS_PAYING.equals(status)
+                || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(status)
+                || DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status);
+    }
+
+    private void reopenPaymentTaskIfNeeded(ProcessDocumentTask task) {
+        if (TASK_STATUS_PENDING.equals(task.getStatus()) || TASK_STATUS_PAUSED.equals(task.getStatus())) {
+            return;
+        }
+        task.setStatus(TASK_STATUS_PENDING);
+        task.setHandledAt(null);
+        task.setActionComment(null);
+        processDocumentTaskMapper.updateById(task);
+    }
+
+    private String buildVoidComment(String targetStatus) {
+        return DOCUMENT_STATUS_PAYING.equals(targetStatus) ? "作废后返回支付中" : "作废后返回待支付";
+    }
+
+    private ProcessDocumentTask requireAccessiblePaymentTask(Long taskId, Long userId) {
         ProcessDocumentTask task = processDocumentTaskMapper.selectById(taskId);
         if (task == null) {
             throw new IllegalStateException("付款任务不存在");
@@ -192,6 +322,11 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         if (!NODE_TYPE_PAYMENT.equals(trimToNull(task.getNodeType()))) {
             throw new IllegalStateException("当前任务不是付款任务");
         }
+        return task;
+    }
+
+    private ProcessDocumentTask requireOpenPaymentTask(Long taskId, Long userId) {
+        ProcessDocumentTask task = requireAccessiblePaymentTask(taskId, userId);
         if (!TASK_STATUS_PENDING.equals(task.getStatus()) && !TASK_STATUS_PAUSED.equals(task.getStatus())) {
             throw new IllegalStateException("付款任务已被处理");
         }
@@ -238,5 +373,8 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         return expenseDocumentReadSupport.buildDocumentDetail(
                 expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
         );
+    }
+
+    private record PaymentTaskContext(ProcessDocumentTask task, ProcessDocumentInstance instance) {
     }
 }

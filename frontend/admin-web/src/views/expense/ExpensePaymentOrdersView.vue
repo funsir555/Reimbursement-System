@@ -47,7 +47,7 @@
 
     <el-card class="expense-wb-panel expense-wb-table-shell expense-wb-table-shell--compact">
       <el-table :data="pagedRows" v-loading="loading" style="width: 100%">
-        <el-table-column v-if="isPendingTab" label="选择" width="68">
+        <el-table-column v-if="supportsBulkActionsTab" label="选择" width="68">
           <template #header>
             <input
               :checked="allCurrentPageSelected"
@@ -153,13 +153,22 @@
         </div>
         <div class="detail-floating-actions" data-testid="expense-payment-floating-actions">
           <div class="detail-floating-actions__group detail-floating-actions__group--secondary">
-            <el-button class="detail-floating-button" data-testid="expense-payment-bulk-start" :disabled="!hasSelectedTasks" @click="openStartPaymentDialog">发起支付</el-button>
+            <el-button
+              v-if="showBulkStart"
+              class="detail-floating-button"
+              data-testid="expense-payment-bulk-start"
+              :disabled="!hasSelectedTasks"
+              @click="openStartPaymentDialog"
+            >
+              发起支付
+            </el-button>
             <el-button class="detail-floating-button" data-testid="expense-payment-bulk-download" :disabled="!hasSelectedTasks" @click="handleBulkDownload">下载</el-button>
-            <el-button class="detail-floating-button" data-testid="expense-payment-bulk-manual-paid" :disabled="!hasSelectedTasks" @click="showPlaceholder('手动已支付')">手动已支付</el-button>
+            <el-button v-if="showBulkManualPaid" class="detail-floating-button" data-testid="expense-payment-bulk-manual-paid" :disabled="!hasSelectedTasks" @click="handleBulkManualPaid">手动已支付</el-button>
             <el-button class="detail-floating-button" data-testid="expense-payment-bulk-print" :disabled="!hasSelectedTasks" @click="handleBulkPrint">打印</el-button>
           </div>
           <div class="detail-floating-actions__group detail-floating-actions__group--primary">
             <el-button
+              v-if="showBulkStart"
               class="detail-floating-button detail-floating-button--danger"
               data-testid="expense-payment-bulk-reject"
               type="danger"
@@ -167,6 +176,16 @@
               @click="handleBulkReject"
             >
               驳回
+            </el-button>
+            <el-button
+              v-if="showBulkVoid"
+              class="detail-floating-button detail-floating-button--danger"
+              data-testid="expense-payment-bulk-void"
+              type="danger"
+              :disabled="!hasSelectedTasks"
+              @click="handleBulkVoid"
+            >
+              作废
             </el-button>
           </div>
         </div>
@@ -245,6 +264,20 @@ const activeTab = computed<PaymentTab>(() => {
 })
 
 const isPendingTab = computed(() => activeTab.value === 'pending')
+const isPayingTab = computed(() => activeTab.value === 'paying')
+const isPaidTab = computed(() => activeTab.value === 'paid')
+const isFinishedTab = computed(() => activeTab.value === 'finished')
+const isExceptionTab = computed(() => activeTab.value === 'exception')
+const supportsBulkActionsTab = computed(() => (
+  isPendingTab.value
+  || isPayingTab.value
+  || isPaidTab.value
+  || isFinishedTab.value
+  || isExceptionTab.value
+))
+const showBulkStart = computed(() => isPendingTab.value)
+const showBulkManualPaid = computed(() => isPendingTab.value || isPayingTab.value)
+const showBulkVoid = computed(() => isPayingTab.value || isPaidTab.value || isExceptionTab.value)
 const showRowActions = computed(() => !isPendingTab.value)
 const currentRows = computed(() => rowsByTab.value[activeTab.value] || [])
 const filteredRows = computed(() => {
@@ -263,17 +296,23 @@ const pagedRows = computed(() => {
   return filteredRows.value.slice(start, start + pageSize.value)
 })
 const allCurrentPageSelected = computed(() => (
-  isPendingTab.value && pagedRows.value.length > 0 && pagedRows.value.every((row) => isTaskSelected(row.taskId))
+  supportsBulkActionsTab.value && pagedRows.value.length > 0 && pagedRows.value.every((row) => isTaskSelected(row.taskId))
 ))
 const hasSelectedTasks = computed(() => selectedTaskIds.value.length > 0)
-const showFloatingBar = computed(() => isPendingTab.value)
+const showFloatingBar = computed(() => supportsBulkActionsTab.value)
 const floatingSelectionText = computed(() => (
   hasSelectedTasks.value ? `已选 ${selectedTaskIds.value.length} 项` : '未选择单据'
 ))
 const floatingSelectionHint = computed(() => (
-  hasSelectedTasks.value
-    ? '勾选单据后可在这里批量发起支付、下载、驳回等操作。'
-    : '请先勾选待支付单据，再进行批量操作'
+  hasSelectedTasks.value ? resolveFloatingHint(true) : resolveFloatingHint(false)
+))
+const voidConfirmMessage = computed(() => (
+  isPayingTab.value
+    ? '作废后，单据会返回“待支付”状态，确认作废吗？'
+    : '作废后，单据会返回上一个支付状态，确认作废吗？'
+))
+const voidSuccessMessage = computed(() => (
+  isPayingTab.value ? '付款任务已返回待支付' : '付款任务已作废'
 ))
 
 const statusCards = computed(() => [
@@ -288,10 +327,8 @@ watch(
   () => route.query.tab,
   () => {
     currentPage.value = 1
-    if (!isPendingTab.value) {
-      clearSelection()
-      startPaymentDialogVisible.value = false
-    }
+    clearSelection()
+    startPaymentDialogVisible.value = false
   },
   { immediate: true }
 )
@@ -339,7 +376,7 @@ async function reloadAll(options: { clearSelection?: boolean } = {}) {
 }
 
 function pruneSelection() {
-  const visibleIds = new Set(rowsByTab.value.pending.map((item) => item.taskId))
+  const visibleIds = new Set((supportsBulkActionsTab.value ? currentRows.value : []).map((item) => item.taskId))
   selectedTaskIds.value = selectedTaskIds.value.filter((taskId) => visibleIds.has(taskId))
   selectedRowsSnapshot.value = Object.fromEntries(
     Object.entries(selectedRowsSnapshot.value).filter(([taskId]) => visibleIds.has(Number(taskId)))
@@ -413,18 +450,23 @@ async function startPayment(row: ExpensePaymentOrder) {
 }
 
 async function completePayment(row: ExpensePaymentOrder) {
+  await confirmAndCompleteTasks([row.taskId])
+}
+
+async function confirmAndCompleteTasks(taskIds: number[]) {
   try {
-    const { value } = await ElMessageBox.prompt(
-      '可选填写备注，系统会将该单据标记为手动已支付，并跳过自动回单查询。',
+    await ElMessageBox.confirm(
+      '点击确认后，单据状态变更为“已支付”',
       '手动标记已支付',
       {
-        inputType: 'textarea',
-        inputPlaceholder: '请输入备注（可空）',
         confirmButtonText: '确认',
-        cancelButtonText: '取消'
+        cancelButtonText: '取消',
+        type: 'warning'
       }
     )
-    await expensePaymentApi.completeTask(row.taskId, { comment: value || '' })
+    for (const taskId of taskIds) {
+      await expensePaymentApi.completeTask(taskId, { comment: '' })
+    }
     ElMessage.success('付款任务已标记为已支付')
     await reloadAll({ clearSelection: true })
   } catch (error: unknown) {
@@ -459,24 +501,43 @@ function openStartPaymentDialog() {
 }
 
 async function handleStartPaymentExport() {
+  await submitOrderExport({
+    requireConfirm: true,
+    closeStartDialog: true
+  })
+}
+
+async function submitOrderExport(options: { requireConfirm: boolean, closeStartDialog?: boolean }) {
   try {
+    if (options.requireConfirm) {
+      await ElMessageBox.confirm(
+        '导出支付单后，单据状态会变更为“支付中”，确认导出吗？',
+        '导出支付单',
+        {
+          confirmButtonText: '确认',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+    }
     await expensePaymentApi.submitOrderExport(selectedTaskIds.value)
-    startPaymentDialogVisible.value = false
-    clearSelection()
+    if (options.closeStartDialog) {
+      startPaymentDialogVisible.value = false
+    }
+    await reloadAll({ clearSelection: true })
     ElMessage.success('下载任务已提交，请到下载中心查看进度')
   } catch (error: unknown) {
+    if (isCancel(error)) {
+      return
+    }
     ElMessage.error(resolveErrorMessage(error, '提交下载任务失败'))
   }
 }
 
 async function handleBulkDownload() {
-  try {
-    await expensePaymentApi.submitOrderExport(selectedTaskIds.value)
-    ElMessage.success('\u4e0b\u8f7d\u4efb\u52a1\u5df2\u63d0\u4ea4\uff0c\u8bf7\u5230\u4e0b\u8f7d\u4e2d\u5fc3\u67e5\u770b\u8fdb\u5ea6')
-    clearSelection()
-  } catch (error: unknown) {
-    ElMessage.error(resolveErrorMessage(error, '\u63d0\u4ea4\u4e0b\u8f7d\u4efb\u52a1\u5931\u8d25'))
-  }
+  await submitOrderExport({
+    requireConfirm: isPendingTab.value
+  })
 }
 
 function handleBulkPrint() {
@@ -485,14 +546,18 @@ function handleBulkPrint() {
     .filter(Boolean)
 
   if (documentCodes.length === 0) {
-    ElMessage.warning('\u8bf7\u5148\u52fe\u9009\u5f85\u652f\u4ed8\u5355\u636e')
+    ElMessage.warning('请先勾选付款单据')
     return
   }
 
-  const openedWindow = openExpensePrintWindow(buildExpenseBatchPrintHref(router, documentCodes))
+  const openedWindow = openExpensePrintWindow(buildExpenseBatchPrintHref(router, documentCodes, `payment-${activeTab.value}`))
   if (!openedWindow) {
     ElMessage.error('\u672a\u80fd\u6253\u5f00\u6253\u5370\u7a97\u53e3\uff0c\u8bf7\u68c0\u67e5\u6d4f\u89c8\u5668\u5f39\u7a97\u62e6\u622a\u8bbe\u7f6e')
   }
+}
+
+async function handleBulkManualPaid() {
+  await confirmAndCompleteTasks(selectedTaskIds.value)
 }
 
 async function handleBulkReject() {
@@ -511,6 +576,28 @@ async function handleBulkReject() {
       return
     }
     ElMessage.error(resolveErrorMessage(error, '驳回付款单失败'))
+  }
+}
+
+async function handleBulkVoid() {
+  try {
+    await ElMessageBox.confirm(
+      voidConfirmMessage.value,
+      '作废付款单',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    await expensePaymentApi.voidTasks(selectedTaskIds.value)
+    ElMessage.success(voidSuccessMessage.value)
+    await reloadAll({ clearSelection: true })
+  } catch (error: unknown) {
+    if (isCancel(error)) {
+      return
+    }
+    ElMessage.error(resolveErrorMessage(error, '作废付款单失败'))
   }
 }
 
@@ -547,11 +634,38 @@ function resolveErrorMessage(error: unknown, fallback: string) {
   }
   return fallback
 }
+
+function resolveFloatingHint(hasSelection: boolean) {
+  if (isPendingTab.value) {
+    return hasSelection
+      ? '勾选待支付单据后可在这里批量发起支付、下载、手动已支付、打印或驳回。'
+      : '请先勾选待支付单据，再进行批量操作'
+  }
+  if (isPayingTab.value) {
+    return hasSelection
+      ? '勾选支付中单据后可在这里批量下载、手动已支付、打印或作废。'
+      : '请先勾选支付中的付款单，再进行批量操作'
+  }
+  if (isPaidTab.value) {
+    return hasSelection
+      ? '勾选已支付单据后可在这里批量下载、打印或作废。'
+      : '请先勾选已支付单据，再进行批量操作'
+  }
+  if (isFinishedTab.value) {
+    return hasSelection
+      ? '勾选已完成单据后可在这里批量下载或打印。'
+      : '请先勾选已完成单据，再进行批量操作'
+  }
+  return hasSelection
+    ? '勾选支付异常单据后可在这里批量下载、打印或作废。'
+    : '请先勾选支付异常单据，再进行批量操作'
+}
 </script>
 
 <style scoped>
 .payment-orders-page {
   padding-bottom: 132px;
+  --payment-floating-action-gap: 12px;
 }
 
 .detail-floating-bar {
@@ -604,14 +718,18 @@ function resolveErrorMessage(error: unknown, fallback: string) {
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--payment-floating-action-gap);
 }
 
 .detail-floating-actions__group {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--payment-floating-action-gap);
+}
+
+:deep(.detail-floating-actions .el-button + .el-button) {
+  margin-left: 0;
 }
 
 :deep(.detail-floating-button) {
@@ -678,7 +796,7 @@ function resolveErrorMessage(error: unknown, fallback: string) {
 
   .detail-floating-actions,
   .detail-floating-actions__group {
-    gap: 10px;
+    gap: var(--payment-floating-action-gap);
   }
 
   .detail-floating-actions__group {
@@ -689,6 +807,10 @@ function resolveErrorMessage(error: unknown, fallback: string) {
     min-height: 34px;
     padding: 0 14px;
     font-size: 14px;
+  }
+
+  .payment-orders-page {
+    --payment-floating-action-gap: 10px;
   }
 }
 </style>

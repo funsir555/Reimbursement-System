@@ -1,4 +1,4 @@
-import { computed, nextTick, reactive, ref, watch, type Ref } from 'vue'
+import { computed, reactive, ref, watch, type Ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   systemSettingsApi,
@@ -24,11 +24,10 @@ export function useSystemSettingsRoles(params: {
   currentUser: Ref<SystemSettingsBootstrapData['currentUser'] | null>
   loadBootstrap: () => Promise<void>
 }) {
-  const { roles, permissions, employees, currentUser, loadBootstrap } = params
+  const { roles, employees, currentUser, loadBootstrap } = params
 
   const selectedRole = ref<RoleRecord>()
   const selectedRoleUserIds = ref<number[]>([])
-  const permissionTreeRef = ref()
   const roleDialogVisible = ref(false)
   const roleForm = reactive<RoleFormState>({
     roleCode: '',
@@ -55,11 +54,9 @@ export function useSystemSettingsRoles(params: {
   )
 
   watch(
-    () => [selectedRole.value?.id, permissions.value.length],
-    async () => {
+    () => selectedRole.value?.id,
+    () => {
       selectedRoleUserIds.value = selectedRole.value?.userIds ? [...selectedRole.value.userIds] : []
-      await nextTick()
-      permissionTreeRef.value?.setCheckedKeys(selectedRole.value?.permissionCodes || [])
     }
   )
 
@@ -109,7 +106,7 @@ export function useSystemSettingsRoles(params: {
     await loadBootstrap()
   }
 
-  async function saveRolePermissions() {
+  async function saveRolePermissions(permissionCodes: string[]) {
     if (!selectedRole.value) {
       return
     }
@@ -117,8 +114,7 @@ export function useSystemSettingsRoles(params: {
       ElMessage.warning('超级管理员权限仅可由超级管理员修改')
       return
     }
-    const checkedKeys = permissionTreeRef.value?.getCheckedKeys(false) || []
-    await systemSettingsApi.assignRolePermissions(selectedRole.value.id, checkedKeys)
+    await systemSettingsApi.assignRolePermissions(selectedRole.value.id, permissionCodes)
     ElMessage.success('角色权限已更新')
     await loadBootstrap()
   }
@@ -193,7 +189,6 @@ export function useSystemSettingsRoles(params: {
   return {
     selectedRole,
     selectedRoleUserIds,
-    permissionTreeRef,
     roleDialogVisible,
     roleForm,
     selectedRoleProtected,

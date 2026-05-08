@@ -35,6 +35,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -501,6 +502,33 @@ class ExpenseWorkflowRuntimeSupportTest {
 
         assertEquals(1, insertedTasks.size());
         assertEquals("approval-route-a", insertedTasks.get(0).getNodeKey());
+    }
+
+    @Test
+    void markPaymentStartedAllowsNullBankFieldsForExportFlow() {
+        List<ProcessDocumentActionLog> insertedLogs = new ArrayList<>();
+        doAnswer(invocation -> {
+            ProcessDocumentActionLog log = invocation.getArgument(0);
+            insertedLogs.add(log);
+            return 1;
+        }).when(processDocumentActionLogMapper).insert(any(ProcessDocumentActionLog.class));
+
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-EXPORT-001");
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(99L);
+        task.setDocumentCode("DOC-EXPORT-001");
+        task.setNodeKey("payment-node");
+        task.setNodeName("付款节点");
+
+        support.markPaymentStarted(instance, task, 1L, "tester", false, null, null, null);
+
+        assertEquals("PAYING", instance.getStatus());
+        assertEquals(1, insertedLogs.size());
+        assertNotNull(insertedLogs.get(0).getPayloadJson());
+        assertTrue(insertedLogs.get(0).getPayloadJson().contains("\"taskId\":99"));
+        assertFalse(insertedLogs.get(0).getPayloadJson().contains("companyBankAccountId"));
     }
 
     @Test
