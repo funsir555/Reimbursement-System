@@ -3,7 +3,7 @@
     <section class="rounded-[26px] border border-slate-100 bg-white px-6 py-4 shadow-sm">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div class="flex flex-wrap items-center gap-3">
-          <h1 class="text-2xl font-bold text-slate-800">财务系统管理</h1>
+          <h1 class="text-2xl font-bold text-slate-800">新建账套</h1>
           <div class="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1.5 text-sm text-sky-700">
             <span class="font-semibold">当前财务公司</span>
             <strong>{{ currentCompanyDisplay || '未设置' }}</strong>

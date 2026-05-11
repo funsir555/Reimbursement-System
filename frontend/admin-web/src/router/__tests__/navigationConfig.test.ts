@@ -17,15 +17,21 @@ describe('navigation configuration', () => {
   it('filters menu visibility and fallback order from the same permission source', () => {
     const visibleMenu = filterVisibleNavigationMenu(MAIN_NAVIGATION_MENU, ['finance:system_management:view'])
     const financeGroup = visibleMenu.find((item) => item.index === '/finance')
+    const systemManagementGroup = financeGroup?.children?.find((item) => item.index === '/finance/system-management')
 
     expect(financeGroup).toBeTruthy()
+    expect(systemManagementGroup?.title).toBe('财务系统管理')
+    expect(systemManagementGroup?.children?.map((item) => item.index)).toEqual([
+      '/finance/system-management/new-account-set',
+      '/finance/system-management/system-enable'
+    ])
     expect(fallbackMatch('settings:roles:view')).toBe('/settings?tab=organization')
     expect(fallbackMatch('settings:company_accounts:view')).toBe('/settings?tab=companyAccounts')
     expect(fallbackMatch('settings:api_interfaces:view')).toBe('/settings?tab=apiInterfaces')
   })
 
   it('resolves finance tab titles and placeholder copy from route meta', () => {
-    expect(resolveRouteTabTitle({ tabTitle: '财务系统管理', title: '财务系统管理' })).toBe('财务系统管理')
+    expect(resolveRouteTabTitle(resolveRouteMeta('finance-system-management-new-account-set'))).toBe('新建账套')
     expect(resolvePlaceholderTitle(resolveRouteMeta('finance-review-voucher'))).toBe('审核凭证')
     expect(resolvePlaceholderDescription(resolveRouteMeta('finance-review-voucher'))).toBe('审核总账凭证')
     expect(resolvePlaceholderTitle(resolveRouteMeta('finance-opening-balance'))).toBe('期初余额')
@@ -61,6 +67,17 @@ describe('navigation configuration', () => {
       'finance-close-ledger'
     ])
     expect(ledgerKeys?.[6]).toBe('finance-ledger-balance-sheet')
+  })
+
+  it('nests finance archives under finance system management without changing archive page routes', () => {
+    const visibleMenu = filterVisibleNavigationMenu(MAIN_NAVIGATION_MENU, ['finance:archives:projects:view'])
+    const financeGroup = visibleMenu.find((item) => item.index === '/finance')
+    const systemManagementGroup = financeGroup?.children?.find((item) => item.index === '/finance/system-management')
+    const archivesGroup = systemManagementGroup?.children?.find((item) => item.index === '/finance/archives')
+
+    expect(systemManagementGroup?.title).toBe('财务系统管理')
+    expect(archivesGroup?.title).toBe('会计档案')
+    expect(archivesGroup?.children?.map((item) => item.index)).toEqual(['/finance/archives/projects'])
   })
 })
 

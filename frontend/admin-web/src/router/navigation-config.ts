@@ -152,18 +152,25 @@ export const MAIN_NAVIGATION_MENU: NavigationMenuNode[] = [
         ]
       ),
       createMenuGroup(
-        '/finance/archives',
-        '会计档案',
+        '/finance/system-management',
+        '财务系统管理',
         [
-          createRouteMenuNode('finance-archives-customers'),
-          createRouteMenuNode('finance-archives-suppliers'),
-          createRouteMenuNode('finance-archives-employees'),
-          createRouteMenuNode('finance-archives-departments'),
-          createRouteMenuNode('finance-archives-account-subjects'),
-          createRouteMenuNode('finance-archives-projects')
+          createRouteMenuNode('finance-system-management-new-account-set'),
+          createMenuGroup(
+            '/finance/archives',
+            '会计档案',
+            [
+              createRouteMenuNode('finance-archives-customers'),
+              createRouteMenuNode('finance-archives-suppliers'),
+              createRouteMenuNode('finance-archives-employees'),
+              createRouteMenuNode('finance-archives-departments'),
+              createRouteMenuNode('finance-archives-account-subjects'),
+              createRouteMenuNode('finance-archives-projects')
+            ]
+          ),
+          createRouteMenuNode('finance-system-management-system-enable')
         ]
-      ),
-      createRouteMenuNode('finance-system-management')
+      )
     ],
     'Coin'
   ),

@@ -35,6 +35,7 @@ import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.EmployeeDirectorySupport;
 import com.finex.auth.support.FinanceBalanceDirectionSupport;
+import com.finex.auth.support.FinanceBalanceRowSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -1086,45 +1087,11 @@ abstract class AbstractFinanceOpeningBalanceSupport {
     }
 
     protected void fillOpeningAmounts(GlAccsum row, FinanceAccountSubject subject, BigDecimal mb, BigDecimal mbF, BigDecimal nbS, BigDecimal md, BigDecimal mc, BigDecimal ndS) {
-        row.setCexchName(trimToNull(subject.getCexchName()) == null ? "人民币" : subject.getCexchName());
-        row.setCurrencyCode(resolveCurrencyCode(subject.getCexchName()));
-        row.setMb(money(mb));
-        row.setMbF(money(mbF));
-        row.setNbS(qty(nbS));
-        row.setMd(money(md));
-        row.setMc(money(mc));
-        row.setNdS(qty(ndS));
-        row.setMdF(ZERO);
-        row.setMcF(ZERO);
-        row.setNcS(ZERO_QTY);
-        row.setMe(row.getMb().add(row.getMd()).subtract(row.getMc()));
-        row.setMeF(row.getMbF().add(money(row.getMdF())).subtract(money(row.getMcF())));
-        row.setNeS(row.getNbS().add(row.getNdS()).subtract(qty(row.getNcS())));
-        row.setCbegindC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMb()));
-        row.setCbegindCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMb()));
-        row.setCenddC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMe()));
-        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMe()));
+        FinanceBalanceRowSupport.fillBalanceRow(row, subject, mb, mbF, nbS, md, mc, ZERO, ZERO, ndS, ZERO_QTY);
     }
 
     protected void fillOpeningAmounts(GlAccass row, FinanceAccountSubject subject, BigDecimal mb, BigDecimal mbF, BigDecimal nbS, BigDecimal md, BigDecimal mc, BigDecimal ndS) {
-        row.setCexchName(trimToNull(subject.getCexchName()) == null ? "人民币" : subject.getCexchName());
-        row.setCurrencyCode(resolveCurrencyCode(subject.getCexchName()));
-        row.setMb(money(mb));
-        row.setMbF(money(mbF));
-        row.setNbS(qty(nbS));
-        row.setMd(money(md));
-        row.setMc(money(mc));
-        row.setNdS(qty(ndS));
-        row.setMdF(ZERO);
-        row.setMcF(ZERO);
-        row.setNcS(ZERO_QTY);
-        row.setMe(row.getMb().add(row.getMd()).subtract(row.getMc()));
-        row.setMeF(row.getMbF().add(money(row.getMdF())).subtract(money(row.getMcF())));
-        row.setNeS(row.getNbS().add(row.getNdS()).subtract(qty(row.getNcS())));
-        row.setCbegindC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMb()));
-        row.setCbegindCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMb()));
-        row.setCenddC(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), row.getMe()));
-        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), row.getMe()));
+        FinanceBalanceRowSupport.fillBalanceRow(row, subject, mb, mbF, nbS, md, mc, ZERO, ZERO, ndS, ZERO_QTY);
     }
 
     protected boolean isDebitDirection(String balanceDirection) {

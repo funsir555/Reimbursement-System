@@ -26,6 +26,7 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceBalanceRowSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -359,6 +360,7 @@ abstract class AbstractFinanceCloseLedgerSupport {
 
         List<FinanceCloseLedgerCheckItemVO> generalChecks = new ArrayList<>();
         List<String> blockingReasons = new ArrayList<>();
+        boolean emptyPeriod = counts.totalCount() == 0;
 
         generalChecks.add(buildCheck("locked_after_close", "结账后本月不能再填制凭证", true, "结账成功后当前期间总账写操作将被锁定"));
 
@@ -368,26 +370,41 @@ abstract class AbstractFinanceCloseLedgerSupport {
             blockingReasons.add("当前期间已结账");
         }
 
-        boolean postedFully = postState != null && POST_STATUS_FULLY_POSTED.equals(trimToNull(postState.getStatus()));
-        generalChecks.add(buildCheck("posted_fully", "本月必须先完成记账", postedFully, postedFully ? "当前期间已完成记账" : "当前期间尚未完成记账"));
-        if (!postedFully) {
-            blockingReasons.add("当前期间尚未完成记账");
-        }
-
         boolean noUnposted = counts.unpostedCount() == 0;
-        generalChecks.add(buildCheck("no_unposted", "没有未审核凭证才能结账", noUnposted, noUnposted ? "当前期间不存在未审核凭证" : "还有未审核的凭证不能结账"));
+        generalChecks.add(buildCheck(
+                "no_unposted",
+                "没有未审核凭证才能结账",
+                noUnposted,
+                noUnposted
+                        ? (emptyPeriod ? "当前期间无凭证，未审核凭证视为已清零" : "当前期间不存在未审核凭证")
+                        : "还有未审核的凭证不能结账"
+        ));
         if (!noUnposted) {
             blockingReasons.add("还有未审核的凭证不能结账");
         }
 
         boolean noReviewed = counts.reviewedCount() == 0;
-        generalChecks.add(buildCheck("no_reviewed", "没有未记账凭证才能结账", noReviewed, noReviewed ? "当前期间不存在已审核未记账凭证" : "还有未记账的凭证不能结账"));
+        generalChecks.add(buildCheck(
+                "no_reviewed",
+                "没有未记账凭证才能结账",
+                noReviewed,
+                noReviewed
+                        ? (emptyPeriod ? "当前期间无凭证，视为已满足记账前置条件" : "当前期间不存在已审核未记账凭证")
+                        : "还有未记账的凭证不能结账"
+        ));
         if (!noReviewed) {
             blockingReasons.add("还有未记账的凭证不能结账");
         }
 
         boolean noError = counts.errorCount() == 0;
-        generalChecks.add(buildCheck("no_error", "错误凭证处理完成后才能结账", noError, noError ? "当前期间不存在错误凭证" : "当前期间存在错误凭证，不能结账"));
+        generalChecks.add(buildCheck(
+                "no_error",
+                "错误凭证处理完成后才能结账",
+                noError,
+                noError
+                        ? (emptyPeriod ? "当前期间无凭证，错误凭证视为已清零" : "当前期间不存在错误凭证")
+                        : "当前期间存在错误凭证，不能结账"
+        ));
         if (!noError) {
             blockingReasons.add("当前期间存在错误凭证，不能结账");
         }
@@ -429,6 +446,7 @@ abstract class AbstractFinanceCloseLedgerSupport {
             String operatorName,
             FinanceCloseLedgerReconcileResultVO reconcileResult
     ) {
+        CarryForwardResult carryForwardResult = carryForwardBalances(companyId, iyear, iperiod);
         FinancePeriodClose close = findPeriodClose(companyId, iyear, iperiod);
         if (close == null) {
             close = new FinancePeriodClose();
@@ -451,9 +469,140 @@ abstract class AbstractFinanceCloseLedgerSupport {
         insertLog(companyId, iyear, iperiod, "CLOSE_SUCCESS", "SUCCESS", operatorName, "总账期间结账成功",
                 "{\"differenceSubjectCount\":" + safeInt(reconcileResult == null ? null : reconcileResult.getDifferenceSubjectCount())
                         + ",\"differenceAssistCount\":" + safeInt(reconcileResult == null ? null : reconcileResult.getDifferenceAssistCount()) + "}");
+        insertLog(
+                companyId,
+                iyear,
+                iperiod,
+                "CARRY_FORWARD",
+                "SUCCESS",
+                operatorName,
+                "期末余额已滚转到下一期间",
+                "{\"nextIyperiod\":" + carryForwardResult.nextIyperiod()
+                        + ",\"glAccsumCount\":" + carryForwardResult.glAccsumCount()
+                        + ",\"glAccassCount\":" + carryForwardResult.glAccassCount() + "}"
+        );
         if (trimToNull(closeNote) != null) {
             insertLog(companyId, iyear, iperiod, "NOTE", "SUCCESS", operatorName, closeNote.trim(), null);
         }
+    }
+
+    protected CarryForwardResult carryForwardBalances(String companyId, int iyear, int iperiod) {
+        YearMonth nextPeriod = YearMonth.of(iyear, iperiod).plusMonths(1);
+        ensureNextPeriodEmpty(companyId, nextPeriod);
+
+        List<GlAccsum> sourceSums = glAccsumMapper.selectList(
+                Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, companyId)
+                        .eq(GlAccsum::getIyear, iyear)
+                        .eq(GlAccsum::getIperiod, iperiod)
+                        .orderByAsc(GlAccsum::getId)
+        );
+        List<GlAccass> sourceAssists = glAccassMapper.selectList(
+                Wrappers.<GlAccass>lambdaQuery()
+                        .eq(GlAccass::getCompanyId, companyId)
+                        .eq(GlAccass::getIyear, iyear)
+                        .eq(GlAccass::getIperiod, iperiod)
+                        .orderByAsc(GlAccass::getId)
+        );
+        if (sourceSums.isEmpty() && sourceAssists.isEmpty()) {
+            return new CarryForwardResult(buildYearPeriod(nextPeriod.getYear(), nextPeriod.getMonthValue()), 0, 0);
+        }
+
+        Map<String, FinanceAccountSubject> subjectMap = financeAccountSubjectMapper.selectList(
+                        Wrappers.<FinanceAccountSubject>lambdaQuery()
+                                .eq(FinanceAccountSubject::getCompanyId, companyId)
+                ).stream()
+                .collect(Collectors.toMap(FinanceAccountSubject::getSubjectCode, item -> item, (left, right) -> left, LinkedHashMap::new));
+
+        int nextYear = nextPeriod.getYear();
+        int nextMonth = nextPeriod.getMonthValue();
+        int nextIyperiod = buildYearPeriod(nextYear, nextMonth);
+
+        int sumCount = 0;
+        for (GlAccsum source : sourceSums) {
+            FinanceAccountSubject subject = requireCarryForwardSubject(subjectMap, source.getCcode());
+            GlAccsum target = new GlAccsum();
+            target.setCompanyId(companyId);
+            target.setIyear(nextYear);
+            target.setIperiod(nextMonth);
+            target.setIyperiod(nextIyperiod);
+            target.setCcode(source.getCcode());
+            FinanceBalanceRowSupport.fillBalanceRow(
+                    target,
+                    subject,
+                    source.getMe(),
+                    source.getMeF(),
+                    source.getNeS(),
+                    ZERO,
+                    ZERO,
+                    ZERO,
+                    ZERO,
+                    ZERO_QTY,
+                    ZERO_QTY
+            );
+            glAccsumMapper.insert(target);
+            sumCount++;
+        }
+
+        int assistCount = 0;
+        for (GlAccass source : sourceAssists) {
+            FinanceAccountSubject subject = requireCarryForwardSubject(subjectMap, source.getCcode());
+            GlAccass target = new GlAccass();
+            target.setCompanyId(companyId);
+            target.setIyear(nextYear);
+            target.setIperiod(nextMonth);
+            target.setIyperiod(nextIyperiod);
+            target.setCcode(source.getCcode());
+            target.setCdeptId(trimToNull(source.getCdeptId()));
+            target.setCpersonId(trimToNull(source.getCpersonId()));
+            target.setCcusId(trimToNull(source.getCcusId()));
+            target.setCsupId(trimToNull(source.getCsupId()));
+            target.setCitemClass(trimToNull(source.getCitemClass()));
+            target.setCitemId(trimToNull(source.getCitemId()));
+            FinanceBalanceRowSupport.fillBalanceRow(
+                    target,
+                    subject,
+                    source.getMe(),
+                    source.getMeF(),
+                    source.getNeS(),
+                    ZERO,
+                    ZERO,
+                    ZERO,
+                    ZERO,
+                    ZERO_QTY,
+                    ZERO_QTY
+            );
+            glAccassMapper.insert(target);
+            assistCount++;
+        }
+
+        return new CarryForwardResult(nextIyperiod, sumCount, assistCount);
+    }
+
+    protected void ensureNextPeriodEmpty(String companyId, YearMonth nextPeriod) {
+        long sumCount = safeLong(glAccsumMapper.selectCount(
+                Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, companyId)
+                        .eq(GlAccsum::getIyear, nextPeriod.getYear())
+                        .eq(GlAccsum::getIperiod, nextPeriod.getMonthValue())
+        ));
+        long assistCount = safeLong(glAccassMapper.selectCount(
+                Wrappers.<GlAccass>lambdaQuery()
+                        .eq(GlAccass::getCompanyId, companyId)
+                        .eq(GlAccass::getIyear, nextPeriod.getYear())
+                        .eq(GlAccass::getIperiod, nextPeriod.getMonthValue())
+        ));
+        if (sumCount > 0 || assistCount > 0) {
+            throw new IllegalStateException("下一期间已存在账务数据，不能重复滚转，请先检查期初或期间数据");
+        }
+    }
+
+    protected FinanceAccountSubject requireCarryForwardSubject(Map<String, FinanceAccountSubject> subjectMap, String subjectCode) {
+        FinanceAccountSubject subject = subjectMap.get(trimToNull(subjectCode));
+        if (subject == null) {
+            throw new IllegalStateException("科目【" + trimToNull(subjectCode) + "】不存在，无法完成结账滚转");
+        }
+        return subject;
     }
 
     protected void logReconcile(String companyId, int iyear, int iperiod, String operatorName, FinanceCloseLedgerReconcileResultVO result) {
@@ -733,6 +882,10 @@ abstract class AbstractFinanceCloseLedgerSupport {
         return value == null ? 0 : value;
     }
 
+    private long safeLong(Number value) {
+        return value == null ? 0L : value.longValue();
+    }
+
     protected record VoucherKey(String companyId, Integer iyear, Integer iperiod, String csign, Integer inoId) {
     }
 
@@ -757,6 +910,13 @@ abstract class AbstractFinanceCloseLedgerSupport {
         int postedCount() {
             return postedKeys.size();
         }
+
+        int totalCount() {
+            return unpostedCount() + reviewedCount() + errorCount() + postedCount();
+        }
+    }
+
+    protected record CarryForwardResult(int nextIyperiod, int glAccsumCount, int glAccassCount) {
     }
 
     protected record MovementKey(String subjectCode, String currencyCode) {

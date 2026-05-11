@@ -17,7 +17,7 @@
           </div>
           <div class="fcl-summary__item">
             <span>记账状态</span>
-            <strong>{{ meta?.postStatusLabel || '未记账' }}</strong>
+            <strong>{{ postStatusDisplayLabel }}</strong>
           </div>
         </div>
 
@@ -46,7 +46,7 @@
         <div class="fcl-notice-grid">
           <div class="fcl-notice-item">结账后本月不能再填制凭证</div>
           <div class="fcl-notice-item">还有未记账的凭证不能结账</div>
-          <div class="fcl-notice-item">每月对账正确后才能结账</div>
+          <div class="fcl-notice-item">空期间允许结账，并按零发生额滚转余额</div>
         </div>
 
         <div class="fcl-metric-grid">
@@ -113,6 +113,9 @@
             </div>
             <span :class="statusClass(item.passed)">{{ item.passed ? '通过' : '未通过' }}</span>
           </div>
+        </div>
+        <div v-if="emptyPeriodValidationMessage" class="fcl-message is-success">
+          {{ emptyPeriodValidationMessage }}
         </div>
         <div v-if="validationGeneralReasons.length" class="fcl-list">
           <div v-for="item in validationGeneralReasons" :key="item" class="fcl-list__item">{{ item }}</div>
@@ -235,6 +238,27 @@ const canClose = computed(() =>
   && Boolean(validationResult.value?.passed)
   && meta.value?.status !== 'CLOSED'
 )
+const voucherTotalCount = computed(() => {
+  const currentMeta = meta.value
+  if (!currentMeta) return 0
+  return (currentMeta.unpostedVoucherCount ?? 0)
+    + (currentMeta.reviewedVoucherCount ?? 0)
+    + (currentMeta.errorVoucherCount ?? 0)
+    + (currentMeta.postedVoucherCount ?? 0)
+})
+const isEmptyPeriod = computed(() => voucherTotalCount.value === 0)
+const postStatusDisplayLabel = computed(() => {
+  if (isEmptyPeriod.value) {
+    return '本期无凭证'
+  }
+  return meta.value?.postStatusLabel || '未记账'
+})
+const emptyPeriodValidationMessage = computed(() => {
+  if (!isEmptyPeriod.value || !validationResult.value?.passed) {
+    return ''
+  }
+  return '本期无凭证，将按零发生额结转到下一期间'
+})
 const reconcileIssues = computed(() => {
   const result = reconcileResult.value
   if (!result) return [] as string[]
@@ -371,7 +395,7 @@ async function runValidate() {
     if (!res.data.generalPassed || !res.data.externalPassed) {
       ElMessage.warning(res.data.blockingReasons?.[0] || '结账校验未通过')
     } else {
-      ElMessage.success('结账校验通过')
+      ElMessage.success(isEmptyPeriod.value ? '本期无凭证，将按零发生额结转到下一期间' : '结账校验通过')
     }
     return res.data
   } catch (error: unknown) {

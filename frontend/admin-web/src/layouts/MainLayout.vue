@@ -92,45 +92,7 @@
           class="h-full overflow-y-auto overflow-x-hidden py-4"
         >
           <el-menu :default-active="activeMenu" class="border-0" router>
-          <template v-for="item in visibleNavigationMenu" :key="item.key">
-            <el-menu-item v-if="!item.children?.length" :index="item.index" class="menu-level-1">
-              <span v-if="item.iconKey === 'Agent'" class="flex items-center gap-2">
-                <pixel-duck-bot-icon class="h-[18px] w-[18px] text-amber-600" />
-                <span>{{ item.title }}</span>
-              </span>
-              <template v-else>
-                <el-icon v-if="item.iconKey"><component :is="resolveMenuIcon(item.iconKey)" /></el-icon>
-                <span>{{ item.title }}</span>
-              </template>
-            </el-menu-item>
-
-            <el-sub-menu v-else :index="item.index" class="menu-level-1">
-              <template #title>
-                <el-icon v-if="item.iconKey"><component :is="resolveMenuIcon(item.iconKey)" /></el-icon>
-                <span>{{ item.title }}</span>
-              </template>
-
-              <template v-for="child in item.children" :key="child.key">
-                <el-menu-item v-if="!child.children?.length" :index="child.index" class="menu-level-2">
-                  {{ child.title }}
-                </el-menu-item>
-
-                <el-sub-menu v-else :index="child.index" class="menu-level-2">
-                  <template #title>
-                    <span>{{ child.title }}</span>
-                  </template>
-                  <el-menu-item
-                    v-for="grandchild in child.children"
-                    :key="grandchild.key"
-                    :index="grandchild.index"
-                    class="menu-level-3"
-                  >
-                    {{ grandchild.title }}
-                  </el-menu-item>
-                </el-sub-menu>
-              </template>
-            </el-sub-menu>
-          </template>
+            <main-navigation-tree :nodes="visibleNavigationMenu" />
           </el-menu>
         </div>
       </aside>
@@ -195,8 +157,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { authApi, downloadApi, notificationApi, type UserProfile } from '@/api'
 import DownloadCenterDrawer from '@/components/DownloadCenterDrawer.vue'
+import MainNavigationTree from '@/components/navigation/MainNavigationTree.vue'
 import NotificationCenterDrawer from '@/components/NotificationCenterDrawer.vue'
-import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import PixelWhaleBrandIcon from '@/components/icons/PixelWhaleBrandIcon.vue'
 import FinanceWorkspaceTabs from '@/components/finance/FinanceWorkspaceTabs.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
@@ -204,7 +166,7 @@ import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
 import { onDownloadCenterOpen } from '@/utils/downloadCenter'
 import { EXPENSE_CREATE_ENTRY_PERMISSION_CODES, hasAnyPermission } from '@/utils/permissions'
-import { MAIN_NAVIGATION_MENU, filterVisibleNavigationMenu, type NavigationIconKey } from '@/router/navigation-config'
+import { MAIN_NAVIGATION_MENU, filterVisibleNavigationMenu } from '@/router/navigation-config'
 import { getRouteMenuPermissionCodes, resolveRouteMeta } from '@/router/route-meta'
 import {
   Search,
@@ -215,11 +177,7 @@ import {
   UserFilled,
   User,
   Setting,
-  SwitchButton,
-  House,
-  Wallet,
-  Coin,
-  FolderOpened
+  SwitchButton
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -243,14 +201,6 @@ const activeMenu = computed(() => route.path)
 const userName = computed(() => currentUser.value?.name || currentUser.value?.username || '未登录用户')
 const permissionCodes = computed(() => currentUser.value?.permissionCodes || [])
 const visibleNavigationMenu = computed(() => filterVisibleNavigationMenu(MAIN_NAVIGATION_MENU, permissionCodes.value))
-
-const MENU_ICON_MAP = {
-  House,
-  Wallet,
-  Coin,
-  FolderOpened,
-  Setting
-} satisfies Record<Exclude<NavigationIconKey, 'Agent'>, unknown>
 
 const canAny = (codes: string[]) => hasAnyPermission(codes, permissionCodes.value)
 
@@ -397,13 +347,6 @@ const handleNotificationChanged = () => {
 
 function isFinancePath(path: string) {
   return financeWorkspace.isFinancePath(path)
-}
-
-function resolveMenuIcon(iconKey?: NavigationIconKey) {
-  if (!iconKey || iconKey === 'Agent') {
-    return null
-  }
-  return MENU_ICON_MAP[iconKey]
 }
 
 function handleFinanceTabSelect(path: string) {

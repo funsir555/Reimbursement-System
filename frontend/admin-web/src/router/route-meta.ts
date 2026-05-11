@@ -418,7 +418,23 @@ export const ROUTE_META_REGISTRY = {
     title: '财务系统管理',
     tabTitle: '财务系统管理',
     menuTitle: '财务系统管理',
-    description: '财务系统管理工作台',
+    description: '财务系统管理入口',
+    permissionCode: 'finance:system_management:view'
+  }),
+  'finance-system-management-new-account-set': routeMeta({
+    title: '新建账套',
+    tabTitle: '新建账套',
+    menuTitle: '新建账套',
+    description: '新建账套工作台',
+    permissionCode: 'finance:system_management:view'
+  }),
+  'finance-system-management-system-enable': routeMeta({
+    title: '系统启用',
+    tabTitle: '系统启用',
+    menuTitle: '系统启用',
+    description: '当前账套系统启用设置',
+    placeholderTitle: '系统启用',
+    placeholderDescription: '当前账套系统启用功能建设中',
     permissionCode: 'finance:system_management:view'
   }),
   'finance-archives-customers': routeMeta({

@@ -15,6 +15,10 @@ public class FinanceVoucherOptionVO {
 
     private String parentValue;
 
+    private String subjectCategory;
+
+    private String subjectCategoryLabel;
+
     private Integer bperson;
 
     private Integer bcus;

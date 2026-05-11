@@ -11,6 +11,8 @@ export interface FinanceVoucherOption {
   name?: string
   label: string
   parentValue?: string
+  subjectCategory?: string
+  subjectCategoryLabel?: string
   bperson?: number
   bcus?: number
   bsup?: number

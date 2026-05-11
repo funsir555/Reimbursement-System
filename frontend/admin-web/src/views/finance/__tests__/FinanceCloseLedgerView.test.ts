@@ -143,7 +143,7 @@ describe('FinanceCloseLedgerView', () => {
         postStatusLabel: '已全部记账',
         blockingReasons: [],
         generalChecks: [
-          { code: 'posted_fully', label: '本月必须先完成记账', passed: true, message: '当前期间已完成记账' }
+          { code: 'no_reviewed', label: '没有未记账凭证才能结账', passed: true, message: '当前期间不存在已审核未记账凭证' }
         ],
         externalChecks: [
           { code: 'fixed_assets', label: '固定资产期间结账', passed: true, message: '固定资产已完成期间结账' }
@@ -224,5 +224,45 @@ describe('FinanceCloseLedgerView', () => {
     expect(financeCompanyStore.refreshContext).toHaveBeenCalledWith('COMP-001')
     expect(financePeriodStore.syncWithCompany).toHaveBeenCalledWith('COMP-001', true)
     expect(mocks.message.success).toHaveBeenCalledWith('结账成功')
+  })
+
+  it('shows empty-period messaging and allows validation without posted state', async () => {
+    mocks.closeLedgerApi.getMeta.mockResolvedValueOnce({
+      data: buildMeta({
+        postStatus: 'NOT_POSTED',
+        postStatusLabel: '未记账',
+        unpostedVoucherCount: 0,
+        reviewedVoucherCount: 0,
+        errorVoucherCount: 0,
+        postedVoucherCount: 0
+      })
+    })
+    mocks.closeLedgerApi.validate.mockResolvedValueOnce({
+      data: {
+        passed: true,
+        generalPassed: true,
+        externalPassed: true,
+        alreadyClosed: false,
+        reconcilePassed: true,
+        postStatus: 'NOT_POSTED',
+        postStatusLabel: '未记账',
+        blockingReasons: [],
+        generalChecks: [
+          { code: 'no_reviewed', label: '没有未记账凭证才能结账', passed: true, message: '当前期间无凭证，视为已满足记账前置条件' }
+        ],
+        externalChecks: [
+          { code: 'fixed_assets', label: '固定资产期间结账', passed: true, message: '固定资产已完成期间结账' }
+        ]
+      }
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('本期无凭证')
+    await clickButton(wrapper, '下一步')
+    await clickButton(wrapper, '下一步')
+    await clickButton(wrapper, '下一步')
+
+    expect(mocks.message.success).toHaveBeenCalledWith('本期无凭证，将按零发生额结转到下一期间')
   })
 })

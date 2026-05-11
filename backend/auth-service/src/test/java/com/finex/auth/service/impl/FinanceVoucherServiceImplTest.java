@@ -165,6 +165,8 @@ class FinanceVoucherServiceImplTest {
         when(userMapper.selectList(any())).thenReturn(List.of(buildUser(2L, "bob", "\u5458\u5de5\u7532", "COMP-001")));
         FinanceAccountSubject cashSubject = buildSubject("1001", "\u5e93\u5b58\u73b0\u91d1", 1, 1, 1, 1, 1, "7");
         cashSubject.setBcash(1);
+        cashSubject.setParentSubjectCode("1000");
+        cashSubject.setSubjectCategory("ASSET");
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(cashSubject));
         when(financeCustomerMapper.selectList(any())).thenReturn(List.of(buildCustomer("C00001", "\u534e\u5357\u5ba2\u6237", "COMP-001")));
         when(financeVendorMapper.selectList(any())).thenReturn(List.of(buildVendor("V00001", "Core Supplier", "COMP-001")));
@@ -187,6 +189,9 @@ class FinanceVoucherServiceImplTest {
         assertEquals(1, meta.getAccountOptions().get(0).getBitem());
         assertEquals("7", meta.getAccountOptions().get(0).getCassItem());
         assertEquals(1, meta.getAccountOptions().get(0).getLeafFlag());
+        assertEquals("1000", meta.getAccountOptions().get(0).getParentValue());
+        assertEquals("ASSET", meta.getAccountOptions().get(0).getSubjectCategory());
+        assertEquals("\u8d44\u4ea7", meta.getAccountOptions().get(0).getSubjectCategoryLabel());
         assertEquals("V00001", meta.getSupplierOptions().get(0).getValue());
         assertEquals("7", meta.getProjectClassOptions().get(0).getCode());
         assertEquals("2002", meta.getProjectOptions().get(0).getCode());

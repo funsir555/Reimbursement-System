@@ -1053,7 +1053,14 @@ public abstract class AbstractFinanceVoucherSupport {
      * 处理财务凭证中的这一步。
      */
     protected FinanceVoucherOptionVO toAccountOption(FinanceAccountSubject subject) {
-        FinanceVoucherOptionVO option = option(subject.getSubjectCode(), subject.getSubjectCode(), subject.getSubjectName());
+        FinanceVoucherOptionVO option = option(
+                subject.getSubjectCode(),
+                subject.getSubjectCode(),
+                subject.getSubjectName(),
+                trimToNull(subject.getParentSubjectCode())
+        );
+        option.setSubjectCategory(trimToNull(subject.getSubjectCategory()));
+        option.setSubjectCategoryLabel(resolveSubjectCategoryLabel(subject.getSubjectCategory()));
         option.setBperson(subject.getBperson());
         option.setBcus(subject.getBcus());
         option.setBsup(subject.getBsup());
@@ -1101,6 +1108,21 @@ public abstract class AbstractFinanceVoucherSupport {
         option.setLabel(buildOptionLabel(code, name, explicitLabel, value));
         option.setParentValue(parentValue);
         return option;
+    }
+
+    protected String resolveSubjectCategoryLabel(String subjectCategory) {
+        String normalizedCategory = trimToNull(subjectCategory);
+        if (normalizedCategory == null) {
+            return null;
+        }
+        return switch (normalizedCategory) {
+            case "ASSET" -> "资产";
+            case "LIABILITY" -> "负债";
+            case "EQUITY" -> "权益";
+            case "COST" -> "成本";
+            case "PROFIT" -> "损益";
+            default -> normalizedCategory;
+        };
     }
 
     /**

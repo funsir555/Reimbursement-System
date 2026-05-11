@@ -291,8 +291,12 @@ describe('MainLayout', () => {
     const wrapper = await mountView(['finance:system_management:view'])
 
     expect(wrapper.find('[data-submenu="/finance"]').exists()).toBe(true)
-    expect(wrapper.find('[data-index="/finance/system-management"]').exists()).toBe(true)
+    expect(wrapper.find('[data-submenu="/finance/system-management"]').exists()).toBe(true)
+    expect(wrapper.find('[data-index="/finance/system-management/new-account-set"]').exists()).toBe(true)
+    expect(wrapper.find('[data-index="/finance/system-management/system-enable"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('财务系统管理')
+    expect(wrapper.text()).toContain('新建账套')
+    expect(wrapper.text()).toContain('系统启用')
   })
 
   it('shows general ledger placeholder entries when the user has opening, post, and close permissions', async () => {
@@ -313,6 +317,7 @@ describe('MainLayout', () => {
     const wrapper = await mountView(['finance:archives:projects:view'])
 
     expect(wrapper.find('[data-submenu="/finance"]').exists()).toBe(true)
+    expect(wrapper.find('[data-submenu="/finance/system-management"]').exists()).toBe(true)
     expect(wrapper.find('[data-submenu="/finance/archives"]').exists()).toBe(true)
     expect(wrapper.find('[data-index="/finance/archives/projects"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('项目档案')

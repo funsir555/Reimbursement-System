@@ -114,9 +114,9 @@
                   </div>
                 </div>
                 <div class="voucher-cell">
-                  <el-select
+                  <subject-tree-select
                     v-model="row.ccode"
-                    filterable v-bind="globalFilterableSelectProps"
+                    :options="accountOptionsForDisplay"
                     clearable
                     placeholder="请选择科目"
                     :disabled="isReadonlyMode"
@@ -124,9 +124,7 @@
                     @focus="handleSubjectFieldFocus(index)"
                     @change="handleSubjectChange(index, $event)"
                     @visible-change="handleSubjectDropdownVisibleChange(index, $event)"
-                  >
-                    <el-option v-for="item in accountOptionsForDisplay" :key="item.value" :label="formatVoucherOptionLabel(item)" :value="item.value" />
-                  </el-select>
+                  />
                 </div>
                 <div class="voucher-cell">
                   <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index)" @keydown="handleAmountKeydown($event, index, 'md')" />
@@ -320,6 +318,7 @@ import FinanceProjectArchiveDialog from '@/components/finance/FinanceProjectArch
 import FinanceSupplierArchiveDialog from '@/components/finance/FinanceSupplierArchiveDialog.vue'
 import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import MoneyInput from '@/components/inputs/MoneyInput.vue'
+import SubjectTreeSelect from '@/components/inputs/SubjectTreeSelect.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { useFinanceNewVoucherAssistCashflowOwner } from './composables/useFinanceNewVoucherAssistCashflowOwner'

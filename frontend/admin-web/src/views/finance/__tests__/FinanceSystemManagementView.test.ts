@@ -37,9 +37,13 @@ vi.mock('@/utils/permissions', () => ({
   })
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 const SimpleStub = defineComponent({
   template: '<div><slot /><slot name="footer" /></div>'
@@ -192,7 +196,7 @@ describe('FinanceSystemManagementView', () => {
 
     expect(mocks.financeSystemManagementApi.getMeta).toHaveBeenCalledTimes(1)
     expect(mocks.financeSystemManagementApi.listAccountSets).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('财务系统管理')
+    expect(wrapper.text()).toContain('新建账套')
     expect(vm.accountSets[0]?.companyName).toBe('广州测试公司')
     expect(vm.accountSets[0]?.companyCode).toBe('COMP202604050001')
     expect(vm.formatCompanyDisplay(vm.accountSets[0] as { companyId: string; companyCode?: string; companyName?: string })).toBe('COMP202604050001 - 广州测试公司')

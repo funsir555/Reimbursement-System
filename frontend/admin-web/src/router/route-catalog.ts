@@ -339,8 +339,20 @@ export const routeCatalog: AppRouteDefinition[] = [
       {
         path: 'finance/system-management',
         name: 'finance-system-management',
-        component: () => import('../views/finance/FinanceSystemManagementView.vue'),
+        redirect: '/finance/system-management/new-account-set',
         metaKey: 'finance-system-management'
+      },
+      {
+        path: 'finance/system-management/new-account-set',
+        name: 'finance-system-management-new-account-set',
+        component: () => import('../views/finance/FinanceSystemManagementView.vue'),
+        metaKey: 'finance-system-management-new-account-set'
+      },
+      {
+        path: 'finance/system-management/system-enable',
+        name: 'finance-system-management-system-enable',
+        component: () => import('../views/finance/FinanceSystemEnableView.vue'),
+        metaKey: 'finance-system-management-system-enable'
       },
       {
         path: 'finance/archives/customers',

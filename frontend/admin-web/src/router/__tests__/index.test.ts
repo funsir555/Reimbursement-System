@@ -36,6 +36,8 @@ import ExpensePaymentOrdersView from '@/views/expense/ExpensePaymentOrdersView.v
 import FinanceOpeningBalanceView from '@/views/finance/FinanceOpeningBalanceView.vue'
 import FinanceCloseLedgerView from '@/views/finance/FinanceCloseLedgerView.vue'
 import FinancePostVoucherView from '@/views/finance/FinancePostVoucherView.vue'
+import FinanceSystemEnableView from '@/views/finance/FinanceSystemEnableView.vue'
+import FinanceSystemManagementView from '@/views/finance/FinanceSystemManagementView.vue'
 import ProcessManagementView from '@/views/process/ProcessManagementView.vue'
 import ExpenseVoucherGenerationView from '@/views/expense/ExpenseVoucherGenerationView.vue'
 
@@ -130,5 +132,27 @@ describe('router process management routes', () => {
     expect(postModule.default).toBe(FinancePostVoucherView)
     expect(closeModule.default).toBe(FinanceCloseLedgerView)
     expect(balanceModule.default).toBe(PlaceholderView)
+  })
+
+  it('keeps the legacy finance system path as a redirect to the new account set child route', () => {
+    const route = router.getRoutes().find((item) => item.name === 'finance-system-management')
+
+    expect(route?.path).toBe('/finance/system-management')
+    expect(route?.redirect).toBe('/finance/system-management/new-account-set')
+    expect(route?.meta.permissionCode).toBe('finance:system_management:view')
+  })
+
+  it('maps the new finance system child routes to their intended views', async () => {
+    const newAccountSetRoute = router.getRoutes().find((item) => item.name === 'finance-system-management-new-account-set')
+    const systemEnableRoute = router.getRoutes().find((item) => item.name === 'finance-system-management-system-enable')
+
+    expect(newAccountSetRoute?.path).toBe('/finance/system-management/new-account-set')
+    expect(systemEnableRoute?.path).toBe('/finance/system-management/system-enable')
+
+    const newAccountSetModule = await (newAccountSetRoute?.components?.default as (() => Promise<{ default: unknown }>))()
+    const systemEnableModule = await (systemEnableRoute?.components?.default as (() => Promise<{ default: unknown }>))()
+
+    expect(newAccountSetModule.default).toBe(FinanceSystemManagementView)
+    expect(systemEnableModule.default).toBe(FinanceSystemEnableView)
   })
 })
