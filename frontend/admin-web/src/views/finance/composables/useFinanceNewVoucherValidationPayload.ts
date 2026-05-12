@@ -2,7 +2,17 @@ import { computed, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FinanceVoucherMeta, FinanceVoucherSavePayload } from '@/api'
 import type { FinanceVoucherEntryRow } from './useFinanceNewVoucherRowOwner'
-import { addMoney, isZeroMoney } from '@/utils/money'
+import { isZeroMoney } from '@/utils/money'
+import {
+  hasVoucherEffectiveCredit,
+  hasVoucherEffectiveDebit,
+  normalizeSignedVoucherMoney,
+  resolveVoucherBalanceGap,
+  resolveVoucherEffectiveCredit,
+  resolveVoucherEffectiveDebit,
+  sumVoucherEffectiveCredit,
+  sumVoucherEffectiveDebit
+} from '@/utils/financeVoucherAmounts'
 
 type VoucherFormStateLike = {
   companyId: string
@@ -33,9 +43,9 @@ type UseFinanceNewVoucherValidationPayloadOptions = {
 
 export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVoucherValidationPayloadOptions) {
   const effectiveRows = computed(() => options.form.entries.filter((item) => !isEntryBlank(item)))
-  const totalDebit = computed(() => sumRows(effectiveRows.value, 'md'))
-  const totalCredit = computed(() => sumRows(effectiveRows.value, 'mc'))
-  const balanceGap = computed(() => subtractVoucherAmount(totalDebit.value, totalCredit.value))
+  const totalDebit = computed(() => sumVoucherEffectiveDebit(effectiveRows.value))
+  const totalCredit = computed(() => sumVoucherEffectiveCredit(effectiveRows.value))
+  const balanceGap = computed(() => resolveVoucherBalanceGap(effectiveRows.value))
 
   function buildPayload(includeBlankRows = false): FinanceVoucherSavePayload {
     const note = options.toOptionalString(options.form.ctext2 || options.form.ctext1) || ''
@@ -101,14 +111,12 @@ export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVouc
 
     entries.forEach((row, index) => {
       const rowNo = index + 1
-      const debit = normalizeMoneyField(row.md)
-      const credit = normalizeMoneyField(row.mc)
       if (!(row.cdigest || '').trim()) errors.push(`第 ${rowNo} 行摘要不能为空`)
       if (!row.ccode) errors.push(`第 ${rowNo} 行请选择科目`)
       validateEntryLength(row, rowNo, errors)
       options.validateEntrySelection(row, rowNo, errors)
-      if (debit && credit) errors.push(`第 ${rowNo} 行借贷不能同时填写`)
-      if (!debit && !credit) errors.push(`第 ${rowNo} 行借方或贷方至少填写一项`)
+      if (hasVoucherEffectiveDebit(row) && hasVoucherEffectiveCredit(row)) errors.push(`第 ${rowNo} 行借贷不能同时填写`)
+      if (!hasVoucherEffectiveDebit(row) && !hasVoucherEffectiveCredit(row)) errors.push(`第 ${rowNo} 行借方或贷方至少填写一项`)
       if ((row.nfrat ?? 1) <= 0) errors.push(`第 ${rowNo} 行汇率必须大于 0`)
     })
 
@@ -143,16 +151,12 @@ export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVouc
     return JSON.stringify(buildPayload(true))
   }
 
-  function sumRows(rows: FinanceVoucherEntryRow[], field: 'md' | 'mc') {
-    return rows.reduce((total, row) => addMoney(total, normalizeMoneyField(row[field]) || '0.00'), '0.00')
-  }
-
   function normalizeMoneyField(value?: string) {
-    return options.toOptionalMoney(value)
-  }
-
-  function subtractVoucherAmount(left: string, right: string) {
-    return addMoney(left, right ? `-${right}` : '0.00')
+    const normalized = normalizeSignedVoucherMoney(value)
+    if (!normalized || isZeroMoney(normalized)) {
+      return undefined
+    }
+    return normalized
   }
 
   return {
@@ -164,6 +168,8 @@ export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVouc
     validateVoucher,
     isEntryBlank,
     buildSnapshot,
-    normalizeMoneyField
+    normalizeMoneyField,
+    resolveRowEffectiveDebit: resolveVoucherEffectiveDebit,
+    resolveRowEffectiveCredit: resolveVoucherEffectiveCredit
   }
 }

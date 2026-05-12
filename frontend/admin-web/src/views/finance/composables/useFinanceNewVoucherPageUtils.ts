@@ -11,7 +11,7 @@ export function useFinanceNewVoucherPageUtils() {
   }
 
   function toOptionalMoney(value?: string | null) {
-    const normalized = normalizeMoneyValue(value || '', { fallback: '' })
+    const normalized = normalizeMoneyValue(value || '', { allowNegative: true, fallback: '' })
     if (!normalized || isZeroMoney(normalized)) {
       return undefined
     }

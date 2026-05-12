@@ -27,6 +27,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.AsyncTaskSupport;
 import com.finex.auth.support.FinanceBalanceDirectionSupport;
+import com.finex.auth.support.FinanceVoucherAmountSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -425,10 +426,10 @@ abstract class AbstractFinancePostVoucherSupport {
 
     protected void applyToAccsum(GlAccvouch voucherRow, FinanceAccountSubject subject) {
         GlAccsum row = loadOrCreateAccsumRow(voucherRow, subject);
-        row.setMd(money(row.getMd()).add(money(voucherRow.getMd())));
-        row.setMc(money(row.getMc()).add(money(voucherRow.getMc())));
-        row.setMdF(money(row.getMdF()).add(money(voucherRow.getMdF())));
-        row.setMcF(money(row.getMcF()).add(money(voucherRow.getMcF())));
+        row.setMd(money(row.getMd()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMd(), voucherRow.getMc())));
+        row.setMc(money(row.getMc()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMd(), voucherRow.getMc())));
+        row.setMdF(money(row.getMdF()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMdF(), voucherRow.getMcF())));
+        row.setMcF(money(row.getMcF()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMdF(), voucherRow.getMcF())));
         row.setNdS(qty(row.getNdS()).add(qty(voucherRow.getNdS())));
         row.setNcS(qty(row.getNcS()).add(qty(voucherRow.getNcS())));
         fillEndingAmounts(row, subject);
@@ -437,10 +438,10 @@ abstract class AbstractFinancePostVoucherSupport {
 
     protected void applyToAccass(GlAccvouch voucherRow, FinanceAccountSubject subject) {
         GlAccass row = loadOrCreateAccassRow(voucherRow, subject);
-        row.setMd(money(row.getMd()).add(money(voucherRow.getMd())));
-        row.setMc(money(row.getMc()).add(money(voucherRow.getMc())));
-        row.setMdF(money(row.getMdF()).add(money(voucherRow.getMdF())));
-        row.setMcF(money(row.getMcF()).add(money(voucherRow.getMcF())));
+        row.setMd(money(row.getMd()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMd(), voucherRow.getMc())));
+        row.setMc(money(row.getMc()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMd(), voucherRow.getMc())));
+        row.setMdF(money(row.getMdF()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMdF(), voucherRow.getMcF())));
+        row.setMcF(money(row.getMcF()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMdF(), voucherRow.getMcF())));
         row.setNdS(qty(row.getNdS()).add(qty(voucherRow.getNdS())));
         row.setNcS(qty(row.getNcS()).add(qty(voucherRow.getNcS())));
         fillEndingAmounts(row, subject);

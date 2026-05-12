@@ -42,6 +42,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.EmployeeDirectorySupport;
+import com.finex.auth.support.FinanceVoucherAmountSupport;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -307,8 +308,8 @@ public abstract class AbstractFinanceVoucherSupport {
             result.setCsign(voucherType);
             result.setInoId(finalVoucherNo);
             result.setEntryCount(normalizedEntries.size());
-            result.setTotalDebit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMd));
-            result.setTotalCredit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMc));
+            result.setTotalDebit(sumEntryAmount(normalizedEntries, true));
+            result.setTotalCredit(sumEntryAmount(normalizedEntries, false));
             result.setStatus(STATUS_UNPOSTED);
             result.setCheckedAt(null);
             result.setPostedAt(null);
@@ -410,8 +411,8 @@ public abstract class AbstractFinanceVoucherSupport {
         result.setCsign(voucherKey.csign());
         result.setInoId(voucherKey.inoId());
         result.setEntryCount(normalizedEntries.size());
-        result.setTotalDebit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMd));
-        result.setTotalCredit(sumAmount(normalizedEntries, FinanceVoucherEntryDTO::getMc));
+        result.setTotalDebit(sumEntryAmount(normalizedEntries, true));
+        result.setTotalCredit(sumEntryAmount(normalizedEntries, false));
         result.setStatus(STATUS_UNPOSTED);
         result.setCheckedAt(null);
         result.setPostedAt(null);
@@ -1432,18 +1433,20 @@ public abstract class AbstractFinanceVoucherSupport {
      */
     protected BigDecimal sumAmount(List<GlAccvouch> rows, boolean debit) {
         return rows.stream()
-                .map(item -> debit ? item.getMd() : item.getMc())
-                .map(this::normalizeAmount)
+                .map(item -> debit
+                        ? FinanceVoucherAmountSupport.effectiveDebit(item.getMd(), item.getMc())
+                        : FinanceVoucherAmountSupport.effectiveCredit(item.getMd(), item.getMc()))
                 .reduce(ZERO, BigDecimal::add);
     }
 
     /**
      * 处理财务凭证中的这一步。
      */
-    protected BigDecimal sumAmount(List<FinanceVoucherEntryDTO> rows, AmountGetter getter) {
+    protected BigDecimal sumEntryAmount(List<FinanceVoucherEntryDTO> rows, boolean debit) {
         return rows.stream()
-                .map(getter::get)
-                .map(this::normalizeAmount)
+                .map(item -> debit
+                        ? FinanceVoucherAmountSupport.effectiveDebit(item.getMd(), item.getMc())
+                        : FinanceVoucherAmountSupport.effectiveCredit(item.getMd(), item.getMc()))
                 .reduce(ZERO, BigDecimal::add);
     }
 
@@ -1688,8 +1691,8 @@ public abstract class AbstractFinanceVoucherSupport {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6c47\u7387\u5fc5\u987b\u5927\u4e8e 0");
             }
 
-            BigDecimal debit = normalizeAmount(entry.getMd());
-            BigDecimal credit = normalizeAmount(entry.getMc());
+            BigDecimal debit = FinanceVoucherAmountSupport.effectiveDebit(entry.getMd(), entry.getMc());
+            BigDecimal credit = FinanceVoucherAmountSupport.effectiveCredit(entry.getMd(), entry.getMc());
             if (debit.compareTo(BigDecimal.ZERO) > 0 && credit.compareTo(BigDecimal.ZERO) > 0) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u501f\u8d37\u4e0d\u80fd\u540c\u65f6\u586b\u5199");
             }
@@ -1819,8 +1822,8 @@ public abstract class AbstractFinanceVoucherSupport {
         if (entry == null || subject == null || cashFlowItems == null || cashFlowItems.isEmpty()) {
             return null;
         }
-        BigDecimal debit = normalizeAmount(entry.getMd());
-        BigDecimal credit = normalizeAmount(entry.getMc());
+        BigDecimal debit = FinanceVoucherAmountSupport.effectiveDebit(entry.getMd(), entry.getMc());
+        BigDecimal credit = FinanceVoucherAmountSupport.effectiveCredit(entry.getMd(), entry.getMc());
         if (!requiresCashFlow(subject, debit, credit)) {
             return null;
         }
@@ -2062,10 +2065,7 @@ public abstract class AbstractFinanceVoucherSupport {
      * 处理财务凭证中的这一步。
      */
     protected BigDecimal normalizeAmount(BigDecimal value) {
-        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
-            return ZERO;
-        }
-        return value.setScale(2, RoundingMode.HALF_UP);
+        return value == null ? ZERO : value.setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
@@ -2074,9 +2074,6 @@ public abstract class AbstractFinanceVoucherSupport {
     protected BigDecimal normalizeNullableAmount(BigDecimal value) {
         if (value == null || value.compareTo(BigDecimal.ZERO) == 0) {
             return null;
-        }
-        if (value.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("金额不能为负数");
         }
         return value.setScale(2, RoundingMode.HALF_UP);
     }

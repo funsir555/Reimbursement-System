@@ -8,6 +8,8 @@ import com.finex.auth.dto.ProcessCustomArchiveItemDTO;
 import com.finex.auth.dto.ProcessCustomArchiveMetaVO;
 import com.finex.auth.dto.ProcessCustomArchiveResolveDTO;
 import com.finex.auth.dto.ProcessCustomArchiveResolveResultVO;
+import com.finex.auth.dto.ProcessFlowMetaVO;
+import com.finex.auth.dto.ProcessFormOptionVO;
 import com.finex.auth.dto.ProcessCustomArchiveRuleDTO;
 import com.finex.auth.dto.ProcessCustomArchiveSaveDTO;
 import com.finex.auth.dto.ProcessCustomArchiveSummaryVO;
@@ -126,12 +128,9 @@ class ProcessCustomArchiveLifecycleSupportTest {
 
     @Test
     void getCustomArchiveMetaIncludesOperatorsAndDepartments() {
-        SystemDepartment department = new SystemDepartment();
-        department.setId(20L);
-        department.setDeptName("财务部");
-        department.setStatus(1);
-
-        when(systemDepartmentMapper.selectList(any())).thenReturn(List.of(department));
+        ProcessFlowMetaVO flowMeta = new ProcessFlowMetaVO();
+        flowMeta.setDepartmentOptions(List.of(option("财务部", "20")));
+        when(processFlowDesignService.getFlowMeta()).thenReturn(flowMeta);
 
         ProcessCustomArchiveMetaVO meta = support.getCustomArchiveMeta();
 
@@ -270,6 +269,13 @@ class ProcessCustomArchiveLifecycleSupportTest {
         rule.setOperator(operator);
         rule.setCompareValue(compareValue);
         return rule;
+    }
+
+    private static ProcessFormOptionVO option(String label, String value) {
+        ProcessFormOptionVO option = new ProcessFormOptionVO();
+        option.setLabel(label);
+        option.setValue(value);
+        return option;
     }
 
     private void initTableInfo(Class<?> entityClass) {

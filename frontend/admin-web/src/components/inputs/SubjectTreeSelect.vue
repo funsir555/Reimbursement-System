@@ -1,12 +1,14 @@
 <template>
   <select
     v-if="useTestSelectFallback"
+    ref="fallbackSelectRef"
     v-bind="attrs"
     class="w-full"
     :disabled="disabled"
     :value="nativeSelectValue"
     @focus="emit('focus')"
     @change="handleNativeChange"
+    @keydown="emit('keydown', $event)"
   >
     <option v-if="clearable" value="">{{ placeholder }}</option>
     <option
@@ -20,6 +22,7 @@
   </select>
   <el-tree-select
     v-else
+    ref="treeSelectRef"
     v-model="innerValue"
     v-bind="treeSelectBindings"
     class="w-full"
@@ -35,11 +38,12 @@
     @focus="emit('focus')"
     @change="emit('change', $event)"
     @visible-change="emit('visible-change', $event)"
+    @keydown="emit('keydown', $event)"
   />
 </template>
 
 <script setup lang="ts">
-import { computed, useAttrs } from 'vue'
+import { computed, ref, useAttrs } from 'vue'
 import type { FinanceVoucherOption } from '@/api'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 import { appendMissingFinanceAssistOptions } from '@/utils/financeAssistOptions'
@@ -70,9 +74,12 @@ const emit = defineEmits<{
   focus: []
   change: [value: string]
   'visible-change': [visible: boolean]
+  keydown: [event: KeyboardEvent]
 }>()
 
 const attrs = useAttrs()
+const treeSelectRef = ref<{ focus?: () => void } | null>(null)
+const fallbackSelectRef = ref<HTMLSelectElement | null>(null)
 
 const treeSelectBindings = computed(() => ({
   ...globalFilterableSelectProps,
@@ -120,4 +127,16 @@ function handleNativeChange(event: Event) {
 function normalizeValue(value?: string | null) {
   return String(value || '').trim()
 }
+
+function focus() {
+  if (useTestSelectFallback) {
+    fallbackSelectRef.value?.focus()
+    return
+  }
+  treeSelectRef.value?.focus?.()
+}
+
+defineExpose({
+  focus
+})
 </script>

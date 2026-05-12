@@ -14,6 +14,7 @@
             'toolbar-button-large toolbar-button-accent': action.emphasis === 'secondary',
             'toolbar-button-large toolbar-button-primary': action.emphasis === 'primary'
           }"
+          :title="toolbarActionTitle(action)"
           @click="handleToolbarAction(action.key)"
         >
           <el-icon :size="action.emphasis ? 18 : 16"><component :is="action.icon" /></el-icon>
@@ -105,32 +106,66 @@
                   <div class="voucher-inline-field">
                     <div class="voucher-row-index">{{ index + 1 }}</div>
                     <el-input
+                      :ref="makeGridCellRefBinder(row.localId, 'cdigest')"
                       v-model="row.cdigest"
+                      :data-voucher-row-id="row.localId"
+                      data-voucher-field="cdigest"
                       placeholder="请输入摘要"
                       :readonly="isReadonlyMode"
                       :maxlength="255"
                       @focus="handleEntryFieldFocus(index)"
+                      @keydown="handleGridCellKeydown($event, index, 'cdigest')"
                     />
                   </div>
                 </div>
                 <div class="voucher-cell">
                   <subject-tree-select
+                    :ref="makeGridCellRefBinder(row.localId, 'ccode')"
                     v-model="row.ccode"
                     :options="accountOptionsForDisplay"
                     clearable
                     placeholder="请选择科目"
                     :disabled="isReadonlyMode"
                     :data-subject-row-id="row.localId"
+                    :data-voucher-row-id="row.localId"
+                    data-voucher-field="ccode"
                     @focus="handleSubjectFieldFocus(index)"
                     @change="handleSubjectChange(index, $event)"
                     @visible-change="handleSubjectDropdownVisibleChange(index, $event)"
+                    @keydown="handleGridCellKeydown($event, index, 'ccode')"
                   />
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.md" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index)" @keydown="handleAmountKeydown($event, index, 'md')" />
+                  <money-input
+                    :ref="makeGridCellRefBinder(row.localId, 'md')"
+                    :model-value="row.md"
+                    :data-voucher-row-id="row.localId"
+                    data-voucher-field="md"
+                    :allow-negative="true"
+                    placeholder="0.00"
+                    :readonly="isReadonlyMode"
+                    :disabled="isReadonlyMode"
+                    @update:modelValue="handleAmountFieldUpdate(index, 'md', $event)"
+                    @focus="handleAmountFieldFocus(index, 'md')"
+                    @blur="handleAmountBlur(index)"
+                    @keydown="handleVoucherAmountKeydown($event, index, 'md')"
+                  />
                 </div>
                 <div class="voucher-cell">
-                  <money-input v-model="row.mc" placeholder="0.00" :readonly="isReadonlyMode" :disabled="isReadonlyMode" @focus="handleEntryFieldFocus(index)" @blur="handleAmountBlur(index)" @keydown="handleAmountKeydown($event, index, 'mc')" />
+                  <money-input
+                    :ref="makeGridCellRefBinder(row.localId, 'mc')"
+                    :model-value="row.mc"
+                    :data-voucher-row-id="row.localId"
+                    data-voucher-field="mc"
+                    :allow-negative="true"
+                    placeholder="0.00"
+                    :readonly="isReadonlyMode"
+                    :disabled="isReadonlyMode"
+                    @update:modelValue="handleAmountFieldUpdate(index, 'mc', $event)"
+                    @focus="handleAmountFieldFocus(index, 'mc')"
+                    @blur="handleAmountBlur(index)"
+                    @keydown="handleVoucherAmountKeydown($event, index, 'mc')"
+                  />
                 </div>
               </div>
             </div>
@@ -251,6 +286,30 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="calculatorDialogVisible" title="计算器" width="360px" destroy-on-close>
+      <div class="calculator-panel">
+        <el-input
+          v-model="calculatorExpression"
+          placeholder="请输入算式，例如 100+20/2"
+          @keydown.enter.prevent="runCalculator"
+        />
+        <div class="calculator-shortcuts">
+          <el-button v-for="token in calculatorShortcutTokens" :key="token" @click="appendCalculatorToken(token)">
+            {{ token }}
+          </el-button>
+        </div>
+        <div class="calculator-result">结果：{{ calculatorResultText }}</div>
+        <p class="calculator-hint">
+          {{ activeAmountTargetLabel }}
+        </p>
+      </div>
+      <template #footer>
+        <el-button @click="clearCalculator">清空</el-button>
+        <el-button @click="runCalculator">计算</el-button>
+        <el-button type="primary" @click="applyCalculatorResult">带回金额框</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="actionDialog.visible" :title="actionDialog.title" width="420px" destroy-on-close>
       <div class="action-dialog-content">
         <p>{{ actionDialog.description }}</p>
@@ -283,7 +342,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onBeforeUnmount,
+  onDeactivated,
+  onMounted,
+  reactive,
+  ref,
+  watch
+} from 'vue'
 import type { Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -331,11 +400,16 @@ import {
 import { useFinanceNewVoucherPageUtils } from './composables/useFinanceNewVoucherPageUtils'
 import {
   useFinanceNewVoucherRowOwner,
-  type FinanceVoucherEntryRow as VoucherEntryRow
+  type FinanceVoucherEntryRow as VoucherEntryRow,
+  type FinanceVoucherGridField
 } from './composables/useFinanceNewVoucherRowOwner'
 import { useFinanceNewVoucherValidationPayload } from './composables/useFinanceNewVoucherValidationPayload'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { formatMoney } from '@/utils/money'
+import {
+  normalizeSignedVoucherMoney,
+  resolveVoucherAutoBalanceValue
+} from '@/utils/financeVoucherAmounts'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 import { formatFinanceAssistOptionLabel } from '@/utils/financeAssistOptions'
 
@@ -348,9 +422,15 @@ interface ToolbarAction {
   key: ToolbarActionKey
   label: string
   icon: Component
+  shortcut?: string
   emphasis?: 'primary' | 'secondary'
   disabled?: boolean
 }
+
+type GridFocusableInstance = {
+  focus?: () => void
+  $el?: Element | null
+} | Element | null
 
 function createBootstrapEntry(defaultCurrencyCode: string, defaultCurrencyName: string, rowNo: number): VoucherEntryRow {
   return {
@@ -426,9 +506,17 @@ const {
 const validationErrors = ref<string[]>([])
 const selectedRowIndex = ref(0)
 const lastCommittedSnapshot = ref('')
+const calculatorDialogVisible = ref(false)
+const calculatorExpression = ref('')
+const calculatorResultText = ref('0.00')
+const activeAmountTarget = ref<{ rowIndex: number; field: 'md' | 'mc' } | null>(null)
 const customerArchiveDialogRef = ref<InstanceType<typeof FinanceCustomerArchiveDialog> | null>(null)
 const supplierArchiveDialogRef = ref<InstanceType<typeof FinanceSupplierArchiveDialog> | null>(null)
 const projectArchiveDialogRef = ref<InstanceType<typeof FinanceProjectArchiveDialog> | null>(null)
+const gridCellRefs = new Map<string, GridFocusableInstance>()
+const calculatorShortcutTokens = ['7', '8', '9', '+', '4', '5', '6', '-', '1', '2', '3', '*', '0', '.', '(', ')', '/']
+
+let hotkeysRegistered = false
 
 const form = reactive<VoucherFormState>({
   companyId: '',
@@ -486,21 +574,21 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
     ]
   }
 
-  const primaryActions: ToolbarAction[] = [{ key: 'new', label: '新增', icon: Plus, emphasis: 'secondary' }]
+  const primaryActions: ToolbarAction[] = [{ key: 'new', label: '新增', icon: Plus, emphasis: 'secondary', shortcut: 'F5' }]
   if (isDetailRoute.value && !editingExisting.value && voucherDetail.value?.editable && canEditExisting.value) {
     primaryActions.push({ key: 'modify', label: '修改', icon: Edit, emphasis: 'primary' })
   }
 
   const editActions: ToolbarAction[] = [
-    { key: 'print', label: '打印', icon: Printer },
+    { key: 'print', label: '打印', icon: Printer, shortcut: 'Ctrl+P' },
     { key: 'export', label: '导出', icon: Download },
-    { key: 'copy', label: '复制', icon: DocumentCopy },
+    { key: 'copy', label: '复制', icon: DocumentCopy, shortcut: 'Ctrl+F' },
     { key: 'reverse', label: '冲销', icon: RefreshLeft },
     { key: 'void', label: '作废', icon: CircleClose }
   ]
   if (!isReadonlyMode.value) {
     editActions.push({ key: 'insert', label: '插入行', icon: Top })
-    editActions.push({ key: 'delete', label: '删行', icon: Delete })
+    editActions.push({ key: 'delete', label: '删行', icon: Delete, shortcut: 'Ctrl+D' })
   }
 
   const actionGroup: ToolbarAction[] = [
@@ -508,7 +596,7 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
     { key: 'cashFlow', label: '现金流量', icon: TrendCharts }
   ]
   if (!isReadonlyMode.value) {
-    actionGroup.push({ key: 'save', label: '保存', icon: Select, emphasis: 'primary' })
+    actionGroup.push({ key: 'save', label: '保存', icon: Select, emphasis: 'primary', shortcut: 'F6' })
   }
 
   return [
@@ -520,7 +608,7 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
       actions: [
         { key: 'assist', label: '辅助核算', icon: Tickets },
         { key: 'balance', label: '平衡', icon: Coin },
-        { key: 'calculator', label: '计算器', icon: Tools }
+        { key: 'calculator', label: '计算器', icon: Tools, shortcut: 'F9' }
       ]
     }
   ]
@@ -530,6 +618,13 @@ const selectedRow = computed(() => form.entries[Math.min(selectedRowIndex.value,
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)
 const defaultCurrencyCode = computed(() => voucherMeta.value?.defaultCurrencyCode || voucherMeta.value?.defaultCurrency || 'CNY')
 const defaultCurrencyName = computed(() => voucherMeta.value?.defaultCurrencyName || '人民币')
+const activeAmountTargetLabel = computed(() => {
+  const target = activeAmountTarget.value
+  if (!target) {
+    return '当前未聚焦借方或贷方金额框，计算结果可先保留。'
+  }
+  return `当前将带回第 ${target.rowIndex + 1} 行${target.field === 'md' ? '借方金额' : '贷方金额'}`
+})
 const {
   loading,
   initializing,
@@ -615,9 +710,11 @@ const {
   createEntryFromValue,
   ensureMinimumRows,
   handleEntryFieldFocus,
+  updateAmountField,
   insertEntryAfter,
   removeSelectedEntry,
   handleGridKeydown,
+  handleGridCellKeydown,
   handleAmountKeydown
 } = useFinanceNewVoucherRowOwner({
   getEntries: () => form.entries,
@@ -633,7 +730,8 @@ const {
   minEntryRows: MIN_ENTRY_ROWS,
   isEntryBlank,
   tryLeaveSubjectField,
-  resetLeafSubjectHistory
+  resetLeafSubjectHistory,
+  focusGridCell
 })
 const {
   currentCompanyName,
@@ -692,7 +790,10 @@ const {
   handleCashFlowFieldFocus,
   resolveErrorMessage,
   insertEntryAfter,
-  removeSelectedEntry
+  removeSelectedEntry,
+  copyCurrentVoucher,
+  openCalculator,
+  printCurrentVoucher
 })
 const accountOptionsForDisplay = computed(() => {
   const options = [...(voucherMeta.value?.accountOptions || [])]
@@ -729,6 +830,193 @@ watch(
   },
   { immediate: true }
 )
+
+onMounted(registerPageHotkeys)
+onActivated(registerPageHotkeys)
+onDeactivated(unregisterPageHotkeys)
+onBeforeUnmount(unregisterPageHotkeys)
+
+function setGridCellRef(rowId: string, field: FinanceVoucherGridField, instance: GridFocusableInstance) {
+  const key = `${rowId}:${field}`
+  if (!instance) {
+    gridCellRefs.delete(key)
+    return
+  }
+  gridCellRefs.set(key, instance)
+}
+
+function makeGridCellRefBinder(rowId: string, field: FinanceVoucherGridField) {
+  return (instance: GridFocusableInstance) => setGridCellRef(rowId, field, instance)
+}
+
+async function focusGridCell(index: number, field: FinanceVoucherGridField) {
+  await nextTick()
+  const row = form.entries[index]
+  if (!row) {
+    return
+  }
+  const target = gridCellRefs.get(`${row.localId}:${field}`)
+  if (target && typeof target === 'object' && 'focus' in target && typeof target.focus === 'function') {
+    target.focus()
+    return
+  }
+  const rootElement = target instanceof Element ? target : target && typeof target === 'object' && '$el' in target ? target.$el : null
+  const focusable = rootElement instanceof HTMLElement
+    ? rootElement.querySelector('input, select, [tabindex]') || rootElement
+    : null
+  if (focusable instanceof HTMLElement) {
+    focusable.focus()
+  }
+}
+
+function toolbarActionTitle(action: ToolbarAction) {
+  return action.shortcut ? `${action.label}（${action.shortcut}）` : action.label
+}
+
+function isToolbarActionEnabled(actionKey: ToolbarActionKey) {
+  return toolbarGroups.value
+    .flatMap((group) => group.actions)
+    .some((action) => action.key === actionKey && !action.disabled)
+}
+
+function resolveShortcutAction(event: KeyboardEvent): ToolbarActionKey | null {
+  if (event.metaKey || event.altKey) {
+    return null
+  }
+  if (event.ctrlKey) {
+    const normalizedKey = event.key.toLowerCase()
+    if (normalizedKey === 'p') return 'print'
+    if (normalizedKey === 'f') return 'copy'
+    if (normalizedKey === 'd') return 'delete'
+    return null
+  }
+  const normalizedKey = event.key.toUpperCase()
+  if (normalizedKey === 'F5') return 'new'
+  if (normalizedKey === 'F6') return 'save'
+  if (normalizedKey === 'F9') return 'calculator'
+  return null
+}
+
+function handlePageHotkey(event: KeyboardEvent) {
+  const action = resolveShortcutAction(event)
+  if (!action || !isToolbarActionEnabled(action)) {
+    return
+  }
+  event.preventDefault()
+  void handleToolbarAction(action)
+}
+
+function registerPageHotkeys() {
+  if (hotkeysRegistered) {
+    return
+  }
+  window.addEventListener('keydown', handlePageHotkey)
+  hotkeysRegistered = true
+}
+
+function unregisterPageHotkeys() {
+  if (!hotkeysRegistered) {
+    return
+  }
+  window.removeEventListener('keydown', handlePageHotkey)
+  hotkeysRegistered = false
+}
+
+function handleAmountFieldFocus(index: number, field: 'md' | 'mc') {
+  activeAmountTarget.value = { rowIndex: index, field }
+  handleEntryFieldFocus(index)
+}
+
+function handleAmountFieldUpdate(index: number, field: 'md' | 'mc', value: string) {
+  updateAmountField(index, field, value)
+}
+
+function handleVoucherAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 'mc') {
+  if (event.key === '=') {
+    event.preventDefault()
+    const value = resolveVoucherAutoBalanceValue(form.entries, index, field)
+    updateAmountField(index, field, normalizeSignedVoucherMoney(value) || '0.00')
+    return
+  }
+  handleAmountKeydown(event, index, field)
+}
+
+function openCalculator() {
+  calculatorDialogVisible.value = true
+}
+
+function printCurrentVoucher() {
+  window.print()
+}
+
+function appendCalculatorToken(token: string) {
+  calculatorExpression.value += token
+}
+
+function clearCalculator() {
+  calculatorExpression.value = ''
+  calculatorResultText.value = '0.00'
+}
+
+function runCalculator() {
+  calculatorResultText.value = evaluateCalculatorExpression(calculatorExpression.value)
+  calculatorExpression.value = calculatorResultText.value
+}
+
+async function applyCalculatorResult() {
+  const target = activeAmountTarget.value
+  if (!target) {
+    ElMessage.warning('请先聚焦借方或贷方金额框')
+    return
+  }
+  const result = evaluateCalculatorExpression(calculatorExpression.value)
+  calculatorResultText.value = result
+  updateAmountField(target.rowIndex, target.field, result)
+  calculatorDialogVisible.value = false
+  selectRow(target.rowIndex)
+  await focusGridCell(target.rowIndex, target.field)
+}
+
+async function copyCurrentVoucher() {
+  const companyId = financeCompany.currentCompanyId || form.companyId
+  const payload = buildPayload()
+  const copiedDraft: FinanceVoucherSavePayload = {
+    ...payload,
+    companyId,
+    inoId: undefined,
+    cbill: voucherMeta.value?.defaultMaker || form.cbill,
+    entries: payload.entries.map((entry, index) => ({
+      ...entry,
+      inid: index + 1
+    }))
+  }
+  writeDraft(copiedDraft, companyId)
+  if (props.pageMode !== 'create') {
+    await router.push({ name: 'finance-new-voucher' })
+    return
+  }
+  if (!voucherMeta.value) {
+    return
+  }
+  applyDraft(copiedDraft, voucherMeta.value, companyId)
+  validationErrors.value = []
+  markCommitted()
+}
+
+function evaluateCalculatorExpression(expression: string) {
+  const normalized = String(expression || '').trim()
+  if (!normalized) {
+    return '0.00'
+  }
+  if (!/^[\d+\-*/().\s]+$/.test(normalized)) {
+    throw new Error('计算器仅支持数字、小数点、括号和四则运算符')
+  }
+  const result = Function(`"use strict"; return (${normalized})`)()
+  if (typeof result !== 'number' || !Number.isFinite(result)) {
+    throw new Error('计算结果无效，请检查算式')
+  }
+  return normalizeSignedVoucherMoney(String(result)) || '0.00'
+}
 
 function syncFormPeriodFromGlobal() {
   if (!financePeriod.hasPeriodContext) {
@@ -821,6 +1109,11 @@ function readDraft(companyId = financeCompany.currentCompanyId): FinanceVoucherS
     window.sessionStorage.removeItem(buildDraftStorageKey(companyId))
     return null
   }
+}
+
+function writeDraft(draft: FinanceVoucherSavePayload, companyId = financeCompany.currentCompanyId || draft.companyId) {
+  window.sessionStorage.setItem(buildDraftStorageKey(companyId), JSON.stringify(draft))
+  hasDraft.value = true
 }
 
 function clearDraft(companyId = financeCompany.currentCompanyId) {
@@ -964,6 +1257,11 @@ defineExpose({
 .voucher-row-index { display: inline-flex; min-width: 22px; align-items: center; justify-content: center; color: #788ca6; font-size: 12px; font-weight: 700; }
 .voucher-footer-amount { text-align: right; color: #173a61; font-family: Consolas, Monaco, monospace; }
 .voucher-signature { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; border-radius: 18px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.92); padding: 12px 14px; color: #4a627f; font-size: 13px; }
+.calculator-panel { display: flex; flex-direction: column; gap: 12px; }
+.calculator-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+.calculator-shortcuts :deep(.el-button) { margin-left: 0; }
+.calculator-result { border-radius: 12px; border: 1px solid #d8e2f0; background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%); padding: 10px 12px; color: #21466d; font-family: Consolas, Monaco, monospace; font-weight: 700; text-align: right; }
+.calculator-hint { margin: 0; color: #7b8ea7; font-size: 12px; line-height: 1.6; }
 .action-dialog-content { color: #506680; line-height: 1.8; }
 .action-dialog-subtle { margin-top: 8px; color: #8a9bb1; font-size: 12px; }
 .cash-flow-radio-group { display: flex; flex-direction: column; gap: 10px; }

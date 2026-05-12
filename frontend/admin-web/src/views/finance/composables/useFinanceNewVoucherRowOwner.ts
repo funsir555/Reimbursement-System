@@ -1,8 +1,10 @@
 import { ElMessage } from 'element-plus'
+import { nextTick } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 import type { FinanceVoucherEntry, FinanceVoucherOption } from '@/api'
 
 export type FinanceVoucherEntryRow = FinanceVoucherEntry & { localId: string }
+export type FinanceVoucherGridField = 'cdigest' | 'ccode' | 'md' | 'mc'
 
 type UseFinanceNewVoucherRowOwnerOptions = {
   getEntries: () => FinanceVoucherEntryRow[]
@@ -17,10 +19,12 @@ type UseFinanceNewVoucherRowOwnerOptions = {
   isEntryBlank: (row: FinanceVoucherEntryRow) => boolean
   tryLeaveSubjectField: (nextRowIndex?: number) => Promise<boolean>
   resetLeafSubjectHistory: (rows: FinanceVoucherEntryRow[], accountOptions?: FinanceVoucherOption[]) => void
+  focusGridCell: (index: number, field: FinanceVoucherGridField) => Promise<void> | void
 }
 
 export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwnerOptions) {
   let entrySeed = 0
+  const gridFieldOrder: FinanceVoucherGridField[] = ['cdigest', 'ccode', 'md', 'mc']
 
   function createEntry(defaultCurrencyCode: string, defaultCurrencyName: string, rowNo: number): FinanceVoucherEntryRow {
     entrySeed += 1
@@ -83,6 +87,22 @@ export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwn
     void options.tryLeaveSubjectField(index)
   }
 
+  function updateAmountField(index: number, field: 'md' | 'mc', value: string) {
+    if (options.isReadonlyMode.value) return
+    const row = options.getEntries()[index]
+    if (!row) return
+    row[field] = value
+    if (value) {
+      if (field === 'md') {
+        row.mc = ''
+        row.ncS = undefined
+      } else {
+        row.md = ''
+        row.ndS = undefined
+      }
+    }
+  }
+
   function insertEntryAfter(index: number) {
     if (options.isReadonlyMode.value) return
     const entries = [...options.getEntries()]
@@ -122,19 +142,52 @@ export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwn
     }
   }
 
-  function handleAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 'mc') {
+  async function handleGridCellKeydown(event: KeyboardEvent, index: number, field: FinanceVoucherGridField) {
     handleGridKeydown(event, index)
-    if (options.isReadonlyMode.value) return
-    const row = options.getEntries()[index]
-    if (!row) return
-    if (field === 'md' && row.md) {
-      row.mc = ''
-      row.ncS = undefined
+    if (event.key !== 'Enter' && event.key !== 'Tab') {
+      return
     }
-    if (field === 'mc' && row.mc) {
-      row.md = ''
-      row.ndS = undefined
+    event.preventDefault()
+    await moveGridFocus(index, field, event.shiftKey ? -1 : 1)
+  }
+
+  function handleAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 'mc') {
+    void handleGridCellKeydown(event, index, field)
+  }
+
+  async function moveGridFocus(index: number, field: FinanceVoucherGridField, direction: -1 | 1) {
+    const currentFieldIndex = gridFieldOrder.indexOf(field)
+    if (currentFieldIndex < 0) {
+      return
     }
+    const currentEntries = options.getEntries()
+    let nextRowIndex = index
+    let nextFieldIndex = currentFieldIndex + direction
+    if (nextFieldIndex < 0) {
+      nextRowIndex = Math.max(0, index - 1)
+      nextFieldIndex = gridFieldOrder.length - 1
+    } else if (nextFieldIndex >= gridFieldOrder.length) {
+      nextRowIndex = index + 1
+      nextFieldIndex = 0
+    }
+
+    if (!(await options.tryLeaveSubjectField(nextRowIndex))) {
+      return
+    }
+
+    if (nextRowIndex >= currentEntries.length) {
+      if (options.isReadonlyMode.value) {
+        return
+      }
+      insertEntryAfter(currentEntries.length - 1)
+      await nextTick()
+      nextRowIndex = Math.min(currentEntries.length, options.getEntries().length - 1)
+    }
+
+    const boundedRowIndex = Math.max(0, Math.min(nextRowIndex, options.getEntries().length - 1))
+    selectRow(boundedRowIndex)
+    await nextTick()
+    await options.focusGridCell(boundedRowIndex, gridFieldOrder[nextFieldIndex] as FinanceVoucherGridField)
   }
 
   return {
@@ -143,9 +196,11 @@ export function useFinanceNewVoucherRowOwner(options: UseFinanceNewVoucherRowOwn
     ensureMinimumRows,
     selectRow,
     handleEntryFieldFocus,
+    updateAmountField,
     insertEntryAfter,
     removeSelectedEntry,
     handleGridKeydown,
+    handleGridCellKeydown,
     handleAmountKeydown
   }
 }

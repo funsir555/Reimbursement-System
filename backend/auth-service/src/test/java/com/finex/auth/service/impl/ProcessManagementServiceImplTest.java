@@ -347,6 +347,7 @@ class ProcessManagementServiceImplTest {
                 "approval-flow",
                 "expense-detail-form",
                 "custom-archive",
+                "user-group",
                 "expense-type"
         ), overview.getNavItems().stream().map(item -> item.getKey()).toList());
     }

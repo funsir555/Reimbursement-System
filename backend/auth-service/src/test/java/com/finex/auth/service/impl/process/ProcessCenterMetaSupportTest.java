@@ -118,7 +118,7 @@ class ProcessCenterMetaSupportTest {
         assertEquals("FD-001", overview.getCategories().get(0).getTemplates().get(0).getFormCode());
         assertEquals("差旅报销表单", overview.getCategories().get(0).getTemplates().get(0).getFormName());
         assertEquals("费用明细表单", overview.getCategories().get(0).getTemplates().get(0).getExpenseDetailDesignName());
-        assertEquals(6, overview.getNavItems().size());
+        assertEquals(7, overview.getNavItems().size());
     }
 
     @Test

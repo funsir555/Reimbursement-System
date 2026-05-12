@@ -158,6 +158,24 @@ class FinanceVoucherServiceImplTest {
     }
 
     @Test
+    void queryVouchersBuildsTotalsFromSignedVoucherAmounts() {
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
+                buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u53cd\u5411\u5206\u5f55", "560101", new BigDecimal("-80.00"), BigDecimal.ZERO),
+                buildRow(2, "COMP-001", 3, "\u8bb0", 8, 2, "2026-03-28", "\u5bf9\u65b9\u5206\u5f55", "100201", new BigDecimal("80.00"), BigDecimal.ZERO)
+        ));
+
+        FinanceVoucherQueryDTO dto = new FinanceVoucherQueryDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setPage(1);
+        dto.setPageSize(20);
+
+        FinanceVoucherSummaryVO summary = service.queryVouchers(dto).getItems().get(0);
+        assertEquals("80.00", summary.getTotalDebit().toPlainString());
+        assertEquals("80.00", summary.getTotalCredit().toPlainString());
+    }
+
+    @Test
     void getMetaLoadsCustomerSupplierAndProjectOptionsFromArchives() {
         when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
         when(userService.getById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5c0f\u738b", "COMP-001"));
@@ -261,6 +279,40 @@ class FinanceVoucherServiceImplTest {
         assertEquals(2, insertedRows.size());
         assertEquals("560101", insertedRows.get(0).getCcode());
         assertEquals("100201", insertedRows.get(1).getCcode());
+    }
+
+    @Test
+    void saveVoucherAllowsSignedAmountsAndReturnsEffectiveTotals() {
+        List<GlAccvouch> insertedRows = new ArrayList<>();
+        doAnswer(invocation -> {
+            insertedRows.add(invocation.getArgument(0));
+            return 1;
+        }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
+
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("560101", "Management Expense", 0, 0, 0, 0, 0, null, 0),
+                buildSubject("100201", "Bank Deposit", 0, 0, 0, 0, 0, null, 0)
+        ));
+        when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Reverse Credit", "100201", "-100.00", null)
+        ));
+
+        FinanceVoucherSaveResultVO result = service.saveVoucher(dto, 1L, "alice");
+
+        assertEquals("100.00", result.getTotalDebit().toPlainString());
+        assertEquals("100.00", result.getTotalCredit().toPlainString());
+        assertEquals(new BigDecimal("-100.00"), insertedRows.get(1).getMd());
+        assertEquals(BigDecimal.ZERO.setScale(2), insertedRows.get(1).getMc());
     }
 
     @Test

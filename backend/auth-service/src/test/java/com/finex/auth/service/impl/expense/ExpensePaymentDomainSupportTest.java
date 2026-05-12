@@ -375,12 +375,21 @@ class ExpensePaymentDomainSupportTest {
 
         when(processDocumentTaskMapper.selectById(61L)).thenReturn(task);
         when(expenseDocumentReadSupport.requireDocument("DOC-VOID")).thenReturn(instance);
+        when(expenseWorkflowRuntimeSupport.resolvePaymentVoidTargetStatus(instance)).thenReturn("PENDING_PAYMENT");
         when(pmBankPaymentRecordMapper.selectOne(any())).thenReturn(record);
 
         boolean actual = support.voidPaymentTasks(1L, "tester", List.of(61L));
 
         assertEquals(true, actual);
-        verify(expenseWorkflowRuntimeSupport).revertPaymentToPending(eq(instance), eq(task), eq(1L), eq("tester"), eq("作废后返回待支付"));
+        verify(expenseWorkflowRuntimeSupport).revertPaymentToStatus(
+                eq(instance),
+                eq(task),
+                eq(1L),
+                eq("tester"),
+                eq("作废后返回待支付"),
+                eq("PAYING"),
+                eq("PENDING_PAYMENT")
+        );
         verify(pmBankPaymentRecordMapper).updateById(record);
     }
 

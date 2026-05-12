@@ -168,7 +168,7 @@ const OptionStub = defineComponent({
 
 const ButtonStub = defineComponent({
   emits: ['click'],
-  template: '<button type="button" @click="$emit(\'click\', $event)"><slot /></button>'
+  template: '<button type="button" v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>'
 })
 
 const NumberStub = defineComponent({
@@ -185,7 +185,7 @@ const MoneyInputStub = defineComponent({
     disabled: { type: Boolean, default: false }
   },
   emits: ['update:modelValue', 'focus', 'blur', 'keydown'],
-  template: '<input :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @focus="$emit(\'focus\')" @blur="$emit(\'blur\', $event)" @keydown="$emit(\'keydown\', $event)" />'
+  template: '<input v-bind="$attrs" :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @focus="$emit(\'focus\')" @blur="$emit(\'blur\', $event)" @keydown="$emit(\'keydown\', $event)" />'
 })
 
 const mountOptions = {
@@ -988,6 +988,109 @@ describe('FinanceNewVoucherView', () => {
 
     expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
     expect((wrapper.vm as unknown as { cashFlowDialogVisible: boolean }).cashFlowDialogVisible).toBe(true)
+  })
+
+  it('shows shortcut titles and triggers save from F6', async () => {
+    mocks.financeApi.createVoucher.mockResolvedValue({
+      data: {
+        voucherNo: 'COMPANY_A~2026~4~记~12',
+        companyId: 'COMPANY_A',
+        iyear: 2026,
+        iyperiod: 202604,
+        iperiod: 4,
+        csign: '记',
+        inoId: 12,
+        entryCount: 2,
+        totalDebit: '100.00',
+        totalCredit: '100.00',
+        status: 'UNPOSTED',
+        checkedAt: null,
+        postedAt: null
+      }
+    })
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '560101'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '560101'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+
+    expect(wrapper.findAll('button').find((button) => button.text() === '新增')?.attributes('title')).toBe('新增（F5）')
+    expect(wrapper.findAll('button').find((button) => button.text() === '保存')?.attributes('title')).toBe('保存（F6）')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6' }))
+    await flushPromises()
+
+    expect(mocks.financeApi.createVoucher).toHaveBeenCalledTimes(1)
+  })
+
+  it('copies the current voucher into a new unsaved draft with Ctrl+F', async () => {
+    const wrapper = await mountView({ pageMode: 'detail', voucherNo: 'COMPANY_A~2026~4~记~12' })
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true }))
+    await flushPromises()
+
+    expect(mocks.router.push).toHaveBeenCalledWith({ name: 'finance-new-voucher' })
+    const rawDraft = sessionStorage.getItem('finance-new-voucher-draft:COMPANY_A')
+    expect(rawDraft).toBeTruthy()
+    const draft = JSON.parse(String(rawDraft)) as {
+      inoId?: number
+      entries: Array<{ cdigest: string; ccode: string; md?: string; mc?: string }>
+    }
+    expect(draft.inoId).toBeUndefined()
+    expect(draft.entries).toHaveLength(2)
+    expect(draft.entries[0]).toMatchObject({ cdigest: '摘要 A', ccode: '1001', md: '100.00' })
+    expect(draft.entries[1]).toMatchObject({ cdigest: '摘要 B', ccode: '100201', mc: '100.00' })
+  })
+
+  it('auto balances signed amounts when pressing equals in amount fields', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          localId: string
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+        }>
+      }
+      totalDebit: string
+      totalCredit: string
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '560101'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '560101'
+    await flushPromises()
+
+    const creditInput = wrapper.findAll('input[data-voucher-field="mc"]')[1]
+    await creditInput.trigger('keydown', { key: '=' })
+    await flushPromises()
+    expect(vm.form.entries[1].mc).toBe('100.00')
+
+    vm.form.entries[1].mc = ''
+    await flushPromises()
+
+    const debitInput = wrapper.findAll('input[data-voucher-field="md"]')[1]
+    await debitInput.trigger('keydown', { key: '=' })
+    await flushPromises()
+    expect(vm.form.entries[1].md).toBe('-100.00')
   })
 })
 

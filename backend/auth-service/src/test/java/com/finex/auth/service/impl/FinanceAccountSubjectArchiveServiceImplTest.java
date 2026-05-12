@@ -166,8 +166,6 @@ class FinanceAccountSubjectArchiveServiceImplTest {
         when(financeAccountSetMapper.selectById("COMPANY_A")).thenReturn(accountSet);
         when(financeAccountSetTemplateSubjectMapper.selectList(any())).thenReturn(List.of(templateSubject));
         when(financeAccountSubjectMapper.selectOne(any())).thenReturn(null).thenReturn(created);
-        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of());
-        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);
         doAnswer(invocation -> {
             FinanceAccountSubject payload = invocation.getArgument(0);
             inserted.setParentSubjectCode(payload.getParentSubjectCode());

@@ -1,5 +1,6 @@
 <template>
   <el-input
+    ref="inputRef"
     :model-value="displayValue"
     :placeholder="placeholder"
     :disabled="disabled"
@@ -8,6 +9,7 @@
     @focus="handleFocus"
     @input="handleInput"
     @blur="handleBlur"
+    @keydown="emit('keydown', $event)"
   />
 </template>
 
@@ -33,11 +35,14 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: string): void
+  (event: 'focus'): void
   (event: 'blur'): void
+  (event: 'keydown', payload: KeyboardEvent): void
 }>()
 
 const isFocused = ref(false)
 const draftValue = ref('')
+const inputRef = ref<{ focus?: () => void } | null>(null)
 
 watch(
   () => props.modelValue,
@@ -64,6 +69,7 @@ function sanitizeInput(value: string) {
 function handleFocus() {
   isFocused.value = true
   draftValue.value = sanitizeInput(props.modelValue || '')
+  emit('focus')
 }
 
 function handleInput(value: string) {
@@ -84,4 +90,12 @@ function handleBlur() {
     emit('blur')
   }
 }
+
+function focus() {
+  inputRef.value?.focus?.()
+}
+
+defineExpose({
+  focus
+})
 </script>

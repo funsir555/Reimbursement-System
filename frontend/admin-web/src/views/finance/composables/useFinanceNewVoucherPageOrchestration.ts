@@ -61,6 +61,9 @@ type UseFinanceNewVoucherPageOrchestrationOptions = {
   resolveErrorMessage: (error: unknown, fallback: string) => string
   insertEntryAfter: (index: number) => void
   removeSelectedEntry: () => void
+  copyCurrentVoucher: () => Promise<void> | void
+  openCalculator: () => void
+  printCurrentVoucher: () => void
 }
 
 export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVoucherPageOrchestrationOptions) {
@@ -225,6 +228,15 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
     }
   }
 
+  async function handleCopyVoucher() {
+    try {
+      await options.copyCurrentVoucher()
+      ElMessage.success('已复制为新的未保存凭证')
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, '复制凭证失败'))
+    }
+  }
+
   function handleFindInEntries() {
     const keyword = window.prompt('请输入关键字（摘要 / 科目编码 / 科目名称）')
     const normalizedKeyword = String(keyword || '').trim().toLowerCase()
@@ -258,16 +270,16 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
       calculator: '计算器'
     }
     const descriptions: Record<ActionDialogKey, string> = {
-      print: '后续可接入正式打印模板与套打配置。',
+      print: '当前将调用浏览器打印能力，后续可继续接入正式打印模板与套打配置。',
       export: '后续可扩展为 Excel、PDF 或外部接口输出。',
-      copy: '后续可按原凭证复制摘要、科目和金额。',
+      copy: '当前将把整张凭证复制成新的未保存凭证，保留业务内容并重置凭证身份。',
       reverse: '后续可接入红字冲销与反向凭证生成流程。',
       void: '后续可接入作废状态流转和权限校验。',
       searchReplace: '后续可在分录摘要、科目和辅助项中做批量查找替换。',
       cashFlow: '请选择当前分录对应的现金流量。',
       assist: '当前下方辅助核算区域已可录入基础信息，后续可扩展为侧边明细抽屉。',
       balance: '后续可联动余额查询与科目实时余额提示。',
-      calculator: '后续可接入悬浮计算器或公式辅助输入能力。'
+      calculator: '当前可打开页内悬浮计算器，并支持把结果带回当前金额输入框。'
     }
 
     actionDialog.title = labels[action]
@@ -286,6 +298,9 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
     if (action === 'markError') return void handleToggleVoucherError()
     if (action === 'find') return void handleFindInEntries()
     if (action === 'export' && options.isReviewMode.value) return void handleExportCurrentVoucher()
+    if (action === 'print') return void options.printCurrentVoucher()
+    if (action === 'copy') return void handleCopyVoucher()
+    if (action === 'calculator') return void options.openCalculator()
     if (action === 'cashFlow') {
       if (!options.ensureRowCashFlowState(options.selectedRow.value)) return
       options.handleCashFlowFieldFocus()
