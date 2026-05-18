@@ -95,7 +95,12 @@ function focus() {
   inputRef.value?.focus?.()
 }
 
+function syncFromModel() {
+  draftValue.value = sanitizeInput(props.modelValue || '')
+}
+
 defineExpose({
-  focus
+  focus,
+  syncFromModel
 })
 </script>

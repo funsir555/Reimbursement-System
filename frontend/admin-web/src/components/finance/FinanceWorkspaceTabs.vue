@@ -114,7 +114,7 @@ type FinanceCompanyOption = {
 }
 
 const COMPANY_SELECT_WIDTH = '292px'
-const PERIOD_YEAR_WIDTH = '74px'
+const PERIOD_YEAR_WIDTH = '88px'
 const PERIOD_MONTH_WIDTH = '60px'
 
 const props = withDefaults(defineProps<{

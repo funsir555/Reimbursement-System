@@ -354,7 +354,11 @@ function handleFinanceTabSelect(path: string) {
   void router.push(path)
 }
 
-function handleFinanceTabClose(path: string) {
+async function handleFinanceTabClose(path: string) {
+  const allowed = await financeWorkspace.requestClose(path)
+  if (!allowed) {
+    return
+  }
   const nextPath = financeWorkspace.getNextPathAfterClose(path)
   const closingCurrent = route.fullPath === path
   financeWorkspace.close(path)

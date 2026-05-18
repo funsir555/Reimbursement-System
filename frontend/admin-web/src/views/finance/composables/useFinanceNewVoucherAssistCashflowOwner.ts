@@ -1,11 +1,13 @@
 import { computed, nextTick, reactive, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type { FinanceVoucherMeta, FinanceVoucherOption } from '@/api'
-import { isZeroMoney } from '@/utils/money'
+import { isZeroMoney, normalizeMoneyValue } from '@/utils/money'
 import { showBusinessWarning } from '@/utils/businessWarning'
 import { buildDepartmentTreeOptions, filterDepartmentTreeNode } from '@/utils/departmentTree'
+import { resolveVoucherCashFlowAmount } from '@/utils/financeVoucherAmounts'
 
 type VoucherEntryRowLike = {
   localId: string
+  cdigest?: string
   ccode?: string
   ccodeName?: string
   cdeptId?: string
@@ -16,6 +18,9 @@ type VoucherEntryRowLike = {
   citemId?: string
   cashFlowItemId?: number
   cashFlowItemName?: string
+  cashFlowSubjectCode?: string
+  cashFlowSubjectName?: string
+  cashFlowAmount?: string
   md?: string
   mc?: string
 }
@@ -27,6 +32,14 @@ type VoucherAssistCapability = {
   supplier: boolean
   project: boolean
   lockedProjectClassCode?: string
+}
+
+type CashFlowEditorLine<TEntry extends VoucherEntryRowLike> = {
+  rowIndex: number
+  row: TEntry
+  rowLabel: string
+  amountMismatch: boolean
+  subjectMismatch: boolean
 }
 
 type UseFinanceNewVoucherAssistCashflowOwnerOptions<TEntry extends VoucherEntryRowLike> = {
@@ -45,13 +58,22 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
   const leafSubjectWarningVisible = ref(false)
   const cashFlowDialogVisible = ref(false)
   const cashFlowDialogRowIndex = ref<number | null>(null)
-  const cashFlowDialogSelection = ref('')
 
   const accountOptionMap = computed(
     () => new Map((options.voucherMeta.value?.accountOptions || []).map((item) => [item.value, item] as const))
   )
   const cashFlowOptionMap = computed(
     () => new Map((options.voucherMeta.value?.cashFlowOptions || []).map((item) => [item.value, item] as const))
+  )
+  const cashAccountOptions = computed(() => {
+    const optionList = (options.voucherMeta.value?.accountOptions || []).filter((item) => Number(item.bcash || 0) === 1)
+    const selectedValues = options.entries.value.flatMap((row) => [normalizeText(row.cashFlowSubjectCode), normalizeText(row.ccode)])
+    return appendDisplayOptions(optionList, selectedValues)
+  })
+  const cashFlowEditorLines = computed<CashFlowEditorLine<TEntry>[]>(() =>
+    options.entries.value
+      .map((row, rowIndex) => buildCashFlowEditorLine(row, rowIndex))
+      .filter((item): item is CashFlowEditorLine<TEntry> => Boolean(item))
   )
   const selectedAccountOption = computed(() => {
     const code = options.selectedRow.value?.ccode
@@ -112,6 +134,10 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
     return text || undefined
   }
 
+  function normalizeCashFlowAmount(value?: string | null) {
+    return normalizeMoneyValue(value, { fallback: '' }) || undefined
+  }
+
   function isOptionEnabled(value?: number | null) {
     return Number(value || 0) === 1
   }
@@ -148,12 +174,104 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
   function clearRowCashFlow(row: TEntry) {
     row.cashFlowItemId = undefined
     row.cashFlowItemName = ''
+    row.cashFlowSubjectCode = ''
+    row.cashFlowSubjectName = ''
+    row.cashFlowAmount = ''
   }
 
   function requiresRowCashFlow(row?: TEntry | null) {
     if (!row?.ccode) return false
     const account = findAccountOptionByCode(row.ccode)
     return Number(account?.bcash || 0) === 1 && (!isZeroMoney(row.md || '0') || !isZeroMoney(row.mc || '0'))
+  }
+
+  function resolveRowCashFlowSubjectCode(row?: TEntry | null) {
+    return normalizeText(row?.ccode) || ''
+  }
+
+  function resolveRowCashFlowSubjectName(row?: TEntry | null) {
+    if (!row?.ccode) {
+      return ''
+    }
+    return findAccountOptionByCode(row.ccode)?.name || normalizeText(row.ccodeName) || ''
+  }
+
+  function resolveRowCashFlowAmount(row?: TEntry | null) {
+    return resolveVoucherCashFlowAmount(row) || ''
+  }
+
+  function hasRowCashFlowDraft(row?: TEntry | null) {
+    if (!row) {
+      return false
+    }
+    return Boolean(
+      row.cashFlowItemId
+      || normalizeText(row.cashFlowItemName)
+      || normalizeText(row.cashFlowSubjectCode)
+      || normalizeText(row.cashFlowSubjectName)
+      || normalizeCashFlowAmount(row.cashFlowAmount)
+    )
+  }
+
+  function clearRowCashFlowSelection(row: TEntry) {
+    row.cashFlowItemId = undefined
+    row.cashFlowItemName = ''
+  }
+
+  function rowCashFlowSubjectMatchesVoucher(row?: TEntry | null) {
+    if (!row) {
+      return true
+    }
+    const cashFlowSubjectCode = normalizeText(row.cashFlowSubjectCode)
+    if (!cashFlowSubjectCode) {
+      return true
+    }
+    return cashFlowSubjectCode === resolveRowCashFlowSubjectCode(row)
+  }
+
+  function rowCashFlowAmountMatchesVoucher(row?: TEntry | null) {
+    if (!row) {
+      return true
+    }
+    const cashFlowAmount = normalizeCashFlowAmount(row.cashFlowAmount)
+    if (!cashFlowAmount) {
+      return true
+    }
+    return cashFlowAmount === resolveRowCashFlowAmount(row)
+  }
+
+  function syncRowCashFlowFromVoucher(row: TEntry, clearSelection = false) {
+    if (!requiresRowCashFlow(row)) {
+      clearRowCashFlow(row)
+      return false
+    }
+    const nextSubjectCode = resolveRowCashFlowSubjectCode(row)
+    const nextSubjectName = resolveRowCashFlowSubjectName(row)
+    const nextAmount = resolveRowCashFlowAmount(row)
+    const changed = normalizeText(row.cashFlowSubjectCode) !== nextSubjectCode
+      || normalizeText(row.cashFlowSubjectName) !== normalizeText(nextSubjectName)
+      || normalizeCashFlowAmount(row.cashFlowAmount) !== normalizeCashFlowAmount(nextAmount)
+    if (changed && clearSelection) {
+      clearRowCashFlowSelection(row)
+    }
+    row.cashFlowSubjectCode = nextSubjectCode
+    row.cashFlowSubjectName = nextSubjectName
+    row.cashFlowAmount = nextAmount
+    return true
+  }
+
+  function buildCashFlowEditorLine(row: TEntry, rowIndex: number): CashFlowEditorLine<TEntry> | null {
+    if (!requiresRowCashFlow(row) && !hasRowCashFlowDraft(row)) {
+      return null
+    }
+    const digest = normalizeText(row.cdigest)
+    return {
+      rowIndex,
+      row,
+      rowLabel: digest ? `第 ${rowIndex + 1} 行 · ${digest}` : `第 ${rowIndex + 1} 行`,
+      amountMismatch: !rowCashFlowAmountMatchesVoucher(row),
+      subjectMismatch: !rowCashFlowSubjectMatchesVoucher(row)
+    }
   }
 
   function syncRowAccountState(row: TEntry, accountOptions = options.voucherMeta.value?.accountOptions || []) {
@@ -245,15 +363,31 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
     return canLeave
   }
 
+  function resolveCashFlowDialogRowIndex(preferredIndex = options.selectedRowIndex.value) {
+    const preferredRow = options.entries.value[preferredIndex]
+    if (preferredRow && (requiresRowCashFlow(preferredRow) || hasRowCashFlowDraft(preferredRow))) {
+      return preferredIndex
+    }
+    const matchedIndex = options.entries.value.findIndex((row) => requiresRowCashFlow(row) || hasRowCashFlowDraft(row))
+    return matchedIndex >= 0 ? matchedIndex : null
+  }
+
   function openCashFlowDialog(index = options.selectedRowIndex.value) {
-    const row = options.entries.value[index]
-    if (!row || options.isReadonlyMode.value || !requiresRowCashFlow(row)) {
+    if (options.isReadonlyMode.value) {
       return false
     }
-    cashFlowDialogRowIndex.value = index
-    cashFlowDialogSelection.value = row.cashFlowItemId ? String(row.cashFlowItemId) : ''
+    const targetIndex = resolveCashFlowDialogRowIndex(index)
+    if (targetIndex === null) {
+      return false
+    }
+    const row = options.entries.value[targetIndex]
+    if (!row) {
+      return false
+    }
+    syncRowCashFlowFromVoucher(row, false)
+    cashFlowDialogRowIndex.value = targetIndex
     cashFlowDialogVisible.value = true
-    options.selectRow(index)
+    options.selectRow(targetIndex)
     return true
   }
 
@@ -261,7 +395,6 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
     cashFlowDialogVisible.value = false
     const rowIndex = cashFlowDialogRowIndex.value
     cashFlowDialogRowIndex.value = null
-    cashFlowDialogSelection.value = ''
     if (rowIndex === null || options.isReadonlyMode.value) {
       return
     }
@@ -274,28 +407,16 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
   }
 
   function confirmCashFlowSelection() {
-    const rowIndex = cashFlowDialogRowIndex.value
-    if (rowIndex === null) {
-      cashFlowDialogVisible.value = false
-      return
-    }
-    const row = options.entries.value[rowIndex]
-    const option = cashFlowOptionMap.value.get(cashFlowDialogSelection.value)
-    if (!row || !option) {
-      return false
-    }
-    row.cashFlowItemId = Number(option.value)
-    row.cashFlowItemName = option.name || option.label || option.code || ''
-    cashFlowDialogVisible.value = false
-    cashFlowDialogRowIndex.value = null
-    cashFlowDialogSelection.value = ''
-    return true
+    return cashFlowEditorLines.value.every((item) => !requiresRowCashFlow(item.row) || Boolean(item.row.cashFlowItemId))
   }
 
   function ensureRowCashFlowState(row: TEntry) {
     if (!requiresRowCashFlow(row)) {
       clearRowCashFlow(row)
       return false
+    }
+    if (!normalizeText(row.cashFlowSubjectCode) || !normalizeCashFlowAmount(row.cashFlowAmount)) {
+      syncRowCashFlowFromVoucher(row, false)
     }
     if (row.cashFlowItemId) {
       const option = cashFlowOptionMap.value.get(String(row.cashFlowItemId))
@@ -330,6 +451,13 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
         label: name ? `${normalizedValue}  ${name}` : normalizedValue
       }
     ]
+  }
+
+  function appendDisplayOptions(optionList: FinanceVoucherOption[], values: Array<string | undefined>) {
+    return values.reduce(
+      (result, value) => appendDisplayOption(result, value),
+      optionList
+    )
   }
 
   function clearDisabledAssistFields(row: TEntry, capability: VoucherAssistCapability) {
@@ -435,11 +563,23 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
       }
     }
     if (Number(account?.bcash || 0) === 1 && (!isZeroMoney(row.md || '0') || !isZeroMoney(row.mc || '0'))) {
+      const expectedSubjectCode = resolveRowCashFlowSubjectCode(row)
+      const expectedAmount = resolveRowCashFlowAmount(row)
+      const enteredSubjectCode = normalizeText(row.cashFlowSubjectCode)
+      const enteredAmount = normalizeCashFlowAmount(row.cashFlowAmount)
+      if (enteredSubjectCode && enteredSubjectCode !== expectedSubjectCode) {
+        errors.push(`第 ${rowNo} 行现金流量科目必须与凭证分录科目一致`)
+      }
+      if (enteredAmount && enteredAmount !== expectedAmount) {
+        errors.push(`第 ${rowNo} 行现金流量金额必须与凭证分录金额一致`)
+      }
       if (!row.cashFlowItemId) {
         errors.push(`第 ${rowNo} 行科目已启用现金管理，必须选择现金流量`)
       } else if (!cashFlowValues.has(String(row.cashFlowItemId))) {
         errors.push(`第 ${rowNo} 行现金流量不存在或当前不可用`)
       }
+    } else if (hasRowCashFlowDraft(row)) {
+      errors.push(`第 ${rowNo} 行当前分录不需要现金流量，请先清除已录入的现金流量信息`)
     }
   }
 
@@ -462,7 +602,7 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
     if (Number(option?.bcash || 0) !== 1) {
       clearRowCashFlow(row)
     } else {
-      ensureRowCashFlowState(row)
+      syncRowCashFlowFromVoucher(row, true)
     }
   }
 
@@ -485,22 +625,82 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
 
   function handleCashFlowFieldFocus() {
     if (options.isReadonlyMode.value) return
-    if (!ensureRowCashFlowState(options.selectedRow.value)) {
-      if (requiresRowCashFlow(options.selectedRow.value)) {
-        void nextTick()
+    const row = options.selectedRow.value
+    if (!row) {
+      return
+    }
+    if (!requiresRowCashFlow(row) && !hasRowCashFlowDraft(row)) {
+      const opened = openCashFlowDialog(options.selectedRowIndex.value)
+      if (!opened) {
+        return
       }
       return
     }
+    ensureRowCashFlowState(row)
     openCashFlowDialog(options.selectedRowIndex.value)
+  }
+
+  function handleAmountValueChange(index: number) {
+    if (options.isReadonlyMode.value) return
+    const row = options.entries.value[index]
+    if (!row) return
+    if (!requiresRowCashFlow(row)) {
+      clearRowCashFlow(row)
+      return
+    }
+    syncRowCashFlowFromVoucher(row, true)
   }
 
   function handleAmountBlur(index: number) {
     if (options.isReadonlyMode.value) return
     const row = options.entries.value[index]
     if (!row) return
+    if (requiresRowCashFlow(row)) {
+      syncRowCashFlowFromVoucher(row, true)
+    }
     if (ensureRowCashFlowState(row)) {
       openCashFlowDialog(index)
     }
+  }
+
+  function handleCashFlowSubjectChange(index: number, value?: string | number) {
+    const row = options.entries.value[index]
+    if (!row) {
+      return
+    }
+    const subjectCode = normalizeText(typeof value === 'number' ? String(value) : value) || ''
+    const option = cashAccountOptions.value.find((item) => item.value === subjectCode)
+    row.cashFlowSubjectCode = subjectCode
+    row.cashFlowSubjectName = option?.name || option?.label || ''
+    clearRowCashFlowSelection(row)
+  }
+
+  function handleCashFlowAmountChange(index: number, value?: string) {
+    const row = options.entries.value[index]
+    if (!row) {
+      return
+    }
+    row.cashFlowAmount = normalizeCashFlowAmount(value) || ''
+    clearRowCashFlowSelection(row)
+  }
+
+  function handleCashFlowItemChange(index: number, value?: string | number) {
+    const row = options.entries.value[index]
+    if (!row) {
+      return
+    }
+    const normalizedValue = normalizeText(typeof value === 'number' ? String(value) : value)
+    if (!normalizedValue) {
+      clearRowCashFlowSelection(row)
+      return
+    }
+    const option = cashFlowOptionMap.value.get(normalizedValue)
+    if (!option) {
+      clearRowCashFlowSelection(row)
+      return
+    }
+    row.cashFlowItemId = Number(option.value)
+    row.cashFlowItemName = option.name || option.label || option.code || ''
   }
 
   function formatVoucherOptionLabel(option?: FinanceVoucherOption | null) {
@@ -521,7 +721,9 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
 
   return {
     cashFlowDialogVisible,
-    cashFlowDialogSelection,
+    cashFlowDialogRowIndex,
+    cashFlowEditorLines,
+    cashAccountOptions,
     currentAssistCapability,
     assistDisabledState,
     projectClassOptionsForDisplay,
@@ -540,7 +742,11 @@ export function useFinanceNewVoucherAssistCashflowOwner<TEntry extends VoucherEn
     handleSubjectDropdownVisibleChange,
     handleAssistFieldFocus,
     handleCashFlowFieldFocus,
+    handleAmountValueChange,
     handleAmountBlur,
+    handleCashFlowSubjectChange,
+    handleCashFlowAmountChange,
+    handleCashFlowItemChange,
     filterDepartmentTreeNode,
     resolveAccountLabel
   }

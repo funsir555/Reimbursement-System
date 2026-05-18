@@ -43,7 +43,55 @@
                     <el-option v-for="item in voucherMeta?.voucherTypeOptions || []" :key="item.value" :label="item.label" :value="item.value" />
                   </el-select>
                   <span class="voucher-number-separator">-</span>
-                  <el-input v-model="voucherNoInput" placeholder="请输入凭证号" :readonly="voucherHeaderLocked" />
+                  <div
+                    v-if="props.pageMode === 'create'"
+                    ref="voucherNoSelectorRef"
+                    class="voucher-no-selector"
+                    :class="{ 'voucher-no-selector-open': savedVoucherDropdownVisible }"
+                  >
+                    <el-input
+                      :model-value="voucherNoInputText"
+                      placeholder="请输入凭证号"
+                      :readonly="voucherHeaderLocked"
+                      data-testid="voucher-no-input"
+                      @update:model-value="handleVoucherNoInput"
+                    />
+                    <button
+                      type="button"
+                      class="voucher-no-trigger"
+                      data-testid="voucher-no-trigger"
+                      :disabled="voucherHeaderLocked"
+                      :aria-expanded="savedVoucherDropdownVisible"
+                      @click="toggleSavedVoucherDropdown"
+                    >
+                      <span class="voucher-no-trigger__caret" aria-hidden="true"></span>
+                    </button>
+                    <div v-if="savedVoucherDropdownVisible" class="voucher-no-dropdown" data-testid="voucher-no-dropdown">
+                      <div v-if="savedVoucherSuggestionsLoading" class="voucher-no-dropdown__state">正在加载当月凭证...</div>
+                      <div v-else-if="!filteredSavedVoucherSuggestions.length" class="voucher-no-dropdown__state">当月暂无匹配的已保存凭证</div>
+                      <div v-else class="voucher-no-dropdown__list">
+                        <button
+                          v-for="item in filteredSavedVoucherSuggestions"
+                          :key="item.voucherNo"
+                          type="button"
+                          class="voucher-no-option"
+                          data-testid="voucher-no-option"
+                          @mousedown.prevent="captureVoucherNoSwitchSnapshot"
+                          @click="handleSavedVoucherSelect(item)"
+                        >
+                          <span class="voucher-no-suggestion__code">{{ item.displayVoucherNo }}</span>
+                          <span class="voucher-no-suggestion__meta">{{ item.dbillDate }}</span>
+                          <span class="voucher-no-suggestion__summary">{{ item.summary || '无摘要' }}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <el-input
+                    v-else
+                    v-model="voucherNoInput"
+                    placeholder="请输入凭证号"
+                    :readonly="voucherHeaderLocked"
+                  />
                 </div>
               </label>
               <label class="voucher-info-field voucher-info-date">
@@ -255,7 +303,13 @@
               </label>
               <label class="assist-field">
                 <span class="voucher-field-label">现金流量</span>
-                <el-input :model-value="selectedRow.cashFlowItemName || ''" readonly placeholder="请选择现金流量" :disabled="isReadonlyMode || !requiresRowCashFlow(selectedRow)" @focus="handleCashFlowFieldFocus" />
+                <el-input
+                  :model-value="selectedRowCashFlowSummary"
+                  readonly
+                  placeholder="点击录入现金流量明细"
+                  :disabled="isReadonlyMode"
+                  @focus="handleCashFlowFieldFocus"
+                />
               </label>
             </div>
           </div>
@@ -271,18 +325,65 @@
       </div>
     </div>
 
-    <el-dialog v-model="cashFlowDialogVisible" title="选择现金流量" width="480px" destroy-on-close :close-on-click-modal="false" :close-on-press-escape="false" :show-close="isReadonlyMode">
-      <div class="space-y-4">
-        <p class="action-dialog-content">当前科目已启用现金管理，请先选择一条现金流量。</p>
-        <el-radio-group v-model="cashFlowDialogSelection" class="cash-flow-radio-group">
-          <el-radio v-for="item in voucherMeta?.cashFlowOptions || []" :key="item.value" :label="item.value">
-            {{ formatVoucherOptionLabel(item) }}
-          </el-radio>
-        </el-radio-group>
+    <el-dialog v-model="cashFlowDialogVisible" title="现金流量明细" width="1080px" destroy-on-close :close-on-click-modal="false" :close-on-press-escape="false">
+      <div class="cash-flow-editor">
+        <p class="cash-flow-editor__hint">当前窗口会自动识别凭证中的现金流量科目和金额，你也可以在这里修改；保存前系统会校验是否与凭证分录保持一致。</p>
+        <div v-if="cashFlowEditorLines.length" class="cash-flow-editor__list">
+          <section
+            v-for="line in cashFlowEditorLines"
+            :key="line.row.localId"
+            class="cash-flow-editor__card"
+            :class="{ 'cash-flow-editor__card-active': cashFlowDialogRowIndex === line.rowIndex }"
+          >
+            <header class="cash-flow-editor__header">
+              <span>{{ line.rowLabel }}</span>
+              <span class="cash-flow-editor__voucher-subject">{{ resolveAccountLabel(line.row.ccode, line.row.ccodeName) || '未选择科目' }}</span>
+            </header>
+            <div class="cash-flow-editor__row">
+              <label class="cash-flow-editor__field">
+                <span>现金流量科目</span>
+                <finance-assist-option-select
+                  :model-value="line.row.cashFlowSubjectCode"
+                  :options="cashAccountOptions"
+                  clearable
+                  placeholder="请选择现金流量科目"
+                  :disabled="isReadonlyMode"
+                  @update:model-value="handleCashFlowSubjectChange(line.rowIndex, $event)"
+                />
+              </label>
+              <label class="cash-flow-editor__field">
+                <span>金额</span>
+                <money-input
+                  :model-value="line.row.cashFlowAmount || ''"
+                  placeholder="0.00"
+                  :readonly="isReadonlyMode"
+                  :disabled="isReadonlyMode"
+                  @update:modelValue="handleCashFlowAmountChange(line.rowIndex, $event)"
+                />
+              </label>
+              <label class="cash-flow-editor__field">
+                <span>现金流量项目</span>
+                <finance-assist-option-select
+                  :model-value="resolveCashFlowItemSelectValue(line.row.cashFlowItemId)"
+                  :options="cashFlowOptionsForDisplay"
+                  clearable
+                  placeholder="请选择现金流量项目"
+                  :disabled="isReadonlyMode"
+                  @update:model-value="handleCashFlowItemChange(line.rowIndex, $event)"
+                />
+              </label>
+            </div>
+            <div v-if="line.subjectMismatch || line.amountMismatch" class="cash-flow-editor__warning">
+              <span v-if="line.subjectMismatch">现金流量科目需与凭证分录科目一致。</span>
+              <span v-if="line.amountMismatch">现金流量金额需与凭证分录金额一致。</span>
+            </div>
+          </section>
+        </div>
+        <el-empty v-else description="当前凭证暂无需要录入的现金流量明细" />
       </div>
       <template #footer>
         <el-button @click="closeCashFlowDialog">取消</el-button>
-        <el-button type="primary" @click="confirmCashFlowSelection">确定</el-button>
+        <el-button type="primary" @click="handleCashFlowDialogConfirm">确定</el-button>
       </template>
     </el-dialog>
 
@@ -290,8 +391,8 @@
       <div class="calculator-panel">
         <el-input
           v-model="calculatorExpression"
+          readonly
           placeholder="请输入算式，例如 100+20/2"
-          @keydown.enter.prevent="runCalculator"
         />
         <div class="calculator-shortcuts">
           <el-button v-for="token in calculatorShortcutTokens" :key="token" @click="appendCalculatorToken(token)">
@@ -307,6 +408,24 @@
         <el-button @click="clearCalculator">清空</el-button>
         <el-button @click="runCalculator">计算</el-button>
         <el-button type="primary" @click="applyCalculatorResult">带回金额框</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="deleteConfirmVisible"
+      title="删除分录"
+      width="360px"
+      destroy-on-close
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+    >
+      <div class="action-dialog-content">
+        <p>确认删除当前分录吗？</p>
+      </div>
+      <template #footer>
+        <el-button @click="cancelRemoveSelectedEntry">否</el-button>
+        <el-button ref="deleteConfirmPrimaryButtonRef" type="primary" @click="confirmRemoveSelectedEntry">是</el-button>
       </template>
     </el-dialog>
 
@@ -354,8 +473,8 @@ import {
   watch
 } from 'vue'
 import type { Component } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleClose,
   Coin,
@@ -379,7 +498,8 @@ import {
   type FinanceVoucherForm,
   type FinanceVoucherMeta,
   type FinanceVoucherOption,
-  type FinanceVoucherSavePayload
+  type FinanceVoucherSavePayload,
+  type FinanceVoucherSummary
 } from '@/api'
 import FinanceAssistOptionSelect from '@/components/finance/FinanceAssistOptionSelect.vue'
 import FinanceCustomerArchiveDialog from '@/components/finance/FinanceCustomerArchiveDialog.vue'
@@ -390,6 +510,7 @@ import MoneyInput from '@/components/inputs/MoneyInput.vue'
 import SubjectTreeSelect from '@/components/inputs/SubjectTreeSelect.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
+import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
 import { useFinanceNewVoucherAssistCashflowOwner } from './composables/useFinanceNewVoucherAssistCashflowOwner'
 import { useFinanceNewVoucherBootstrap } from './composables/useFinanceNewVoucherBootstrap'
 import { useFinanceNewVoucherHeaderMetaOwner } from './composables/useFinanceNewVoucherHeaderMetaOwner'
@@ -407,11 +528,15 @@ import { useFinanceNewVoucherValidationPayload } from './composables/useFinanceN
 import { hasPermission, readStoredUser } from '@/utils/permissions'
 import { formatMoney } from '@/utils/money'
 import {
+  hasVoucherFieldAmount,
   normalizeSignedVoucherMoney,
-  resolveVoucherAutoBalanceValue
+  resolveOppositeVoucherAmountField,
+  resolveVoucherAutoBalanceValue,
+  toggleVoucherAmountDirection
 } from '@/utils/financeVoucherAmounts'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 import { formatFinanceAssistOptionLabel } from '@/utils/financeAssistOptions'
+import { formatFinancePeriodMonthEnd } from '@/utils/financeVoucherPeriods'
 
 
 type ToolbarActionKey = FinanceNewVoucherToolbarActionKey
@@ -429,8 +554,14 @@ interface ToolbarAction {
 
 type GridFocusableInstance = {
   focus?: () => void
+  syncFromModel?: () => void
   $el?: Element | null
 } | Element | null
+
+type SavedVoucherSuggestion = FinanceVoucherSummary & {
+  sequenceNo: number
+  value: string
+}
 
 function createBootstrapEntry(defaultCurrencyCode: string, defaultCurrencyName: string, rowNo: number): VoucherEntryRow {
   return {
@@ -492,9 +623,11 @@ const props = withDefaults(defineProps<{ pageMode?: VoucherPageMode; voucherNo?:
   pageMode: 'create',
   voucherNo: ''
 })
+const route = useRoute()
 const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
 const financePeriod = useFinancePeriodStore()
+const financeWorkspace = useFinanceWorkspaceStore()
 const currentUser = readStoredUser()
 const {
   resolveErrorMessage,
@@ -509,12 +642,22 @@ const lastCommittedSnapshot = ref('')
 const calculatorDialogVisible = ref(false)
 const calculatorExpression = ref('')
 const calculatorResultText = ref('0.00')
+const deleteConfirmVisible = ref(false)
 const activeAmountTarget = ref<{ rowIndex: number; field: 'md' | 'mc' } | null>(null)
+const voucherNoSelectorRef = ref<HTMLElement | null>(null)
+const savedVoucherSuggestions = ref<SavedVoucherSuggestion[]>([])
+const savedVoucherSuggestionsLoading = ref(false)
+const savedVoucherDropdownVisible = ref(false)
+const savedVoucherFilterKeyword = ref('')
+const voucherNoInputText = ref('')
+const voucherNoSwitchSnapshot = ref<{ text: string; inoId?: number; filterKeyword: string }>({ text: '', inoId: undefined, filterKeyword: '' })
 const customerArchiveDialogRef = ref<InstanceType<typeof FinanceCustomerArchiveDialog> | null>(null)
 const supplierArchiveDialogRef = ref<InstanceType<typeof FinanceSupplierArchiveDialog> | null>(null)
 const projectArchiveDialogRef = ref<InstanceType<typeof FinanceProjectArchiveDialog> | null>(null)
+const deleteConfirmPrimaryButtonRef = ref<{ $el?: Element | null; focus?: () => void } | HTMLElement | null>(null)
 const gridCellRefs = new Map<string, GridFocusableInstance>()
 const calculatorShortcutTokens = ['7', '8', '9', '+', '4', '5', '6', '-', '1', '2', '3', '*', '0', '.', '(', ')', '/']
+const workspaceTabPath = String(route.fullPath || '')
 
 let hotkeysRegistered = false
 
@@ -637,6 +780,7 @@ const {
   loadDetail
 } = useFinanceNewVoucherBootstrap({
   financeCompany,
+  financePeriod,
   router,
   companySwitchGuardKey: COMPANY_SWITCH_GUARD_KEY,
   pageMode: computed(() => props.pageMode),
@@ -656,7 +800,9 @@ const {
 })
 const {
   cashFlowDialogVisible,
-  cashFlowDialogSelection,
+  cashFlowDialogRowIndex,
+  cashFlowEditorLines,
+  cashAccountOptions,
   currentAssistCapability,
   assistDisabledState,
   projectClassOptionsForDisplay,
@@ -675,7 +821,11 @@ const {
   handleSubjectDropdownVisibleChange,
   handleAssistFieldFocus,
   handleCashFlowFieldFocus,
+  handleAmountValueChange,
   handleAmountBlur,
+  handleCashFlowSubjectChange,
+  handleCashFlowAmountChange,
+  handleCashFlowItemChange,
   filterDepartmentTreeNode,
   resolveAccountLabel
 } = useFinanceNewVoucherAssistCashflowOwner({
@@ -712,7 +862,7 @@ const {
   handleEntryFieldFocus,
   updateAmountField,
   insertEntryAfter,
-  removeSelectedEntry,
+  removeSelectedEntry: removeSelectedEntryImmediately,
   handleGridKeydown,
   handleGridCellKeydown,
   handleAmountKeydown
@@ -790,7 +940,7 @@ const {
   handleCashFlowFieldFocus,
   resolveErrorMessage,
   insertEntryAfter,
-  removeSelectedEntry,
+  removeSelectedEntry: requestRemoveSelectedEntry,
   copyCurrentVoucher,
   openCalculator,
   printCurrentVoucher
@@ -813,12 +963,59 @@ const accountOptionsForDisplay = computed(() => {
 const resolvedVoucherProjectClassCode = computed(
   () => currentAssistCapability.value.lockedProjectClassCode || selectedRow.value?.citemClass || ''
 )
+const selectedRowCashFlowSummary = computed(() => {
+  if (requiresRowCashFlow(selectedRow.value)) {
+    return selectedRow.value.cashFlowItemName || '点击录入现金流量明细'
+  }
+  return cashFlowEditorLines.value.length
+    ? `已录入 ${cashFlowEditorLines.value.length} 条现金流量明细`
+    : ''
+})
+const cashFlowOptionsForDisplay = computed(() => {
+  const options = [...(voucherMeta.value?.cashFlowOptions || [])]
+  const existingValues = new Set(options.map((item) => String(item.value)))
+  form.entries.forEach((row) => {
+    if (row.cashFlowItemId === undefined || row.cashFlowItemId === null) {
+      return
+    }
+    const value = String(row.cashFlowItemId)
+    if (existingValues.has(value)) {
+      return
+    }
+    options.push({
+      value,
+      name: row.cashFlowItemName || value,
+      label: row.cashFlowItemName || value
+    })
+    existingValues.add(value)
+  })
+  return options
+})
+const savedVoucherBillMonth = computed(() => String(form.dbillDate || '').slice(0, 7))
+const filteredSavedVoucherSuggestions = computed(() => {
+  const keyword = String(savedVoucherFilterKeyword.value || '').trim().toLowerCase()
+  if (!keyword) {
+    return savedVoucherSuggestions.value
+  }
+  return savedVoucherSuggestions.value.filter((item) => {
+    const inoIdText = String(item.sequenceNo || '')
+    const displayVoucherNo = String(item.displayVoucherNo || '').toLowerCase()
+    return inoIdText.includes(keyword) || displayVoucherNo.includes(keyword)
+  })
+})
 
 watch(() => form.entries.length, () => {
   if (selectedRowIndex.value >= form.entries.length) {
     selectedRowIndex.value = Math.max(0, form.entries.length - 1)
   }
 })
+
+watch(voucherNoInput, (value) => {
+  const nextText = String(value || '')
+  if (voucherNoInputText.value !== nextText) {
+    voucherNoInputText.value = nextText
+  }
+}, { immediate: true })
 
 watch(
   () => [props.pageMode, financePeriod.currentYearPeriod] as const,
@@ -831,10 +1028,44 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => [props.pageMode, financeCompany.currentCompanyId, savedVoucherBillMonth.value, form.csign] as const,
+  async ([pageMode]) => {
+    if (pageMode !== 'create') {
+      savedVoucherSuggestions.value = []
+      return
+    }
+    await loadSavedVoucherSuggestions()
+  },
+  { immediate: true }
+)
+
+watch(
+  () => isReadonlyMode.value,
+  (readonly) => {
+    if (!workspaceTabPath) {
+      return
+    }
+    if (readonly) {
+      financeWorkspace.unregisterCloseGuard(workspaceTabPath)
+      return
+    }
+    financeWorkspace.registerCloseGuard(workspaceTabPath, () => confirmDiscardCurrentVoucher('close'))
+  },
+  { immediate: true }
+)
+
 onMounted(registerPageHotkeys)
 onActivated(registerPageHotkeys)
 onDeactivated(unregisterPageHotkeys)
-onBeforeUnmount(unregisterPageHotkeys)
+onMounted(() => document.addEventListener('mousedown', handleVoucherNoDropdownClickOutside))
+onBeforeUnmount(() => {
+  unregisterPageHotkeys()
+  document.removeEventListener('mousedown', handleVoucherNoDropdownClickOutside)
+  if (workspaceTabPath) {
+    financeWorkspace.unregisterCloseGuard(workspaceTabPath)
+  }
+})
 
 function setGridCellRef(rowId: string, field: FinanceVoucherGridField, instance: GridFocusableInstance) {
   const key = `${rowId}:${field}`
@@ -869,14 +1100,203 @@ async function focusGridCell(index: number, field: FinanceVoucherGridField) {
   }
 }
 
+async function syncGridCellDisplayFromModel(index: number, field: FinanceVoucherGridField) {
+  await nextTick()
+  const row = form.entries[index]
+  if (!row) {
+    return
+  }
+  const target = gridCellRefs.get(`${row.localId}:${field}`)
+  if (target && typeof target === 'object' && 'syncFromModel' in target && typeof target.syncFromModel === 'function') {
+    target.syncFromModel()
+  }
+}
+
+async function syncVoucherAmountFieldsFromModel(index: number, ...fields: Array<'md' | 'mc'>) {
+  for (const field of fields) {
+    await syncGridCellDisplayFromModel(index, field)
+  }
+}
+
 function toolbarActionTitle(action: ToolbarAction) {
   return action.shortcut ? `${action.label}（${action.shortcut}）` : action.label
+}
+
+function resolveVoucherSequenceNo(item: FinanceVoucherSummary) {
+  const voucherNoParts = String(item.voucherNo || '').split('~')
+  const rawPart = voucherNoParts[voucherNoParts.length - 1] || String(item.displayVoucherNo || '').replace(/\D/g, '')
+  const sequenceNo = Number(rawPart || 0)
+  return Number.isFinite(sequenceNo) ? sequenceNo : 0
+}
+
+function captureVoucherNoSwitchSnapshot() {
+  voucherNoSwitchSnapshot.value = {
+    text: voucherNoInputText.value,
+    inoId: form.inoId,
+    filterKeyword: savedVoucherFilterKeyword.value
+  }
+}
+
+function handleVoucherNoDropdownClickOutside(event: MouseEvent) {
+  if (!savedVoucherDropdownVisible.value) {
+    return
+  }
+  const target = event.target
+  if (!(target instanceof Node)) {
+    return
+  }
+  if (voucherNoSelectorRef.value?.contains(target)) {
+    return
+  }
+  savedVoucherDropdownVisible.value = false
+}
+
+function toggleSavedVoucherDropdown() {
+  if (voucherHeaderLocked.value || props.pageMode !== 'create') {
+    return
+  }
+  captureVoucherNoSwitchSnapshot()
+  savedVoucherDropdownVisible.value = !savedVoucherDropdownVisible.value
+}
+
+function handleVoucherNoInput(value: string | number) {
+  const nextText = String(value || '')
+  voucherNoInputText.value = nextText
+  voucherNoInput.value = nextText
+  savedVoucherFilterKeyword.value = nextText
+  voucherNoSwitchSnapshot.value = {
+    text: nextText,
+    inoId: form.inoId,
+    filterKeyword: nextText
+  }
+}
+
+async function loadSavedVoucherSuggestions() {
+  if (props.pageMode !== 'create') {
+    savedVoucherSuggestions.value = []
+    return
+  }
+  const companyId = financeCompany.currentCompanyId || form.companyId
+  const billMonth = savedVoucherBillMonth.value
+  if (!companyId || !billMonth || !form.csign) {
+    savedVoucherSuggestions.value = []
+    return
+  }
+  savedVoucherSuggestionsLoading.value = true
+  try {
+    const res = await financeApi.listVouchers({
+      companyId,
+      billMonth,
+      csign: form.csign,
+      page: 1,
+      pageSize: 500
+    })
+    savedVoucherSuggestions.value = [...(res.data.items || [])]
+      .map((item) => {
+        const sequenceNo = resolveVoucherSequenceNo(item)
+        return {
+          ...item,
+          sequenceNo,
+          value: String(sequenceNo || '')
+        }
+      })
+      .sort((left, right) => left.sequenceNo - right.sequenceNo)
+  } catch (error: unknown) {
+    savedVoucherSuggestions.value = []
+    ElMessage.error(resolveErrorMessage(error, '加载当月凭证编号失败'))
+  } finally {
+    savedVoucherSuggestionsLoading.value = false
+  }
+}
+
+function restoreVoucherNoSwitchSnapshot() {
+  savedVoucherDropdownVisible.value = false
+  voucherNoInputText.value = voucherNoSwitchSnapshot.value.text || ''
+  savedVoucherFilterKeyword.value = voucherNoSwitchSnapshot.value.filterKeyword || ''
+  form.inoId = voucherNoSwitchSnapshot.value.inoId
+}
+
+async function confirmDiscardCurrentVoucher(reason: 'switch' | 'close') {
+  if (!hasUnsavedChanges.value) {
+    return true
+  }
+  const config = reason === 'switch'
+    ? {
+        title: '切换凭证',
+        message: '当前凭证未保存，切换后当前录入将丢失，确认切换吗'
+      }
+    : {
+        title: '关闭凭证',
+        message: '当前凭证未保存，关闭后当前录入将丢失，确认关闭吗'
+      }
+  try {
+    await ElMessageBox.confirm(config.message, config.title, {
+      type: 'warning',
+      confirmButtonText: '确认',
+      cancelButtonText: '取消'
+    })
+    if (props.pageMode === 'create') {
+      clearDraft(financeCompany.currentCompanyId || form.companyId)
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function handleSavedVoucherSelect(item: SavedVoucherSuggestion) {
+  if (props.pageMode !== 'create' || !item?.voucherNo) {
+    return
+  }
+  savedVoucherDropdownVisible.value = false
+  const allowed = await confirmDiscardCurrentVoucher('switch')
+  if (!allowed) {
+    restoreVoucherNoSwitchSnapshot()
+    return
+  }
+  clearDraft(financeCompany.currentCompanyId || form.companyId)
+  validationErrors.value = []
+  const targetLocation = router.resolve({
+    name: 'finance-query-voucher-detail',
+    params: { voucherNo: item.voucherNo }
+  })
+  financeWorkspace.replaceTabPath(workspaceTabPath, targetLocation.fullPath, '凭证详情')
+  await router.replace({
+    name: 'finance-query-voucher-detail',
+    params: { voucherNo: item.voucherNo }
+  })
 }
 
 function isToolbarActionEnabled(actionKey: ToolbarActionKey) {
   return toolbarGroups.value
     .flatMap((group) => group.actions)
     .some((action) => action.key === actionKey && !action.disabled)
+}
+
+function focusButtonLike(target: { $el?: Element | null; focus?: () => void } | HTMLElement | null | undefined) {
+  if (!target) {
+    return
+  }
+  if (target instanceof HTMLElement) {
+    target.focus()
+    return
+  }
+  if (typeof target.focus === 'function') {
+    target.focus()
+    return
+  }
+  const host = target.$el
+  if (!(host instanceof Element)) {
+    return
+  }
+  const button = host.matches('button') ? host : host.querySelector('button')
+  if (button instanceof HTMLElement) {
+    button.focus()
+  }
+}
+
+function blockToolbarShortcutsWhileOverlayOpen(event: KeyboardEvent) {
+  return Boolean(resolveShortcutAction(event))
 }
 
 function resolveShortcutAction(event: KeyboardEvent): ToolbarActionKey | null {
@@ -897,7 +1317,69 @@ function resolveShortcutAction(event: KeyboardEvent): ToolbarActionKey | null {
   return null
 }
 
+function handleCalculatorDialogKeydown(event: KeyboardEvent) {
+  if (!calculatorDialogVisible.value || event.metaKey || event.ctrlKey || event.altKey) {
+    return false
+  }
+  if (/^[0-9+\-*/().]$/.test(event.key)) {
+    event.preventDefault()
+    calculatorExpression.value += event.key
+    return true
+  }
+  if (event.key === 'Backspace') {
+    event.preventDefault()
+    calculatorExpression.value = calculatorExpression.value.slice(0, -1)
+    return true
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    runCalculator()
+    return true
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    calculatorDialogVisible.value = false
+    return true
+  }
+  return false
+}
+
+function handleDeleteConfirmKeydown(event: KeyboardEvent) {
+  if (!deleteConfirmVisible.value) {
+    return false
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    void confirmRemoveSelectedEntry()
+    return true
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cancelRemoveSelectedEntry()
+    return true
+  }
+  return false
+}
+
 function handlePageHotkey(event: KeyboardEvent) {
+  if (handleDeleteConfirmKeydown(event)) {
+    return
+  }
+  if (deleteConfirmVisible.value) {
+    if (blockToolbarShortcutsWhileOverlayOpen(event)) {
+      event.preventDefault()
+    }
+    return
+  }
+  if (handleCalculatorDialogKeydown(event)) {
+    return
+  }
+  if (calculatorDialogVisible.value) {
+    if (blockToolbarShortcutsWhileOverlayOpen(event)) {
+      event.preventDefault()
+    }
+    return
+  }
   const action = resolveShortcutAction(event)
   if (!action || !isToolbarActionEnabled(action)) {
     return
@@ -929,16 +1411,67 @@ function handleAmountFieldFocus(index: number, field: 'md' | 'mc') {
 
 function handleAmountFieldUpdate(index: number, field: 'md' | 'mc', value: string) {
   updateAmountField(index, field, value)
+  handleAmountValueChange(index)
 }
 
-function handleVoucherAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 'mc') {
+function handleCashFlowDialogConfirm() {
+  if (!confirmCashFlowSelection()) {
+    ElMessage.warning('请先为每条需要现金流量的分录选择现金流量项目')
+    return
+  }
+  closeCashFlowDialog()
+}
+
+function requestRemoveSelectedEntry() {
+  if (isReadonlyMode.value) {
+    return
+  }
+  deleteConfirmVisible.value = true
+  void nextTick(() => {
+    focusButtonLike(deleteConfirmPrimaryButtonRef.value)
+  })
+}
+
+function cancelRemoveSelectedEntry() {
+  deleteConfirmVisible.value = false
+}
+
+async function confirmRemoveSelectedEntry() {
+  deleteConfirmVisible.value = false
+  removeSelectedEntryImmediately()
+  await nextTick()
+}
+
+async function handleVoucherAmountKeydown(event: KeyboardEvent, index: number, field: 'md' | 'mc') {
   if (event.key === '=') {
     event.preventDefault()
     const value = resolveVoucherAutoBalanceValue(form.entries, index, field)
     updateAmountField(index, field, normalizeSignedVoucherMoney(value) || '0.00')
+    await syncGridCellDisplayFromModel(index, field)
     return
   }
-  handleAmountKeydown(event, index, field)
+  if (event.key === ' ' || event.code === 'Space') {
+    event.preventDefault()
+    const row = form.entries[index]
+    if (!row) {
+      return
+    }
+    const currentValue = row[field]
+    const nextField = resolveOppositeVoucherAmountField(field)
+    if (!hasVoucherFieldAmount(field, currentValue)) {
+      selectRow(index)
+      await focusGridCell(index, nextField)
+      return
+    }
+    const toggled = toggleVoucherAmountDirection(field, currentValue)
+    row.md = toggled.md
+    row.mc = toggled.mc
+    await syncVoucherAmountFieldsFromModel(index, field, toggled.nextField)
+    selectRow(index)
+    await focusGridCell(index, toggled.nextField)
+    return
+  }
+  await handleAmountKeydown(event, index, field)
 }
 
 function openCalculator() {
@@ -1028,6 +1561,10 @@ function syncFormPeriodFromGlobal() {
   return true
 }
 
+function resolveCreateDefaultBillDate(meta: FinanceVoucherMeta) {
+  return formatFinancePeriodMonthEnd(financePeriod.currentYear, financePeriod.currentPeriod) || meta.defaultBillDate
+}
+
 function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.currentCompanyId) {
   form.companyId = companyId || meta.defaultCompanyId || ''
   if (!syncFormPeriodFromGlobal()) {
@@ -1037,7 +1574,7 @@ function resetFormFromMeta(meta: FinanceVoucherMeta, companyId = financeCompany.
   }
   form.csign = meta.defaultVoucherType
   form.inoId = meta.suggestedVoucherNo
-  form.dbillDate = meta.defaultBillDate
+  form.dbillDate = financePeriod.hasPeriodContext ? resolveCreateDefaultBillDate(meta) : meta.defaultBillDate
   form.idoc = meta.defaultAttachedDocCount
   form.cbill = meta.defaultMaker
   form.ctext1 = ''
@@ -1060,7 +1597,7 @@ function applyDraft(draft: FinanceVoucherSavePayload, meta: FinanceVoucherMeta, 
   }
   form.csign = draft.csign || meta.defaultVoucherType
   form.inoId = draft.inoId || meta.suggestedVoucherNo
-  form.dbillDate = draft.dbillDate || meta.defaultBillDate
+  form.dbillDate = draft.dbillDate || (financePeriod.hasPeriodContext ? resolveCreateDefaultBillDate(meta) : meta.defaultBillDate)
   form.idoc = draft.idoc ?? meta.defaultAttachedDocCount
   form.cbill = draft.cbill || meta.defaultMaker
   form.ctext1 = draft.ctext1 || ''
@@ -1189,6 +1726,10 @@ function parseVoucherCompanyId(voucherNo: string) {
   return parts.length === 4 || parts.length === 5 ? parts[0] ?? '' : ''
 }
 
+function resolveCashFlowItemSelectValue(value?: number | null) {
+  return value === undefined || value === null ? undefined : String(value)
+}
+
 function moneyText(value: string) {
   return formatMoney(value)
 }
@@ -1240,6 +1781,24 @@ defineExpose({
 .voucher-company-box { justify-content: flex-start; padding: 0 14px; font-weight: 600; }
 .voucher-number-group { display: grid; grid-template-columns: minmax(84px,96px) auto minmax(0,1fr); align-items: center; gap: 6px; }
 .voucher-number-separator { display: inline-flex; align-items: center; justify-content: center; color: #5f7391; font-weight: 700; }
+.voucher-no-selector { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 34px; align-items: stretch; min-width: 0; }
+.voucher-no-selector :deep(.el-input) { min-width: 0; }
+.voucher-no-selector :deep(.el-input__wrapper) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.voucher-no-selector-open :deep(.el-input__wrapper) { border-color: #8fb4ea; box-shadow: 0 0 0 1px rgba(79,138,216,.14) inset; }
+.voucher-no-trigger { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #c6daf6; border-left: 0; border-radius: 0 12px 12px 0; background: linear-gradient(180deg, #eef7ff 0%, #dcecff 100%); color: #386393; cursor: pointer; transition: background-color .16s ease, border-color .16s ease, color .16s ease; }
+.voucher-no-trigger:hover:not(:disabled) { border-color: #9fc0eb; background: linear-gradient(180deg, #e7f2ff 0%, #d4e6ff 100%); color: #24466f; }
+.voucher-no-trigger:disabled { cursor: not-allowed; opacity: .7; }
+.voucher-no-trigger__caret { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid currentColor; }
+.voucher-no-dropdown { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 16; overflow: hidden; border-radius: 14px; border: 1px solid #d6e2f3; background: #fff; box-shadow: 0 18px 32px rgba(15,23,42,.12); }
+.voucher-no-dropdown__state { padding: 14px 16px; color: #7085a0; font-size: 13px; line-height: 1.6; }
+.voucher-no-dropdown__list { max-height: 390px; overflow: auto; }
+.voucher-no-option { display: grid; grid-template-columns: minmax(84px,auto) minmax(92px,auto) minmax(0,1fr); align-items: center; gap: 8px; width: 100%; border: 0; border-top: 1px solid #edf2f8; background: #fff; padding: 10px 14px; text-align: left; cursor: pointer; }
+.voucher-no-option:first-child { border-top: 0; }
+.voucher-no-option:hover { background: linear-gradient(180deg, #f6faff 0%, #edf5ff 100%); }
+.voucher-no-suggestion { display: grid; grid-template-columns: minmax(84px,auto) minmax(92px,auto) minmax(0,1fr); align-items: center; gap: 8px; width: 100%; }
+.voucher-no-suggestion__code { color: #24466f; font-weight: 700; }
+.voucher-no-suggestion__meta { color: #7287a2; font-size: 12px; }
+.voucher-no-suggestion__summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5f7391; font-size: 12px; }
 .voucher-ledger-card { display: flex; min-height: 0; flex-direction: column; }
 .voucher-grid { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: 18px; border: 1px solid #d7e0eb; background: #fdfefe; }
 .voucher-grid-layout { display: grid; grid-template-columns: minmax(220px,1.2fr) minmax(280px,1.4fr) minmax(160px,.8fr) minmax(160px,.8fr); }
@@ -1264,14 +1823,24 @@ defineExpose({
 .calculator-hint { margin: 0; color: #7b8ea7; font-size: 12px; line-height: 1.6; }
 .action-dialog-content { color: #506680; line-height: 1.8; }
 .action-dialog-subtle { margin-top: 8px; color: #8a9bb1; font-size: 12px; }
-.cash-flow-radio-group { display: flex; flex-direction: column; gap: 10px; }
+.cash-flow-editor { display: flex; flex-direction: column; gap: 12px; }
+.cash-flow-editor__hint { margin: 0; color: #5f7391; line-height: 1.7; }
+.cash-flow-editor__list { display: flex; max-height: 56vh; flex-direction: column; gap: 12px; overflow: auto; padding-right: 4px; }
+.cash-flow-editor__card { border-radius: 16px; border: 1px solid #d8e2f0; background: linear-gradient(180deg, #f9fbff 0%, #f3f7fd 100%); padding: 12px; }
+.cash-flow-editor__card-active { border-color: #9cbbe3; box-shadow: 0 0 0 1px rgba(79,138,216,.18); }
+.cash-flow-editor__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: #365070; font-size: 13px; font-weight: 700; }
+.cash-flow-editor__voucher-subject { color: #6a7f99; font-weight: 600; }
+.cash-flow-editor__row { display: grid; grid-template-columns: minmax(240px, 1.1fr) minmax(160px, .7fr) minmax(320px, 1.2fr); gap: 10px 12px; }
+.cash-flow-editor__field { display: flex; min-width: 0; flex-direction: column; gap: 6px; color: #5f7391; font-size: 12px; font-weight: 600; }
+.cash-flow-editor__warning { display: flex; gap: 14px; margin-top: 8px; color: #c2410c; font-size: 12px; font-weight: 600; line-height: 1.6; }
 :deep(.voucher-info-field .el-input__wrapper), :deep(.voucher-info-field .el-select__wrapper), :deep(.voucher-info-field .el-date-editor), :deep(.assist-field .el-input__wrapper), :deep(.assist-field .el-select__wrapper), :deep(.voucher-cell .el-input__wrapper), :deep(.voucher-cell .el-select__wrapper) { border-radius: 12px; box-shadow: 0 0 0 1px #d8e2f0 inset; }
 :deep(.voucher-cell .el-input-number), :deep(.voucher-cell .el-input-number .el-input__wrapper), :deep(.assist-field .el-input-number), :deep(.assist-field .el-input-number .el-input__wrapper), :deep(.voucher-info-field .el-input-number), :deep(.voucher-info-field .el-input-number .el-input__wrapper) { width: 100%; }
 :deep(.voucher-info-field .el-input__wrapper), :deep(.voucher-info-field .el-select__wrapper), :deep(.voucher-info-field .el-date-editor), :deep(.voucher-info-field .el-input-number .el-input__wrapper), :deep(.assist-field .el-input__wrapper), :deep(.assist-field .el-select__wrapper), :deep(.assist-field .el-input-number .el-input__wrapper) { min-height: 34px; }
 :deep(.voucher-number-group .el-select__wrapper), :deep(.voucher-number-group .el-input__wrapper) { min-height: 34px; }
 :deep(.voucher-cell .el-input__wrapper), :deep(.voucher-cell .el-select__wrapper), :deep(.voucher-cell .money-input__control), :deep(.voucher-cell .el-input-number .el-input__wrapper) { min-height: 32px; }
+:deep(.cash-flow-editor__field .el-input__wrapper), :deep(.cash-flow-editor__field .el-select__wrapper), :deep(.cash-flow-editor__field .money-input__control) { min-height: 34px; border-radius: 12px; box-shadow: 0 0 0 1px #d8e2f0 inset; }
 @media (max-width: 1440px) { .voucher-lower { grid-template-columns: 1fr; } }
-@media (max-width: 1024px) { .voucher-info-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .assist-grid { grid-template-columns: repeat(6, minmax(0,1fr)); } .assist-field { grid-column: span 3; } .voucher-info-spacer { display: none; } .voucher-grid-layout { min-width: 860px; } }
+@media (max-width: 1024px) { .voucher-info-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .assist-grid { grid-template-columns: repeat(6, minmax(0,1fr)); } .assist-field { grid-column: span 3; } .voucher-info-spacer { display: none; } .voucher-grid-layout { min-width: 860px; } .cash-flow-editor__row { grid-template-columns: 1fr; } }
 @media (max-width: 768px) {
   .voucher-page-header h1 { font-size: 18px; letter-spacing: .12em; }
   .toolbar-group { width: 100%; }
@@ -1283,5 +1852,6 @@ defineExpose({
   .voucher-info-field, .assist-field { gap: 8px; }
   .voucher-field-label { min-width: 52px; }
   .voucher-signature { flex-direction: column; align-items: flex-start; }
+  .cash-flow-editor__header { flex-direction: column; align-items: flex-start; }
 }
 </style>

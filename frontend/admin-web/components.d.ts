@@ -15,6 +15,7 @@ declare module 'vue' {
     DepartmentTreeSelect: typeof import('./src/components/inputs/DepartmentTreeSelect.vue')['default']
     DownloadCenterDrawer: typeof import('./src/components/DownloadCenterDrawer.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
+    ElAutocomplete: typeof import('element-plus/es')['ElAutocomplete']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
     ElBadge: typeof import('element-plus/es')['ElBadge']
     ElButton: typeof import('element-plus/es')['ElButton']

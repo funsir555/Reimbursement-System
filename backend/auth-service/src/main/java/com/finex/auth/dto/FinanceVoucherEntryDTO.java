@@ -40,6 +40,15 @@ public class FinanceVoucherEntryDTO {
     @Size(max = 200, message = "\u73b0\u91d1\u6d41\u91cf\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 200 \u4e2a\u5b57\u7b26")
     private String cashFlowItemName;
 
+    @Size(max = 64, message = "\u73b0\u91d1\u6d41\u91cf\u79d1\u76ee\u7f16\u7801\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 64 \u4e2a\u5b57\u7b26")
+    private String cashFlowSubjectCode;
+
+    @Size(max = 128, message = "\u73b0\u91d1\u6d41\u91cf\u79d1\u76ee\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 128 \u4e2a\u5b57\u7b26")
+    private String cashFlowSubjectName;
+
+    @MoneyInput
+    private BigDecimal cashFlowAmount;
+
     @Size(max = 32, message = "\u5e01\u79cd\u540d\u79f0\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc7 32 \u4e2a\u5b57\u7b26")
     private String cexchName;
 

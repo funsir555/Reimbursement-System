@@ -60,6 +60,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("unchecked")
 class FinanceVoucherServiceImplTest {
 
     @Mock
@@ -251,7 +252,7 @@ class FinanceVoucherServiceImplTest {
     void saveVoucherAcceptsLeafSubjectsWhenStoredLeafFlagIsDirty() {
         List<GlAccvouch> insertedRows = new ArrayList<>();
         doAnswer(invocation -> {
-            insertedRows.add(invocation.getArgument(0));
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
             return 1;
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
@@ -285,7 +286,7 @@ class FinanceVoucherServiceImplTest {
     void saveVoucherAllowsSignedAmountsAndReturnsEffectiveTotals() {
         List<GlAccvouch> insertedRows = new ArrayList<>();
         doAnswer(invocation -> {
-            insertedRows.add(invocation.getArgument(0));
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
             return 1;
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
@@ -319,7 +320,7 @@ class FinanceVoucherServiceImplTest {
     void saveVoucherAcceptsVariableLengthProjectCodes() {
         List<GlAccvouch> insertedRows = new ArrayList<>();
         doAnswer(invocation -> {
-            insertedRows.add(invocation.getArgument(0));
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
             return 1;
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
@@ -385,7 +386,7 @@ class FinanceVoucherServiceImplTest {
     void saveVoucherAcceptsCashSubjectWithValidCashFlowSelection() {
         List<GlAccvouch> insertedRows = new ArrayList<>();
         doAnswer(invocation -> {
-            insertedRows.add(invocation.getArgument(0));
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
             return 1;
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
@@ -419,6 +420,107 @@ class FinanceVoucherServiceImplTest {
         assertEquals(101L, insertedRows.get(0).getCashFlowItemId());
         assertEquals("销售商品、提供劳务收到的现金", insertedRows.get(0).getCashFlowItemName());
         assertNull(insertedRows.get(1).getCashFlowItemId());
+    }
+
+    @Test
+    void saveVoucherRejectsCashFlowSubjectMismatch() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        FinanceAccountSubject cashSubject = buildSubject("100101", "库存现金");
+        cashSubject.setBcash(1);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                cashSubject,
+                buildSubject("560101", "管理费用")
+        ));
+        when(financeCashFlowItemMapper.selectList(any())).thenReturn(List.of(
+                buildCashFlowItem(101L, "1001", "销售商品、提供劳务收到的现金", "INFLOW", "COMP-001")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("收到现金", "100101", "100.00", null),
+                buildSaveEntry("对方科目", "560101", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCashFlowItemId(101L);
+        dto.getEntries().get(0).setCashFlowSubjectCode("100201");
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u73b0\u91d1\u6d41\u91cf\u79d1\u76ee\u5fc5\u987b\u4e0e\u51ed\u8bc1\u5206\u5f55\u79d1\u76ee\u4e00\u81f4", exception.getMessage());
+    }
+
+    @Test
+    void saveVoucherRejectsCashFlowAmountMismatch() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        FinanceAccountSubject cashSubject = buildSubject("100101", "库存现金");
+        cashSubject.setBcash(1);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                cashSubject,
+                buildSubject("560101", "管理费用")
+        ));
+        when(financeCashFlowItemMapper.selectList(any())).thenReturn(List.of(
+                buildCashFlowItem(101L, "1001", "销售商品、提供劳务收到的现金", "INFLOW", "COMP-001")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("收到现金", "100101", "100.00", null),
+                buildSaveEntry("对方科目", "560101", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCashFlowItemId(101L);
+        dto.getEntries().get(0).setCashFlowAmount(new BigDecimal("120.00"));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u73b0\u91d1\u6d41\u91cf\u91d1\u989d\u5fc5\u987b\u4e0e\u51ed\u8bc1\u5206\u5f55\u91d1\u989d\u4e00\u81f4", exception.getMessage());
+    }
+
+    @Test
+    void saveVoucherRejectsStaleCashFlowDataWhenSubjectNoLongerRequiresCashFlow() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("560101", "管理费用"),
+                buildSubject("100201", "银行存款")
+        ));
+        when(financeCashFlowItemMapper.selectList(any())).thenReturn(List.of(
+                buildCashFlowItem(101L, "1001", "销售商品、提供劳务收到的现金", "INFLOW", "COMP-001")
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("\u8bb0");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("办公费用", "560101", "100.00", null),
+                buildSaveEntry("对方科目", "100201", null, "100.00")
+        ));
+        dto.getEntries().get(0).setCashFlowItemId(101L);
+        dto.getEntries().get(0).setCashFlowSubjectCode("100101");
+        dto.getEntries().get(0).setCashFlowAmount(new BigDecimal("100.00"));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice")
+        );
+
+        assertEquals("\u7b2c 1 \u884c\u5f53\u524d\u5206\u5f55\u4e0d\u9700\u8981\u73b0\u91d1\u6d41\u91cf\uff0c\u8bf7\u5148\u6e05\u9664\u5df2\u5f55\u5165\u7684\u73b0\u91d1\u6d41\u91cf\u4fe1\u606f", exception.getMessage());
     }
 
     @Test
@@ -509,7 +611,7 @@ class FinanceVoucherServiceImplTest {
     void saveVoucherWritesAccountNameSnapshot() {
         List<GlAccvouch> insertedRows = new ArrayList<>();
         doAnswer(invocation -> {
-            insertedRows.add(invocation.getArgument(0));
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
             return 1;
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
@@ -625,7 +727,7 @@ class FinanceVoucherServiceImplTest {
     void updateVoucherPreservesChineseDigestWhenRebuildingEntries() {
         List<GlAccvouch> insertedRows = new ArrayList<>();
         doAnswer(invocation -> {
-            insertedRows.add(invocation.getArgument(0));
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
             return 1;
         }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
 
@@ -733,7 +835,7 @@ class FinanceVoucherServiceImplTest {
         assertEquals("COMP-001~2026~3~\u8bb0~11", result.getNextVoucherNo());
         assertFalse(Boolean.TRUE.equals(result.getLastVoucherOfMonth()));
 
-        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = wrapperCaptor();
         verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
         assertWrapperContainsValues(wrapperCaptor.getValue(), "\u8d22\u52a1\u5c0f\u738b", 0);
     }
@@ -769,7 +871,7 @@ class FinanceVoucherServiceImplTest {
         assertEquals("UNPOSTED", result.getStatus());
         assertNull(result.getCheckerName());
 
-        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = wrapperCaptor();
         verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
         assertWrapperContainsValues(wrapperCaptor.getValue(), 0);
     }
@@ -786,7 +888,7 @@ class FinanceVoucherServiceImplTest {
         assertEquals("ERROR", result.getStatus());
         assertEquals("\u5df2\u6807\u8bb0\u9519\u8bef", result.getStatusLabel());
 
-        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = wrapperCaptor();
         verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
         assertWrapperContainsValues(wrapperCaptor.getValue(), 1);
     }
@@ -805,9 +907,14 @@ class FinanceVoucherServiceImplTest {
         assertEquals("REVIEWED", result.getStatus());
         assertEquals("\u8d22\u52a1\u4e3b\u7ba1", result.getCheckerName());
 
-        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = wrapperCaptor();
         verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
         assertWrapperContainsValues(wrapperCaptor.getValue(), 0);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor() {
+        return (ArgumentCaptor) ArgumentCaptor.forClass(Wrapper.class);
     }
 
     private com.finex.auth.dto.FinanceVoucherEntryDTO buildSaveEntry(String digest, String code, String debit, String credit) {

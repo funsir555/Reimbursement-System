@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
     isFinancePath: vi.fn(() => false),
     syncRoute: vi.fn(),
     activate: vi.fn(),
+    requestClose: vi.fn(async () => true),
     close: vi.fn(),
     closeOthers: vi.fn(),
     closeToRight: vi.fn(),
@@ -186,11 +187,12 @@ const FinanceWorkspaceTabsStub = defineComponent({
       default: 0
     }
   },
-  emits: ['change-company', 'change-period'],
+  emits: ['change-company', 'change-period', 'close'],
   template: `
     <div data-testid="finance-workspace-tabs" :data-company-id="currentCompanyId" :data-period="periodYear + '-' + periodMonth">
       <button type="button" data-testid="company-switch" @click="$emit('change-company', 'COMPANY_B')">切换公司</button>
       <button type="button" data-testid="period-switch" @click="$emit('change-period', { year: 2026, month: 5 })">切换期间</button>
+      <button type="button" data-testid="tab-close" @click="$emit('close', '/finance/general-ledger/new-voucher')">关闭页签</button>
     </div>
   `
 })
@@ -259,6 +261,7 @@ describe('MainLayout', () => {
     mocks.financeWorkspace.tabs = []
     mocks.financeWorkspace.activePath = '/dashboard'
     mocks.financeWorkspace.isFinancePath = vi.fn(() => false)
+    mocks.financeWorkspace.requestClose = vi.fn(async () => true)
     mocks.financeCompany.companyOptions = []
     mocks.financeCompany.currentCompanyId = ''
     mocks.financePeriod.currentYear = 2026
@@ -403,5 +406,31 @@ describe('MainLayout', () => {
     expect(wrapper.find('[data-testid="finance-workspace-tabs"]').attributes('data-period')).toBe('2026-4')
     await wrapper.find('[data-testid="period-switch"]').trigger('click')
     expect(mocks.financePeriod.switchPeriod).toHaveBeenCalledWith(2026, 5)
+  })
+
+  it('checks the workspace close guard before closing a finance tab', async () => {
+    routeState.path = '/finance/general-ledger/new-voucher'
+    routeState.fullPath = '/finance/general-ledger/new-voucher'
+    mocks.financeWorkspace.tabs = [{ path: '/finance/general-ledger/new-voucher' }]
+    mocks.financeWorkspace.activePath = '/finance/general-ledger/new-voucher'
+    mocks.financeWorkspace.isFinancePath = vi.fn(() => true)
+    mocks.financeWorkspace.getNextPathAfterClose = vi.fn(() => '/finance/general-ledger/query-voucher')
+    mocks.financeWorkspace.requestClose = vi.fn(async () => false)
+
+    const wrapper = await mountView(['finance:general_ledger:new_voucher:view'])
+
+    await wrapper.find('[data-testid="tab-close"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeWorkspace.requestClose).toHaveBeenCalledWith('/finance/general-ledger/new-voucher')
+    expect(mocks.financeWorkspace.close).not.toHaveBeenCalled()
+    expect(mocks.router.push).not.toHaveBeenCalled()
+
+    mocks.financeWorkspace.requestClose = vi.fn(async () => true)
+    await wrapper.find('[data-testid="tab-close"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeWorkspace.close).toHaveBeenCalledWith('/finance/general-ledger/new-voucher')
+    expect(mocks.router.push).toHaveBeenCalledWith('/finance/general-ledger/query-voucher')
   })
 })

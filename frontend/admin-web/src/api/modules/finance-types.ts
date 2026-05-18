@@ -36,6 +36,9 @@ export interface FinanceVoucherEntry {
   citemId?: string
   cashFlowItemId?: number
   cashFlowItemName?: string
+  cashFlowSubjectCode?: string
+  cashFlowSubjectName?: string
+  cashFlowAmount?: MoneyValue
   cexchName?: string
   currencyCode?: string
   nfrat?: number

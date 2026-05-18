@@ -215,7 +215,7 @@ abstract class AbstractExpensePaymentSupport {
             return new LinkedHashMap<>();
         }
         try {
-            return objectMapper.readValue(json, LinkedHashMap.class);
+            return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to parse json map", ex);
         }

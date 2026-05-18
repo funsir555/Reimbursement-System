@@ -5,12 +5,15 @@ import FinanceNewVoucherView from '@/views/finance/FinanceNewVoucherView.vue'
 
 const routeState = reactive({
   name: 'finance-new-voucher',
+  path: '/finance/general-ledger/new-voucher',
+  fullPath: '/finance/general-ledger/new-voucher',
   params: {} as Record<string, unknown>
 })
 
 const mocks = vi.hoisted(() => ({
   financeApi: {
     getVoucherMeta: vi.fn(),
+    listVouchers: vi.fn(),
     getVoucherDetail: vi.fn(),
     createVoucher: vi.fn(),
     updateVoucher: vi.fn(),
@@ -34,9 +37,17 @@ const mocks = vi.hoisted(() => ({
     currentYearPeriod: 202606,
     hasPeriodContext: true
   },
+  financeWorkspace: {
+    registerCloseGuard: vi.fn(),
+    unregisterCloseGuard: vi.fn(),
+    replaceTabPath: vi.fn()
+  },
   router: {
     push: vi.fn(),
-    replace: vi.fn()
+    replace: vi.fn(),
+    resolve: vi.fn((location: { params?: { voucherNo?: string } }) => ({
+      fullPath: `/finance/general-ledger/query-voucher/${location.params?.voucherNo || ''}`
+    }))
   },
   elMessage: {
     success: vi.fn(),
@@ -63,6 +74,10 @@ vi.mock('@/stores/financeCompany', () => ({
 
 vi.mock('@/stores/financePeriod', () => ({
   useFinancePeriodStore: () => financePeriodStore
+}))
+
+vi.mock('@/stores/financeWorkspace', () => ({
+  useFinanceWorkspaceStore: () => mocks.financeWorkspace
 }))
 
 vi.mock('vue-router', () => ({
@@ -122,7 +137,7 @@ const InputStub = defineComponent({
     disabled: { type: Boolean, default: false }
   },
   emits: ['focus', 'update:modelValue'],
-  template: '<input :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @focus="$emit(\'focus\')" @input="$emit(\'update:modelValue\', $event.target.value)" />'
+  template: '<input v-bind="$attrs" :value="modelValue" :placeholder="placeholder" :readonly="readonly" :disabled="disabled" @focus="$emit(\'focus\')" @input="$emit(\'update:modelValue\', $event.target.value)" />'
 })
 
 const SelectStub = defineComponent({
@@ -198,7 +213,11 @@ const mountOptions = {
       'el-option': OptionStub,
       'el-input-number': NumberStub,
       'el-date-picker': InputStub,
-      'el-dialog': defineComponent({ template: '<div><slot /><slot name="footer" /></div>' }),
+      'el-dialog': defineComponent({
+        props: { modelValue: { type: Boolean, default: false } },
+        template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>'
+      }),
+      'el-empty': defineComponent({ template: '<div><slot /></div>' }),
       'el-radio-group': defineComponent({ props: { modelValue: { type: [String, Number], default: '' } }, emits: ['update:modelValue'], template: '<div><slot /></div>' }),
       'el-radio': defineComponent({ props: { label: { type: [String, Number], default: '' } }, template: '<label><input type=\"radio\" :value=\"label\" /><slot /></label>' }),
       'el-icon': true,
@@ -326,6 +345,7 @@ function buildDetail() {
 async function mountView(props: { pageMode?: 'create' | 'detail' | 'review'; voucherNo?: string } = {}) {
   const wrapper = mount(FinanceNewVoucherView, {
     ...mountOptions,
+    attachTo: document.body,
     props
   })
   mountedWrappers.push(wrapper)
@@ -339,12 +359,15 @@ describe('FinanceNewVoucherView', () => {
     while (mountedWrappers.length) {
       mountedWrappers.pop()?.unmount()
     }
+    document.body.innerHTML = ''
   })
 
   beforeEach(() => {
     vi.clearAllMocks()
     sessionStorage.clear()
     routeState.name = 'finance-new-voucher'
+    routeState.path = '/finance/general-ledger/new-voucher'
+    routeState.fullPath = '/finance/general-ledger/new-voucher'
     routeState.params = {}
     financeCompanyStore.currentCompanyId = 'COMPANY_A'
     financeCompanyStore.currentCompanyName = '广州远智教育科技有限公司'
@@ -355,6 +378,55 @@ describe('FinanceNewVoucherView', () => {
     financePeriodStore.currentYearPeriod = 202606
     financePeriodStore.hasPeriodContext = true
     mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: buildMeta() })
+    mocks.financeApi.listVouchers.mockResolvedValue({
+      data: {
+        total: 2,
+        items: [
+          {
+            voucherNo: 'COMPANY_A~2026~6~记~12',
+            displayVoucherNo: '记-0012',
+            companyId: 'COMPANY_A',
+            iyear: 2026,
+            iyperiod: 202606,
+            iperiod: 6,
+            csign: '记',
+            voucherTypeLabel: '记账凭证',
+            dbillDate: '2026-06-12',
+            summary: '摘要一',
+            cbill: '财务制单员',
+            idoc: 1,
+            status: 'UNPOSTED',
+            statusLabel: '未记账',
+            editable: true,
+            entryCount: 2,
+            totalDebit: '100.00',
+            totalCredit: '100.00',
+            inoId: 12
+          },
+          {
+            voucherNo: 'COMPANY_A~2026~6~记~18',
+            displayVoucherNo: '记-0018',
+            companyId: 'COMPANY_A',
+            iyear: 2026,
+            iyperiod: 202606,
+            iperiod: 6,
+            csign: '记',
+            voucherTypeLabel: '记账凭证',
+            dbillDate: '2026-06-20',
+            summary: '摘要二',
+            cbill: '财务制单员',
+            idoc: 1,
+            status: 'UNPOSTED',
+            statusLabel: '未记账',
+            editable: true,
+            entryCount: 2,
+            totalDebit: '100.00',
+            totalCredit: '100.00',
+            inoId: 18
+          }
+        ]
+      }
+    })
     mocks.financeApi.getVoucherDetail.mockResolvedValue({ data: buildDetail() })
     mocks.financeApi.reviewVoucher.mockResolvedValue({
       data: {
@@ -397,15 +469,194 @@ describe('FinanceNewVoucherView', () => {
   it('loads voucher meta with the finance company context', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
     const vm = wrapper.vm as unknown as {
-      form: { iyear?: number; iperiod?: number; iyperiod?: number }
+      form: { iyear?: number; iperiod?: number; iyperiod?: number; dbillDate?: string }
     }
 
-    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })
+    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A', billDate: '2026-06-30' })
+    expect(mocks.financeApi.listVouchers).toHaveBeenCalledWith({
+      companyId: 'COMPANY_A',
+      billMonth: '2026-06',
+      csign: '记',
+      page: 1,
+      pageSize: 500
+    })
     expect(wrapper.text()).toContain('凭证编号')
     expect(wrapper.text()).toContain('备注')
     expect(vm.form.iyear).toBe(2026)
     expect(vm.form.iperiod).toBe(6)
     expect(vm.form.iyperiod).toBe(202606)
+    expect(vm.form.dbillDate).toBe('2026-06-30')
+  })
+
+  it('reloads saved voucher suggestions when the month or voucher type changes', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { dbillDate?: string; csign?: string }
+    }
+
+    vm.form.dbillDate = '2026-07-15'
+    await flushPromises()
+    expect(mocks.financeApi.listVouchers).toHaveBeenCalledWith({
+      companyId: 'COMPANY_A',
+      billMonth: '2026-07',
+      csign: '记',
+      page: 1,
+      pageSize: 500
+    })
+
+    vm.form.csign = '收'
+    await flushPromises()
+    expect(mocks.financeApi.listVouchers).toHaveBeenCalledWith({
+      companyId: 'COMPANY_A',
+      billMonth: '2026-07',
+      csign: '收',
+      page: 1,
+      pageSize: 500
+    })
+  })
+
+  it('keeps manual voucher-number input editable without navigating away', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const voucherNoInput = wrapper.get('[data-testid="voucher-no-input"]')
+    const vm = wrapper.vm as unknown as {
+      form: { inoId?: number }
+    }
+
+    await voucherNoInput.setValue('18')
+    await flushPromises()
+
+    expect(vm.form.inoId).toBe(18)
+    expect(mocks.router.replace).not.toHaveBeenCalled()
+  })
+
+  it('opens the voucher dropdown only from the dedicated trigger and shows a scrollable saved-voucher list', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const voucherNoInput = wrapper.get('[data-testid="voucher-no-input"]')
+
+    await voucherNoInput.trigger('focus')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="voucher-no-dropdown"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="voucher-no-trigger"]').trigger('click')
+    await flushPromises()
+
+    const dropdown = wrapper.get('[data-testid="voucher-no-dropdown"]')
+    const optionTexts = wrapper.findAll('[data-testid="voucher-no-option"]').map((option) => option.text())
+
+    expect(dropdown.exists()).toBe(true)
+    expect(optionTexts).toContain('记-00122026-06-12摘要一')
+    expect(optionTexts).toContain('记-00182026-06-20摘要二')
+  })
+
+  it('switches to a saved voucher detail and replaces the current workspace tab after selection', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+
+    await wrapper.get('[data-testid="voucher-no-trigger"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="voucher-no-option"]')[1]?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeWorkspace.replaceTabPath).toHaveBeenCalledWith(
+      '/finance/general-ledger/new-voucher',
+      '/finance/general-ledger/query-voucher/COMPANY_A~2026~6~记~18',
+      '凭证详情'
+    )
+    expect(mocks.router.replace).toHaveBeenCalledWith({
+      name: 'finance-query-voucher-detail',
+      params: { voucherNo: 'COMPANY_A~2026~6~记~18' }
+    })
+  })
+
+  it('registers a close guard for editable vouchers and prompts before closing when dirty', async () => {
+    mocks.elMessageBox.confirm.mockResolvedValueOnce(undefined)
+    sessionStorage.setItem('finance-new-voucher-draft:COMPANY_A', JSON.stringify({ companyId: 'COMPANY_A', entries: [] }))
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { entries: Array<{ cdigest: string }> }
+    }
+
+    expect(mocks.financeWorkspace.registerCloseGuard).toHaveBeenCalledWith(
+      '/finance/general-ledger/new-voucher',
+      expect.any(Function)
+    )
+
+    vm.form.entries[0].cdigest = '待关闭未保存'
+    await flushPromises()
+
+    const guard = mocks.financeWorkspace.registerCloseGuard.mock.calls.at(-1)?.[1] as (() => Promise<boolean>) | undefined
+    expect(await guard?.()).toBe(true)
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '当前凭证未保存，关闭后当前录入将丢失，确认关闭吗',
+      '关闭凭证',
+      expect.objectContaining({
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    )
+    expect(sessionStorage.getItem('finance-new-voucher-draft:COMPANY_A')).toBeNull()
+
+    wrapper.unmount()
+    expect(mocks.financeWorkspace.unregisterCloseGuard).toHaveBeenCalledWith('/finance/general-ledger/new-voucher')
+  })
+
+  it('prompts before switching to a saved voucher when the current voucher is dirty', async () => {
+    mocks.elMessageBox.confirm.mockRejectedValueOnce(new Error('cancel'))
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { entries: Array<{ cdigest: string }> }
+    }
+
+    vm.form.entries[0].cdigest = '未保存摘要'
+    await flushPromises()
+    await wrapper.get('[data-testid="voucher-no-trigger"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="voucher-no-option"]')[0]?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.elMessageBox.confirm).toHaveBeenCalledWith(
+      '当前凭证未保存，切换后当前录入将丢失，确认切换吗',
+      '切换凭证',
+      expect.objectContaining({
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    )
+    expect(mocks.router.replace).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the meta bill date when no finance period context is available', async () => {
+    financePeriodStore.currentYear = 0
+    financePeriodStore.currentPeriod = 0
+    financePeriodStore.currentYearPeriod = 0
+    financePeriodStore.hasPeriodContext = false
+
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { dbillDate?: string }
+    }
+
+    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })
+    expect(vm.form.dbillDate).toBe('2026-04-05')
+  })
+
+  it('fills a restored draft without bill date from the current period month end', async () => {
+    sessionStorage.setItem('finance-new-voucher-draft:COMPANY_A', JSON.stringify({
+      companyId: 'COMPANY_A',
+      csign: '记',
+      idoc: 0,
+      cbill: '草稿制单员',
+      entries: []
+    }))
+
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: { dbillDate?: string }
+    }
+
+    expect(vm.form.dbillDate).toBe('2026-06-30')
+    expect(mocks.elMessage.success).toHaveBeenCalledWith('已恢复暂存草稿')
   })
 
   it('renders a compact document card without redundant section headings and shows company name only', async () => {
@@ -697,8 +948,8 @@ describe('FinanceNewVoucherView', () => {
     financePeriodStore.currentYearPeriod = 202607
     await flushPromises()
 
-    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A' })
-    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_B' })
+    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_A', billDate: '2026-06-30' })
+    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith({ companyId: 'COMPANY_B', billDate: '2026-07-31' })
 
     wrapper.unmount()
   })
@@ -945,6 +1196,8 @@ describe('FinanceNewVoucherView', () => {
           ccode: string
           md?: string
           cashFlowItemId?: number
+          cashFlowSubjectCode?: string
+          cashFlowAmount?: string
         }>
       }
       cashFlowDialogVisible: boolean
@@ -960,6 +1213,41 @@ describe('FinanceNewVoucherView', () => {
 
     expect(vm.cashFlowDialogVisible).toBe(true)
     expect(vm.form.entries[0].cashFlowItemId).toBeUndefined()
+    expect(vm.form.entries[0].cashFlowSubjectCode).toBe('1001')
+    expect(vm.form.entries[0].cashFlowAmount).toBe('100.00')
+  })
+
+  it('clears stale cash-flow selection when the cash amount changes', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          cashFlowItemId?: number
+          cashFlowItemName?: string
+          cashFlowSubjectCode?: string
+          cashFlowAmount?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].cashFlowItemId = 101
+    vm.form.entries[0].cashFlowItemName = '销售商品、提供劳务收到的现金'
+    vm.form.entries[0].cashFlowSubjectCode = '1001'
+    vm.form.entries[0].cashFlowAmount = '100.00'
+    await flushPromises()
+
+    const debitInput = wrapper.findAll('input[data-voucher-field="md"]')[0]
+    await debitInput?.setValue('120.00')
+    await flushPromises()
+
+    expect(vm.form.entries[0].cashFlowItemId).toBeUndefined()
+    expect(vm.form.entries[0].cashFlowItemName).toBe('')
+    expect(vm.form.entries[0].cashFlowAmount).toBe('120.00')
   })
 
   it('blocks save when a cash subject is missing cash-flow selection', async () => {
@@ -988,6 +1276,81 @@ describe('FinanceNewVoucherView', () => {
 
     expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
     expect((wrapper.vm as unknown as { cashFlowDialogVisible: boolean }).cashFlowDialogVisible).toBe(true)
+  })
+
+  it('blocks save when the entered cash-flow subject or amount is inconsistent with the voucher row', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+          cashFlowItemId?: number
+          cashFlowSubjectCode?: string
+          cashFlowAmount?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[0].cashFlowItemId = 101
+    vm.form.entries[0].cashFlowSubjectCode = '100201'
+    vm.form.entries[0].cashFlowAmount = '120.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '560101'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '保存')?.trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeApi.createVoucher).not.toHaveBeenCalled()
+    expect(mocks.elMessage.warning).toHaveBeenCalledWith('第 1 行现金流量科目必须与凭证分录科目一致')
+  })
+
+  it('renders the cash-flow item select with code and name instead of bare id', async () => {
+    const meta = buildMeta()
+    meta.cashFlowOptions = []
+    mocks.financeApi.getVoucherMeta.mockResolvedValue({ data: meta })
+
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+          cashFlowItemId?: number
+          cashFlowItemName?: string
+        }>
+      }
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '1001'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[0].cashFlowItemId = 101
+    vm.form.entries[0].cashFlowItemName = '销售商品、提供劳务收到的现金'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '560101'
+    vm.form.entries[1].mc = '100.00'
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === '现金流量')?.trigger('click')
+    await flushPromises()
+
+    const cashFlowSelect = wrapper
+      .findAll('select')
+      .find((select) => select.findAll('option').some((option) => option.text().includes('销售商品、提供劳务收到的现金')))
+
+    expect(cashFlowSelect).toBeTruthy()
+    expect(cashFlowSelect?.findAll('option').map((option) => option.text())).toContain('销售商品、提供劳务收到的现金')
+    expect((cashFlowSelect?.element as HTMLSelectElement).value).toBe('101')
   })
 
   it('shows shortcut titles and triggers save from F6', async () => {
@@ -1056,6 +1419,68 @@ describe('FinanceNewVoucherView', () => {
     expect(draft.entries[1]).toMatchObject({ cdigest: '摘要 B', ccode: '100201', mc: '100.00' })
   })
 
+  it('supports calculator keyboard entry, backspace, enter, and escape while the dialog is open', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9' }))
+    await flushPromises()
+
+    const calculatorInput = wrapper.findAll('input').find((input) => input.attributes('placeholder') === '请输入算式，例如 100+20/2')
+    expect(calculatorInput?.exists()).toBe(true)
+
+    for (const key of ['1', '0', '0', '+', '2', '0', '/', '2']) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key }))
+    }
+    await flushPromises()
+    expect((calculatorInput?.element as HTMLInputElement).value).toBe('100+20/2')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace' }))
+    await flushPromises()
+    expect((calculatorInput?.element as HTMLInputElement).value).toBe('100+20/')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '2' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+
+    expect((calculatorInput?.element as HTMLInputElement).value).toBe('110')
+    expect(wrapper.text()).toContain('结果：110')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('结果：110.00')
+  })
+
+  it('shows a delete confirmation for Ctrl+D and only deletes after confirmation', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{ localId: string }>
+      }
+    }
+    const initialLength = vm.form.entries.length
+
+    await wrapper.findAll('button').find((button) => button.text() === '插入行')?.trigger('click')
+    await flushPromises()
+    expect(vm.form.entries).toHaveLength(initialLength + 1)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', ctrlKey: true }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('确认删除当前分录吗？')
+
+    await wrapper.findAll('button').find((button) => button.text() === '否')?.trigger('click')
+    await flushPromises()
+    expect(vm.form.entries).toHaveLength(initialLength + 1)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', ctrlKey: true }))
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+
+    expect(vm.form.entries).toHaveLength(initialLength)
+    expect(wrapper.text()).not.toContain('确认删除当前分录吗？')
+  })
+
   it('auto balances signed amounts when pressing equals in amount fields', async () => {
     const wrapper = await mountView({ pageMode: 'create' })
     const vm = wrapper.vm as unknown as {
@@ -1083,6 +1508,7 @@ describe('FinanceNewVoucherView', () => {
     await creditInput.trigger('keydown', { key: '=' })
     await flushPromises()
     expect(vm.form.entries[1].mc).toBe('100.00')
+    expect((creditInput.element as HTMLInputElement).value).toBe('100.00')
 
     vm.form.entries[1].mc = ''
     await flushPromises()
@@ -1091,6 +1517,70 @@ describe('FinanceNewVoucherView', () => {
     await debitInput.trigger('keydown', { key: '=' })
     await flushPromises()
     expect(vm.form.entries[1].md).toBe('-100.00')
+    expect((debitInput.element as HTMLInputElement).value).toBe('-100.00')
+  })
+
+  it('toggles amount direction with space and only shifts focus when the current field is empty', async () => {
+    const wrapper = await mountView({ pageMode: 'create' })
+    const vm = wrapper.vm as unknown as {
+      form: {
+        entries: Array<{
+          cdigest: string
+          ccode: string
+          md?: string
+          mc?: string
+        }>
+      }
+      totalDebit: string
+      totalCredit: string
+    }
+
+    vm.form.entries[0].cdigest = '摘要 A'
+    vm.form.entries[0].ccode = '560101'
+    vm.form.entries[0].md = '100.00'
+    vm.form.entries[1].cdigest = '摘要 B'
+    vm.form.entries[1].ccode = '560101'
+    vm.form.entries[1].mc = '-100.00'
+    await flushPromises()
+
+    const firstDebitInput = wrapper.findAll('input[data-voucher-field="md"]')[0]
+    await firstDebitInput.trigger('focus')
+    await firstDebitInput.trigger('keydown', { key: ' ', code: 'Space' })
+    await flushPromises()
+
+    expect(vm.form.entries[0].md).toBe('')
+    expect(vm.form.entries[0].mc).toBe('100.00')
+    expect((firstDebitInput.element as HTMLInputElement).value).toBe('')
+    expect((wrapper.findAll('input[data-voucher-field="mc"]')[0]?.element as HTMLInputElement).value).toBe('100.00')
+    expect(vm.totalDebit).toBe('100.00')
+    expect(vm.totalCredit).toBe('100.00')
+    expect((document.activeElement as HTMLInputElement | null)?.getAttribute('data-voucher-field')).toBe('mc')
+
+    const secondCreditInput = wrapper.findAll('input[data-voucher-field="mc"]')[1]
+    await secondCreditInput.trigger('focus')
+    await secondCreditInput.trigger('keydown', { key: ' ', code: 'Space' })
+    await flushPromises()
+
+    expect(vm.form.entries[1].md).toBe('-100.00')
+    expect(vm.form.entries[1].mc).toBe('')
+    expect((secondCreditInput.element as HTMLInputElement).value).toBe('')
+    expect((wrapper.findAll('input[data-voucher-field="md"]')[1]?.element as HTMLInputElement).value).toBe('-100.00')
+    expect(vm.totalDebit).toBe('0.00')
+    expect(vm.totalCredit).toBe('200.00')
+    expect((document.activeElement as HTMLInputElement | null)?.getAttribute('data-voucher-field')).toBe('md')
+
+    vm.form.entries[0].md = ''
+    vm.form.entries[0].mc = '100.00'
+    await flushPromises()
+
+    const firstDebitInputAfterClear = wrapper.findAll('input[data-voucher-field="md"]')[0]
+    await firstDebitInputAfterClear.trigger('focus')
+    await firstDebitInputAfterClear.trigger('keydown', { key: ' ', code: 'Space' })
+    await flushPromises()
+
+    expect(vm.form.entries[0].md).toBe('')
+    expect(vm.form.entries[0].mc).toBe('100.00')
+    expect((document.activeElement as HTMLInputElement | null)?.getAttribute('data-voucher-field')).toBe('mc')
   })
 })
 

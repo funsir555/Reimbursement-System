@@ -16,6 +16,7 @@ import {
   type FinanceVoucherSavePayload
 } from '@/api'
 import type { Router } from 'vue-router'
+import { formatFinancePeriodMonthEnd } from '@/utils/financeVoucherPeriods'
 
 type FinanceCompanyLike = {
   currentCompanyId?: string
@@ -23,10 +24,17 @@ type FinanceCompanyLike = {
   unregisterSwitchGuard: (key: string) => void
 }
 
+type FinancePeriodLike = {
+  hasPeriodContext?: boolean
+  currentYear?: number
+  currentPeriod?: number
+}
+
 type RouterLike = Pick<Router, 'push' | 'replace'>
 
 type UseFinanceNewVoucherBootstrapOptions = {
   financeCompany: FinanceCompanyLike
+  financePeriod: FinancePeriodLike
   router: RouterLike
   companySwitchGuardKey: string
   pageMode: ComputedRef<'create' | 'detail' | 'review'>
@@ -104,7 +112,8 @@ export function useFinanceNewVoucherBootstrap(options: UseFinanceNewVoucherBoots
     loading.value = true
     initializing.value = true
     try {
-      const res = await financeApi.getVoucherMeta({ companyId })
+      const defaultBillDate = resolveCreateDefaultBillDate()
+      const res = await financeApi.getVoucherMeta(defaultBillDate ? { companyId, billDate: defaultBillDate } : { companyId })
       if (!isLiveLoad(loadId)) return
       voucherMeta.value = res.data
       const draft = options.readDraft(companyId)
@@ -220,6 +229,13 @@ export function useFinanceNewVoucherBootstrap(options: UseFinanceNewVoucherBoots
     if (!guardRegistered) return
     options.financeCompany.unregisterSwitchGuard(options.companySwitchGuardKey)
     guardRegistered = false
+  }
+
+  function resolveCreateDefaultBillDate() {
+    if (!options.financePeriod.hasPeriodContext) {
+      return ''
+    }
+    return formatFinancePeriodMonthEnd(options.financePeriod.currentYear, options.financePeriod.currentPeriod)
   }
 
   return {

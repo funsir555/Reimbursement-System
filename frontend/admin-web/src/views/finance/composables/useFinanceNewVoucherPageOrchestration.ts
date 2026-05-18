@@ -302,7 +302,6 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
     if (action === 'copy') return void handleCopyVoucher()
     if (action === 'calculator') return void options.openCalculator()
     if (action === 'cashFlow') {
-      if (!options.ensureRowCashFlowState(options.selectedRow.value)) return
       options.handleCashFlowFieldFocus()
       return
     }

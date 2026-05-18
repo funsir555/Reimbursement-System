@@ -83,7 +83,7 @@ describe('FinanceWorkspaceTabs', () => {
     expect(wrapper.text()).toContain('会计期间')
     expect(wrapper.text()).toContain('当前公司')
     expect(wrapper.text()).not.toContain('页签')
-    expect(wrapper.find('[data-testid="period-year-select"]').attributes('style')).toContain('--finance-period-select-width: 74px')
+    expect(wrapper.find('[data-testid="period-year-select"]').attributes('style')).toContain('--finance-period-select-width: 88px')
     expect(wrapper.find('[data-testid="period-month-select"]').attributes('style')).toContain('--finance-period-select-width: 60px')
     expect(wrapper.get('[data-testid="company-select"]').attributes('style')).toContain('--finance-company-select-width: 292px')
     expect(wrapper.find('[data-testid="period-tooltip"]').exists()).toBe(true)

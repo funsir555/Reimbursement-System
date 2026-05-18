@@ -114,4 +114,25 @@ describe('MoneyInput', () => {
     expect(model.value).toBe('12.00')
     expect((input.element as HTMLInputElement).value).toBe('12.00')
   })
+
+  it('can sync the focused display from the parent model during programmatic updates', async () => {
+    const { wrapper, model, setModel } = mountWithModel('8.00')
+    const input = wrapper.get('input')
+    const moneyInput = wrapper.getComponent(MoneyInput)
+
+    await input.trigger('focus')
+    await input.setValue('12.')
+    expect(model.value).toBe('12.')
+    expect((input.element as HTMLInputElement).value).toBe('12.')
+
+    setModel('99.99')
+    await flushPromises()
+    expect((input.element as HTMLInputElement).value).toBe('12.')
+
+    ;(moneyInput.vm as { syncFromModel: () => void }).syncFromModel()
+    await flushPromises()
+
+    expect((input.element as HTMLInputElement).value).toBe('99.99')
+    expect(model.value).toBe('99.99')
+  })
 })

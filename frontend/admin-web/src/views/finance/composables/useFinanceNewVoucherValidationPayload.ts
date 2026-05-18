@@ -61,6 +61,9 @@ export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVouc
       citemId: options.toOptionalString(item.citemId),
       cashFlowItemId: item.cashFlowItemId,
       cashFlowItemName: options.toOptionalString(item.cashFlowItemName),
+      cashFlowSubjectCode: options.toOptionalString(item.cashFlowSubjectCode),
+      cashFlowSubjectName: options.toOptionalString(item.cashFlowSubjectName),
+      cashFlowAmount: normalizeMoneyField(item.cashFlowAmount),
       cexchName: options.toOptionalString(item.cexchName) || options.voucherMeta.value?.defaultCurrencyName || options.voucherMeta.value?.defaultCurrency || '人民币',
       currencyCode: options.toOptionalString(item.currencyCode) || options.voucherMeta.value?.defaultCurrencyCode || options.voucherMeta.value?.defaultCurrency || 'CNY',
       nfrat: options.toOptionalDecimal(item.nfrat, 2),
@@ -141,6 +144,9 @@ export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVouc
       && !row.citemClass
       && !row.citemId
       && !row.cashFlowItemId
+      && !options.toOptionalString(row.cashFlowSubjectCode)
+      && !options.toOptionalString(row.cashFlowSubjectName)
+      && !normalizeMoneyField(row.cashFlowAmount)
       && !normalizeMoneyField(row.md)
       && !normalizeMoneyField(row.mc)
       && !row.ndS

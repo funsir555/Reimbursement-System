@@ -563,8 +563,10 @@ function filterOpeningBalanceRows(source: OpeningBalanceTableRow[], filtersState
   return source.filter((row) => applyOpeningBalanceRowFilter(row, filtersState))
 }
 
-function applyOpeningBalanceRowFilter(row: OpeningBalanceTableRow, filtersState: OpeningBalanceFilterState) {
-  const childMatches = (row.children || []).filter((child) => applyOpeningBalanceRowFilter(child, filtersState))
+function applyOpeningBalanceRowFilter(row: OpeningBalanceTableRow, filtersState: OpeningBalanceFilterState): boolean {
+  const childMatches: OpeningBalanceTableRow[] = (row.children || []).filter((child) =>
+    applyOpeningBalanceRowFilter(child, filtersState)
+  )
   row.visibleChildren = childMatches
   if (!hasActiveFilters(filtersState)) {
     row.visibleChildren = row.children || []

@@ -32,6 +32,13 @@ public class FinanceVoucherEntryVO {
 
     private String cashFlowItemName;
 
+    private String cashFlowSubjectCode;
+
+    private String cashFlowSubjectName;
+
+    @MoneyValue
+    private BigDecimal cashFlowAmount;
+
     private String cexchName;
 
     private String currencyCode;

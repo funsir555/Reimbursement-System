@@ -1340,6 +1340,13 @@ public abstract class AbstractFinanceVoucherSupport {
         entry.setCitemId(row.getCitemId());
         entry.setCashFlowItemId(row.getCashFlowItemId());
         entry.setCashFlowItemName(row.getCashFlowItemName());
+        if (row.getCashFlowItemId() != null || trimToNull(row.getCashFlowItemName()) != null) {
+            BigDecimal effectiveDebit = FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc());
+            BigDecimal effectiveCredit = FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc());
+            entry.setCashFlowSubjectCode(row.getCcode());
+            entry.setCashFlowSubjectName(entry.getCcodeName());
+            entry.setCashFlowAmount(resolveCashFlowEntryAmount(effectiveDebit, effectiveCredit));
+        }
         OptionSeed currencySeed = resolveCurrencySeed(row.getCurrencyCode(), row.getCexchName());
         entry.setCurrencyCode(currencySeed == null ? normalize(row.getCurrencyCode(), DEFAULT_CURRENCY) : currencySeed.value());
         entry.setCexchName(currencySeed == null ? normalize(row.getCexchName(), resolveCurrencyName(entry.getCurrencyCode())) : currencySeed.label());
@@ -1593,6 +1600,9 @@ public abstract class AbstractFinanceVoucherSupport {
             normalizedEntry.setCitemId(trimToNull(entry.getCitemId()));
             normalizedEntry.setCashFlowItemId(entry.getCashFlowItemId());
             normalizedEntry.setCashFlowItemName(trimToNull(entry.getCashFlowItemName()));
+            normalizedEntry.setCashFlowSubjectCode(trimToNull(entry.getCashFlowSubjectCode()));
+            normalizedEntry.setCashFlowSubjectName(trimToNull(entry.getCashFlowSubjectName()));
+            normalizedEntry.setCashFlowAmount(normalizeNullableAmount(entry.getCashFlowAmount()));
             OptionSeed currencySeed = resolveCurrencySeed(entry.getCurrencyCode(), entry.getCexchName());
             normalizedEntry.setCexchName(currencySeed == null ? trimToNull(entry.getCexchName()) : currencySeed.label());
             normalizedEntry.setCurrencyCode(currencySeed == null ? trimToNull(entry.getCurrencyCode()) : currencySeed.value());
@@ -1620,6 +1630,9 @@ public abstract class AbstractFinanceVoucherSupport {
                 && trimToNull(entry.getCitemId()) == null
                 && entry.getCashFlowItemId() == null
                 && trimToNull(entry.getCashFlowItemName()) == null
+                && trimToNull(entry.getCashFlowSubjectCode()) == null
+                && trimToNull(entry.getCashFlowSubjectName()) == null
+                && isNullOrZero(entry.getCashFlowAmount())
                 && trimToNull(entry.getCurrencyCode()) == null
                 && trimToNull(entry.getCexchName()) == null
                 && isNullOrZero(entry.getNfrat())
@@ -1662,6 +1675,8 @@ public abstract class AbstractFinanceVoucherSupport {
             validateEntryLength(entry.getCsupId(), "\u4f9b\u5e94\u5546\u6807\u8bc6", 64, rowNo);
             validateEntryLength(entry.getCitemClass(), "\u9879\u76ee\u5206\u7c7b", 2, rowNo);
             validateEntryLength(entry.getCitemId(), "\u9879\u76ee\u7f16\u7801", 6, rowNo);
+            validateEntryLength(entry.getCashFlowSubjectCode(), "\u73b0\u91d1\u6d41\u91cf\u79d1\u76ee\u7f16\u7801", 64, rowNo);
+            validateEntryLength(entry.getCashFlowSubjectName(), "\u73b0\u91d1\u6d41\u91cf\u79d1\u76ee\u540d\u79f0", 128, rowNo);
             validateEntryLength(entry.getCurrencyCode(), "\u5e01\u79cd\u7f16\u7801", 32, rowNo);
             validateEntryLength(entry.getCexchName(), "\u5e01\u79cd\u540d\u79f0", 32, rowNo);
             if (trimToNull(entry.getCdigest()) == null) {
@@ -1802,7 +1817,20 @@ public abstract class AbstractFinanceVoucherSupport {
             int rowNo
     ) {
         if (!requiresCashFlow(subject, debit, credit)) {
+            if (hasCashFlowDraft(entry)) {
+                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u5f53\u524d\u5206\u5f55\u4e0d\u9700\u8981\u73b0\u91d1\u6d41\u91cf\uff0c\u8bf7\u5148\u6e05\u9664\u5df2\u5f55\u5165\u7684\u73b0\u91d1\u6d41\u91cf\u4fe1\u606f");
+            }
             return;
+        }
+        String expectedSubjectCode = trimToNull(entry.getCcode());
+        String cashFlowSubjectCode = trimToNull(entry.getCashFlowSubjectCode());
+        if (cashFlowSubjectCode != null && !Objects.equals(cashFlowSubjectCode, expectedSubjectCode)) {
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u73b0\u91d1\u6d41\u91cf\u79d1\u76ee\u5fc5\u987b\u4e0e\u51ed\u8bc1\u5206\u5f55\u79d1\u76ee\u4e00\u81f4");
+        }
+        BigDecimal cashFlowAmount = normalizeNullableAmount(entry.getCashFlowAmount());
+        BigDecimal expectedAmount = resolveCashFlowEntryAmount(debit, credit);
+        if (cashFlowAmount != null && cashFlowAmount.compareTo(expectedAmount) != 0) {
+            throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u73b0\u91d1\u6d41\u91cf\u91d1\u989d\u5fc5\u987b\u4e0e\u51ed\u8bc1\u5206\u5f55\u91d1\u989d\u4e00\u81f4");
         }
         Long cashFlowItemId = entry.getCashFlowItemId();
         if (cashFlowItemId == null) {
@@ -1829,6 +1857,27 @@ public abstract class AbstractFinanceVoucherSupport {
         }
         Long cashFlowItemId = entry.getCashFlowItemId();
         return cashFlowItemId == null ? null : cashFlowItems.get(cashFlowItemId);
+    }
+
+    protected boolean hasCashFlowDraft(FinanceVoucherEntryDTO entry) {
+        return entry != null
+                && (entry.getCashFlowItemId() != null
+                || trimToNull(entry.getCashFlowItemName()) != null
+                || trimToNull(entry.getCashFlowSubjectCode()) != null
+                || trimToNull(entry.getCashFlowSubjectName()) != null
+                || normalizeNullableAmount(entry.getCashFlowAmount()) != null);
+    }
+
+    protected BigDecimal resolveCashFlowEntryAmount(BigDecimal debit, BigDecimal credit) {
+        BigDecimal normalizedDebit = normalizeAmount(debit);
+        if (normalizedDebit.compareTo(BigDecimal.ZERO) > 0) {
+            return normalizedDebit;
+        }
+        BigDecimal normalizedCredit = normalizeAmount(credit);
+        if (normalizedCredit.compareTo(BigDecimal.ZERO) > 0) {
+            return normalizedCredit;
+        }
+        return ZERO;
     }
 
     protected boolean requiresCashFlow(FinanceAccountSubject subject, BigDecimal debit, BigDecimal credit) {
