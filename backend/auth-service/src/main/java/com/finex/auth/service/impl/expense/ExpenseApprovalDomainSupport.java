@@ -56,6 +56,8 @@ public class ExpenseApprovalDomainSupport {
     private static final String TASK_STATUS_PENDING = "PENDING";
     private static final String TASK_KIND_NORMAL = "NORMAL";
     private static final String TASK_KIND_ADD_SIGN = "ADD_SIGN";
+    private static final String TASK_KIND_ADD_SIGN_BEFORE = "ADD_SIGN_BEFORE";
+    private static final String TASK_KIND_ADD_SIGN_AFTER = "ADD_SIGN_AFTER";
     private static final String LOG_MODIFY = "MODIFY";
     private static final String LOG_TRANSFER = "TRANSFER";
     private static final String PAYEE_ACCOUNT_COMPONENT_CODE = "payee-account";
@@ -123,7 +125,8 @@ public ExpenseDocumentDetailVO approveTask(Long userId, String username, Long ta
         ProcessDocumentTask task = requirePendingTask(taskId, userId);
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         String comment = dto == null ? null : dto.getComment();
-        if (Objects.equals(trimToNull(task.getTaskKind()), TASK_KIND_ADD_SIGN)) {
+        if (isAddSignTask(task)) {
+            ensureAddSignTaskCanBeApproved(task);
             expenseWorkflowRuntimeSupport.approveAddSignTask(instance, task, userId, username, comment);
             return expenseDocumentReadSupport.buildDocumentDetail(
                     expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
@@ -240,7 +243,16 @@ public ExpenseDocumentDetailVO transferTask(Long userId, String username, Long t
         }
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
         String remark = trimToNull(dto == null ? null : dto.getRemark());
-        expenseWorkflowRuntimeSupport.createAddSignTask(instance, task, targetUser, userId, username, remark);
+        String position = normalizeAddSignPosition(dto == null ? null : dto.getPosition());
+        expenseWorkflowRuntimeSupport.createAddSignTask(
+                instance,
+                task,
+                targetUser,
+                userId,
+                username,
+                remark,
+                position
+        );
         return expenseDocumentReadSupport.buildDocumentDetail(
                 expenseDocumentReadSupport.requireDocument(task.getDocumentCode())
         );
@@ -307,7 +319,59 @@ public ExpenseDocumentDetailVO transferTask(Long userId, String username, Long t
         if (!TASK_STATUS_PENDING.equals(task.getStatus())) {
             throw new IllegalStateException("Task has already been handled");
         }
+        if (hasPendingBeforeAddSignTask(task)) {
+            throw new IllegalStateException("当前审批任务正在等待前置加签审批完成");
+        }
         return task;
+    }
+
+    private boolean isAddSignTask(ProcessDocumentTask task) {
+        String taskKind = trimToNull(task == null ? null : task.getTaskKind());
+        return TASK_KIND_ADD_SIGN.equals(taskKind)
+                || TASK_KIND_ADD_SIGN_BEFORE.equals(taskKind)
+                || TASK_KIND_ADD_SIGN_AFTER.equals(taskKind);
+    }
+
+    private void ensureAddSignTaskCanBeApproved(ProcessDocumentTask task) {
+        if (!TASK_KIND_ADD_SIGN_AFTER.equals(trimToNull(task.getTaskKind()))) {
+            return;
+        }
+        if (task.getSourceTaskId() == null) {
+            throw new IllegalStateException("后置加签任务缺少来源审批任务");
+        }
+        ProcessDocumentTask sourceTask = processDocumentTaskMapper.selectById(task.getSourceTaskId());
+        if (sourceTask == null || !"APPROVED".equals(trimToNull(sourceTask.getStatus()))) {
+            throw new IllegalStateException("当前审批人尚未完成审批，加签人员暂不能处理");
+        }
+    }
+
+    private boolean hasPendingBeforeAddSignTask(ProcessDocumentTask sourceTask) {
+        if (sourceTask == null || sourceTask.getId() == null) {
+            return false;
+        }
+        return processDocumentTaskMapper.selectList(
+                Wrappers.<ProcessDocumentTask>lambdaQuery()
+                        .eq(ProcessDocumentTask::getDocumentCode, sourceTask.getDocumentCode())
+                        .eq(ProcessDocumentTask::getNodeKey, sourceTask.getNodeKey())
+                        .eq(ProcessDocumentTask::getSourceTaskId, sourceTask.getId())
+                        .in(ProcessDocumentTask::getTaskKind, List.of(
+                                TASK_KIND_ADD_SIGN,
+                                TASK_KIND_ADD_SIGN_BEFORE
+                        ))
+                        .eq(ProcessDocumentTask::getStatus, TASK_STATUS_PENDING)
+        ).stream().findAny().isPresent();
+    }
+
+    private String normalizeAddSignPosition(String position) {
+        String normalized = trimToNull(position);
+        if (normalized == null) {
+            return ExpenseTaskAddSignDTO.POSITION_BEFORE;
+        }
+        if (ExpenseTaskAddSignDTO.POSITION_BEFORE.equals(normalized)
+                || ExpenseTaskAddSignDTO.POSITION_AFTER.equals(normalized)) {
+            return normalized;
+        }
+        throw new IllegalArgumentException("加签位置只能选择在我之前或在我之后");
     }
 
     private User requireActiveUser(Long userId) {

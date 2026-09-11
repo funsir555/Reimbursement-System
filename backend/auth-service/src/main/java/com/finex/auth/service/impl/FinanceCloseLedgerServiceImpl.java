@@ -6,6 +6,7 @@ import com.finex.auth.dto.FinanceCloseLedgerRequestDTO;
 import com.finex.auth.dto.FinanceCloseLedgerValidationResultVO;
 import com.finex.auth.mapper.FaAssetPeriodCloseMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinancePeriodCloseLogMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
@@ -16,13 +17,16 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceCloseLedgerService;
+import com.finex.auth.service.FinancePeriodTransferService;
 import com.finex.auth.service.impl.closeledger.CloseLedgerExternalCheckerRegistry;
 import com.finex.auth.service.impl.closeledger.CloseLedgerMetaSupport;
 import com.finex.auth.service.impl.closeledger.CloseLedgerMutationSupport;
 import com.finex.auth.service.impl.closeledger.CloseLedgerReconcileSupport;
 import com.finex.auth.service.impl.closeledger.CloseLedgerValidationSupport;
 import com.finex.auth.service.impl.closeledger.FixedAssetPeriodCloseChecker;
+import com.finex.auth.service.impl.closeledger.PeriodTransferCloseChecker;
 import com.finex.auth.service.impl.closeledger.SharedCloseLedgerSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,8 +50,12 @@ public class FinanceCloseLedgerServiceImpl implements FinanceCloseLedgerService 
             GlAccsumMapper glAccsumMapper,
             GlAccassMapper glAccassMapper,
             FaAssetPeriodCloseMapper faAssetPeriodCloseMapper,
-            UserMapper userMapper
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper,
+            UserMapper userMapper,
+            FinancePeriodTransferService financePeriodTransferService
     ) {
+        FinanceModuleEnableSupport financeModuleEnableSupport =
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
         SharedCloseLedgerSupport support = new SharedCloseLedgerSupport(
                 systemCompanyMapper,
                 financeAccountSetMapper,
@@ -58,10 +66,14 @@ public class FinanceCloseLedgerServiceImpl implements FinanceCloseLedgerService 
                 glAccvouchMapper,
                 glAccsumMapper,
                 glAccassMapper,
-                userMapper
+                userMapper,
+                financeModuleEnableSupport
         );
         CloseLedgerExternalCheckerRegistry externalCheckerRegistry = new CloseLedgerExternalCheckerRegistry(
-                List.of(new FixedAssetPeriodCloseChecker(faAssetPeriodCloseMapper))
+                List.of(
+                        new FixedAssetPeriodCloseChecker(faAssetPeriodCloseMapper, financeAccountSetModuleEnableMapper),
+                        new PeriodTransferCloseChecker(financePeriodTransferService)
+                )
         );
         this.closeLedgerMetaSupport = new CloseLedgerMetaSupport(support, externalCheckerRegistry);
         this.closeLedgerReconcileSupport = new CloseLedgerReconcileSupport(support);

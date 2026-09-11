@@ -31,6 +31,14 @@ public interface FinanceVoucherService {
 
     FinanceVoucherActionResultVO clearVoucherError(String companyId, String voucherNo);
 
+    FinanceVoucherActionResultVO voidVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername);
+
+    FinanceVoucherActionResultVO restoreVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername);
+
+    FinanceVoucherActionResultVO reverseVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername);
+
+    FinanceVoucherActionResultVO deleteVoucher(String companyId, String voucherNo);
+
     FinanceVoucherBatchActionResultVO batchUpdateVoucherState(FinanceVoucherBatchActionDTO dto, Long currentUserId, String currentUsername);
 
     byte[] exportVouchers(FinanceVoucherQueryDTO dto);

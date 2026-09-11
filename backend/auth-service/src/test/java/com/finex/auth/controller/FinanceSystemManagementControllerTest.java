@@ -4,6 +4,9 @@ import com.finex.auth.config.GlobalExceptionHandler;
 import com.finex.auth.dto.FinanceAccountSetTaskStatusVO;
 import com.finex.auth.dto.FinanceAccountSetMetaVO;
 import com.finex.auth.dto.FinanceAccountSetSummaryVO;
+import com.finex.auth.dto.FinanceModuleBackupRecordVO;
+import com.finex.auth.dto.FinanceModuleEnableMetaVO;
+import com.finex.auth.dto.FinanceModuleEnableSummaryVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.FinanceSystemManagementService;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,6 +93,45 @@ class FinanceSystemManagementControllerTest {
     }
 
     @Test
+    void getModuleEnablesRequiresViewPermissionAndReturnsPayload() throws Exception {
+        FinanceModuleEnableSummaryVO summary = new FinanceModuleEnableSummaryVO();
+        summary.setCompanyId("COMPANY_A");
+        summary.setModuleCode("GENERAL_LEDGER");
+        summary.setModuleName("总账");
+        summary.setEnabled(true);
+        summary.setImplemented(true);
+        summary.setToggleAllowed(true);
+        summary.setDisableAllowed(false);
+        summary.setBackupAllowed(true);
+        summary.setBackupRecordAllowed(true);
+        summary.setClearAllowed(false);
+        summary.setClearBlockedMessage("总账不支持清除数据");
+
+        FinanceModuleEnableMetaVO meta = new FinanceModuleEnableMetaVO();
+        meta.setCompanyId("COMPANY_A");
+        meta.setCompanyName("广州测试公司");
+        meta.setModules(List.of(summary));
+
+        doNothing().when(accessControlService).requirePermission(1L, "finance:system_management:view");
+        when(financeSystemManagementService.getModuleEnableMeta("COMPANY_A")).thenReturn(meta);
+
+        mockMvc.perform(get("/auth/finance/system-management/module-enables")
+                        .param("companyId", "COMPANY_A")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.companyId").value("COMPANY_A"))
+                .andExpect(jsonPath("$.data.modules[0].moduleCode").value("GENERAL_LEDGER"))
+                .andExpect(jsonPath("$.data.modules[0].moduleName").value("总账"))
+                .andExpect(jsonPath("$.data.modules[0].enabled").value(true))
+                .andExpect(jsonPath("$.data.modules[0].backupAllowed").value(true))
+                .andExpect(jsonPath("$.data.modules[0].clearAllowed").value(false));
+
+        verify(accessControlService).requirePermission(1L, "finance:system_management:view");
+        verify(financeSystemManagementService).getModuleEnableMeta("COMPANY_A");
+    }
+
+    @Test
     void createAccountSetAcceptsValidYearMonth() throws Exception {
         FinanceAccountSetTaskStatusVO taskStatus = new FinanceAccountSetTaskStatusVO();
         taskStatus.setTaskNo("FAS202604080001");
@@ -140,6 +182,165 @@ class FinanceSystemManagementControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("启用年月格式必须为 YYYY-MM"));
+    }
+
+    @Test
+    void toggleModuleEnableRequiresEnablePermissionAndReturnsPayload() throws Exception {
+        FinanceModuleEnableSummaryVO summary = new FinanceModuleEnableSummaryVO();
+        summary.setCompanyId("COMPANY_A");
+        summary.setModuleCode("FIXED_ASSETS");
+        summary.setModuleName("固定资产");
+        summary.setEnabled(true);
+        summary.setImplemented(true);
+        summary.setToggleAllowed(true);
+        summary.setDisableAllowed(true);
+
+        FinanceModuleEnableMetaVO meta = new FinanceModuleEnableMetaVO();
+        meta.setCompanyId("COMPANY_A");
+        meta.setCompanyName("广州测试公司");
+        meta.setModules(List.of(summary));
+
+        doNothing().when(accessControlService).requirePermission(1L, "finance:system_management:enable");
+        when(financeSystemManagementService.toggleModuleEnable(org.mockito.ArgumentMatchers.any())).thenReturn(meta);
+
+        mockMvc.perform(post("/auth/finance/system-management/module-enables/toggle")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .content("""
+                                {
+                                  "companyId": "COMPANY_A",
+                                  "moduleCode": "FIXED_ASSETS",
+                                  "enabled": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("模块启停状态已更新"))
+                .andExpect(jsonPath("$.data.modules[0].moduleCode").value("FIXED_ASSETS"))
+                .andExpect(jsonPath("$.data.modules[0].enabled").value(true));
+
+        verify(accessControlService).requirePermission(1L, "finance:system_management:enable");
+        verify(financeSystemManagementService).toggleModuleEnable(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void toggleModuleEnableRejectsBlankCompanyId() throws Exception {
+        mockMvc.perform(post("/auth/finance/system-management/module-enables/toggle")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .content("""
+                                {
+                                  "companyId": "  ",
+                                  "moduleCode": "GENERAL_LEDGER",
+                                  "enabled": false
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(jsonPath("$.message").value("公司主体不能为空"));
+    }
+
+    @Test
+    void backupModuleDataRequiresEnablePermissionAndReturnsPayload() throws Exception {
+        FinanceModuleBackupRecordVO record = new FinanceModuleBackupRecordVO();
+        record.setId(1L);
+        record.setCompanyId("COMPANY_A");
+        record.setModuleCode("GENERAL_LEDGER");
+        record.setModuleName("总账");
+        record.setBackupFileName("COMPANY_A-GENERAL_LEDGER-20260518_120000.sql");
+        record.setBackupFilePath("C:/backup/COMPANY_A-GENERAL_LEDGER-20260518_120000.sql");
+        record.setBackupStatus("SUCCESS");
+        record.setBackupUserName("张会计");
+
+        doNothing().when(accessControlService).requirePermission(1L, "finance:system_management:enable");
+        when(financeSystemManagementService.backupModuleData(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(record);
+
+        mockMvc.perform(post("/auth/finance/system-management/module-enables/backup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .content("""
+                                {
+                                  "companyId": "COMPANY_A",
+                                  "moduleCode": "GENERAL_LEDGER"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("模块数据备份完成"))
+                .andExpect(jsonPath("$.data.moduleCode").value("GENERAL_LEDGER"))
+                .andExpect(jsonPath("$.data.backupFileName").value("COMPANY_A-GENERAL_LEDGER-20260518_120000.sql"));
+
+        verify(accessControlService).requirePermission(1L, "finance:system_management:enable");
+        verify(financeSystemManagementService).backupModuleData(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void listModuleBackupRecordsRequiresViewPermissionAndReturnsPayload() throws Exception {
+        FinanceModuleBackupRecordVO record = new FinanceModuleBackupRecordVO();
+        record.setId(1L);
+        record.setCompanyId("COMPANY_A");
+        record.setModuleCode("FIXED_ASSETS");
+        record.setModuleName("固定资产");
+        record.setBackupFileName("COMPANY_A-FIXED_ASSETS-20260518_120000.sql");
+        record.setBackupFilePath("C:/backup/COMPANY_A-FIXED_ASSETS-20260518_120000.sql");
+        record.setBackupStatus("SUCCESS");
+        record.setBackupUserName("张会计");
+
+        doNothing().when(accessControlService).requirePermission(1L, "finance:system_management:view");
+        when(financeSystemManagementService.listModuleBackupRecords("COMPANY_A", "FIXED_ASSETS")).thenReturn(List.of(record));
+
+        mockMvc.perform(get("/auth/finance/system-management/module-enables/backup-records")
+                        .param("companyId", "COMPANY_A")
+                        .param("moduleCode", "FIXED_ASSETS")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data[0].moduleCode").value("FIXED_ASSETS"))
+                .andExpect(jsonPath("$.data[0].backupUserName").value("张会计"));
+
+        verify(accessControlService).requirePermission(1L, "finance:system_management:view");
+        verify(financeSystemManagementService).listModuleBackupRecords("COMPANY_A", "FIXED_ASSETS");
+    }
+
+    @Test
+    void clearModuleDataRequiresEnablePermissionAndReturnsPayload() throws Exception {
+        FinanceModuleEnableSummaryVO summary = new FinanceModuleEnableSummaryVO();
+        summary.setCompanyId("COMPANY_A");
+        summary.setModuleCode("FIXED_ASSETS");
+        summary.setModuleName("固定资产");
+        summary.setEnabled(true);
+        summary.setImplemented(true);
+        summary.setToggleAllowed(true);
+        summary.setDisableAllowed(true);
+        summary.setBackupAllowed(true);
+        summary.setBackupRecordAllowed(true);
+        summary.setClearAllowed(true);
+
+        FinanceModuleEnableMetaVO meta = new FinanceModuleEnableMetaVO();
+        meta.setCompanyId("COMPANY_A");
+        meta.setModules(List.of(summary));
+
+        doNothing().when(accessControlService).requirePermission(1L, "finance:system_management:enable");
+        when(financeSystemManagementService.clearModuleData(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(meta);
+
+        mockMvc.perform(post("/auth/finance/system-management/module-enables/clear")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr("currentUserId", 1L)
+                        .content("""
+                                {
+                                  "companyId": "COMPANY_A",
+                                  "moduleCode": "FIXED_ASSETS"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("模块数据已清除"))
+                .andExpect(jsonPath("$.data.modules[0].moduleCode").value("FIXED_ASSETS"));
+
+        verify(accessControlService).requirePermission(1L, "finance:system_management:enable");
+        verify(financeSystemManagementService).clearModuleData(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any());
     }
 
     @Test

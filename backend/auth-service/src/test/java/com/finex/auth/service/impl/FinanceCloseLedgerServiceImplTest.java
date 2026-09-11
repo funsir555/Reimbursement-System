@@ -1,16 +1,20 @@
 package com.finex.auth.service.impl;
 
 import com.finex.auth.dto.FinanceCloseLedgerRequestDTO;
+import com.finex.auth.dto.FinanceCloseLedgerReconcileResultVO;
 import com.finex.auth.dto.FinanceCloseLedgerValidationResultVO;
 import com.finex.auth.entity.FaAssetPeriodClose;
 import com.finex.auth.entity.FinanceAccountSet;
+import com.finex.auth.entity.FinanceAccountSetModuleEnable;
 import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.entity.FinancePeriodClose;
 import com.finex.auth.entity.GlAccass;
 import com.finex.auth.entity.GlAccsum;
+import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.mapper.FaAssetPeriodCloseMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinancePeriodCloseLogMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
@@ -20,6 +24,7 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.service.FinancePeriodTransferService;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -64,7 +69,11 @@ class FinanceCloseLedgerServiceImplTest {
     @Mock
     private FaAssetPeriodCloseMapper faAssetPeriodCloseMapper;
     @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
+    @Mock
     private UserMapper userMapper;
+    @Mock
+    private FinancePeriodTransferService financePeriodTransferService;
 
     private final AtomicReference<FinancePeriodClose> storedClose = new AtomicReference<>();
 
@@ -83,15 +92,18 @@ class FinanceCloseLedgerServiceImplTest {
                 glAccsumMapper,
                 glAccassMapper,
                 faAssetPeriodCloseMapper,
-                userMapper
+                financeAccountSetModuleEnableMapper,
+                userMapper,
+                financePeriodTransferService
         );
 
         storedClose.set(null);
 
-        when(systemCompanyMapper.selectOne(any())).thenReturn(company());
-        when(financeAccountSetMapper.selectOne(any())).thenReturn(accountSet());
-        when(faAssetPeriodCloseMapper.selectOne(any())).thenReturn(closedFixedAssetPeriod());
-        when(financePeriodCloseMapper.selectOne(any())).thenAnswer(invocation -> storedClose.get());
+        lenient().when(systemCompanyMapper.selectOne(any())).thenReturn(company());
+        lenient().when(financeAccountSetMapper.selectOne(any())).thenReturn(accountSet());
+        lenient().when(financeAccountSetModuleEnableMapper.selectOne(any())).thenReturn(generalLedgerModule());
+        lenient().when(faAssetPeriodCloseMapper.selectOne(any())).thenReturn(closedFixedAssetPeriod());
+        lenient().when(financePeriodCloseMapper.selectOne(any())).thenAnswer(invocation -> storedClose.get());
         lenient().when(financePostVoucherStateMapper.selectOne(any())).thenReturn(null);
         lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of());
         lenient().when(glAccvouchMapper.selectList(any())).thenReturn(List.of());
@@ -101,6 +113,8 @@ class FinanceCloseLedgerServiceImplTest {
         lenient().when(glAccassMapper.selectCount(any())).thenReturn(0L);
         lenient().when(financePeriodCloseLogMapper.insert(any())).thenReturn(1);
         lenient().when(userMapper.selectById(any())).thenReturn(null);
+        lenient().when(financePeriodTransferService.hasCompletedRunForPeriod(any(), any(Integer.class), any(Integer.class))).thenReturn(true);
+        lenient().when(financePeriodTransferService.resolveValidationMessage(any(), any(Integer.class), any(Integer.class))).thenReturn("期末结转已完成");
 
         lenient().doAnswer(invocation -> {
             FinancePeriodClose entity = invocation.getArgument(0);
@@ -141,14 +155,63 @@ class FinanceCloseLedgerServiceImplTest {
     }
 
     @Test
+    void closeAllowsRecloseAfterReopenWhenNextPeriodOnlyHasReplaceableCarryForwardRows() {
+        FinanceAccountSubject subject = subject("4103", "本年利润", "CREDIT");
+        GlAccsum currentSum = currentSumRow("4103", "-88.50");
+        GlAccass currentAssist = currentAssistRow("4103", "-56.00", "D-01");
+        GlAccsum nextSum = carryForwardSumRow("4103", "-88.50", 2027, 1, "借", "DEBIT");
+        GlAccass nextAssist = carryForwardAssistRow("4103", "-56.00", "D-01", 2027, 1, "借", "DEBIT");
+
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(subject));
+        when(glAccsumMapper.selectList(any())).thenReturn(
+                List.of(currentSum),
+                List.of(currentSum),
+                List.of(currentSum),
+                List.of(nextSum),
+                List.of(currentSum),
+                List.of(nextSum)
+        );
+        when(glAccassMapper.selectList(any())).thenReturn(
+                List.of(currentAssist),
+                List.of(currentAssist),
+                List.of(currentAssist),
+                List.of(nextAssist),
+                List.of(currentAssist),
+                List.of(nextAssist)
+        );
+
+        var result = service.close(1L, "alice", request(2026, 12));
+
+        assertEquals("CLOSED", result.getStatus());
+        verify(glAccsumMapper).delete(any());
+        verify(glAccassMapper).delete(any());
+        verify(glAccsumMapper).insert(any(GlAccsum.class));
+        verify(glAccassMapper).insert(any(GlAccass.class));
+    }
+
+    @Test
     void closeCarriesEndingBalancesIntoNextPeriodWithOppositeDirectionSemantics() {
         FinanceAccountSubject subject = subject("4103", "本年利润", "CREDIT");
         GlAccsum currentSum = currentSumRow("4103", "-88.50");
         GlAccass currentAssist = currentAssistRow("4103", "-56.00", "D-01");
 
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(subject));
-        when(glAccsumMapper.selectList(any())).thenReturn(List.of(currentSum));
-        when(glAccassMapper.selectList(any())).thenReturn(List.of(currentAssist));
+        when(glAccsumMapper.selectList(any())).thenReturn(
+                List.of(currentSum),
+                List.of(currentSum),
+                List.of(currentSum),
+                List.of(),
+                List.of(currentSum),
+                List.of()
+        );
+        when(glAccassMapper.selectList(any())).thenReturn(
+                List.of(currentAssist),
+                List.of(currentAssist),
+                List.of(currentAssist),
+                List.of(),
+                List.of(currentAssist),
+                List.of()
+        );
 
         ArgumentCaptor<GlAccsum> sumCaptor = ArgumentCaptor.forClass(GlAccsum.class);
         ArgumentCaptor<GlAccass> assistCaptor = ArgumentCaptor.forClass(GlAccass.class);
@@ -193,18 +256,69 @@ class FinanceCloseLedgerServiceImplTest {
 
     @Test
     void closeRejectsWhenNextPeriodAlreadyContainsLedgerRows() {
-        when(glAccsumMapper.selectCount(any())).thenReturn(1L);
+        GlAccsum nextSum = carryForwardSumRow("4103", "-88.50", 2027, 1, "借", "DEBIT");
+        when(glAccsumMapper.selectList(any())).thenReturn(
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(nextSum),
+                List.of(),
+                List.of(nextSum)
+        );
 
         IllegalStateException error = assertThrows(
                 IllegalStateException.class,
-                () -> service.close(1L, "alice", request(2026, 11))
+                () -> service.close(1L, "alice", request(2026, 12))
         );
 
-        assertEquals("下一期间已存在账务数据，不能重复滚转，请先检查期初或期间数据", error.getMessage());
+        assertEquals("下一期间基础数据与当前期间应滚转结果不一致，不能自动覆盖，请先检查期初或期间数据", error.getMessage());
         assertTrue(storedClose.get() == null);
         verify(financePeriodCloseMapper, never()).insert(any(FinancePeriodClose.class));
         verify(glAccsumMapper, never()).insert(any(GlAccsum.class));
         verify(glAccassMapper, never()).insert(any(GlAccass.class));
+    }
+
+    @Test
+    void reconcileUsesAncestorRollupAndEffectiveDebitCredit() {
+        FinanceAccountSubject parent = subject("6401", "制造费用", "DEBIT");
+        parent.setParentSubjectCode(null);
+        parent.setBdept(0);
+        FinanceAccountSubject middle = subject("640108", "间接费用", "DEBIT");
+        middle.setParentSubjectCode("6401");
+        middle.setBdept(0);
+        FinanceAccountSubject leaf = subject("64010801", "工资", "DEBIT");
+        leaf.setParentSubjectCode("640108");
+        leaf.setBdept(1);
+        FinanceAccountSubject expenseParent = subject("6603", "管理费用", "DEBIT");
+        expenseParent.setParentSubjectCode(null);
+        expenseParent.setBdept(0);
+        FinanceAccountSubject expenseLeaf = subject("660302", "办公费", "DEBIT");
+        expenseLeaf.setParentSubjectCode("6603");
+        expenseLeaf.setBdept(0);
+
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(parent, middle, leaf, expenseParent, expenseLeaf));
+        when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
+                postedVoucherRow("64010801", "-2273513.79", "0.00", "76"),
+                postedVoucherRow("660302", "0.00", "-15.97", null)
+        ));
+        when(glAccsumMapper.selectList(any())).thenReturn(List.of(
+                sumMovementRow("64010801", "0.00", "2273513.79"),
+                sumMovementRow("640108", "0.00", "2273513.79"),
+                sumMovementRow("6401", "0.00", "2273513.79"),
+                sumMovementRow("660302", "15.97", "0.00"),
+                sumMovementRow("6603", "15.97", "0.00")
+        ));
+        when(glAccassMapper.selectList(any())).thenReturn(List.of(
+                assistMovementRow("64010801", "0.00", "2273513.79", "76")
+        ));
+
+        FinanceCloseLedgerReconcileResultVO result = service.reconcile(1L, "alice", request(2026, 11));
+
+        assertTrue(result.getPassed());
+        assertEquals(0, result.getDifferenceSubjectCount());
+        assertEquals(0, result.getDifferenceAssistCount());
+        assertEquals(0, result.getIllegalAssistCount());
+        assertEquals(0, result.getMissingAssistCount());
     }
 
     private FinanceCloseLedgerRequestDTO request(int iyear, int iperiod) {
@@ -231,6 +345,15 @@ class FinanceCloseLedgerServiceImplTest {
         accountSet.setEnabledYear(2026);
         accountSet.setEnabledPeriod(1);
         return accountSet;
+    }
+
+    private FinanceAccountSetModuleEnable generalLedgerModule() {
+        FinanceAccountSetModuleEnable module = new FinanceAccountSetModuleEnable();
+        module.setId(1L);
+        module.setCompanyId("COMP-001");
+        module.setModuleCode("GENERAL_LEDGER");
+        module.setEnabled(1);
+        return module;
     }
 
     private FaAssetPeriodClose closedFixedAssetPeriod() {
@@ -267,6 +390,35 @@ class FinanceCloseLedgerServiceImplTest {
         return row;
     }
 
+    private GlAccsum carryForwardSumRow(String code, String endingBalance, int iyear, int iperiod, String direction, String directionEngl) {
+        GlAccsum row = new GlAccsum();
+        row.setId(10);
+        row.setCompanyId("COMP-001");
+        row.setIyear(iyear);
+        row.setIperiod(iperiod);
+        row.setIyperiod(iyear * 100 + iperiod);
+        row.setCcode(code);
+        row.setCurrencyCode("CNY");
+        row.setCexchName("人民币");
+        row.setMb(new BigDecimal(endingBalance));
+        row.setMbF(BigDecimal.ZERO.setScale(2));
+        row.setMd(BigDecimal.ZERO.setScale(2));
+        row.setMdF(BigDecimal.ZERO.setScale(2));
+        row.setMc(BigDecimal.ZERO.setScale(2));
+        row.setMcF(BigDecimal.ZERO.setScale(2));
+        row.setMe(new BigDecimal(endingBalance));
+        row.setMeF(BigDecimal.ZERO.setScale(2));
+        row.setNbS(BigDecimal.ZERO.setScale(6));
+        row.setNdS(BigDecimal.ZERO.setScale(6));
+        row.setNcS(BigDecimal.ZERO.setScale(6));
+        row.setNeS(BigDecimal.ZERO.setScale(6));
+        row.setCbegindC(direction);
+        row.setCbegindCEngl(directionEngl);
+        row.setCenddC(direction);
+        row.setCenddCEngl(directionEngl);
+        return row;
+    }
+
     private GlAccass currentAssistRow(String code, String endingBalance, String deptId) {
         GlAccass row = new GlAccass();
         row.setId(1);
@@ -281,4 +433,98 @@ class FinanceCloseLedgerServiceImplTest {
         row.setNeS(BigDecimal.ZERO.setScale(6));
         return row;
     }
+
+    private GlAccass carryForwardAssistRow(String code, String endingBalance, String deptId, int iyear, int iperiod, String direction, String directionEngl) {
+        GlAccass row = new GlAccass();
+        row.setId(20);
+        row.setCompanyId("COMP-001");
+        row.setIyear(iyear);
+        row.setIperiod(iperiod);
+        row.setIyperiod(iyear * 100 + iperiod);
+        row.setCcode(code);
+        row.setCdeptId(deptId);
+        row.setCurrencyCode("CNY");
+        row.setCexchName("人民币");
+        row.setMb(new BigDecimal(endingBalance));
+        row.setMbF(BigDecimal.ZERO.setScale(2));
+        row.setMd(BigDecimal.ZERO.setScale(2));
+        row.setMdF(BigDecimal.ZERO.setScale(2));
+        row.setMc(BigDecimal.ZERO.setScale(2));
+        row.setMcF(BigDecimal.ZERO.setScale(2));
+        row.setMe(new BigDecimal(endingBalance));
+        row.setMeF(BigDecimal.ZERO.setScale(2));
+        row.setNbS(BigDecimal.ZERO.setScale(6));
+        row.setNdS(BigDecimal.ZERO.setScale(6));
+        row.setNcS(BigDecimal.ZERO.setScale(6));
+        row.setNeS(BigDecimal.ZERO.setScale(6));
+        row.setCbegindC(direction);
+        row.setCbegindCEngl(directionEngl);
+        row.setCenddC(direction);
+        row.setCenddCEngl(directionEngl);
+        return row;
+    }
+
+    private GlAccvouch postedVoucherRow(String subjectCode, String md, String mc, String deptId) {
+        GlAccvouch row = new GlAccvouch();
+        row.setId(1);
+        row.setCompanyId("COMP-001");
+        row.setIyear(2026);
+        row.setIperiod(11);
+        row.setIyperiod(202611);
+        row.setCsign("记");
+        row.setInoId(1);
+        row.setInid(1);
+        row.setIbook(1);
+        row.setCcode(subjectCode);
+        row.setCurrencyCode("CNY");
+        row.setCexchName("人民币");
+        row.setMd(new BigDecimal(md));
+        row.setMc(new BigDecimal(mc));
+        row.setMdF(BigDecimal.ZERO.setScale(2));
+        row.setMcF(BigDecimal.ZERO.setScale(2));
+        row.setNdS(BigDecimal.ZERO.setScale(6));
+        row.setNcS(BigDecimal.ZERO.setScale(6));
+        row.setCdeptId(deptId);
+        return row;
+    }
+
+    private GlAccsum sumMovementRow(String code, String md, String mc) {
+        GlAccsum row = new GlAccsum();
+        row.setId(1);
+        row.setCompanyId("COMP-001");
+        row.setIyear(2026);
+        row.setIperiod(11);
+        row.setIyperiod(202611);
+        row.setCcode(code);
+        row.setCurrencyCode("CNY");
+        row.setCexchName("人民币");
+        row.setMd(new BigDecimal(md));
+        row.setMc(new BigDecimal(mc));
+        row.setMdF(BigDecimal.ZERO.setScale(2));
+        row.setMcF(BigDecimal.ZERO.setScale(2));
+        row.setNdS(BigDecimal.ZERO.setScale(6));
+        row.setNcS(BigDecimal.ZERO.setScale(6));
+        return row;
+    }
+
+    private GlAccass assistMovementRow(String code, String md, String mc, String deptId) {
+        GlAccass row = new GlAccass();
+        row.setId(1);
+        row.setCompanyId("COMP-001");
+        row.setIyear(2026);
+        row.setIperiod(11);
+        row.setIyperiod(202611);
+        row.setCcode(code);
+        row.setCurrencyCode("CNY");
+        row.setCexchName("人民币");
+        row.setMd(new BigDecimal(md));
+        row.setMc(new BigDecimal(mc));
+        row.setMdF(BigDecimal.ZERO.setScale(2));
+        row.setMcF(BigDecimal.ZERO.setScale(2));
+        row.setNdS(BigDecimal.ZERO.setScale(6));
+        row.setNcS(BigDecimal.ZERO.setScale(6));
+        row.setCdeptId(deptId);
+        return row;
+    }
+
 }

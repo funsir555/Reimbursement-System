@@ -161,7 +161,7 @@ class ExpensePaymentOrderQuerySupport extends AbstractExpensePaymentSupport {
         item.setPayeeOrCounterpartyName(effectiveReceiverInfo.receiverName());
         item.setPayeeAccountNo(effectiveReceiverInfo.accountNo());
         item.setPayeeBankName(effectiveReceiverInfo.bankName());
-        item.setActualPaymentAmount(resolveActualPaymentAmount(expenseDetails));
+        item.setActualPaymentAmount(resolveActualPaymentAmount(instance, expenseDetails));
         item.setBankPushSummary(resolveBankPushSummary(instance));
         item.setPayeeBankProvince(resolvePayeeBankProvince(effectiveReceiverInfo, branchCatalogMap));
         item.setPayeeBankCity(resolvePayeeBankCity(effectiveReceiverInfo, branchCatalogMap));
@@ -315,9 +315,15 @@ class ExpensePaymentOrderQuerySupport extends AbstractExpensePaymentSupport {
         );
     }
 
-    private BigDecimal resolveActualPaymentAmount(List<ProcessDocumentExpenseDetail> expenseDetails) {
+    private BigDecimal resolveActualPaymentAmount(
+            ProcessDocumentInstance instance,
+            List<ProcessDocumentExpenseDetail> expenseDetails
+    ) {
         if (expenseDetails == null || expenseDetails.isEmpty()) {
-            return BigDecimal.ZERO;
+            MainFormPaymentAmountResolution resolution = resolveMainFormPaymentAmount(instance);
+            return resolution.hasMultipleAmountControls() || resolution.amount() == null
+                    ? BigDecimal.ZERO
+                    : resolution.amount();
         }
         return expenseDetails.stream()
                 .map(ProcessDocumentExpenseDetail::getActualPaymentAmount)

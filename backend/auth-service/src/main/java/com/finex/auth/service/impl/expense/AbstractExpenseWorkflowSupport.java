@@ -235,6 +235,14 @@ class AbstractExpenseWorkflowSupport {
 
     private static final String TASK_KIND_ADD_SIGN = "ADD_SIGN";
 
+    private static final String TASK_KIND_ADD_SIGN_BEFORE = "ADD_SIGN_BEFORE";
+
+    private static final String TASK_KIND_ADD_SIGN_AFTER = "ADD_SIGN_AFTER";
+
+    private static final String ADD_SIGN_POSITION_BEFORE = "BEFORE";
+
+    private static final String ADD_SIGN_POSITION_AFTER = "AFTER";
+
 
 
     private static final String LOG_ROUTE_HIT = "ROUTE_HIT";
@@ -667,9 +675,15 @@ public void approvePendingTask(
 
 
 
+        String approvalMode = defaultText(task.getApprovalMode(), APPROVAL_MODE_OR_SIGN);
+
         List<ProcessDocumentTask> openTasks = loadNodeOpenTasks(task.getDocumentCode(), task.getNodeKey());
 
-        String approvalMode = defaultText(task.getApprovalMode(), APPROVAL_MODE_OR_SIGN);
+        List<ProcessDocumentTask> openAfterAddSignTasks = openTasks.stream()
+
+                .filter(this::isAfterAddSignTask)
+
+                .toList();
 
         boolean nodeCompleted;
 
@@ -679,9 +693,9 @@ public void approvePendingTask(
 
         } else {
 
-            cancelOpenTasks(openTasks, task.getId(), now);
+            cancelOpenTasksExceptAfterAddSign(openTasks, task.getId(), now);
 
-            nodeCompleted = true;
+            nodeCompleted = openAfterAddSignTasks.isEmpty();
 
         }
 
@@ -881,11 +895,42 @@ public void createAddSignTask(
 
     ) {
 
+        createAddSignTask(instance, task, targetUser, userId, username, remark, ADD_SIGN_POSITION_BEFORE);
+    }
+
+    /**
+     * 为当前审批节点创建带位置语义的加签任务。
+     */
+    public void createAddSignTask(
+
+            ProcessDocumentInstance instance,
+
+            ProcessDocumentTask task,
+
+            User targetUser,
+
+            Long userId,
+
+            String username,
+
+            String remark,
+
+            String position
+
+    ) {
+
         LocalDateTime now = LocalDateTime.now();
 
-        task.setStatus(TASK_STATUS_PAUSED);
+        String normalizedPosition = normalizeAddSignPosition(position);
 
-        processDocumentTaskMapper.updateById(task);
+        boolean before = ADD_SIGN_POSITION_BEFORE.equals(normalizedPosition);
+
+        if (before) {
+
+            task.setStatus(TASK_STATUS_PAUSED);
+
+            processDocumentTaskMapper.updateById(task);
+        }
 
 
 
@@ -909,7 +954,7 @@ public void createAddSignTask(
 
         addSignTask.setApprovalMode(APPROVAL_MODE_OR_SIGN);
 
-        addSignTask.setTaskKind(TASK_KIND_ADD_SIGN);
+        addSignTask.setTaskKind(before ? TASK_KIND_ADD_SIGN_BEFORE : TASK_KIND_ADD_SIGN_AFTER);
 
         addSignTask.setSourceTaskId(task.getId());
 
@@ -925,7 +970,7 @@ public void createAddSignTask(
 
         instance.setCurrentNodeName(task.getNodeName());
 
-        instance.setCurrentTaskType(TASK_KIND_ADD_SIGN);
+        instance.setCurrentTaskType(before ? TASK_KIND_ADD_SIGN : NODE_TYPE_APPROVAL);
 
         instance.setFinishedAt(null);
 
@@ -941,7 +986,9 @@ public void createAddSignTask(
 
                 "targetUserId", targetUser.getId(),
 
-                "targetUserName", normalizeUserName(targetUser)
+                "targetUserName", normalizeUserName(targetUser),
+
+                "position", normalizedPosition
 
         ));
 
@@ -980,28 +1027,72 @@ public void approveAddSignTask(
 
                 "taskId", task.getId(),
 
-                "taskKind", TASK_KIND_ADD_SIGN,
+                "taskKind", defaultText(task.getTaskKind(), TASK_KIND_ADD_SIGN),
 
                 "sourceTaskId", task.getSourceTaskId()
 
         ));
 
-        resumeSourceTask(task.getSourceTaskId(), now);
+        if (!isAfterAddSignTask(task)) {
+            resumeSourceTask(task.getSourceTaskId(), now);
+            updateAfterAddSignApproval(instance, task, now);
+            return;
+        }
 
+        ProcessDocumentTask sourceTask = task.getSourceTaskId() == null
+                ? null
+                : processDocumentTaskMapper.selectById(task.getSourceTaskId());
+        if (sourceTask == null || !TASK_STATUS_APPROVED.equals(trimToNull(sourceTask.getStatus()))) {
+            updateAfterAddSignApproval(instance, task, now);
+            return;
+        }
+
+        FlowRuntimeSnapshot snapshot = readFlowSnapshot(instance.getFlowSnapshotJson());
+        ProcessFlowNodeDTO node = snapshot.node(task.getNodeKey());
+        if (node == null) {
+            throw new IllegalStateException("当前任务找不到对应流程节点");
+        }
+
+        String approvalMode = defaultText(sourceTask.getApprovalMode(), APPROVAL_MODE_OR_SIGN);
+        List<ProcessDocumentTask> openTasks = loadNodeOpenTasks(task.getDocumentCode(), task.getNodeKey());
+        boolean nodeCompleted;
+        if (APPROVAL_MODE_AND_SIGN.equals(approvalMode)) {
+            nodeCompleted = openTasks.isEmpty();
+        } else {
+            cancelOpenTasks(openTasks, task.getId(), now);
+            nodeCompleted = true;
+        }
+
+        if (nodeCompleted) {
+            Map<String, Object> context = buildRuntimeContextForInstance(instance);
+            clearCurrentNode(instance);
+            advanceFromPosition(
+                    instance,
+                    snapshot,
+                    context,
+                    node.getParentNodeKey(),
+                    nextIndex(snapshot, node),
+                    DOCUMENT_STATUS_COMPLETED
+            );
+            return;
+        }
+
+        updateAfterAddSignApproval(instance, task, now);
+
+    }
+
+    private void updateAfterAddSignApproval(
+            ProcessDocumentInstance instance,
+            ProcessDocumentTask task,
+            LocalDateTime now
+    ) {
         instance.setStatus(DOCUMENT_STATUS_PENDING);
-
         instance.setCurrentNodeKey(task.getNodeKey());
-
         instance.setCurrentNodeName(task.getNodeName());
-
         instance.setCurrentTaskType(NODE_TYPE_APPROVAL);
-
         instance.setFinishedAt(null);
-
         instance.setUpdatedAt(now);
-
         processDocumentInstanceMapper.updateById(instance);
-
     }
 
 
@@ -3622,6 +3713,21 @@ private void clearCurrentNode(ProcessDocumentInstance instance) {
 
     }
 
+    private boolean isAfterAddSignTask(ProcessDocumentTask task) {
+        return task != null && TASK_KIND_ADD_SIGN_AFTER.equals(trimToNull(task.getTaskKind()));
+    }
+
+    private String normalizeAddSignPosition(String position) {
+        String normalized = trimToNull(position);
+        if (normalized == null) {
+            return ADD_SIGN_POSITION_BEFORE;
+        }
+        if (ADD_SIGN_POSITION_BEFORE.equals(normalized) || ADD_SIGN_POSITION_AFTER.equals(normalized)) {
+            return normalized;
+        }
+        throw new IllegalArgumentException("加签位置只能选择在我之前或在我之后");
+    }
+
 
 
     private ProcessDocumentInstance requireDocument(String documentCode) {
@@ -3979,6 +4085,25 @@ private List<String> resolveUndertakeDeptIdsFromSnapshots(
         context.put(CONDITION_FIELD_UNDERTAKE_DEPT_EXACT, new ArrayList<>(undertakeDeptIds));
         context.put(CONDITION_FIELD_UNDERTAKE_DEPT_WITH_CHILDREN, resolveDepartmentLineageIds(undertakeDeptIds));
 
+    }
+
+    private void cancelOpenTasksExceptAfterAddSign(
+            List<ProcessDocumentTask> tasks,
+            Long keepTaskId,
+            LocalDateTime handledAt
+    ) {
+        for (ProcessDocumentTask task : tasks) {
+            if (isAfterAddSignTask(task)) {
+                continue;
+            }
+            if (Objects.equals(task.getId(), keepTaskId)
+                    || (!TASK_STATUS_PENDING.equals(task.getStatus()) && !TASK_STATUS_PAUSED.equals(task.getStatus()))) {
+                continue;
+            }
+            task.setStatus(TASK_STATUS_CANCELLED);
+            task.setHandledAt(handledAt);
+            processDocumentTaskMapper.updateById(task);
+        }
     }
 
     private void putSharedArchiveConditionContext(

@@ -1,5 +1,6 @@
 package com.finex.auth.dto;
 
+import java.util.List;
 import lombok.Data;
 
 @Data
@@ -24,6 +25,8 @@ public class FinanceContextCompanyOptionVO {
     private Integer periodEndYear;
 
     private Integer periodEndMonth;
+
+    private List<String> enabledModules;
 
     private String value;
 

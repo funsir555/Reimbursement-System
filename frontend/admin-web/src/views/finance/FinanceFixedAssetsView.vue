@@ -279,6 +279,25 @@ import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 const FA_CODE_MAX_LENGTH = 32
 const FA_NAME_MAX_LENGTH = 64
+const FIXED_ASSET_TEXT_REPLACEMENTS: Array<[string, string]> = [
+  ['骞冲潎骞撮檺娉?', '平均年限法'],
+  ['宸ヤ綔閲忔硶', '工作量法'],
+  ['鍙屽€嶄綑棰濋€掑噺娉?', '双倍余额递减法'],
+  ['鑽夌', '草稿'],
+  ['鍦ㄧ敤', '在用'],
+  ['闂茬疆', '闲置'],
+  ['宸插缃?', '已处置'],
+  ['璧勪骇澧炲姞', '资产增加'],
+  ['閮ㄩ棬璋冩暣', '部门调整'],
+  ['淇濈浜鸿皟鏁?', '保管人调整'],
+  ['鍘熷€艰皟鏁?', '原值调整'],
+  ['娈嬪€艰皟鏁?', '残值调整'],
+  ['浣跨敤骞撮檺璋冩暣', '使用年限调整'],
+  ['鍥哄畾璧勪骇鍙樺姩:', '固定资产变动:'],
+  ['鍥哄畾璧勪骇鎶樻棫:', '固定资产折旧:'],
+  ['鍥哄畾璧勪骇澶勭疆:', '固定资产处置:'],
+  ['璐㈠姟璐?', '财务账簿']
+]
 
 const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
 const activeTab = ref('ledger')
@@ -370,9 +389,10 @@ async function refreshAll() {
   if (!financeCompany.currentCompanyId || !financePeriod.hasPeriodContext) return
   try {
     const res = await fixedAssetApi.getMeta({ companyId: financeCompany.currentCompanyId, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })
-    meta.value = res.data
+    const nextMeta = normalizeFixedAssetMeta(res.data)
+    meta.value = nextMeta
     filters.companyId = financeCompany.currentCompanyId
-    filters.bookCode = res.data.defaultBookCode || filters.bookCode
+    filters.bookCode = nextMeta.defaultBookCode || filters.bookCode
     syncForms()
     if (!filters.companyId) return
     await Promise.all([loadCategories(), loadCards(), loadChangeBills(), loadDepreciationRuns(), loadDisposalBills()])
@@ -384,20 +404,42 @@ async function refreshAll() {
 async function loadCategories() {
   if (!filters.companyId) return
   loading.categories = true
-  try { const res = await fixedAssetApi.listCategories(filters.companyId); categories.value = res.data; if (!res.data.some((item) => item.id === selectedCategoryId.value)) selectedCategoryId.value = res.data[0]?.id || null } finally { loading.categories = false }
+  try {
+    const res = await fixedAssetApi.listCategories(filters.companyId)
+    const nextCategories = res.data.map(normalizeCategory)
+    categories.value = nextCategories
+    if (!nextCategories.some((item) => item.id === selectedCategoryId.value)) selectedCategoryId.value = nextCategories[0]?.id || null
+  } finally { loading.categories = false }
 }
 async function loadCards() {
   if (!filters.companyId) return
   loading.cards = true
-  try { const res = await fixedAssetApi.listCards({ companyId: filters.companyId, bookCode: filters.bookCode, keyword: filters.keyword || undefined, categoryId: filters.categoryId, status: filters.status || undefined }); cards.value = res.data; if (!res.data.some((item) => item.id === selectedCardId.value)) selectedCardId.value = res.data[0]?.id || null } finally { loading.cards = false }
+  try {
+    const res = await fixedAssetApi.listCards({ companyId: filters.companyId, bookCode: filters.bookCode, keyword: filters.keyword || undefined, categoryId: filters.categoryId, status: filters.status || undefined })
+    const nextCards = res.data.map(normalizeCard)
+    cards.value = nextCards
+    if (!nextCards.some((item) => item.id === selectedCardId.value)) selectedCardId.value = nextCards[0]?.id || null
+  } finally { loading.cards = false }
 }
-async function loadChangeBills() { if (!filters.companyId) return; loading.changeBills = true; try { changeBills.value = (await fixedAssetApi.listChangeBills(buildPeriodContext())).data } finally { loading.changeBills = false } }
-async function loadDepreciationRuns() { if (!filters.companyId) return; loading.depreciation = true; try { depreciationRuns.value = (await fixedAssetApi.listDepreciationRuns(buildPeriodContext())).data } finally { loading.depreciation = false } }
-async function loadDisposalBills() { if (!filters.companyId) return; loading.disposalBills = true; try { disposalBills.value = (await fixedAssetApi.listDisposalBills(buildPeriodContext())).data } finally { loading.disposalBills = false } }
+async function loadChangeBills() {
+  if (!filters.companyId) return
+  loading.changeBills = true
+  try { changeBills.value = (await fixedAssetApi.listChangeBills(buildPeriodContext())).data.map(normalizeChangeBill) } finally { loading.changeBills = false }
+}
+async function loadDepreciationRuns() {
+  if (!filters.companyId) return
+  loading.depreciation = true
+  try { depreciationRuns.value = (await fixedAssetApi.listDepreciationRuns(buildPeriodContext())).data.map(normalizeDeprRun) } finally { loading.depreciation = false }
+}
+async function loadDisposalBills() {
+  if (!filters.companyId) return
+  loading.disposalBills = true
+  try { disposalBills.value = (await fixedAssetApi.listDisposalBills(buildPeriodContext())).data.map(normalizeDisposalBill) } finally { loading.disposalBills = false }
+}
 
 function handleCardCurrentChange(row?: FixedAssetCard) { selectedCardId.value = row?.id || null }
 function handleCategoryCurrentChange(row?: FixedAssetCategory) { selectedCategoryId.value = row?.id || null }
-async function openCardDialog(row?: FixedAssetCard) { syncForms(); if (row?.id) { Object.assign(cardForm, createCardPayload(), (await fixedAssetApi.getCard(row.id)).data); editingCardId.value = row.id } else { Object.assign(cardForm, createCardPayload()); editingCardId.value = null } cardDialogVisible.value = true }
+async function openCardDialog(row?: FixedAssetCard) { syncForms(); if (row?.id) { Object.assign(cardForm, createCardPayload(), normalizeCard((await fixedAssetApi.getCard(row.id)).data)); editingCardId.value = row.id } else { Object.assign(cardForm, createCardPayload()); editingCardId.value = null } cardDialogVisible.value = true }
 async function saveCard() { saving.value = true; try { const payload = normalizeCardPayload(); if (editingCardId.value) await fixedAssetApi.updateCard(editingCardId.value, payload); else await fixedAssetApi.createCard(payload); cardDialogVisible.value = false; ElMessage.success('资产卡片保存成功'); await Promise.all([loadCards(), refreshMetaOnly()]) } catch (error: unknown) { ElMessage.error(resolveError(error, '资产卡片保存失败')) } finally { saving.value = false } }
 function openCategoryDialog(row?: FixedAssetCategory) { syncForms(); Object.assign(categoryForm, createCategoryPayload(), row || {}); editingCategoryId.value = row?.id || null; categoryDialogVisible.value = true }
 async function saveCategory() { saving.value = true; try { const payload = normalizeCategoryPayload(); if (editingCategoryId.value) await fixedAssetApi.updateCategory(editingCategoryId.value, payload); else await fixedAssetApi.createCategory(payload); categoryDialogVisible.value = false; ElMessage.success('资产类别保存成功'); await Promise.all([loadCategories(), refreshMetaOnly()]) } catch (error: unknown) { ElMessage.error(resolveError(error, '资产类别保存失败')) } finally { saving.value = false } }
@@ -407,14 +449,14 @@ async function postChangeBill(id: number) { try { await ElMessageBox.confirm('�
 function openDisposalDialog() { syncForms(); Object.assign(disposalForm, createDisposalPayload()); if (selectedCard.value) Object.assign(disposalLine.value, { assetId: selectedCard.value.id, assetCode: selectedCard.value.assetCode }); disposalDialogVisible.value = true }
 async function saveDisposalBill() { saving.value = true; try { await fixedAssetApi.createDisposalBill({ ...normalizeDisposalPayload(), lines: [disposalLine.value] }); disposalDialogVisible.value = false; ElMessage.success('资产处置单保存成功'); await loadDisposalBills() } catch (error: unknown) { ElMessage.error(resolveError(error, '资产处置单保存失败')) } finally { saving.value = false } }
 async function postDisposalBill(id: number) { try { await ElMessageBox.confirm('处置过账后将更新资产状态并自动生成凭证，是否继续？', '处置单过账', { type: 'warning' }); await fixedAssetApi.postDisposalBill(id); ElMessage.success('资产处置单过账成功'); await Promise.all([loadDisposalBills(), loadCards(), refreshMetaOnly()]) } catch (error: unknown) { if (!isCancel(error)) ElMessage.error(resolveError(error, '资产处置单过账失败')) } }
-async function previewDepreciation() { try { previewRun.value = (await fixedAssetApi.previewDepreciation(buildDeprPayload())).data; activeTab.value = 'depreciation'; ElMessage.success('折旧试算完成') } catch (error: unknown) { ElMessage.error(resolveError(error, '折旧试算失败')) } }
-async function createDepreciationRun() { try { previewRun.value = (await fixedAssetApi.createDepreciationRun(buildDeprPayload())).data; ElMessage.success(`折旧批次已生成：${previewRun.value.runNo || '-'}`); await loadDepreciationRuns() } catch (error: unknown) { ElMessage.error(resolveError(error, '折旧批次生成失败')) } }
+async function previewDepreciation() { try { previewRun.value = normalizeDeprRun((await fixedAssetApi.previewDepreciation(buildDeprPayload())).data); activeTab.value = 'depreciation'; ElMessage.success('折旧试算完成') } catch (error: unknown) { ElMessage.error(resolveError(error, '折旧试算失败')) } }
+async function createDepreciationRun() { try { previewRun.value = normalizeDeprRun((await fixedAssetApi.createDepreciationRun(buildDeprPayload())).data); ElMessage.success(`折旧批次已生成：${previewRun.value.runNo || '-'}`); await loadDepreciationRuns() } catch (error: unknown) { ElMessage.error(resolveError(error, '折旧批次生成失败')) } }
 async function postDepreciationRun(id: number) { try { await ElMessageBox.confirm('折旧过账后将更新累计折旧并生成凭证，是否继续？', '折旧过账', { type: 'warning' }); await fixedAssetApi.postDepreciationRun(id); previewRun.value = null; ElMessage.success('折旧过账成功'); await Promise.all([loadDepreciationRuns(), loadCards(), refreshMetaOnly()]) } catch (error: unknown) { if (!isCancel(error)) ElMessage.error(resolveError(error, '折旧过账失败')) } }
 async function closePeriod() { try { await ElMessageBox.confirm(`确认结账 ${filters.fiscalYear}-${String(filters.fiscalPeriod).padStart(2, '0')} 吗？`, '期间结账', { type: 'warning' }); await fixedAssetApi.closePeriod(buildPeriodContext()); ElMessage.success('固定资产期间结账成功'); await refreshAll() } catch (error: unknown) { if (!isCancel(error)) ElMessage.error(resolveError(error, '固定资产期间结账失败')) } }
 async function downloadOpeningTemplate() { try { const res = await fixedAssetApi.getOpeningTemplate(buildPeriodContext()); const blob = new Blob([res.data.templateContent], { type: res.data.contentType || 'text/csv;charset=utf-8' }); const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = res.data.fileName || '固定资产期初导入模板.csv'; link.click(); window.URL.revokeObjectURL(url); ElMessage.success('模板下载完成') } catch (error: unknown) { ElMessage.error(resolveError(error, '模板下载失败')) } }
 function triggerOpeningUpload() { openingFileInput.value?.click() }
-async function onOpeningFilePicked(event: Event) { const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return; try { const rows = parseOpeningCsv(await file.text()); lastImport.value = (await fixedAssetApi.importOpening({ ...buildPeriodContext(), rows })).data; activeTab.value = 'opening'; ElMessage.success(`导入完成：成功 ${lastImport.value.successRows} / 总计 ${lastImport.value.totalRows}`); await Promise.all([loadCards(), refreshMetaOnly()]) } catch (error: unknown) { ElMessage.error(resolveError(error, '期初导入失败')) } finally { input.value = '' } }
-async function refreshMetaOnly() { meta.value = (await fixedAssetApi.getMeta({ companyId: financeCompany.currentCompanyId || filters.companyId, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })).data }
+async function onOpeningFilePicked(event: Event) { const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return; try { const rows = parseOpeningCsv(await file.text()); lastImport.value = normalizeOpeningImportResult((await fixedAssetApi.importOpening({ ...buildPeriodContext(), rows })).data); activeTab.value = 'opening'; ElMessage.success(`导入完成：成功 ${lastImport.value.successRows} / 总计 ${lastImport.value.totalRows}`); await Promise.all([loadCards(), refreshMetaOnly()]) } catch (error: unknown) { ElMessage.error(resolveError(error, '期初导入失败')) } finally { input.value = '' } }
+async function refreshMetaOnly() { meta.value = normalizeFixedAssetMeta((await fixedAssetApi.getMeta({ companyId: financeCompany.currentCompanyId || filters.companyId, fiscalYear: filters.fiscalYear, fiscalPeriod: filters.fiscalPeriod })).data) }
 
 function parseOpeningCsv(content: string): FixedAssetOpeningImportRow[] { const lines = content.replace(/\uFEFF/g, '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean); if (lines.length < 2) throw new Error('CSV 文件内容为空'); const headers = parseCsvLine(lines[0] || ''); const required = ['assetCode', 'assetName', 'categoryCode', 'inServiceDate', 'originalAmount', 'accumDeprAmount', 'salvageAmount', 'usefulLifeMonths', 'depreciatedMonths', 'remainingMonths']; const indexMap = new Map(headers.map((item, index) => [item, index])); const missing = required.filter((item) => !indexMap.has(item)); if (missing.length) throw new Error(`导入模板缺少字段：${missing.join(', ')}`); return lines.slice(1).map((line, index) => { const cells = parseCsvLine(line); const read = (name: string) => cells[indexMap.get(name) ?? -1] || ''; const row = { rowNo: index + 1, assetCode: requireTextLength(read('assetCode'), '资产编码', FA_CODE_MAX_LENGTH, index + 1), assetName: requireTextLength(read('assetName'), '资产名称', FA_NAME_MAX_LENGTH, index + 1), categoryCode: requireTextLength(read('categoryCode'), '类别编码', FA_CODE_MAX_LENGTH, index + 1), acquireDate: read('acquireDate') || undefined, inServiceDate: read('inServiceDate'), originalAmount: normalizeRequiredMoney(read('originalAmount')), accumDeprAmount: normalizeRequiredMoney(read('accumDeprAmount')), salvageAmount: normalizeRequiredMoney(read('salvageAmount')), usefulLifeMonths: toInteger(read('usefulLifeMonths')), depreciatedMonths: toInteger(read('depreciatedMonths')), remainingMonths: toInteger(read('remainingMonths')), useDeptId: toOptionalInteger(read('useDeptId')), keeperUserId: toOptionalInteger(read('keeperUserId')), status: read('status') || 'IN_USE', workTotal: toOptionalNumber(read('workTotal')), workUsed: toOptionalNumber(read('workUsed')), remark: read('remark') || undefined }; return row }) }
 function parseCsvLine(line: string) { const result: string[] = []; let current = ''; let inQuotes = false; for (let i = 0; i < line.length; i += 1) { const char = line[i]; const next = line[i + 1]; if (char === '"') { if (inQuotes && next === '"') { current += '"'; i += 1 } else { inQuotes = !inQuotes } } else if (char === ',' && !inQuotes) { result.push(current.trim()); current = '' } else { current += char } } result.push(current.trim()); return result }
@@ -432,7 +474,7 @@ function createDisposalPayload(): FixedAssetDisposalBillPayload { return { compa
 function optionLabel(options: Array<{ value: string; label: string }> | undefined, value?: string) { return options?.find((item) => item.value === value)?.label || value || '-' }
 function cardStatusLabel(value?: string) { return optionLabel(meta.value?.cardStatusOptions, value) }
 function billStatusLabel(value?: string) { return ({ DRAFT: '草稿', POSTED: '已过账', VOID: '已作废', CLOSED: '已结账', OPEN: '开放中' } as Record<string, string>)[value || ''] || value || '-' }
-function resolveError(error: unknown, fallback: string) { return error instanceof Error && error.message ? error.message : fallback }
+function resolveError(error: unknown, fallback: string) { return error instanceof Error && error.message ? normalizeFixedAssetText(error.message) : fallback }
 function isCancel(error: unknown) { return error === 'cancel' || error === 'close' }
 function closeDialogs() { cardDialogVisible.value = false; categoryDialogVisible.value = false; changeDialogVisible.value = false; disposalDialogVisible.value = false; editingCardId.value = null; editingCategoryId.value = null; syncForms() }
 function trimText(value?: string) { return String(value || '').trim() }
@@ -446,6 +488,119 @@ function toNumber(value: string) { const n = Number(value); return Number.isFini
 function toInteger(value: string) { const n = Number.parseInt(value, 10); return Number.isFinite(n) ? n : 0 }
 function toOptionalNumber(value: string) { return value ? toNumber(value) : undefined }
 function toOptionalInteger(value: string) { return value ? toInteger(value) : undefined }
+
+function normalizeFixedAssetText(value?: string | null) {
+  const text = String(value || '')
+  if (!text) {
+    return ''
+  }
+  return FIXED_ASSET_TEXT_REPLACEMENTS.reduce((current, [source, target]) => current.split(source).join(target), text)
+}
+
+function normalizeFixedAssetOption(option: { value: string; label: string; code?: string; name?: string; parentValue?: string }) {
+  return {
+    ...option,
+    label: normalizeFixedAssetText(option.label),
+    code: option.code ? normalizeFixedAssetText(option.code) : option.code,
+    name: option.name ? normalizeFixedAssetText(option.name) : option.name,
+    parentValue: option.parentValue ? normalizeFixedAssetText(option.parentValue) : option.parentValue
+  }
+}
+
+function normalizeFixedAssetMeta(payload: FixedAssetMeta): FixedAssetMeta {
+  return {
+    ...payload,
+    companyOptions: (payload.companyOptions || []).map(normalizeFixedAssetOption),
+    departmentOptions: (payload.departmentOptions || []).map(normalizeFixedAssetOption),
+    employeeOptions: (payload.employeeOptions || []).map(normalizeFixedAssetOption),
+    categoryOptions: (payload.categoryOptions || []).map(normalizeFixedAssetOption),
+    depreciationMethodOptions: (payload.depreciationMethodOptions || []).map(normalizeFixedAssetOption),
+    cardStatusOptions: (payload.cardStatusOptions || []).map(normalizeFixedAssetOption),
+    changeTypeOptions: (payload.changeTypeOptions || []).map(normalizeFixedAssetOption),
+    bookOptions: (payload.bookOptions || []).map(normalizeFixedAssetOption)
+  }
+}
+
+function normalizeCategory(category: FixedAssetCategory): FixedAssetCategory {
+  return {
+    ...category,
+    categoryName: normalizeFixedAssetText(category.categoryName),
+    remark: category.remark ? normalizeFixedAssetText(category.remark) : category.remark
+  }
+}
+
+function normalizeCard(card: FixedAssetCard): FixedAssetCard {
+  return {
+    ...card,
+    assetName: normalizeFixedAssetText(card.assetName),
+    categoryName: card.categoryName ? normalizeFixedAssetText(card.categoryName) : card.categoryName,
+    useDeptName: card.useDeptName ? normalizeFixedAssetText(card.useDeptName) : card.useDeptName,
+    keeperName: card.keeperName ? normalizeFixedAssetText(card.keeperName) : card.keeperName,
+    managerName: card.managerName ? normalizeFixedAssetText(card.managerName) : card.managerName,
+    remark: card.remark ? normalizeFixedAssetText(card.remark) : card.remark
+  }
+}
+
+function normalizeChangeBill(bill: FixedAssetChangeBill): FixedAssetChangeBill {
+  return {
+    ...bill,
+    remark: bill.remark ? normalizeFixedAssetText(bill.remark) : bill.remark,
+    voucherLink: bill.voucherLink
+      ? { ...bill.voucherLink, remark: bill.voucherLink.remark ? normalizeFixedAssetText(bill.voucherLink.remark) : bill.voucherLink.remark }
+      : bill.voucherLink,
+    lines: (bill.lines || []).map((line) => ({
+      ...line,
+      assetName: line.assetName ? normalizeFixedAssetText(line.assetName) : line.assetName,
+      categoryCode: line.categoryCode ? normalizeFixedAssetText(line.categoryCode) : line.categoryCode,
+      useDeptName: line.useDeptName ? normalizeFixedAssetText(line.useDeptName) : line.useDeptName,
+      keeperName: line.keeperName ? normalizeFixedAssetText(line.keeperName) : line.keeperName,
+      remark: line.remark ? normalizeFixedAssetText(line.remark) : line.remark
+    }))
+  }
+}
+
+function normalizeDeprRun(run: FixedAssetDeprRun): FixedAssetDeprRun {
+  return {
+    ...run,
+    remark: run.remark ? normalizeFixedAssetText(run.remark) : run.remark,
+    voucherLink: run.voucherLink
+      ? { ...run.voucherLink, remark: run.voucherLink.remark ? normalizeFixedAssetText(run.voucherLink.remark) : run.voucherLink.remark }
+      : run.voucherLink,
+    lines: (run.lines || []).map((line) => ({
+      ...line,
+      assetName: normalizeFixedAssetText(line.assetName),
+      categoryName: line.categoryName ? normalizeFixedAssetText(line.categoryName) : line.categoryName
+    }))
+  }
+}
+
+function normalizeDisposalBill(bill: FixedAssetDisposalBill): FixedAssetDisposalBill {
+  return {
+    ...bill,
+    remark: bill.remark ? normalizeFixedAssetText(bill.remark) : bill.remark,
+    voucherLink: bill.voucherLink
+      ? { ...bill.voucherLink, remark: bill.voucherLink.remark ? normalizeFixedAssetText(bill.voucherLink.remark) : bill.voucherLink.remark }
+      : bill.voucherLink,
+    lines: (bill.lines || []).map((line) => ({
+      ...line,
+      assetName: normalizeFixedAssetText(line.assetName),
+      categoryName: line.categoryName ? normalizeFixedAssetText(line.categoryName) : line.categoryName,
+      remark: line.remark ? normalizeFixedAssetText(line.remark) : line.remark
+    }))
+  }
+}
+
+function normalizeOpeningImportResult(result: FixedAssetOpeningImportResult): FixedAssetOpeningImportResult {
+  return {
+    ...result,
+    batchNo: normalizeFixedAssetText(result.batchNo),
+    lines: (result.lines || []).map((line) => ({
+      ...line,
+      assetName: line.assetName ? normalizeFixedAssetText(line.assetName) : line.assetName,
+      errorMessage: line.errorMessage ? normalizeFixedAssetText(line.errorMessage) : line.errorMessage
+    }))
+  }
+}
 
 async function confirmCompanySwitch() {
   if (!hasPendingEdit.value) {

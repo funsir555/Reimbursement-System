@@ -7,6 +7,7 @@ package com.finex.auth.service.impl;
 
 import com.finex.auth.dto.FinanceContextMetaVO;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.service.FinanceContextService;
@@ -31,9 +32,16 @@ public class FinanceContextServiceImpl implements FinanceContextService {
             SystemCompanyMapper systemCompanyMapper,
             FinanceAccountSetMapper financeAccountSetMapper,
             FinancePeriodCloseMapper financePeriodCloseMapper,
-            UserService userService
+            UserService userService,
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper
     ) {
-        this.voucherContextSupport = new VoucherContextSupport(systemCompanyMapper, financeAccountSetMapper, financePeriodCloseMapper, userService);
+        this.voucherContextSupport = new VoucherContextSupport(
+                systemCompanyMapper,
+                financeAccountSetMapper,
+                financePeriodCloseMapper,
+                userService,
+                financeAccountSetModuleEnableMapper
+        );
     }
 
     /**

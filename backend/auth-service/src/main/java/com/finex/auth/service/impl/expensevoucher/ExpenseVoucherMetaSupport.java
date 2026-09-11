@@ -50,9 +50,9 @@ public class ExpenseVoucherMetaSupport extends AbstractExpenseVoucherGenerationS
         meta.setAccountOptions(loadAccountOptions());
         meta.setVoucherTypeOptions(toOptions(VOUCHER_TYPE_SEEDS));
         meta.setPushStatusOptions(List.of(
-                option(PUSH_STATUS_UNPUSHED, "寰呮帹閫?"),
-                option(PUSH_STATUS_SUCCESS, "鎺ㄩ€佹垚鍔?"),
-                option(PUSH_STATUS_FAILED, "鎺ㄩ€佸け璐?")
+                option(PUSH_STATUS_UNPUSHED, "待推送"),
+                option(PUSH_STATUS_SUCCESS, "推送成功"),
+                option(PUSH_STATUS_FAILED, "推送失败")
         ));
         meta.setDefaultCompanyId(resolveDefaultCompanyId(currentUserId, companies));
         meta.setLatestBatchNo(resolveLatestBatchNo());

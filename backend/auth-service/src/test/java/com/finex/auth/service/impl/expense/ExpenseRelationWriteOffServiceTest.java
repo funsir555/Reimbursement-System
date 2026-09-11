@@ -92,11 +92,11 @@ class ExpenseRelationWriteOffServiceTest {
                 related.getGroups().stream().map(item -> item.getTemplateType()).toList());
         assertEquals(List.of("report", "loan"),
                 writeoff.getGroups().stream().map(item -> item.getTemplateType()).toList());
-        assertEquals(List.of(1, 1, 1, 1),
+        assertEquals(List.of(1, 1, 1, 2),
                 related.getGroups().stream().map(item -> item.getTotal()).toList());
         assertEquals(List.of(1, 1),
                 writeoff.getGroups().stream().map(item -> item.getTotal()).toList());
-        assertEquals(List.of("DOC-REPORT-001", "DOC-APP-001", "DOC-CON-001", "DOC-LOAN-001"),
+        assertEquals(List.of("DOC-REPORT-001", "DOC-APP-001", "DOC-CON-001", "DOC-LOAN-001", "DOC-LOAN-002"),
                 related.getGroups().stream()
                         .flatMap(group -> group.getItems().stream())
                         .map(item -> item.getDocumentCode())
@@ -166,7 +166,7 @@ class ExpenseRelationWriteOffServiceTest {
                 "writeOffAmount", 120
         )));
         ProcessDocumentInstance source = createApprovedDocument("DOC-SOURCE-001", "report", "source-doc", BigDecimal.valueOf(600), 2L);
-        ProcessDocumentInstance relatedTarget = createDocument("DOC-APP-001", "application", "application-doc", BigDecimal.valueOf(300), 2L, "PENDING_PAYMENT");
+        ProcessDocumentInstance relatedTarget = createDocument("DOC-APP-001", "application", "application-doc", BigDecimal.valueOf(300), 2L, "COMPLETED");
         ProcessDocumentInstance writeoffTarget = createDocument("DOC-LOAN-001", "loan", "loan-doc", BigDecimal.valueOf(500), 2L, "PAYMENT_FINISHED");
 
         when(processDocumentInstanceMapper.selectOne(any())).thenReturn(source);
@@ -336,8 +336,15 @@ class ExpenseRelationWriteOffServiceTest {
         ProcessDocumentInstance source = createApprovedDocument("DOC-SOURCE", "report", "来源单据", BigDecimal.valueOf(260), 10L);
         source.setSubmitterName("来源提单人");
 
-        when(processDocumentRelationMapper.selectList(any())).thenReturn(List.of(outbound), List.of(inbound));
-        when(processDocumentInstanceMapper.selectList(any())).thenReturn(List.of(target, source));
+        when(processDocumentRelationMapper.selectList(any())).thenReturn(
+                List.of(outbound),
+                List.of(inbound),
+                List.of()
+        );
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(
+                List.of(target, source),
+                List.of()
+        );
 
         var bindings = service.loadRelatedDocumentBindings("DOC-CURRENT");
 
@@ -353,6 +360,60 @@ class ExpenseRelationWriteOffServiceTest {
         assertEquals("来源单据", bindings.get(1).getDocumentTitle());
         assertEquals("报销单", bindings.get(1).getTemplateTypeLabel());
         assertEquals("来源提单人", bindings.get(1).getSubmitterName());
+    }
+
+    @Test
+    void loadRelatedDocumentBindingsAddsDistinctEligibleInboundRelationCount() {
+        ProcessDocumentRelation relationOne = new ProcessDocumentRelation();
+        relationOne.setSourceDocumentCode("DOC-SOURCE-001");
+        relationOne.setTargetDocumentCode("DOC-TARGET");
+        relationOne.setStatus("ACTIVE");
+        ProcessDocumentRelation relationDuplicate = new ProcessDocumentRelation();
+        relationDuplicate.setSourceDocumentCode("DOC-SOURCE-001");
+        relationDuplicate.setTargetDocumentCode("DOC-TARGET");
+        relationDuplicate.setStatus("ACTIVE");
+        ProcessDocumentRelation relationTwo = new ProcessDocumentRelation();
+        relationTwo.setSourceDocumentCode("DOC-SOURCE-002");
+        relationTwo.setTargetDocumentCode("DOC-TARGET");
+        relationTwo.setStatus("ACTIVE");
+        ProcessDocumentRelation voidRelation = new ProcessDocumentRelation();
+        voidRelation.setSourceDocumentCode("DOC-SOURCE-003");
+        voidRelation.setTargetDocumentCode("DOC-TARGET");
+        voidRelation.setStatus("VOID");
+
+        ProcessDocumentInstance target = createApprovedDocument(
+                "DOC-TARGET", "application", "目标单据", BigDecimal.valueOf(300), 9L
+        );
+        ProcessDocumentInstance sourceOne = createDocument(
+                "DOC-SOURCE-001", "report", "来源一", BigDecimal.valueOf(100), 10L, "COMPLETED"
+        );
+        ProcessDocumentInstance sourceTwo = createDocument(
+                "DOC-SOURCE-002", "report", "来源二", BigDecimal.valueOf(120), 11L, "PENDING_APPROVAL"
+        );
+        ProcessDocumentInstance sourceRejected = createDocument(
+                "DOC-SOURCE-003", "report", "来源三", BigDecimal.valueOf(130), 12L, "REJECTED"
+        );
+
+        ProcessDocumentRelation outbound = new ProcessDocumentRelation();
+        outbound.setSourceDocumentCode("DOC-CURRENT");
+        outbound.setTargetDocumentCode("DOC-TARGET");
+        outbound.setTargetTemplateType("application");
+        outbound.setStatus("ACTIVE");
+
+        when(processDocumentRelationMapper.selectList(any())).thenReturn(
+                List.of(outbound),
+                List.of(),
+                List.of(relationOne, relationDuplicate, relationTwo)
+        );
+        when(processDocumentInstanceMapper.selectList(any())).thenReturn(
+                List.of(target),
+                List.of(sourceOne, sourceTwo)
+        );
+
+        var bindings = service.loadRelatedDocumentBindings("DOC-CURRENT");
+
+        assertEquals(1, bindings.size());
+        assertEquals(2, bindings.get(0).getRelationCount());
     }
 
     @Test

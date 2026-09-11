@@ -7,10 +7,12 @@ import com.finex.auth.dto.ExpenseDetailInstanceDTO;
 import com.finex.auth.dto.ExpenseDocumentDetailVO;
 import com.finex.auth.dto.ExpenseDocumentEditContextVO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
+import com.finex.auth.dto.ExpenseTaskAddSignDTO;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.ProcessDocumentTemplate;
 import com.finex.auth.entity.ProcessFormDesign;
+import com.finex.auth.entity.User;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTaskMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
@@ -118,6 +120,75 @@ class ExpenseApprovalDomainSupportTest {
         assertSame(detail, actual);
         verify(expenseWorkflowRuntimeSupport).rejectPendingTask(any(), any(), any(), any(), any(), eq("NODE-2"));
         verify(expenseRelationWriteOffService).voidPendingWriteOffs("DOC-001");
+    }
+
+    @Test
+    void addSignPassesSelectedPositionToWorkflowRuntime() {
+        ProcessDocumentTask task = pendingTask();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-001");
+        User targetUser = new User();
+        targetUser.setId(2L);
+        targetUser.setName("李四");
+        targetUser.setStatus(1);
+        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+        ExpenseTaskAddSignDTO dto = new ExpenseTaskAddSignDTO();
+        dto.setTargetUserId(2L);
+        dto.setPosition(ExpenseTaskAddSignDTO.POSITION_AFTER);
+
+        ExpenseApprovalDomainSupport support = newSupport();
+        when(processDocumentTaskMapper.selectById(10L)).thenReturn(task);
+        when(userMapper.selectById(2L)).thenReturn(targetUser);
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+        when(expenseDocumentReadSupport.buildDocumentDetail(instance)).thenReturn(detail);
+
+        ExpenseDocumentDetailVO actual = support.addSignTask(1L, "测试用户", 10L, dto);
+
+        assertSame(detail, actual);
+        verify(expenseWorkflowRuntimeSupport).createAddSignTask(
+                instance,
+                task,
+                targetUser,
+                1L,
+                "测试用户",
+                null,
+                ExpenseTaskAddSignDTO.POSITION_AFTER
+        );
+    }
+
+    @Test
+    void addSignRejectsUnknownPosition() {
+        ProcessDocumentTask task = pendingTask();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-001");
+        User targetUser = new User();
+        targetUser.setId(2L);
+        targetUser.setName("李四");
+        targetUser.setStatus(1);
+        ExpenseTaskAddSignDTO dto = new ExpenseTaskAddSignDTO();
+        dto.setTargetUserId(2L);
+        dto.setPosition("MIDDLE");
+
+        ExpenseApprovalDomainSupport support = newSupport();
+        when(processDocumentTaskMapper.selectById(10L)).thenReturn(task);
+        when(userMapper.selectById(2L)).thenReturn(targetUser);
+        when(expenseDocumentReadSupport.requireDocument("DOC-001")).thenReturn(instance);
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> support.addSignTask(1L, "测试用户", 10L, dto)
+        );
+
+        assertEquals("加签位置只能选择在我之前或在我之后", error.getMessage());
+        verify(expenseWorkflowRuntimeSupport, never()).createAddSignTask(
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
     }
 
     @Test

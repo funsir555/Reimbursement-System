@@ -3,15 +3,19 @@ import { reactive, ref, type ComputedRef, type Ref } from 'vue'
 import { financeApi, type FinanceVoucherDetail, type FinanceVoucherMeta, type FinanceVoucherSavePayload } from '@/api'
 import type { Router } from 'vue-router'
 import type { FinanceVoucherEntryRow } from './useFinanceNewVoucherRowOwner'
+import type { FinanceNewVoucherCreateRouteState } from './useFinanceNewVoucherBootstrap'
 
 export type FinanceNewVoucherToolbarActionKey =
   | 'new'
   | 'modify'
+  | 'clear'
   | 'print'
   | 'export'
   | 'copy'
   | 'reverse'
   | 'void'
+  | 'restore'
+  | 'deleteVoucher'
   | 'insert'
   | 'delete'
   | 'searchReplace'
@@ -27,7 +31,7 @@ export type FinanceNewVoucherToolbarActionKey =
 
 type ActionDialogKey = Exclude<
   FinanceNewVoucherToolbarActionKey,
-  'new' | 'modify' | 'insert' | 'delete' | 'save' | 'review' | 'unreview' | 'markError' | 'find'
+  'new' | 'modify' | 'clear' | 'insert' | 'delete' | 'deleteVoucher' | 'save' | 'review' | 'unreview' | 'markError' | 'find' | 'reverse' | 'void' | 'restore'
 >
 
 type RouterLike = Pick<Router, 'push' | 'replace'>
@@ -42,17 +46,27 @@ type UseFinanceNewVoucherPageOrchestrationOptions = {
   isReviewMode: ComputedRef<boolean>
   canEditExisting: ComputedRef<boolean>
   detailVoucherNo: ComputedRef<string>
+  currentVoucherNo: ComputedRef<string>
+  hasUnsavedChanges: ComputedRef<boolean>
+  createRouteState?: ComputedRef<FinanceNewVoucherCreateRouteState>
+  currentCreateRouteVoucherNo?: ComputedRef<string>
   selectedRow: ComputedRef<FinanceVoucherEntryRow>
   selectedRowIndex: Ref<number>
   currentCompanyId: () => string
+  isCurrentPeriodClosed: ComputedRef<boolean>
   getCurrentContext: () => { companyId: string; billDate: string; csign: string }
   getEntries: () => FinanceVoucherEntryRow[]
   selectRow: (index: number) => void
   loadMeta: (companyId?: string) => Promise<void>
   loadDetail: (companyId: string, voucherNo: string) => Promise<void>
+  refreshSavedVoucherSuggestions?: (context?: { companyId?: string; billDate?: string; csign?: string }) => Promise<void>
+  requestCreateVoucherTakeover?: () => Promise<boolean>
   clearDraft: (companyId?: string) => void
+  clearEditableVoucher: () => Promise<void> | void
   resetFormFromMeta: (meta: FinanceVoucherMeta, companyId?: string) => void
   markCommitted: () => void
+  setCreateRouteState?: (state: FinanceNewVoucherCreateRouteState) => void
+  setCreateRouteVoucherNo?: (voucherNo: string) => void
   buildPayload: () => FinanceVoucherSavePayload
   validateVoucher: (showToast?: boolean) => boolean
   ensureSelectedRowUsesLeafSubject: () => Promise<boolean>
@@ -71,21 +85,45 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
   const reviewActing = ref(false)
   const currentToolbarLoadingKey = ref<FinanceNewVoucherToolbarActionKey | ''>('')
   const actionDialog = reactive({ visible: false, title: '', description: '' })
+  const isCreateEditingLast = () => options.createRouteState?.value === 'editing-last'
+
+  function showClosedPeriodWarning() {
+    ElMessage.warning('当前所属期间已结账，仅允许查询和阅读')
+  }
+
+  function isPeriodMutationBlocked() {
+    return options.isCurrentPeriodClosed.value
+  }
 
   async function handleNewVoucher() {
-    try {
-      await ElMessageBox.confirm('将清空当前录入内容并开始新的凭证，是否继续？', '新增凭证', {
-        type: 'warning',
-        confirmButtonText: '继续',
-        cancelButtonText: '取消'
-      })
-    } catch {
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
       return
+    }
+    if (options.isDetailRoute.value || options.isReviewMode.value) {
+      const takeoverAllowed = await options.requestCreateVoucherTakeover?.()
+      if (takeoverAllowed === false) {
+        return
+      }
+    }
+
+    const shouldConfirmResetCurrentInput =
+      (!options.isDetailRoute.value && !options.isReviewMode.value && options.hasUnsavedChanges.value) ||
+      (options.isDetailRoute.value && options.editingExisting.value && options.hasUnsavedChanges.value)
+    if (shouldConfirmResetCurrentInput) {
+      try {
+        await ElMessageBox.confirm('将清空当前录入内容并开始新的凭证，是否继续？', '新增凭证', {
+          type: 'warning',
+          confirmButtonText: '继续',
+          cancelButtonText: '取消'
+        })
+      } catch {
+        return
+      }
     }
 
     options.editingExisting.value = false
     options.voucherDetail.value = null
-    options.clearDraft()
     options.validationErrors.value = []
 
     if (options.isDetailRoute.value || options.isReviewMode.value) {
@@ -93,15 +131,28 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
       return
     }
 
-    if (options.voucherMeta.value) {
-      options.resetFormFromMeta(options.voucherMeta.value, options.currentCompanyId())
+    options.clearDraft()
+    try {
+      const currentContext = options.getCurrentContext()
+      const freshMeta = await financeApi.getVoucherMeta({
+        companyId: currentContext.companyId,
+        billDate: currentContext.billDate
+      })
+      options.voucherMeta.value = freshMeta.data
+      options.setCreateRouteVoucherNo?.('')
+      options.resetFormFromMeta(freshMeta.data, options.currentCompanyId())
+      options.setCreateRouteState?.('editing-new')
       options.markCommitted()
-    } else {
-      await options.loadMeta(options.currentCompanyId())
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, '加载新增凭证失败'))
     }
   }
 
   function enterEditMode() {
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
     if (!options.voucherDetail.value?.editable) {
       ElMessage.warning('当前凭证状态不允许修改')
       return
@@ -110,19 +161,31 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
       ElMessage.warning('当前账号没有修改凭证权限')
       return
     }
+    if (!options.isDetailRoute.value && options.createRouteState?.value === 'locked-last') {
+      options.setCreateRouteState?.('editing-last')
+      return
+    }
     options.editingExisting.value = true
   }
 
   async function handleSave() {
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return false
+    }
     if (!(await options.ensureSelectedRowUsesLeafSubject())) return
     if (options.ensureRowCashFlowState(options.selectedRow.value)) {
       options.handleCashFlowFieldFocus()
-      return
+      return false
     }
-    if (!options.validateVoucher(true)) return
+    if (!options.validateVoucher(true)) return false
 
     saving.value = true
     try {
+      const updateVoucherNo = options.isDetailRoute.value
+        ? options.detailVoucherNo.value
+        : (isCreateEditingLast() ? String(options.currentCreateRouteVoucherNo?.value || '') : '')
+      const savingExistingVoucher = Boolean(updateVoucherNo)
       if (options.isDetailRoute.value && options.detailVoucherNo.value) {
         const res = await financeApi.updateVoucher(
           options.currentCompanyId(),
@@ -131,28 +194,75 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
         )
         ElMessage.success(`凭证修改成功：${res.data.voucherNo}`)
         await options.loadDetail(options.currentCompanyId(), options.detailVoucherNo.value)
-        return
+        return true
+      }
+      if (savingExistingVoucher) {
+        const res = await financeApi.updateVoucher(
+          options.currentCompanyId(),
+          updateVoucherNo,
+          options.buildPayload()
+        )
+        ElMessage.success(`凭证修改成功：${res.data.voucherNo}`)
+        await options.loadMeta(options.currentCompanyId())
+        return true
       }
 
       const currentContext = options.getCurrentContext()
       const res = await financeApi.createVoucher(options.buildPayload())
       options.clearDraft()
       ElMessage.success(`凭证保存成功：${res.data.voucherNo}`)
+      if (res.data.voucherNoAutoForwarded) {
+        const requestedDisplayVoucherNo =
+          res.data.requestedDisplayVoucherNo || formatDisplayVoucherNo(res.data.csign, res.data.requestedInoId)
+        const currentDisplayVoucherNo = formatDisplayVoucherNo(res.data.csign, res.data.inoId)
+        ElMessage.warning(
+          `凭证号${requestedDisplayVoucherNo}已被${res.data.occupiedByUserName || '其他用户'}占用，已自动顺延到${currentDisplayVoucherNo}`
+        )
+      }
       const nextMeta = await financeApi.getVoucherMeta(currentContext)
       options.voucherMeta.value = nextMeta.data
+      await options.refreshSavedVoucherSuggestions?.(currentContext)
       options.resetFormFromMeta(nextMeta.data, currentContext.companyId)
       options.validationErrors.value = []
       options.markCommitted()
+      return true
     } catch (error: unknown) {
-      ElMessage.error(options.resolveErrorMessage(error, options.isDetailRoute.value ? '修改凭证失败' : '保存凭证失败'))
+      ElMessage.error(
+        options.resolveErrorMessage(
+          error,
+          options.isDetailRoute.value || isCreateEditingLast() ? '修改凭证失败' : '保存凭证失败'
+        )
+      )
+      return false
     } finally {
       saving.value = false
     }
   }
 
+  async function handleClearVoucher() {
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
+    try {
+      await ElMessageBox.confirm('是否清空凭证', '清空凭证', {
+        type: 'warning',
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    await options.clearEditableVoucher()
+  }
+
   async function handleReviewVoucher() {
     const companyId = options.currentCompanyId()
     if (!companyId || !options.detailVoucherNo.value) return
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
 
     reviewActing.value = true
     currentToolbarLoadingKey.value = 'review'
@@ -181,6 +291,10 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
   async function handleUnreviewVoucher() {
     const companyId = options.currentCompanyId()
     if (!companyId || !options.detailVoucherNo.value) return
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
 
     reviewActing.value = true
     currentToolbarLoadingKey.value = 'unreview'
@@ -199,6 +313,10 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
   async function handleToggleVoucherError() {
     const companyId = options.currentCompanyId()
     if (!companyId || !options.detailVoucherNo.value) return
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
 
     const clearing = options.voucherDetail.value?.status === 'ERROR'
     reviewActing.value = true
@@ -230,10 +348,137 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
 
   async function handleCopyVoucher() {
     try {
+      if (isPeriodMutationBlocked()) {
+        showClosedPeriodWarning()
+        return
+      }
+      if (options.isDetailRoute.value || options.isReviewMode.value) {
+        const takeoverAllowed = await options.requestCreateVoucherTakeover?.()
+        if (takeoverAllowed === false) {
+          return
+        }
+      }
       await options.copyCurrentVoucher()
       ElMessage.success('已复制为新的未保存凭证')
     } catch (error: unknown) {
       ElMessage.error(options.resolveErrorMessage(error, '复制凭证失败'))
+    }
+  }
+
+  async function handleReverseVoucher() {
+    const companyId = options.currentCompanyId()
+    const voucherNo = options.currentVoucherNo.value
+    if (!companyId || !voucherNo) {
+      return
+    }
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
+    reviewActing.value = true
+    currentToolbarLoadingKey.value = 'reverse'
+    try {
+      const res = await financeApi.reverseVoucher(companyId, voucherNo)
+      ElMessage.success(`凭证冲销成功：${res.data.voucherNo}`)
+      await options.router.push({
+        name: options.isReviewMode.value ? 'finance-review-voucher-detail' : 'finance-query-voucher-detail',
+        params: { voucherNo: res.data.voucherNo }
+      })
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, '冲销凭证失败'))
+    } finally {
+      currentToolbarLoadingKey.value = ''
+      reviewActing.value = false
+    }
+  }
+
+  async function handleVoidVoucher() {
+    const companyId = options.currentCompanyId()
+    const voucherNo = options.currentVoucherNo.value
+    if (!companyId || !voucherNo) {
+      return
+    }
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
+    reviewActing.value = true
+    currentToolbarLoadingKey.value = 'void'
+    try {
+      const res = await financeApi.voidVoucher(companyId, voucherNo)
+      ElMessage.success(`凭证作废成功：${res.data.voucherNo}`)
+      await options.loadDetail(companyId, voucherNo)
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, '作废凭证失败'))
+    } finally {
+      currentToolbarLoadingKey.value = ''
+      reviewActing.value = false
+    }
+  }
+
+  async function handleRestoreVoucher() {
+    const companyId = options.currentCompanyId()
+    const voucherNo = options.currentVoucherNo.value
+    if (!companyId || !voucherNo) {
+      return
+    }
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
+    try {
+      await ElMessageBox.confirm('是否恢复当前作废凭证？', '恢复凭证', {
+        type: 'warning',
+        confirmButtonText: '确认恢复',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    reviewActing.value = true
+    currentToolbarLoadingKey.value = 'restore'
+    try {
+      const res = await financeApi.restoreVoucher(companyId, voucherNo)
+      ElMessage.success(`凭证恢复成功：${res.data.voucherNo}`)
+      await options.loadDetail(companyId, voucherNo)
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, '恢复凭证失败'))
+    } finally {
+      currentToolbarLoadingKey.value = ''
+      reviewActing.value = false
+    }
+  }
+
+  async function handleDeleteVoucher() {
+    const companyId = options.currentCompanyId()
+    const voucherNo = options.currentVoucherNo.value
+    if (!companyId || !voucherNo) {
+      return
+    }
+    if (isPeriodMutationBlocked()) {
+      showClosedPeriodWarning()
+      return
+    }
+    try {
+      await ElMessageBox.confirm('是否删除当前凭证？仅已作废凭证允许删除。', '删除凭证', {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    reviewActing.value = true
+    currentToolbarLoadingKey.value = 'deleteVoucher'
+    try {
+      await financeApi.deleteVoucher(companyId, voucherNo)
+      ElMessage.success('凭证删除成功')
+      await options.router.replace({ name: options.isReviewMode.value ? 'finance-review-voucher' : 'finance-query-voucher' })
+    } catch (error: unknown) {
+      ElMessage.error(options.resolveErrorMessage(error, '删除凭证失败'))
+    } finally {
+      currentToolbarLoadingKey.value = ''
+      reviewActing.value = false
     }
   }
 
@@ -261,8 +506,6 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
       print: '打印',
       export: '导出',
       copy: '复制',
-      reverse: '冲销',
-      void: '作废',
       searchReplace: '查找替换',
       cashFlow: '现金流量',
       assist: '辅助核算',
@@ -273,8 +516,6 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
       print: '当前将调用浏览器打印能力，后续可继续接入正式打印模板与套打配置。',
       export: '后续可扩展为 Excel、PDF 或外部接口输出。',
       copy: '当前将把整张凭证复制成新的未保存凭证，保留业务内容并重置凭证身份。',
-      reverse: '后续可接入红字冲销与反向凭证生成流程。',
-      void: '后续可接入作废状态流转和权限校验。',
       searchReplace: '后续可在分录摘要、科目和辅助项中做批量查找替换。',
       cashFlow: '请选择当前分录对应的现金流量。',
       assist: '当前下方辅助核算区域已可录入基础信息，后续可扩展为侧边明细抽屉。',
@@ -290,8 +531,22 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
   function handleToolbarAction(action: FinanceNewVoucherToolbarActionKey) {
     if (action === 'new') return void handleNewVoucher()
     if (action === 'modify') return void enterEditMode()
-    if (action === 'insert') return options.insertEntryAfter(options.selectedRowIndex.value)
-    if (action === 'delete') return options.removeSelectedEntry()
+    if (action === 'clear') return void handleClearVoucher()
+    if (action === 'insert') {
+      if (isPeriodMutationBlocked()) {
+        showClosedPeriodWarning()
+        return
+      }
+      return options.insertEntryAfter(options.selectedRowIndex.value)
+    }
+    if (action === 'delete') {
+      if (isPeriodMutationBlocked()) {
+        showClosedPeriodWarning()
+        return
+      }
+      return options.removeSelectedEntry()
+    }
+    if (action === 'deleteVoucher') return void handleDeleteVoucher()
     if (action === 'save') return void handleSave()
     if (action === 'review') return void handleReviewVoucher()
     if (action === 'unreview') return void handleUnreviewVoucher()
@@ -300,8 +555,15 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
     if (action === 'export' && options.isReviewMode.value) return void handleExportCurrentVoucher()
     if (action === 'print') return void options.printCurrentVoucher()
     if (action === 'copy') return void handleCopyVoucher()
+    if (action === 'reverse') return void handleReverseVoucher()
+    if (action === 'void') return void handleVoidVoucher()
+    if (action === 'restore') return void handleRestoreVoucher()
     if (action === 'calculator') return void options.openCalculator()
     if (action === 'cashFlow') {
+      if (isPeriodMutationBlocked()) {
+        showClosedPeriodWarning()
+        return
+      }
       options.handleCashFlowFieldFocus()
       return
     }
@@ -313,6 +575,13 @@ export function useFinanceNewVoucherPageOrchestration(options: UseFinanceNewVouc
     reviewActing,
     currentToolbarLoadingKey,
     actionDialog,
-    handleToolbarAction
+    handleToolbarAction,
+    handleSave
   }
+}
+
+function formatDisplayVoucherNo(voucherType?: string, inoId?: number) {
+  const normalizedVoucherType = String(voucherType || '记').trim() || '记'
+  const normalizedInoId = Number.isFinite(Number(inoId)) ? Math.max(Number(inoId), 0) : 0
+  return `${normalizedVoucherType}-${String(normalizedInoId).padStart(4, '0')}`
 }

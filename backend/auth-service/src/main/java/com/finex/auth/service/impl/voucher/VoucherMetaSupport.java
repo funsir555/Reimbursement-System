@@ -22,6 +22,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.EmployeeDirectorySupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -52,9 +53,10 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
             SystemDepartmentMapper systemDepartmentMapper,
             UserMapper userMapper,
             FinancePeriodCloseMapper financePeriodCloseMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport,
             VoucherContextSupport voucherContextSupport
     ) {
-        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper);
+        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper, financeModuleEnableSupport);
         this.voucherContextSupport = voucherContextSupport;
     }
 
@@ -92,6 +94,7 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
         meta.setProjectClassOptions(loadProjectClassOptions(effectiveCompanyId));
         meta.setProjectOptions(loadProjectOptions(effectiveCompanyId));
         meta.setCashFlowOptions(loadCashFlowOptions(effectiveCompanyId));
+        meta.setMakerOptions(loadMakerOptions(effectiveCompanyId, effectiveBillDate.getYear(), effectiveBillDate.getMonthValue()));
         meta.setDefaultCompanyId(effectiveCompanyId);
         meta.setDefaultYear(effectiveBillDate.getYear());
         meta.setDefaultYearPeriod(buildYearPeriod(effectiveBillDate.getYear(), effectiveBillDate.getMonthValue()));
@@ -104,6 +107,9 @@ public final class VoucherMetaSupport extends AbstractFinanceVoucherSupport {
                 effectiveBillDate.getMonthValue(),
                 effectiveVoucherType
         ));
+        String periodStatus = resolvePeriodStatus(effectiveCompanyId, effectiveBillDate.getYear(), effectiveBillDate.getMonthValue());
+        meta.setPeriodStatus(periodStatus);
+        meta.setPeriodStatusLabel(resolvePeriodStatusLabel(periodStatus));
         meta.setDefaultMaker(resolveMakerName(currentUser, currentUsername));
         meta.setDefaultAttachedDocCount(0);
         meta.setDefaultCurrency(DEFAULT_CURRENCY);

@@ -11,6 +11,7 @@ import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
+import com.finex.auth.entity.FinanceAccountSetModuleEnable;
 import com.finex.auth.entity.FinanceCashFlowItem;
 import com.finex.auth.entity.FinanceCustomer;
 import com.finex.auth.entity.FinanceProjectArchive;
@@ -21,6 +22,7 @@ import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.SystemDepartment;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
@@ -101,6 +103,8 @@ class FinanceVoucherServiceImplTest {
 
     @Mock
     private UserService userService;
+    @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
 
     private FinanceVoucherServiceImpl service;
 
@@ -121,7 +125,8 @@ class FinanceVoucherServiceImplTest {
                 userMapper,
                 financeAccountSetMapper,
                 financePeriodCloseMapper,
-                userService
+                userService,
+                financeAccountSetModuleEnableMapper
         );
 
         lenient().when(systemDepartmentMapper.selectList(any())).thenReturn(List.of());
@@ -137,6 +142,7 @@ class FinanceVoucherServiceImplTest {
         ));
         lenient().when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);
         lenient().when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of());
+        lenient().when(financeAccountSetModuleEnableMapper.selectOne(any())).thenReturn(buildEnabledModule("COMP-001", "GENERAL_LEDGER"));
     }
 
     @Test
@@ -314,6 +320,89 @@ class FinanceVoucherServiceImplTest {
         assertEquals("100.00", result.getTotalCredit().toPlainString());
         assertEquals(new BigDecimal("-100.00"), insertedRows.get(1).getMd());
         assertEquals(BigDecimal.ZERO.setScale(2), insertedRows.get(1).getMc());
+    }
+
+    @Test
+    void saveVoucherAutoForwardsRequestedVoucherNoWhenOccupied() {
+        List<GlAccvouch> insertedRows = new ArrayList<>();
+        doAnswer(invocation -> {
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
+            return 1;
+        }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
+
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("560101", "Management Expense", 0, 0, 0, 0, 0, null, 0),
+                buildSubject("100201", "Bank Deposit", 0, 0, 0, 0, 0, null, 0)
+        ));
+        when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of(12));
+        when(glAccvouchMapper.selectCount(any())).thenReturn(1L, 0L);
+        when(glAccvouchMapper.selectList(any())).thenReturn(List.of(
+                buildRow(1, "COMP-001", 4, "记", 12, 1, "2026-04-09", "已占用凭证", "560101", new BigDecimal("100.00"), BigDecimal.ZERO)
+        ));
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("记");
+        dto.setInoId(12);
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "100201", null, "100.00")
+        ));
+
+        FinanceVoucherSaveResultVO result = service.saveVoucher(dto, 1L, "alice");
+
+        assertEquals(13, result.getInoId());
+        assertEquals(Boolean.TRUE, result.getVoucherNoAutoForwarded());
+        assertEquals(12, result.getRequestedInoId());
+        assertEquals("记-0012", result.getRequestedDisplayVoucherNo());
+        assertEquals("财务制单员", result.getOccupiedByUserName());
+        assertEquals(2, insertedRows.size());
+        assertEquals(13, insertedRows.get(0).getInoId());
+        assertEquals(13, insertedRows.get(1).getInoId());
+    }
+
+    @Test
+    void saveVoucherDoesNotReturnAutoForwardMetadataWhenRequestedVoucherNoIsFree() {
+        List<GlAccvouch> insertedRows = new ArrayList<>();
+        doAnswer(invocation -> {
+            insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
+            return 1;
+        }).when(glAccvouchMapper).insert(any(GlAccvouch.class));
+
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(
+                buildSubject("560101", "Management Expense", 0, 0, 0, 0, 0, null, 0),
+                buildSubject("100201", "Bank Deposit", 0, 0, 0, 0, 0, null, 0)
+        ));
+        when(glAccvouchMapper.selectObjs(any())).thenReturn(List.of(12));
+        when(glAccvouchMapper.selectCount(any())).thenReturn(0L);
+
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("记");
+        dto.setInoId(15);
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "100201", null, "100.00")
+        ));
+
+        FinanceVoucherSaveResultVO result = service.saveVoucher(dto, 1L, "alice");
+
+        assertEquals(15, result.getInoId());
+        assertNull(result.getVoucherNoAutoForwarded());
+        assertNull(result.getRequestedInoId());
+        assertNull(result.getRequestedDisplayVoucherNo());
+        assertNull(result.getOccupiedByUserName());
+        assertEquals(2, insertedRows.size());
+        assertEquals(15, insertedRows.get(0).getInoId());
+        assertEquals(15, insertedRows.get(1).getInoId());
     }
 
     @Test
@@ -894,6 +983,32 @@ class FinanceVoucherServiceImplTest {
     }
 
     @Test
+    void restoreVoucherClearsVoidStateAndReturnsUnpostedStatus() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "\u8d22\u52a1\u5236\u5355\u5458", "COMP-001"));
+
+        GlAccvouch currentRow = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u5df2\u4f5c\u5e9f\u51ed\u8bc1", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO);
+        currentRow.setVoidFlag(1);
+        currentRow.setVoidedAt(LocalDateTime.parse("2026-03-29T10:00:00"));
+        currentRow.setVoidedByUserId(1L);
+        currentRow.setVoidedByName("\u8d22\u52a1\u5236\u5355\u5458");
+        GlAccvouch refreshedRow = buildRow(1, "COMP-001", 3, "\u8bb0", 8, 1, "2026-03-28", "\u6062\u590d\u540e\u51ed\u8bc1", "560101", new BigDecimal("1280.00"), BigDecimal.ZERO);
+
+        when(glAccvouchMapper.selectList(any())).thenReturn(List.of(currentRow), List.of(refreshedRow));
+
+        FinanceVoucherActionResultVO result = service.restoreVoucher("COMP-001", "COMP-001~2026~3~\u8bb0~8", 1L, "alice");
+
+        assertEquals("RESTORE", result.getAction());
+        assertEquals("UNPOSTED", result.getStatus());
+        assertEquals("\u672a\u8bb0\u8d26", result.getStatusLabel());
+        assertNull(result.getVoidedAt());
+        assertNull(result.getVoidedByName());
+
+        ArgumentCaptor<Wrapper<GlAccvouch>> wrapperCaptor = wrapperCaptor();
+        verify(glAccvouchMapper).update(eq(null), wrapperCaptor.capture());
+        assertWrapperContainsValues(wrapperCaptor.getValue(), 0);
+    }
+
+    @Test
     void clearVoucherErrorRestoresReviewedStatus() {
         GlAccvouch currentRow = buildErrorVoucherRow(8, 3, "\u8bb0", "2026-03-28");
         currentRow.setCcheck("\u8d22\u52a1\u4e3b\u7ba1");
@@ -1021,6 +1136,14 @@ class FinanceVoucherServiceImplTest {
         item.setStatus(1);
         item.setSortOrder(1);
         return item;
+    }
+
+    private FinanceAccountSetModuleEnable buildEnabledModule(String companyId, String moduleCode) {
+        FinanceAccountSetModuleEnable record = new FinanceAccountSetModuleEnable();
+        record.setCompanyId(companyId);
+        record.setModuleCode(moduleCode);
+        record.setEnabled(1);
+        return record;
     }
 
     private SystemCompany buildCompany(String companyId, String companyCode, String companyName) {

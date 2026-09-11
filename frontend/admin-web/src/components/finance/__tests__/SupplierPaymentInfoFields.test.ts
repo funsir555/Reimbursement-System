@@ -19,9 +19,13 @@ vi.mock('@/api', () => ({
   financeBankApi: mocks.financeBankApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 const SimpleContainer = defineComponent({
   template: '<div><slot /></div>'

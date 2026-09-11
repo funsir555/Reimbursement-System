@@ -31,6 +31,7 @@
 
         <section class="voucher-info-band">
           <div class="voucher-info-main">
+            <div v-if="isVoidedVoucher" class="voucher-void-flag">作废</div>
             <div class="voucher-info-grid">
               <label class="voucher-info-field voucher-info-company">
                 <span class="voucher-field-label">公司</span>
@@ -44,15 +45,15 @@
                   </el-select>
                   <span class="voucher-number-separator">-</span>
                   <div
-                    v-if="props.pageMode === 'create'"
+                    v-if="supportsSavedVoucherSelector"
                     ref="voucherNoSelectorRef"
                     class="voucher-no-selector"
                     :class="{ 'voucher-no-selector-open': savedVoucherDropdownVisible }"
                   >
                     <el-input
-                      :model-value="voucherNoInputText"
-                      placeholder="请输入凭证号"
-                      :readonly="voucherHeaderLocked"
+                      :model-value="displayVoucherNoInputText"
+                      :placeholder="isCreateLockedEmpty ? '点击下拉查看本期凭证' : '请输入凭证号'"
+                      :readonly="voucherNoFieldReadonly"
                       data-testid="voucher-no-input"
                       @update:model-value="handleVoucherNoInput"
                     />
@@ -60,7 +61,7 @@
                       type="button"
                       class="voucher-no-trigger"
                       data-testid="voucher-no-trigger"
-                      :disabled="voucherHeaderLocked"
+                      :disabled="savedVoucherSelectorDisabled"
                       :aria-expanded="savedVoucherDropdownVisible"
                       @click="toggleSavedVoucherDropdown"
                     >
@@ -407,7 +408,7 @@
       <template #footer>
         <el-button @click="clearCalculator">清空</el-button>
         <el-button @click="runCalculator">计算</el-button>
-        <el-button type="primary" @click="applyCalculatorResult">带回金额框</el-button>
+        <el-button type="primary" :title="calculatorApplyButtonTitle" @click="applyCalculatorResult">带回金额框</el-button>
       </template>
     </el-dialog>
 
@@ -512,7 +513,11 @@ import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
 import { useFinanceNewVoucherAssistCashflowOwner } from './composables/useFinanceNewVoucherAssistCashflowOwner'
-import { useFinanceNewVoucherBootstrap } from './composables/useFinanceNewVoucherBootstrap'
+import {
+  useFinanceNewVoucherBootstrap,
+  type FinanceNewVoucherCreateRouteState
+} from './composables/useFinanceNewVoucherBootstrap'
+import { useFinanceNewVoucherDraftPersistence } from './composables/useFinanceNewVoucherDraftPersistence'
 import { useFinanceNewVoucherHeaderMetaOwner } from './composables/useFinanceNewVoucherHeaderMetaOwner'
 import {
   useFinanceNewVoucherPageOrchestration,
@@ -592,6 +597,7 @@ function createBootstrapEntries(defaultCurrencyCode: string, defaultCurrencyName
 }
 
 const DRAFT_STORAGE_KEY = 'finance-new-voucher-draft'
+const DRAFT_RESTORE_TOAST_SUPPRESSION_KEY = 'finance-new-voucher-draft-restore-toast-suppression'
 const MIN_ENTRY_ROWS = 8
 const COMPANY_SWITCH_GUARD_KEY = 'finance-new-voucher'
 const ENTRY_FIELD_MAX_LENGTH: Record<'cdigest' | 'ccode' | 'cdeptId' | 'cpersonId' | 'ccusId' | 'csupId' | 'citemClass' | 'citemId' | 'cexchName' | 'currencyCode', number> = {
@@ -675,6 +681,9 @@ const form = reactive<VoucherFormState>({
   ctext2: '',
   entries: createBootstrapEntries('CNY', '人民币', MIN_ENTRY_ROWS)
 })
+const createRouteState = ref<FinanceNewVoucherCreateRouteState>('locked-empty')
+const createRouteVoucherNo = ref('')
+const isCreateRoute = computed(() => props.pageMode === 'create')
 const isDetailRoute = computed(() => props.pageMode === 'detail')
 const isReviewMode = computed(() => props.pageMode === 'review')
 const detailVoucherNo = computed(() => String(props.voucherNo || ''))
@@ -682,13 +691,51 @@ const canEditExisting = computed(() => hasPermission('finance:general_ledger:que
 const canReviewVoucher = computed(() => hasPermission('finance:general_ledger:review_voucher:review', currentUser))
 const canUnreviewVoucher = computed(() => hasPermission('finance:general_ledger:review_voucher:unreview', currentUser))
 const canMarkVoucherError = computed(() => hasPermission('finance:general_ledger:review_voucher:mark_error', currentUser))
-const isReadonlyMode = computed(() => isReviewMode.value || (isDetailRoute.value && !editingExisting.value))
-const voucherHeaderLocked = computed(() => isReviewMode.value || isDetailRoute.value)
+const isCreateLockedEmpty = computed(() => isCreateRoute.value && createRouteState.value === 'locked-empty')
+const isCreateLockedLast = computed(() => isCreateRoute.value && createRouteState.value === 'locked-last')
+const isCreateEditingNew = computed(() => isCreateRoute.value && createRouteState.value === 'editing-new')
+const isCreateEditingLast = computed(() => isCreateRoute.value && createRouteState.value === 'editing-last')
+const supportsSavedVoucherSelector = computed(() => props.pageMode !== 'review')
+const currentPeriodStatus = computed(() =>
+  voucherDetail.value?.periodStatus || voucherMeta.value?.periodStatus || 'OPEN'
+)
+const isCurrentPeriodClosed = computed(() => currentPeriodStatus.value === 'CLOSED')
+const isVoidedVoucher = computed(() => voucherDetail.value?.status === 'VOIDED')
+const currentVoucherNo = computed(() => {
+  if (isDetailRoute.value || isReviewMode.value) {
+    return detailVoucherNo.value
+  }
+  if (isCreateLockedLast.value || isCreateEditingLast.value) {
+    return String(createRouteVoucherNo.value || '')
+  }
+  return ''
+})
+const isReadonlyMode = computed(() =>
+  isReviewMode.value
+  || (isDetailRoute.value && !editingExisting.value)
+  || isCreateLockedEmpty.value
+  || isCreateLockedLast.value
+  || isCurrentPeriodClosed.value
+)
+const voucherHeaderLocked = computed(() =>
+  isReviewMode.value
+  || isDetailRoute.value
+  || isCreateLockedEmpty.value
+  || isCreateLockedLast.value
+  || isCreateEditingLast.value
+)
+const voucherNoFieldReadonly = computed(() => {
+  if (isCreateEditingNew.value && !isCurrentPeriodClosed.value) {
+    return false
+  }
+  return true
+})
+const savedVoucherSelectorDisabled = computed(() => !supportsSavedVoucherSelector.value || loading.value || initializing.value)
 const periodFieldLocked = computed(() => props.pageMode === 'create' || voucherHeaderLocked.value)
 const backToListRouteName = computed(() => (isReviewMode.value ? 'finance-review-voucher' : 'finance-query-voucher'))
 const pageTitle = computed(() => {
   if (isReviewMode.value) return '审核凭证'
-  if (!isDetailRoute.value) return '新建凭证'
+  if (!isDetailRoute.value) return isCreateEditingLast.value ? '修改凭证' : '新建凭证'
   return editingExisting.value ? '修改凭证' : '凭证详情'
 })
 const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>(() => {
@@ -711,25 +758,48 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
             label: voucherDetail.value?.status === 'ERROR' ? '取消错误' : '标记错误',
             icon: CircleClose,
             disabled: !canMarkVoucherError.value
-          }
+          },
+          ...(isVoidedVoucher.value
+            ? [{ key: 'restore', label: '恢复', icon: RefreshLeft, disabled: !canEditExisting.value || !currentVoucherNo.value } as ToolbarAction]
+            : [
+                { key: 'reverse', label: '冲销', icon: RefreshLeft, disabled: !canEditExisting.value || !currentVoucherNo.value } as ToolbarAction,
+                { key: 'void', label: '作废', icon: CircleClose, disabled: !canEditExisting.value || !currentVoucherNo.value } as ToolbarAction
+              ]),
+          { key: 'deleteVoucher', label: '删除凭证', icon: Delete, disabled: !canEditExisting.value || !currentVoucherNo.value }
         ]
       }
     ]
   }
 
   const primaryActions: ToolbarAction[] = [{ key: 'new', label: '新增', icon: Plus, emphasis: 'secondary', shortcut: 'F5' }]
-  if (isDetailRoute.value && !editingExisting.value && voucherDetail.value?.editable && canEditExisting.value) {
+  if (
+    ((isDetailRoute.value && !editingExisting.value) || isCreateLockedLast.value)
+    && voucherDetail.value?.editable
+    && canEditExisting.value
+  ) {
     primaryActions.push({ key: 'modify', label: '修改', icon: Edit, emphasis: 'primary' })
   }
 
   const editActions: ToolbarAction[] = [
     { key: 'print', label: '打印', icon: Printer, shortcut: 'Ctrl+P' },
     { key: 'export', label: '导出', icon: Download },
-    { key: 'copy', label: '复制', icon: DocumentCopy, shortcut: 'Ctrl+F' },
-    { key: 'reverse', label: '冲销', icon: RefreshLeft },
-    { key: 'void', label: '作废', icon: CircleClose }
+    { key: 'copy', label: '复制', icon: DocumentCopy, shortcut: 'Ctrl+F' }
   ]
-  if (!isReadonlyMode.value) {
+  if (currentVoucherNo.value) {
+    if (isVoidedVoucher.value) {
+      editActions.push(
+        { key: 'restore', label: '恢复', icon: RefreshLeft, disabled: !canEditExisting.value },
+        { key: 'deleteVoucher', label: '删除凭证', icon: Delete, disabled: !canEditExisting.value }
+      )
+    } else {
+      editActions.push(
+        { key: 'reverse', label: '冲销', icon: RefreshLeft, disabled: !canEditExisting.value },
+        { key: 'void', label: '作废', icon: CircleClose, disabled: !canEditExisting.value },
+        { key: 'deleteVoucher', label: '删除凭证', icon: Delete, disabled: !canEditExisting.value }
+      )
+    }
+  }
+  if (!isReadonlyMode.value || isCurrentPeriodClosed.value) {
     editActions.push({ key: 'insert', label: '插入行', icon: Top })
     editActions.push({ key: 'delete', label: '删行', icon: Delete, shortcut: 'Ctrl+D' })
   }
@@ -738,7 +808,7 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
     { key: 'searchReplace', label: '查找替换', icon: Search },
     { key: 'cashFlow', label: '现金流量', icon: TrendCharts }
   ]
-  if (!isReadonlyMode.value) {
+  if (!isReadonlyMode.value || isCurrentPeriodClosed.value) {
     actionGroup.push({ key: 'save', label: '保存', icon: Select, emphasis: 'primary', shortcut: 'F6' })
   }
 
@@ -751,7 +821,8 @@ const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>
       actions: [
         { key: 'assist', label: '辅助核算', icon: Tickets },
         { key: 'balance', label: '平衡', icon: Coin },
-        { key: 'calculator', label: '计算器', icon: Tools, shortcut: 'F9' }
+        { key: 'calculator', label: '计算器', icon: Tools, shortcut: 'F9' },
+        ...(isCreateEditingNew.value ? [{ key: 'clear', label: '清空', icon: CircleClose } as ToolbarAction] : [])
       ]
     }
   ]
@@ -768,6 +839,7 @@ const activeAmountTargetLabel = computed(() => {
   }
   return `当前将带回第 ${target.rowIndex + 1} 行${target.field === 'md' ? '借方金额' : '贷方金额'}`
 })
+const calculatorApplyButtonTitle = '带回金额框（空格）'
 const {
   loading,
   initializing,
@@ -791,10 +863,15 @@ const {
   hasUnsavedChanges: () => hasUnsavedChanges.value,
   validationErrors,
   readDraft,
+  consumeDraftRestoreToastSuppression,
+  discardDraft: discardCreateDraft,
+  resumeDraftPersistence: resumeCreateDraftPersistence,
   resetFormFromMeta,
   applyDraft,
   applyDetail,
   markCommitted,
+  setCreateRouteState,
+  setCreateRouteVoucherNo,
   parseVoucherCompanyId,
   resolveErrorMessage
 })
@@ -907,7 +984,8 @@ const {
   reviewActing,
   currentToolbarLoadingKey,
   actionDialog,
-  handleToolbarAction
+  handleToolbarAction,
+  handleSave
 } = useFinanceNewVoucherPageOrchestration({
   router,
   voucherMeta,
@@ -918,9 +996,14 @@ const {
   isReviewMode,
   canEditExisting,
   detailVoucherNo,
+  currentVoucherNo,
+  hasUnsavedChanges,
+  createRouteState: computed(() => createRouteState.value),
+  currentCreateRouteVoucherNo: computed(() => createRouteVoucherNo.value),
   selectedRow,
   selectedRowIndex,
   currentCompanyId: () => financeCompany.currentCompanyId || form.companyId,
+  isCurrentPeriodClosed,
   getCurrentContext: () => ({
     companyId: financeCompany.currentCompanyId || form.companyId,
     billDate: form.dbillDate,
@@ -930,9 +1013,13 @@ const {
   selectRow,
   loadMeta,
   loadDetail,
+  refreshSavedVoucherSuggestions: loadSavedVoucherSuggestions,
+  requestCreateVoucherTakeover: () => financeWorkspace.requestCreateVoucherTakeover(),
   clearDraft,
   resetFormFromMeta,
   markCommitted,
+  setCreateRouteState,
+  setCreateRouteVoucherNo,
   buildPayload,
   validateVoucher,
   ensureSelectedRowUsesLeafSubject,
@@ -943,7 +1030,8 @@ const {
   removeSelectedEntry: requestRemoveSelectedEntry,
   copyCurrentVoucher,
   openCalculator,
-  printCurrentVoucher
+  printCurrentVoucher,
+  clearEditableVoucher: clearEditableVoucherContents
 })
 const accountOptionsForDisplay = computed(() => {
   const options = [...(voucherMeta.value?.accountOptions || [])]
@@ -992,6 +1080,7 @@ const cashFlowOptionsForDisplay = computed(() => {
   return options
 })
 const savedVoucherBillMonth = computed(() => String(form.dbillDate || '').slice(0, 7))
+const displayVoucherNoInputText = computed(() => (isCreateLockedEmpty.value ? '' : voucherNoInputText.value))
 const filteredSavedVoucherSuggestions = computed(() => {
   const keyword = String(savedVoucherFilterKeyword.value || '').trim().toLowerCase()
   if (!keyword) {
@@ -1029,9 +1118,9 @@ watch(
 )
 
 watch(
-  () => [props.pageMode, financeCompany.currentCompanyId, savedVoucherBillMonth.value, form.csign] as const,
+  () => [props.pageMode, financeCompany.currentCompanyId, savedVoucherBillMonth.value] as const,
   async ([pageMode]) => {
-    if (pageMode !== 'create') {
+    if (pageMode === 'review') {
       savedVoucherSuggestions.value = []
       return
     }
@@ -1041,16 +1130,24 @@ watch(
 )
 
 watch(
-  () => isReadonlyMode.value,
-  (readonly) => {
+  () => [isReadonlyMode.value, isCreateEditingNew.value] as const,
+  ([readonly]) => {
     if (!workspaceTabPath) {
       return
     }
     if (readonly) {
       financeWorkspace.unregisterCloseGuard(workspaceTabPath)
+      financeWorkspace.unregisterPeriodSwitchGuard(workspaceTabPath)
+      financeWorkspace.unregisterCreateVoucherTakeoverGuard(workspaceTabPath)
       return
     }
-    financeWorkspace.registerCloseGuard(workspaceTabPath, () => confirmDiscardCurrentVoucher('close'))
+    financeWorkspace.registerCloseGuard(workspaceTabPath, async () => Boolean(await confirmDiscardCurrentVoucher()))
+    financeWorkspace.registerPeriodSwitchGuard(workspaceTabPath, async () => Boolean(await confirmFinancePeriodSwitch()))
+    if (isCreateEditingNew.value) {
+      financeWorkspace.registerCreateVoucherTakeoverGuard(workspaceTabPath, async () => Boolean(await confirmCreateVoucherTakeover()))
+    } else {
+      financeWorkspace.unregisterCreateVoucherTakeoverGuard(workspaceTabPath)
+    }
   },
   { immediate: true }
 )
@@ -1064,6 +1161,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleVoucherNoDropdownClickOutside)
   if (workspaceTabPath) {
     financeWorkspace.unregisterCloseGuard(workspaceTabPath)
+    financeWorkspace.unregisterPeriodSwitchGuard(workspaceTabPath)
+    financeWorkspace.unregisterCreateVoucherTakeoverGuard(workspaceTabPath)
   }
 })
 
@@ -1152,7 +1251,7 @@ function handleVoucherNoDropdownClickOutside(event: MouseEvent) {
 }
 
 function toggleSavedVoucherDropdown() {
-  if (voucherHeaderLocked.value || props.pageMode !== 'create') {
+  if (savedVoucherSelectorDisabled.value) {
     return
   }
   captureVoucherNoSwitchSnapshot()
@@ -1171,14 +1270,15 @@ function handleVoucherNoInput(value: string | number) {
   }
 }
 
-async function loadSavedVoucherSuggestions() {
-  if (props.pageMode !== 'create') {
+async function loadSavedVoucherSuggestions(context?: { companyId?: string; billDate?: string; csign?: string }) {
+  if (props.pageMode === 'review') {
     savedVoucherSuggestions.value = []
     return
   }
-  const companyId = financeCompany.currentCompanyId || form.companyId
-  const billMonth = savedVoucherBillMonth.value
-  if (!companyId || !billMonth || !form.csign) {
+  const companyId = String(context?.companyId || financeCompany.currentCompanyId || form.companyId || '')
+  const billDate = String(context?.billDate || form.dbillDate || '')
+  const billMonth = billDate.slice(0, 7)
+  if (!companyId || !billMonth) {
     savedVoucherSuggestions.value = []
     return
   }
@@ -1187,7 +1287,6 @@ async function loadSavedVoucherSuggestions() {
     const res = await financeApi.listVouchers({
       companyId,
       billMonth,
-      csign: form.csign,
       page: 1,
       pageSize: 500
     })
@@ -1209,26 +1308,17 @@ async function loadSavedVoucherSuggestions() {
   }
 }
 
-function restoreVoucherNoSwitchSnapshot() {
-  savedVoucherDropdownVisible.value = false
-  voucherNoInputText.value = voucherNoSwitchSnapshot.value.text || ''
-  savedVoucherFilterKeyword.value = voucherNoSwitchSnapshot.value.filterKeyword || ''
-  form.inoId = voucherNoSwitchSnapshot.value.inoId
-}
-
-async function confirmDiscardCurrentVoucher(reason: 'switch' | 'close') {
+async function confirmDiscardCurrentVoucher() {
   if (!hasUnsavedChanges.value) {
     return true
   }
-  const config = reason === 'switch'
-    ? {
-        title: '切换凭证',
-        message: '当前凭证未保存，切换后当前录入将丢失，确认切换吗'
-      }
-    : {
-        title: '关闭凭证',
-        message: '当前凭证未保存，关闭后当前录入将丢失，确认关闭吗'
-      }
+  if ((isDetailRoute.value && editingExisting.value) || isCreateEditingLast.value) {
+    return await confirmSaveBeforeCloseDetailVoucher()
+  }
+  const config = {
+    title: '关闭凭证',
+    message: '当前凭证未保存，关闭后当前录入将丢失，确认关闭吗'
+  }
   try {
     await ElMessageBox.confirm(config.message, config.title, {
       type: 'warning',
@@ -1236,7 +1326,7 @@ async function confirmDiscardCurrentVoucher(reason: 'switch' | 'close') {
       cancelButtonText: '取消'
     })
     if (props.pageMode === 'create') {
-      clearDraft(financeCompany.currentCompanyId || form.companyId)
+      discardDraftAndResetCreateVoucher()
     }
     return true
   } catch {
@@ -1244,27 +1334,101 @@ async function confirmDiscardCurrentVoucher(reason: 'switch' | 'close') {
   }
 }
 
+async function confirmSaveBeforeCloseDetailVoucher() {
+  try {
+    await ElMessageBox.confirm('当前凭证已修改，是否保存修改？', '关闭凭证', {
+      type: 'warning',
+      confirmButtonText: '保存并关闭',
+      cancelButtonText: '直接关闭',
+      distinguishCancelAndClose: true
+    })
+    return await handleSave()
+  } catch (error: unknown) {
+    if (error === 'cancel') {
+      return true
+    }
+    return false
+  }
+}
+
+async function confirmSaveBeforeSwitchVoucher() {
+  try {
+    await ElMessageBox.confirm('是否保存当前修改', '切换凭证', {
+      type: 'warning',
+      confirmButtonText: '保存后切换',
+      cancelButtonText: '直接切换',
+      distinguishCancelAndClose: true
+    })
+    return await handleSave()
+  } catch (error: unknown) {
+    if (error === 'cancel') {
+      return true
+    }
+    return false
+  }
+}
+
 async function handleSavedVoucherSelect(item: SavedVoucherSuggestion) {
-  if (props.pageMode !== 'create' || !item?.voucherNo) {
+  if (!supportsSavedVoucherSelector.value || !item?.voucherNo) {
     return
   }
   savedVoucherDropdownVisible.value = false
-  const allowed = await confirmDiscardCurrentVoucher('switch')
-  if (!allowed) {
-    restoreVoucherNoSwitchSnapshot()
-    return
+  if (isDetailRoute.value && editingExisting.value && hasUnsavedChanges.value) {
+    const confirmed = await confirmSaveBeforeSwitchVoucher()
+    if (!confirmed) {
+      return
+    }
   }
-  clearDraft(financeCompany.currentCompanyId || form.companyId)
-  validationErrors.value = []
-  const targetLocation = router.resolve({
+  await router.push({
     name: 'finance-query-voucher-detail',
     params: { voucherNo: item.voucherNo }
   })
-  financeWorkspace.replaceTabPath(workspaceTabPath, targetLocation.fullPath, '凭证详情')
-  await router.replace({
-    name: 'finance-query-voucher-detail',
-    params: { voucherNo: item.voucherNo }
-  })
+}
+
+async function confirmFinancePeriodSwitch() {
+  if (!hasUnsavedChanges.value) {
+    return true
+  }
+  const currentTabTitle =
+    financeWorkspace.tabs.find((item) => item.path === workspaceTabPath)?.title || pageTitle.value || '当前页签'
+  try {
+    await ElMessageBox.confirm(
+      `当前“${currentTabTitle}”中存在未保存的草稿，强制切换将清空已录入内容，确认切换吗？`,
+      '切换期间',
+      {
+        type: 'warning',
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      }
+    )
+    if (props.pageMode === 'create') {
+      discardDraftAndResetCreateVoucher()
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function confirmCreateVoucherTakeover() {
+  if (props.pageMode !== 'create' || !hasUnsavedChanges.value) {
+    return true
+  }
+  try {
+    await ElMessageBox.confirm(
+      '新建凭证中存在未保存的草稿，当前操作将覆盖已录入的内容，确认操作吗？',
+      '接管新建凭证',
+      {
+        type: 'warning',
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+      }
+    )
+    discardDraftAndResetCreateVoucher()
+    return true
+  } catch {
+    return false
+  }
 }
 
 function isToolbarActionEnabled(actionKey: ToolbarActionKey) {
@@ -1320,6 +1484,11 @@ function resolveShortcutAction(event: KeyboardEvent): ToolbarActionKey | null {
 function handleCalculatorDialogKeydown(event: KeyboardEvent) {
   if (!calculatorDialogVisible.value || event.metaKey || event.ctrlKey || event.altKey) {
     return false
+  }
+  if (event.code === 'Space' || event.key === ' ') {
+    event.preventDefault()
+    void applyCalculatorResult()
+    return true
   }
   if (/^[0-9+\-*/().]$/.test(event.key)) {
     event.preventDefault()
@@ -1510,6 +1679,56 @@ async function applyCalculatorResult() {
   await focusGridCell(target.rowIndex, target.field)
 }
 
+async function clearEditableVoucherContents() {
+  if (!isCreateEditingNew.value || isReadonlyMode.value) {
+    return
+  }
+  const meta = voucherMeta.value
+  if (!meta) {
+    return
+  }
+  clearDraft(financeCompany.currentCompanyId || form.companyId)
+  validationErrors.value = []
+  resetFormFromMeta(meta, financeCompany.currentCompanyId || form.companyId)
+  savedVoucherDropdownVisible.value = false
+  savedVoucherFilterKeyword.value = ''
+  voucherNoInputText.value = String(voucherNoInput.value || '')
+  voucherNoSwitchSnapshot.value = {
+    text: voucherNoInputText.value,
+    inoId: form.inoId,
+    filterKeyword: ''
+  }
+  activeAmountTarget.value = null
+  markCommitted()
+  resumeCreateDraftPersistence()
+  await nextTick()
+}
+
+function discardDraftAndResetCreateVoucher() {
+  if (props.pageMode !== 'create') {
+    return
+  }
+  discardCreateDraft(financeCompany.currentCompanyId || form.companyId)
+  setCreateRouteVoucherNo('')
+  setCreateRouteState('locked-empty')
+  validationErrors.value = []
+  savedVoucherDropdownVisible.value = false
+  savedVoucherFilterKeyword.value = ''
+  activeAmountTarget.value = null
+  const meta = voucherMeta.value
+  if (!meta) {
+    return
+  }
+  resetFormFromMeta(meta, financeCompany.currentCompanyId || form.companyId)
+  voucherNoInputText.value = String(voucherNoInput.value || '')
+  voucherNoSwitchSnapshot.value = {
+    text: voucherNoInputText.value,
+    inoId: form.inoId,
+    filterKeyword: ''
+  }
+  markCommitted()
+}
+
 async function copyCurrentVoucher() {
   const companyId = financeCompany.currentCompanyId || form.companyId
   const payload = buildPayload()
@@ -1525,15 +1744,19 @@ async function copyCurrentVoucher() {
   }
   writeDraft(copiedDraft, companyId)
   if (props.pageMode !== 'create') {
+    markNextDraftRestoreToastSuppressed(companyId)
+    financeWorkspace.invalidateCache('/finance/general-ledger/new-voucher')
     await router.push({ name: 'finance-new-voucher' })
     return
   }
   if (!voucherMeta.value) {
     return
   }
+  setCreateRouteVoucherNo('')
+  setCreateRouteState('editing-new')
   applyDraft(copiedDraft, voucherMeta.value, companyId)
   validationErrors.value = []
-  markCommitted()
+  resumeCreateDraftPersistence()
 }
 
 function evaluateCalculatorExpression(expression: string) {
@@ -1648,6 +1871,15 @@ function readDraft(companyId = financeCompany.currentCompanyId): FinanceVoucherS
   }
 }
 
+function consumeDraftRestoreToastSuppression(companyId = financeCompany.currentCompanyId) {
+  const storageKey = buildDraftRestoreToastSuppressionKey(companyId)
+  if (!window.sessionStorage.getItem(storageKey)) {
+    return false
+  }
+  window.sessionStorage.removeItem(storageKey)
+  return true
+}
+
 function writeDraft(draft: FinanceVoucherSavePayload, companyId = financeCompany.currentCompanyId || draft.companyId) {
   window.sessionStorage.setItem(buildDraftStorageKey(companyId), JSON.stringify(draft))
   hasDraft.value = true
@@ -1655,8 +1887,48 @@ function writeDraft(draft: FinanceVoucherSavePayload, companyId = financeCompany
 
 function clearDraft(companyId = financeCompany.currentCompanyId) {
   window.sessionStorage.removeItem(buildDraftStorageKey(companyId))
+  window.sessionStorage.removeItem(buildDraftRestoreToastSuppressionKey(companyId))
   hasDraft.value = false
 }
+
+function markNextDraftRestoreToastSuppressed(companyId = financeCompany.currentCompanyId || form.companyId) {
+  window.sessionStorage.setItem(buildDraftRestoreToastSuppressionKey(companyId), '1')
+}
+
+function buildDraftRestoreToastSuppressionKey(companyId = financeCompany.currentCompanyId || form.companyId) {
+  return `${DRAFT_RESTORE_TOAST_SUPPRESSION_KEY}:${companyId || 'default'}`
+}
+
+const draftPersistence = useFinanceNewVoucherDraftPersistence({
+  pageMode: computed(() => props.pageMode),
+  draftPersistenceEnabled: computed(() => isCreateEditingNew.value),
+  initializing,
+  voucherMetaReady: computed(() => Boolean(voucherMeta.value)),
+  hasUnsavedChanges,
+  hasDraft,
+  currentCompanyId: () => financeCompany.currentCompanyId || form.companyId,
+  buildPayload,
+  buildSnapshot,
+  writeDraft,
+  clearDraft
+})
+
+function discardCreateDraft(companyId = financeCompany.currentCompanyId || form.companyId) {
+  draftPersistence.discardDraft(companyId)
+}
+
+function resumeCreateDraftPersistence() {
+  draftPersistence.resumePersistence()
+}
+
+function setCreateRouteState(state: FinanceNewVoucherCreateRouteState) {
+  createRouteState.value = state
+}
+
+function setCreateRouteVoucherNo(voucherNo: string) {
+  createRouteVoucherNo.value = String(voucherNo || '')
+}
+
 function selectRow(index: number) {
   selectedRowIndex.value = Math.max(0, Math.min(index, form.entries.length - 1))
 }
@@ -1758,18 +2030,19 @@ defineExpose({
 .voucher-notice-item-info { border-color: #bfd4f2; background: linear-gradient(180deg, #f3f8ff 0%, #e9f1ff 100%); color: #325985; }
 .voucher-page-header { display: flex; justify-content: center; }
 .voucher-page-header h1 { font-size: 21px; font-weight: 700; color: #1e3a5f; letter-spacing: .2em; line-height: 1.15; }
-.voucher-toolbar-panel { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 11px; border-bottom: 1px solid rgba(216,226,240,.9); border-radius: 22px; background: rgba(255,255,255,.92); padding: 11px 13px; backdrop-filter: blur(10px); box-shadow: 0 12px 24px rgba(15,23,42,.07); }
-.toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.toolbar-group + .toolbar-group { position: relative; padding-left: 13px; }
+.voucher-toolbar-panel { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 9px; border-bottom: 1px solid rgba(216,226,240,.9); border-radius: 22px; background: rgba(255,255,255,.92); padding: 10px 12px; backdrop-filter: blur(10px); box-shadow: 0 12px 24px rgba(15,23,42,.07); }
+.toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.toolbar-group + .toolbar-group { position: relative; padding-left: 11px; }
 .toolbar-group + .toolbar-group::before { position: absolute; left: 0; top: 4px; height: 28px; width: 1px; background: linear-gradient(180deg, transparent 0%, #d5deea 22%, #d5deea 78%, transparent 100%); content: ''; }
-.toolbar-button { height: 32px; min-width: 88px; border-radius: 12px; border-color: #d6e0ec; background: #fff; color: #365070; font-weight: 600; padding: 0 12px; }
-.toolbar-button-large { height: 42px; min-width: 116px; padding: 0 16px; font-size: 14px; }
+.toolbar-button { height: 30px; min-width: 82px; border-radius: 12px; border-color: #d6e0ec; background: #fff; color: #365070; font-weight: 600; padding: 0 10px; }
+.toolbar-button-large { height: 38px; min-width: 104px; padding: 0 14px; font-size: 14px; }
 .toolbar-button-accent { border-color: #9cbbe3; background: linear-gradient(180deg, #f0f7ff 0%, #e4efff 100%); color: #24528a; box-shadow: 0 12px 24px rgba(59,130,246,.14); }
 .toolbar-button-primary { box-shadow: 0 16px 30px rgba(37,99,235,.2); }
 .voucher-info-band { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; }
 .voucher-lower { display: grid; grid-template-columns: minmax(0,1fr) 260px; gap: 10px; }
 .voucher-lower-full { grid-template-columns: minmax(0,1fr); }
 .voucher-info-main, .voucher-ledger-card, .voucher-assist-card, .voucher-side-card { border-radius: 22px; border: 1px solid #d8e2f0; background: rgba(255,255,255,.94); box-shadow: 0 10px 24px rgba(15,23,42,.04); padding: 14px; }
+.voucher-void-flag { display: inline-flex; align-self: flex-start; margin-bottom: 10px; border-radius: 999px; border: 1px solid #f5b5b5; background: linear-gradient(180deg, #fff4f4 0%, #ffe7e7 100%); padding: 4px 10px; color: #c73333; font-size: 12px; font-weight: 700; letter-spacing: .18em; line-height: 1.2; }
 .voucher-info-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px 12px; }
 .assist-grid { display: grid; grid-template-columns: repeat(12, minmax(0,1fr)); gap: 8px 12px; }
 .voucher-info-field, .assist-field { display: flex; align-items: center; gap: 10px; min-height: 34px; }

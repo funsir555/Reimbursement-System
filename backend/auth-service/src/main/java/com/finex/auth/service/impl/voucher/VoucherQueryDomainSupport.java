@@ -20,6 +20,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 /**
  * VoucherQueryDomainSupport：领域规则支撑类。
@@ -42,9 +43,10 @@ public final class VoucherQueryDomainSupport extends AbstractFinanceVoucherSuppo
             SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
             UserMapper userMapper,
-            FinancePeriodCloseMapper financePeriodCloseMapper
+            FinancePeriodCloseMapper financePeriodCloseMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
-        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper);
+        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper, financeModuleEnableSupport);
     }
 
     /**

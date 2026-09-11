@@ -268,6 +268,7 @@
               :approval-edit-mode="isApprovalModifyMode"
               :allow-edit-form-module="allowEditFormModule"
               :allow-edit-pay-account="allowEditPayAccount"
+              @open-document-detail="openDocumentDetail"
             />
           </div>
         </el-card>
@@ -362,6 +363,11 @@
       @confirm-submit="confirmSubmitAfterManualSelection"
       @save-draft="saveDraftManually"
     />
+
+    <ExpenseDocumentReadonlyDrawer
+      v-model="documentDrawerVisible"
+      :document-code="documentDrawerCode"
+    />
   </div>
 </template>
 
@@ -392,6 +398,7 @@ import {
   resolveDocumentTotalAmount
 } from './expenseDetailRuntime'
 import ExpenseManualApproverSubmitDialog from './components/ExpenseManualApproverSubmitDialog.vue'
+import ExpenseDocumentReadonlyDrawer from './components/ExpenseDocumentReadonlyDrawer.vue'
 import ExpenseRuntimeFormEditor from './components/ExpenseRuntimeFormEditor.vue'
 import { useExpenseCreateBootstrap } from './composables/useExpenseCreateBootstrap'
 import { useExpenseCreateDraftPersistence } from './composables/useExpenseCreateDraftPersistence'
@@ -449,6 +456,8 @@ const expenseDetails = ref<ExpenseDetailInstance[]>([])
 const manualApproverSelections = reactive<Record<string, string[]>>({})
 const allowEditFormModule = ref(false)
 const allowEditPayAccount = ref(false)
+const documentDrawerVisible = ref(false)
+const documentDrawerCode = ref('')
 
 let floatingBarResizeObserver: ResizeObserver | null = null
 
@@ -865,6 +874,15 @@ onBeforeUnmount(() => {
 })
 function applyTemplateDetail(nextDetail: ExpenseCreateTemplateDetail) {
   templateDetail.value = cloneValue(nextDetail)
+}
+
+function openDocumentDetail(documentCode: string) {
+  const normalizedCode = String(documentCode || '').trim()
+  if (!normalizedCode) {
+    return
+  }
+  documentDrawerCode.value = normalizedCode
+  documentDrawerVisible.value = true
 }
 
 function resetFormValues() {

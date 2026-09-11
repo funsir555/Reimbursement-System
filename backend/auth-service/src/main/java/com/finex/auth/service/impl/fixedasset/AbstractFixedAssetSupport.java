@@ -68,6 +68,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.EmployeeDirectorySupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -147,6 +148,7 @@ public abstract class AbstractFixedAssetSupport {
     private final SystemCompanyMapper systemCompanyMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final UserMapper userMapper;
+    private final FinanceModuleEnableSupport financeModuleEnableSupport;
 
     private final ConcurrentHashMap<String, Object> voucherNoLocks = new ConcurrentHashMap<>();
 
@@ -170,7 +172,8 @@ public abstract class AbstractFixedAssetSupport {
             GlAccvouchMapper glAccvouchMapper,
             SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         this.faAssetCategoryMapper = faAssetCategoryMapper;
         this.faAssetAccountPolicyMapper = faAssetAccountPolicyMapper;
@@ -189,6 +192,7 @@ public abstract class AbstractFixedAssetSupport {
         this.systemCompanyMapper = systemCompanyMapper;
         this.systemDepartmentMapper = systemDepartmentMapper;
         this.userMapper = userMapper;
+        this.financeModuleEnableSupport = financeModuleEnableSupport;
     }
     /**
      * 获取元数据。
@@ -209,25 +213,25 @@ public abstract class AbstractFixedAssetSupport {
         meta.setEmployeeDirectory(EmployeeDirectorySupport.buildEmployeeDirectory(employees, userMapper, systemDepartmentMapper));
         meta.setCategoryOptions(listAccessibleCategories(effectiveCompanyId).stream().map(this::toCategoryOption).toList());
         meta.setDepreciationMethodOptions(List.of(
-                option(METHOD_STRAIGHT_LINE, "骞冲潎骞撮檺娉?"),
-                option(METHOD_WORKLOAD, "宸ヤ綔閲忔硶"),
-                option(METHOD_DOUBLE_DECLINING, "鍙屽€嶄綑棰濋€掑噺娉?")
+                option(METHOD_STRAIGHT_LINE, "平均年限法"),
+                option(METHOD_WORKLOAD, "工作量法"),
+                option(METHOD_DOUBLE_DECLINING, "双倍余额递减法")
         ));
         meta.setCardStatusOptions(List.of(
-                option(CARD_STATUS_DRAFT, "鑽夌"),
-                option(CARD_STATUS_IN_USE, "鍦ㄧ敤"),
-                option(CARD_STATUS_IDLE, "闂茬疆"),
-                option(CARD_STATUS_DISPOSED, "宸插缃?")
+                option(CARD_STATUS_DRAFT, "草稿"),
+                option(CARD_STATUS_IN_USE, "在用"),
+                option(CARD_STATUS_IDLE, "闲置"),
+                option(CARD_STATUS_DISPOSED, "已处置")
         ));
         meta.setChangeTypeOptions(List.of(
-                option(CHANGE_ADD, "璧勪骇澧炲姞"),
-                option(CHANGE_TRANSFER_DEPT, "閮ㄩ棬璋冩暣"),
-                option(CHANGE_TRANSFER_KEEPER, "淇濈浜鸿皟鏁?"),
-                option(CHANGE_VALUE_ADJUST, "鍘熷€艰皟鏁?"),
-                option(CHANGE_RESIDUAL_ADJUST, "娈嬪€艰皟鏁?"),
-                option(CHANGE_LIFE_ADJUST, "浣跨敤骞撮檺璋冩暣")
+                option(CHANGE_ADD, "资产增加"),
+                option(CHANGE_TRANSFER_DEPT, "部门调整"),
+                option(CHANGE_TRANSFER_KEEPER, "保管人调整"),
+                option(CHANGE_VALUE_ADJUST, "原值调整"),
+                option(CHANGE_RESIDUAL_ADJUST, "残值调整"),
+                option(CHANGE_LIFE_ADJUST, "使用年限调整")
         ));
-        meta.setBookOptions(List.of(option(BOOK_CODE_FINANCE, "璐㈠姟璐?")));
+        meta.setBookOptions(List.of(option(BOOK_CODE_FINANCE, "财务账簿")));
         meta.setDefaultCompanyId(effectiveCompanyId);
         meta.setDefaultBookCode(bookCode);
         meta.setDefaultFiscalYear(effectiveYear);
@@ -255,7 +259,7 @@ public abstract class AbstractFixedAssetSupport {
         public FixedAssetCategoryVO createCategory(FixedAssetCategorySaveDTO dto, String operatorName) {
         validateCategorySave(dto);
         if (findCategoryByCode(dto.getCompanyId(), dto.getCategoryCode()) != null) {
-            throw new IllegalStateException("?????????");
+            throw new IllegalStateException("资产类别编码已存在");
         }
 
         FaAssetCategory category = new FaAssetCategory();
@@ -276,7 +280,7 @@ public abstract class AbstractFixedAssetSupport {
 
         FaAssetCategory duplicate = findCategoryByCode(existing.getCompanyId(), dto.getCategoryCode());
         if (duplicate != null && !Objects.equals(duplicate.getId(), id)) {
-            throw new IllegalStateException("?????????");
+            throw new IllegalStateException("资产类别编码已存在");
         }
 
         fillCategory(existing, dto, operatorName, false);
@@ -329,7 +333,7 @@ public abstract class AbstractFixedAssetSupport {
         public FixedAssetCardVO createCard(FixedAssetCardSaveDTO dto, String operatorName) {
         validateCardSave(dto, null);
         if (findCardByCode(dto.getCompanyId(), dto.getAssetCode()) != null) {
-            throw new IllegalStateException("???????");
+            throw new IllegalStateException("资产编码已存在");
         }
         FaAssetCategory category = requireAccessibleCategory(dto.getCompanyId(), dto.getCategoryId(), null);
 
@@ -362,10 +366,10 @@ public abstract class AbstractFixedAssetSupport {
         int period = normalizePeriod(fiscalPeriod == null ? LocalDate.now().getMonthValue() : fiscalPeriod);
         String sample = String.join("\n",
                 "assetCode,assetName,categoryCode,acquireDate,inServiceDate,originalAmount,accumDeprAmount,salvageAmount,usefulLifeMonths,depreciatedMonths,remainingMonths,useDeptId,keeperUserId,status,workTotal,workUsed,remark",
-                "FA-OPEN-001,???????,IT_ASSET," + year + "-" + String.format("%02d", period) + "-01," + year + "-" + String.format("%02d", period) + "-01,12000,2000,600,36,6,30,,,IN_USE,,,??????-" + effectiveCompanyId
+                "FA-OPEN-001,固定资产电脑,IT_ASSET," + year + "-" + String.format("%02d", period) + "-01," + year + "-" + String.format("%02d", period) + "-01,12000,2000,600,36,6,30,,,IN_USE,,,固定资产期初导入-" + effectiveCompanyId
         );
         FixedAssetTemplateVO template = new FixedAssetTemplateVO();
-        template.setFileName("??????????.csv");
+        template.setFileName("固定资产期初导入模板.csv");
         template.setContentType("text/csv");
         template.setTemplateContent(sample);
         return template;
@@ -449,7 +453,7 @@ public abstract class AbstractFixedAssetSupport {
     public FixedAssetOpeningImportResultVO getOpeningImportResult(Long batchId) {
         FaAssetOpeningImport batch = faAssetOpeningImportMapper.selectById(batchId);
         if (batch == null) {
-            throw new IllegalStateException("?????????");
+            throw new IllegalStateException("期初导入批次不存在");
         }
         List<FaAssetOpeningImportLine> lines = faAssetOpeningImportLineMapper.selectList(
                 Wrappers.<FaAssetOpeningImportLine>lambdaQuery()
@@ -525,12 +529,12 @@ public abstract class AbstractFixedAssetSupport {
         public FixedAssetChangeBillVO postChangeBill(Long id, String operatorName) {
         FaAssetChangeBill bill = requireChangeBill(id);
         if (!Objects.equals(bill.getStatus(), STATUS_DRAFT)) {
-            throw new IllegalStateException("???????????????");
+            throw new IllegalStateException("当前变动单不是草稿状态，不能过账");
         }
         ensurePeriodOpen(bill.getCompanyId(), bill.getBookCode(), bill.getFiscalYear(), bill.getFiscalPeriod());
         List<FaAssetChangeLine> lines = listChangeLines(bill.getId());
         if (lines.isEmpty()) {
-            throw new IllegalStateException("?????????");
+            throw new IllegalStateException("当前变动单没有明细行");
         }
 
         VoucherAccumulator voucher = new VoucherAccumulator();
@@ -549,7 +553,7 @@ public abstract class AbstractFixedAssetSupport {
                     bill.getBookCode(),
                     bill.getFiscalPeriod(),
                     bill.getBillDate(),
-                    "鍥哄畾璧勪骇鍙樺姩:" + bill.getBillNo(),
+                    "固定资产变动:" + bill.getBillNo(),
                     voucher,
                     BUSINESS_CHANGE_BILL,
                     bill.getId(),
@@ -618,10 +622,10 @@ public abstract class AbstractFixedAssetSupport {
         public FixedAssetDeprRunVO createDepreciationRun(FixedAssetDeprPreviewDTO dto, String operatorName) {
         FixedAssetDeprRunVO preview = previewDepreciation(dto);
         if (preview.getLines().isEmpty()) {
-            throw new IllegalStateException("??????????????");
+            throw new IllegalStateException("当前期间没有可计提折旧的资产");
         }
         if (findActiveDeprRun(preview.getCompanyId(), preview.getBookCode(), preview.getFiscalYear(), preview.getFiscalPeriod()) != null) {
-            throw new IllegalStateException("???????????");
+            throw new IllegalStateException("当前期间已存在折旧批次");
         }
 
         FaAssetDeprRun run = new FaAssetDeprRun();
@@ -662,20 +666,20 @@ public abstract class AbstractFixedAssetSupport {
         public FixedAssetDeprRunVO postDepreciationRun(Long id, String operatorName) {
         FaAssetDeprRun run = requireDeprRun(id);
         if (!Objects.equals(run.getStatus(), STATUS_DRAFT)) {
-            throw new IllegalStateException("??????????????");
+            throw new IllegalStateException("当前折旧批次不是草稿状态，不能过账");
         }
         ensurePeriodOpen(run.getCompanyId(), run.getBookCode(), run.getFiscalYear(), run.getFiscalPeriod());
 
         List<FaAssetDeprLine> lines = listDeprLines(run.getId());
         if (lines.isEmpty()) {
-            throw new IllegalStateException("????????");
+            throw new IllegalStateException("当前折旧批次没有明细");
         }
 
         VoucherAccumulator voucher = new VoucherAccumulator();
         for (FaAssetDeprLine line : lines) {
             FaAssetCard card = requireCard(line.getAssetId());
             if (hasDepreciated(card, run.getFiscalYear(), run.getFiscalPeriod())) {
-                throw new IllegalStateException("?????????????" + card.getAssetCode());
+                throw new IllegalStateException("资产本期已计提折旧：" + card.getAssetCode());
             }
             FaAssetCategory category = requireCategory(card.getCategoryId());
             FaAssetAccountPolicy policy = requirePolicy(category.getCompanyId(), category.getId(), run.getBookCode());
@@ -712,7 +716,7 @@ public abstract class AbstractFixedAssetSupport {
                     run.getBookCode(),
                     run.getFiscalPeriod(),
                     LocalDate.of(run.getFiscalYear(), run.getFiscalPeriod(), 1),
-                    "鍥哄畾璧勪骇鎶樻棫:" + run.getRunNo(),
+                    "固定资产折旧:" + run.getRunNo(),
                     voucher,
                     BUSINESS_DEPRECIATION_RUN,
                     run.getId(),
@@ -771,7 +775,7 @@ public abstract class AbstractFixedAssetSupport {
         for (FixedAssetDisposalLineDTO item : dto.getLines()) {
             FaAssetCard card = requireExistingCard(companyId, item.getAssetId(), item.getAssetCode());
             if (Objects.equals(card.getStatus(), CARD_STATUS_DISPOSED)) {
-                throw new IllegalStateException("??????" + card.getAssetCode());
+                throw new IllegalStateException("资产已处置：" + card.getAssetCode());
             }
             FaAssetDisposalLine line = new FaAssetDisposalLine();
             line.setCompanyId(companyId);
@@ -802,13 +806,13 @@ public abstract class AbstractFixedAssetSupport {
         public FixedAssetDisposalBillVO postDisposalBill(Long id, String operatorName) {
         FaAssetDisposalBill bill = requireDisposalBill(id);
         if (!Objects.equals(bill.getStatus(), STATUS_DRAFT)) {
-            throw new IllegalStateException("???????????????");
+            throw new IllegalStateException("当前处置单不是草稿状态，不能过账");
         }
         ensurePeriodOpen(bill.getCompanyId(), bill.getBookCode(), bill.getFiscalYear(), bill.getFiscalPeriod());
 
         List<FaAssetDisposalLine> lines = listDisposalLines(bill.getId());
         if (lines.isEmpty()) {
-            throw new IllegalStateException("?????????");
+            throw new IllegalStateException("当前处置单没有明细行");
         }
 
         VoucherAccumulator voucher = new VoucherAccumulator();
@@ -818,7 +822,7 @@ public abstract class AbstractFixedAssetSupport {
             FaAssetAccountPolicy policy = requirePolicy(category.getCompanyId(), category.getId(), bill.getBookCode());
 
             if (Objects.equals(card.getStatus(), CARD_STATUS_DISPOSED)) {
-                throw new IllegalStateException("??????" + card.getAssetCode());
+                throw new IllegalStateException("资产已处置：" + card.getAssetCode());
             }
 
             BigDecimal originalAmount = defaultAmount(line.getOriginalAmount());
@@ -851,7 +855,7 @@ public abstract class AbstractFixedAssetSupport {
                     bill.getBookCode(),
                     bill.getFiscalPeriod(),
                     bill.getBillDate(),
-                    "鍥哄畾璧勪骇澶勭疆:" + bill.getBillNo(),
+                    "固定资产处置:" + bill.getBillNo(),
                     voucher,
                     BUSINESS_DISPOSAL_BILL,
                     bill.getId(),
@@ -921,10 +925,10 @@ public abstract class AbstractFixedAssetSupport {
     private void applyChangeLine(FaAssetChangeBill bill, FaAssetChangeLine line, String operatorName, VoucherAccumulator voucher) {
         String changeType = trimToNull(line.getChangeType());
         if (CHANGE_ADD.equals(changeType)) {
-            FaAssetCategory category = requireAccessibleCategory(bill.getCompanyId(), line.getCategoryId(), line.getCategoryCode());
-            if (findCardByCode(bill.getCompanyId(), line.getAssetCode()) != null) {
-                throw new IllegalStateException("???????: " + line.getAssetCode());
-            }
+        FaAssetCategory category = requireAccessibleCategory(bill.getCompanyId(), line.getCategoryId(), line.getCategoryCode());
+        if (findCardByCode(bill.getCompanyId(), line.getAssetCode()) != null) {
+            throw new IllegalStateException("资产编码已存在: " + line.getAssetCode());
+        }
             BigDecimal amount = positiveAmount(line.getChangeAmount(), "changeAmount is required for ADD");
             BigDecimal salvage = defaultAmount(line.getNewSalvageAmount());
             if (salvage.compareTo(ZERO) == 0) {
@@ -969,7 +973,7 @@ public abstract class AbstractFixedAssetSupport {
 
         FaAssetCard card = requireExistingCard(bill.getCompanyId(), line.getAssetId(), line.getAssetCode());
         if (Objects.equals(card.getStatus(), CARD_STATUS_DISPOSED)) {
-            throw new IllegalStateException("?????????????" + card.getAssetCode());
+            throw new IllegalStateException("已处置资产不能继续变动：" + card.getAssetCode());
         }
 
         if (CHANGE_TRANSFER_DEPT.equals(changeType)) {
@@ -980,7 +984,7 @@ public abstract class AbstractFixedAssetSupport {
             card.setSalvageAmount(scale(defaultAmount(line.getNewSalvageAmount())));
         } else if (CHANGE_LIFE_ADJUST.equals(changeType)) {
             if (line.getNewUsefulLifeMonths() == null || line.getNewUsefulLifeMonths() <= 0) {
-                throw new IllegalArgumentException("?????????0");
+                throw new IllegalArgumentException("新的使用年限必须大于0");
             }
             card.setUsefulLifeMonths(line.getNewUsefulLifeMonths());
             card.setRemainingMonths(line.getNewRemainingMonths() == null ? Math.max(0, line.getNewUsefulLifeMonths() - defaultInt(card.getDepreciatedMonths())) : line.getNewRemainingMonths());
@@ -989,7 +993,7 @@ public abstract class AbstractFixedAssetSupport {
             BigDecimal newValue = line.getNewValue() == null ? original.add(defaultAmount(line.getChangeAmount())) : scale(line.getNewValue());
             BigDecimal delta = newValue.subtract(original);
             if (newValue.compareTo(defaultAmount(card.getAccumDeprAmount())) < 0) {
-                throw new IllegalArgumentException("?????????????");
+                throw new IllegalArgumentException("资产原值不能小于累计折旧");
             }
             card.setOriginalAmount(scale(newValue));
             card.setNetAmount(scale(newValue.subtract(defaultAmount(card.getAccumDeprAmount()))));
@@ -1007,7 +1011,7 @@ public abstract class AbstractFixedAssetSupport {
                 }
             }
         } else {
-            throw new IllegalArgumentException("???????????" + changeType);
+            throw new IllegalArgumentException("不支持的资产变动类型：" + changeType);
         }
         card.setUpdatedBy(defaultOperator(operatorName));
         faAssetCardMapper.updateById(card);
@@ -1021,11 +1025,11 @@ public abstract class AbstractFixedAssetSupport {
         validateFieldLength(dto.getCategoryName(), FIXED_ASSET_NAME_MAX_LENGTH, "类别名称");
         String shareScope = trimToNull(dto.getShareScope());
         if (!Objects.equals(shareScope, SHARE_SCOPE_COMPANY) && !Objects.equals(shareScope, SHARE_SCOPE_GROUP)) {
-            throw new IllegalArgumentException("???????");
+            throw new IllegalArgumentException("共享范围不合法");
         }
         validateDepreciationMethod(dto.getDepreciationMethod());
         if (dto.getResidualRate().compareTo(BigDecimal.ZERO) < 0 || dto.getResidualRate().compareTo(BigDecimal.ONE) > 0) {
-            throw new IllegalArgumentException("??????0?1??");
+            throw new IllegalArgumentException("残值率必须在0到1之间");
         }
     }
 
@@ -1066,25 +1070,25 @@ public abstract class AbstractFixedAssetSupport {
         validateFieldLength(dto.getAssetCode(), FIXED_ASSET_CODE_MAX_LENGTH, "资产编码");
         validateFieldLength(dto.getAssetName(), FIXED_ASSET_NAME_MAX_LENGTH, "资产名称");
         if (dto.getOriginalAmount().compareTo(ZERO) <= 0) {
-            throw new IllegalArgumentException("??????0");
+            throw new IllegalArgumentException("资产原值必须大于0");
         }
         if (dto.getAccumDeprAmount().compareTo(ZERO) < 0) {
-            throw new IllegalArgumentException("?????????");
+            throw new IllegalArgumentException("累计折旧不能为负数");
         }
         if (dto.getSalvageAmount().compareTo(ZERO) < 0) {
-            throw new IllegalArgumentException("????????");
+            throw new IllegalArgumentException("残值不能为负数");
         }
         if (dto.getAccumDeprAmount().compareTo(dto.getOriginalAmount()) > 0) {
-            throw new IllegalArgumentException("??????????");
+            throw new IllegalArgumentException("累计折旧不能大于资产原值");
         }
         if (dto.getSalvageAmount().compareTo(dto.getOriginalAmount()) > 0) {
-            throw new IllegalArgumentException("?????????");
+            throw new IllegalArgumentException("残值不能大于资产原值");
         }
         if (dto.getDepreciatedMonths() > dto.getUsefulLifeMonths()) {
-            throw new IllegalArgumentException("?????????????");
+            throw new IllegalArgumentException("已折旧月数不能大于使用年限");
         }
         if (existing == null && trimToNull(dto.getCompanyId()) == null) {
-            throw new IllegalArgumentException("??????");
+            throw new IllegalArgumentException("公司主体不能为空");
         }
     }
 
@@ -1136,7 +1140,7 @@ public abstract class AbstractFixedAssetSupport {
             return "assetCode is duplicated in the same batch";
         }
         if (findCardByCode(companyId, assetCode) != null) {
-            return "???????";
+            return "资产编码已存在";
         }
         if (trimToNull(row.getAssetName()) == null) {
             return "assetName is required";
@@ -1155,13 +1159,13 @@ public abstract class AbstractFixedAssetSupport {
             return "inServiceDate is invalid";
         }
         if (row.getOriginalAmount() == null || row.getOriginalAmount().compareTo(ZERO) <= 0) {
-            return "??????0";
+            return "资产原值必须大于0";
         }
         if (defaultAmount(row.getAccumDeprAmount()).compareTo(defaultAmount(row.getOriginalAmount())) > 0) {
-            return "??????????";
+            return "累计折旧不能大于资产原值";
         }
         if (defaultAmount(row.getSalvageAmount()).compareTo(defaultAmount(row.getOriginalAmount())) > 0) {
-            return "?????????";
+            return "残值不能大于资产原值";
         }
         if (row.getUsefulLifeMonths() == null || row.getUsefulLifeMonths() <= 0) {
             return "usefulLifeMonths must be greater than 0";
@@ -1246,7 +1250,7 @@ public abstract class AbstractFixedAssetSupport {
     private void validateChangeType(String billType) {
         Set<String> supported = Set.of(CHANGE_ADD, CHANGE_TRANSFER_DEPT, CHANGE_TRANSFER_KEEPER, CHANGE_VALUE_ADJUST, CHANGE_RESIDUAL_ADJUST, CHANGE_LIFE_ADJUST);
         if (!supported.contains(trimToNull(billType))) {
-            throw new IllegalArgumentException("???????");
+            throw new IllegalArgumentException("不支持的变动类型");
         }
     }
 
@@ -1303,7 +1307,7 @@ public abstract class AbstractFixedAssetSupport {
     private void validateDepreciationMethod(String method) {
         Set<String> supported = Set.of(METHOD_STRAIGHT_LINE, METHOD_WORKLOAD, METHOD_DOUBLE_DECLINING);
         if (!supported.contains(trimToNull(method))) {
-            throw new IllegalArgumentException("???????");
+            throw new IllegalArgumentException("不支持的折旧方法");
         }
     }
 
@@ -1841,18 +1845,19 @@ public abstract class AbstractFixedAssetSupport {
     private FaAssetCategory requireCategory(Long id) {
         FaAssetCategory category = faAssetCategoryMapper.selectById(id);
         if (category == null) {
-            throw new IllegalStateException("???????");
+            throw new IllegalStateException("资产类别不存在");
         }
+        requireFixedAssetsEnabled(category.getCompanyId());
         return category;
     }
 
     private FaAssetCategory requireAccessibleCategory(String companyId, Long categoryId, String categoryCode) {
         FaAssetCategory category = categoryId != null ? faAssetCategoryMapper.selectById(categoryId) : findCategoryByCode(companyId, categoryCode);
         if (category == null) {
-            throw new IllegalStateException("???????");
+            throw new IllegalStateException("资产类别不存在");
         }
         if (!Objects.equals(category.getCompanyId(), companyId) && !Objects.equals(category.getShareScope(), SHARE_SCOPE_GROUP)) {
-            throw new IllegalStateException("?????????????");
+            throw new IllegalStateException("当前公司无权使用该资产类别");
         }
         return category;
     }
@@ -1874,7 +1879,7 @@ public abstract class AbstractFixedAssetSupport {
     private FaAssetAccountPolicy requirePolicy(String companyId, Long categoryId, String bookCode) {
         FaAssetAccountPolicy policy = findPolicy(companyId, categoryId, bookCode);
         if (policy == null) {
-            throw new IllegalStateException("???????????");
+            throw new IllegalStateException("资产类别科目策略未配置");
         }
         return policy;
     }
@@ -1893,15 +1898,16 @@ public abstract class AbstractFixedAssetSupport {
     private FaAssetCard requireCard(Long id) {
         FaAssetCard card = faAssetCardMapper.selectById(id);
         if (card == null) {
-            throw new IllegalStateException("???????");
+            throw new IllegalStateException("资产卡片不存在");
         }
+        requireFixedAssetsEnabled(card.getCompanyId());
         return card;
     }
 
     private FaAssetCard requireExistingCard(String companyId, Long assetId, String assetCode) {
         FaAssetCard card = assetId == null ? findCardByCode(companyId, assetCode) : requireCard(assetId);
         if (card == null || !Objects.equals(card.getCompanyId(), companyId)) {
-            throw new IllegalStateException("???????");
+            throw new IllegalStateException("资产卡片不存在");
         }
         return card;
     }
@@ -1920,8 +1926,9 @@ public abstract class AbstractFixedAssetSupport {
     private FaAssetChangeBill requireChangeBill(Long id) {
         FaAssetChangeBill bill = faAssetChangeBillMapper.selectById(id);
         if (bill == null) {
-            throw new IllegalStateException("????????");
+            throw new IllegalStateException("资产变动单不存在");
         }
+        requireFixedAssetsEnabled(bill.getCompanyId());
         return bill;
     }
 
@@ -1935,8 +1942,9 @@ public abstract class AbstractFixedAssetSupport {
     private FaAssetDeprRun requireDeprRun(Long id) {
         FaAssetDeprRun run = faAssetDeprRunMapper.selectById(id);
         if (run == null) {
-            throw new IllegalStateException("???????");
+            throw new IllegalStateException("折旧批次不存在");
         }
+        requireFixedAssetsEnabled(run.getCompanyId());
         return run;
     }
 
@@ -1950,8 +1958,9 @@ public abstract class AbstractFixedAssetSupport {
     private FaAssetDisposalBill requireDisposalBill(Long id) {
         FaAssetDisposalBill bill = faAssetDisposalBillMapper.selectById(id);
         if (bill == null) {
-            throw new IllegalStateException("????????");
+            throw new IllegalStateException("资产处置单不存在");
         }
+        requireFixedAssetsEnabled(bill.getCompanyId());
         return bill;
     }
 
@@ -1976,7 +1985,7 @@ public abstract class AbstractFixedAssetSupport {
 
     private void ensurePeriodOpen(String companyId, String bookCode, int fiscalYear, int fiscalPeriod) {
         if (findPeriodClose(companyId, bookCode, fiscalYear, fiscalPeriod) != null) {
-            throw new IllegalStateException("???????");
+            throw new IllegalStateException("当前期间已结账");
         }
     }
 
@@ -1988,7 +1997,7 @@ public abstract class AbstractFixedAssetSupport {
             return;
         }
         if (voucher.totalDebit().compareTo(voucher.totalCredit()) != 0) {
-            throw new IllegalStateException("?????????????");
+            throw new IllegalStateException("固定资产自动生成凭证借贷不平衡");
         }
 
         String lockKey = companyId + "#" + period + "#" + VOUCHER_TYPE;
@@ -2118,7 +2127,7 @@ public abstract class AbstractFixedAssetSupport {
             return candidate;
         }
         if (companies.isEmpty()) {
-            throw new IllegalStateException("?????????");
+            throw new IllegalStateException("当前没有可用公司");
         }
         return companies.get(0).getCompanyId();
     }
@@ -2131,14 +2140,19 @@ public abstract class AbstractFixedAssetSupport {
     private String requireCompanyId(String companyId) {
         String normalized = trimToNull(companyId);
         if (normalized == null) {
-            throw new IllegalArgumentException("??????");
+            throw new IllegalArgumentException("公司主体不能为空");
         }
+        requireFixedAssetsEnabled(normalized);
         return normalized;
+    }
+
+    private void requireFixedAssetsEnabled(String companyId) {
+        financeModuleEnableSupport.requireEnabled(companyId, FinanceModuleEnableSupport.FIXED_ASSETS);
     }
 
     private Integer normalizePeriod(Integer fiscalPeriod) {
         if (fiscalPeriod == null || fiscalPeriod < 1 || fiscalPeriod > 12) {
-            throw new IllegalArgumentException("???????1?12??");
+            throw new IllegalArgumentException("会计期间必须在1到12之间");
         }
         return fiscalPeriod;
     }
@@ -2169,7 +2183,7 @@ public abstract class AbstractFixedAssetSupport {
     private int defaultUsefulLife(Integer preferred, Integer fallback) {
         Integer candidate = preferred == null || preferred <= 0 ? fallback : preferred;
         if (candidate == null || candidate <= 0) {
-            throw new IllegalArgumentException("????????");
+            throw new IllegalArgumentException("使用年限必须大于0");
         }
         return candidate;
     }
@@ -2192,7 +2206,7 @@ public abstract class AbstractFixedAssetSupport {
         try {
             return LocalDate.parse(value, DATE_FORMATTER);
         } catch (DateTimeParseException ex) {
-            throw new IllegalArgumentException("???????");
+            throw new IllegalArgumentException("日期格式不正确");
         }
     }
 
@@ -2243,7 +2257,7 @@ public abstract class AbstractFixedAssetSupport {
             if (amount == null || amount.compareTo(ZERO) == 0) { return; }
             String normalizedAccount = account == null ? null : account.trim();
             if (normalizedAccount == null || normalizedAccount.isEmpty()) {
-                throw new IllegalArgumentException("????????????");
+                throw new IllegalArgumentException("固定资产凭证科目不能为空");
             }
             bucket.merge(normalizedAccount, amount.setScale(2, RoundingMode.HALF_UP), BigDecimal::add);
         }

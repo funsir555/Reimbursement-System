@@ -82,7 +82,7 @@ class ExpenseRelationBindingMutationSupport extends AbstractExpenseRelationWrite
         LocalDateTime now = LocalDateTime.now();
 
         for (RelatedDocumentSelection selection : relatedSelections) {
-            ProcessDocumentInstance target = requireRelationSelectableTargetDocument(
+            ProcessDocumentInstance target = requireRelatedDocumentSelectableTargetDocument(
                     targetDocumentMap,
                     selection.documentCode(),
                     sourceSubmitterUserId,

@@ -13,6 +13,7 @@ import com.finex.auth.entity.GlAccsum;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
@@ -74,6 +75,8 @@ class FinanceOpeningBalanceServiceImplTest {
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     @Mock
     private OpeningBalanceTaskWorker openingBalanceTaskWorker;
+    @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
 
     private FinanceOpeningBalanceServiceImpl service;
 
@@ -93,7 +96,8 @@ class FinanceOpeningBalanceServiceImplTest {
                 financeOpeningBalanceStateMapper,
                 asyncTaskRecordMapper,
                 objectMapper,
-                openingBalanceTaskWorker
+                openingBalanceTaskWorker,
+                financeAccountSetModuleEnableMapper
         );
 
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);

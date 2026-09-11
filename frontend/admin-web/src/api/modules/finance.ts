@@ -57,6 +57,22 @@ export const financeApi = {
     request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/clear-error${buildQueryString({ companyId })}`, {
       method: 'POST'
     }),
+  voidVoucher: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/void${buildQueryString({ companyId })}`, {
+      method: 'POST'
+    }),
+  restoreVoucher: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/restore${buildQueryString({ companyId })}`, {
+      method: 'POST'
+    }),
+  reverseVoucher: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}/reverse${buildQueryString({ companyId })}`, {
+      method: 'POST'
+    }),
+  deleteVoucher: (companyId: string, voucherNo: string) =>
+    request<FinanceVoucherActionResult>(`/auth/finance/vouchers/${encodeURIComponent(voucherNo)}${buildQueryString({ companyId })}`, {
+      method: 'DELETE'
+    }),
   batchUpdateVoucherState: (payload: FinanceVoucherBatchActionPayload) =>
     request<FinanceVoucherBatchActionResult>('/auth/finance/vouchers/actions', {
       method: 'POST',

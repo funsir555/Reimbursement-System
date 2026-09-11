@@ -31,6 +31,12 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         boolean retrying = DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status)
                 && expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task);
         if (DOCUMENT_STATUS_PENDING_PAYMENT.equals(status) || retrying) {
+            if (hasMultipleMainFormAmountControls(instance)) {
+                markPaymentConfigurationException(instance, task, userId, username);
+                return expenseDocumentReadSupport.buildDocumentDetail(
+                        expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
+                );
+            }
             return pushPaymentTaskToBank(userId, username, task, instance, retrying);
         }
         throw new IllegalStateException("当前付款任务无法发起支付");
@@ -42,6 +48,12 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         String status = trimToNull(instance.getStatus());
         if (!DOCUMENT_STATUS_PAYING.equals(status) && !DOCUMENT_STATUS_PENDING_PAYMENT.equals(status)) {
             throw new IllegalStateException("当前付款任务不在可完成状态");
+        }
+        if (hasMultipleMainFormAmountControls(instance)) {
+            markPaymentConfigurationException(instance, task, userId, username);
+            return expenseDocumentReadSupport.buildDocumentDetail(
+                    expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
+            );
         }
         SystemCompanyBankAccount account = recordSupport.findActiveBankAccountForDocument(instance, false);
         PmBankPaymentRecord record = recordSupport.findOrCreateBankPaymentRecord(
@@ -196,6 +208,12 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
             boolean manualPaid,
             LocalDateTime paidAt
     ) {
+        if (hasMultipleMainFormAmountControls(instance)) {
+            markPaymentConfigurationException(instance, task, userId, username);
+            return expenseDocumentReadSupport.buildDocumentDetail(
+                    expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
+            );
+        }
         PmBankPaymentRecord record = recordSupport.findLatestBankPaymentRecord(instance.getDocumentCode());
         if (record == null) {
             SystemCompanyBankAccount account = recordSupport.findActiveBankAccountForDocument(instance, false);
@@ -270,7 +288,7 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
         if (normalizedTaskIds.isEmpty()) {
             throw new IllegalArgumentException("请选择付款单");
         }
-        return normalizedTaskIds.stream()
+        List<PaymentTaskContext> contexts = normalizedTaskIds.stream()
                 .map(taskId -> {
                     ProcessDocumentTask task = requireAccessiblePaymentTask(taskId, userId);
                     ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(task.getDocumentCode());
@@ -281,6 +299,50 @@ class ExpensePaymentExecutionSupport extends AbstractExpensePaymentSupport {
                     return new PaymentTaskContext(task, instance);
                 })
                 .toList();
+        for (PaymentTaskContext context : contexts) {
+            if (hasMultipleMainFormAmountControls(context.instance())) {
+                markPaymentConfigurationException(context.instance(), context.task(), userId, SYSTEM_OPERATOR);
+                throw new IllegalStateException("付款单主表存在多个金额控件，无法确定实际支付金额");
+            }
+        }
+        return contexts;
+    }
+
+    boolean hasMultipleMainFormAmountControls(ProcessDocumentInstance instance) {
+        if (loadExpenseDetailMap(List.of(instance.getDocumentCode()))
+                .getOrDefault(instance.getDocumentCode(), List.of())
+                .isEmpty()) {
+            MainFormPaymentAmountResolution resolution = resolveMainFormPaymentAmount(instance);
+            return resolution.hasMultipleAmountControls();
+        }
+        return false;
+    }
+
+    void markPaymentConfigurationException(
+            ProcessDocumentInstance instance,
+            ProcessDocumentTask task,
+            Long userId,
+            String username
+    ) {
+        String message = "付款单主表存在多个金额控件，无法确定实际支付金额";
+        String status = trimToNull(instance.getStatus());
+        if (!DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(status)) {
+            boolean allowRetry = expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task);
+            expenseWorkflowRuntimeSupport.markPaymentException(
+                    instance,
+                    task,
+                    userId,
+                    firstNonBlank(username, SYSTEM_OPERATOR),
+                    message,
+                    allowRetry
+            );
+        }
+        PmBankPaymentRecord record = recordSupport.findLatestBankPaymentRecord(instance.getDocumentCode());
+        if (record != null) {
+            record.setLastErrorMessage(message);
+            record.setReceiptStatus(RECEIPT_STATUS_FAILED);
+            pmBankPaymentRecordMapper.updateById(record);
+        }
     }
 
     private boolean isExportableStatus(String status) {

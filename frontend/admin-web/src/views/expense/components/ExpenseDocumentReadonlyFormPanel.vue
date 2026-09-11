@@ -21,6 +21,7 @@
       :vendor-option-map="display.vendorOptionMap"
       :payee-option-map="display.payeeOptionMap"
       :payee-account-option-map="display.payeeAccountOptionMap"
+      @open-document-detail="emit('open-document-detail', $event)"
     />
     <el-empty v-else description="暂无单据数据" :image-size="96" />
   </el-card>
@@ -52,5 +53,9 @@ type ReadonlyFormDisplay = {
 defineProps<{
   amountText: string
   display: ReadonlyFormDisplay | null
+}>()
+
+const emit = defineEmits<{
+  'open-document-detail': [documentCode: string]
 }>()
 </script>

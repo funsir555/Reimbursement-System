@@ -19,6 +19,8 @@ public class FinanceVoucherQueryDTO {
 
     private String billMonthTo;
 
+    private String cbill;
+
     private String summary;
 
     private Integer page;

@@ -22,6 +22,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 /**
  * SharedFixedAssetSupport：通用支撑类。
@@ -50,7 +51,8 @@ public final class SharedFixedAssetSupport extends AbstractFixedAssetSupport {
             GlAccvouchMapper glAccvouchMapper,
             SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         super(
                 faAssetCategoryMapper,
@@ -69,7 +71,8 @@ public final class SharedFixedAssetSupport extends AbstractFixedAssetSupport {
                 glAccvouchMapper,
                 systemCompanyMapper,
                 systemDepartmentMapper,
-                userMapper
+                userMapper,
+                financeModuleEnableSupport
         );
     }
 }

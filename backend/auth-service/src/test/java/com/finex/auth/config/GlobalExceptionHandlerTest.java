@@ -199,6 +199,34 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleIllegalStateReturnsChineseMessageDirectlyForCloseLedgerRequests() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("\u4e0b\u4e00\u671f\u95f4\u57fa\u7840\u6570\u636e\u4e0e\u5f53\u524d\u671f\u95f4\u5e94\u6eda\u8f6c\u7ed3\u679c\u4e0d\u4e00\u81f4\uff0c\u4e0d\u80fd\u81ea\u52a8\u8986\u76d6\uff0c\u8bf7\u5148\u68c0\u67e5\u671f\u521d\u6216\u671f\u95f4\u6570\u636e");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/finance/close-ledger/close")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("\u4e0b\u4e00\u671f\u95f4\u57fa\u7840\u6570\u636e\u4e0e\u5f53\u524d\u671f\u95f4\u5e94\u6eda\u8f6c\u7ed3\u679c\u4e0d\u4e00\u81f4\uff0c\u4e0d\u80fd\u81ea\u52a8\u8986\u76d6\uff0c\u8bf7\u5148\u68c0\u67e5\u671f\u521d\u6216\u671f\u95f4\u6570\u636e", result.getMessage());
+    }
+
+    @Test
+    void handleIllegalStateReturnsChineseMessageDirectlyForGeneralLedgerPeriodStatusRequests() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        IllegalStateException exception = new IllegalStateException("\u4e0b\u4e00\u671f\u95f4\u5df2\u7ed3\u8d26\uff0c\u4e0d\u80fd\u53cd\u7ed3\u8d26");
+
+        Result<Void> result = handler.handleIllegalState(
+                exception,
+                new MockHttpServletRequest("POST", "/auth/finance/general-ledger/period-status/reopen")
+        );
+
+        assertEquals(500, result.getCode());
+        assertEquals("\u4e0b\u4e00\u671f\u95f4\u5df2\u7ed3\u8d26\uff0c\u4e0d\u80fd\u53cd\u7ed3\u8d26", result.getMessage());
+    }
+
+    @Test
     void handleIllegalStateReturnsChineseMessageDirectlyForExpenseResubmitPath() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         IllegalStateException exception = new IllegalStateException("\u8282\u70b9\u3010\u9886\u5bfc\u5ba1\u6279\u3011\u627e\u4e0d\u5230\u5ba1\u6279\u4eba\uff0c\u5f53\u524d\u914d\u7f6e\u4e0d\u5141\u8bb8\u63d0\u4ea4");

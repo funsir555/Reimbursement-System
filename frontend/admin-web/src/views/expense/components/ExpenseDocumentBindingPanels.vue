@@ -39,8 +39,13 @@
           <div
             v-for="item in section.items"
             :key="item.key"
-            class="expense-wb-detail-card"
+            class="expense-wb-detail-card expense-wb-related-document-card"
             :data-testid="section.itemTestId"
+            role="button"
+            tabindex="0"
+            @click="openBoundDocument(item.documentCode)"
+            @keydown.enter.prevent="openBoundDocument(item.documentCode)"
+            @keydown.space.prevent="openBoundDocument(item.documentCode)"
           >
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div class="space-y-2">
@@ -48,18 +53,17 @@
                   <p class="text-base font-semibold text-slate-800">{{ item.title }}</p>
                   <el-tag size="small" effect="plain">{{ item.templateTypeLabel }}</el-tag>
                   <el-tag v-if="item.statusLabel" size="small" effect="plain">{{ item.statusLabel }}</el-tag>
+                  <el-tag
+                    v-if="item.relationCount !== undefined"
+                    size="small"
+                    type="primary"
+                    effect="plain"
+                  >
+                    关联 {{ item.relationCount }} 次
+                  </el-tag>
                 </div>
                 <p class="text-sm text-slate-500">{{ item.metaLine }}</p>
                 <p class="text-xs leading-6 text-slate-500">{{ item.detailLine }}</p>
-              </div>
-              <div class="expense-wb-compact-actions">
-                <el-button
-                  plain
-                  :data-testid="`open-bound-document-${item.documentCode}`"
-                  @click="emit('open-bound-document', item.documentCode)"
-                >
-                  {{ viewBoundDocumentLabel }}
-                </el-button>
               </div>
             </div>
           </div>
@@ -82,10 +86,16 @@ import type { BindingPanelDisplay } from '../composables/useExpenseDocumentDetai
 defineProps<{
   panels: BindingPanelDisplay[]
   bindingCountSuffix: string
-  viewBoundDocumentLabel: string
 }>()
 
 const emit = defineEmits<{
   'open-bound-document': [documentCode: string]
 }>()
+
+function openBoundDocument(documentCode: string) {
+  const normalizedCode = String(documentCode || '').trim()
+  if (normalizedCode) {
+    emit('open-bound-document', normalizedCode)
+  }
+}
 </script>

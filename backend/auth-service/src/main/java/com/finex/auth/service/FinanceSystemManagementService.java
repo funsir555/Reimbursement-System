@@ -9,6 +9,11 @@ import com.finex.auth.dto.FinanceAccountSetCreateDTO;
 import com.finex.auth.dto.FinanceAccountSetMetaVO;
 import com.finex.auth.dto.FinanceAccountSetSummaryVO;
 import com.finex.auth.dto.FinanceAccountSetTaskStatusVO;
+import com.finex.auth.dto.FinanceModuleBackupDTO;
+import com.finex.auth.dto.FinanceModuleBackupRecordVO;
+import com.finex.auth.dto.FinanceModuleClearDTO;
+import com.finex.auth.dto.FinanceModuleEnableMetaVO;
+import com.finex.auth.dto.FinanceModuleEnableToggleDTO;
 
 import java.util.List;
 
@@ -38,4 +43,29 @@ public interface FinanceSystemManagementService {
      * 获取任务Status。
      */
     FinanceAccountSetTaskStatusVO getTaskStatus(String taskNo);
+
+    /**
+     * 查询当前公司模块启用状态。
+     */
+    FinanceModuleEnableMetaVO getModuleEnableMeta(String companyId);
+
+    /**
+     * 切换当前公司模块启用状态。
+     */
+    FinanceModuleEnableMetaVO toggleModuleEnable(FinanceModuleEnableToggleDTO dto);
+
+    /**
+     * 备份当前公司模块数据。
+     */
+    FinanceModuleBackupRecordVO backupModuleData(Long currentUserId, FinanceModuleBackupDTO dto);
+
+    /**
+     * 查询当前公司模块备份记录。
+     */
+    List<FinanceModuleBackupRecordVO> listModuleBackupRecords(String companyId, String moduleCode);
+
+    /**
+     * 清除当前公司模块数据。
+     */
+    FinanceModuleEnableMetaVO clearModuleData(Long currentUserId, FinanceModuleClearDTO dto);
 }

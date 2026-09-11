@@ -1928,6 +1928,55 @@ describe('ExpenseRuntimeFormEditor', () => {
     expect(mocks.elMessage.warning).toHaveBeenCalledWith('发票附件仅支持 PDF、PNG、JPG、JPEG 文件')
   })
 
+  it('emits document detail events from selected relation cards without changing selection behavior', async () => {
+    const { wrapper } = mountEditor({
+      relatedDocs: [
+        {
+          documentCode: 'DOC-REL-001',
+          documentTitle: '已选关联单据',
+          templateType: 'report',
+          status: 'COMPLETED',
+          statusLabel: '已完成'
+        }
+      ],
+      writeoffDocs: [
+        {
+          documentCode: 'DOC-WO-001',
+          documentTitle: '已选核销单据',
+          templateType: 'loan',
+          status: 'PAYMENT_FINISHED',
+          statusLabel: '已完成',
+          writeOffAmount: '20.00'
+        }
+      ]
+    }, [
+      createBusinessBlock('relatedDocs', '关联单据', 'related-document'),
+      createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document')
+    ])
+
+    await flushPromises()
+
+    const selectedRelated = wrapper.get('[data-testid="selected-document-relatedDocs-DOC-REL-001"]')
+    expect(selectedRelated.classes()).toContain('expense-wb-related-document-card')
+    await selectedRelated.trigger('click')
+    expect(wrapper.findComponent(ExpenseRuntimeFormEditor).emitted('open-document-detail')).toEqual([
+      ['DOC-REL-001']
+    ])
+
+    const selectedWriteOff = wrapper.get('[data-testid="selected-document-writeoffDocs-DOC-WO-001"]')
+    await selectedWriteOff.trigger('click')
+    expect(wrapper.findComponent(ExpenseRuntimeFormEditor).emitted('open-document-detail')).toEqual([
+      ['DOC-REL-001'],
+      ['DOC-WO-001']
+    ])
+
+    await wrapper.get('[data-testid="remove-document-relatedDocs-DOC-REL-001"]').trigger('click')
+    expect(wrapper.findComponent(ExpenseRuntimeFormEditor).emitted('open-document-detail')).toHaveLength(2)
+
+    await wrapper.get('[data-testid="writeoff-amount-writeoffDocs-DOC-WO-001"]').trigger('click')
+    expect(wrapper.findComponent(ExpenseRuntimeFormEditor).emitted('open-document-detail')).toHaveLength(2)
+  })
+
   it('rejects generic attachments that exceed the block size limit before uploading', async () => {
     const { wrapper, model } = mountEditor({ attachments: [] }, [
       createControlBlock('attachments', '附件', 'ATTACHMENT', {

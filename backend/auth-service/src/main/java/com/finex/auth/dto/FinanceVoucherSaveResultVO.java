@@ -35,4 +35,12 @@ public class FinanceVoucherSaveResultVO {
     private String checkedAt;
 
     private String postedAt;
+
+    private Boolean voucherNoAutoForwarded;
+
+    private Integer requestedInoId;
+
+    private String requestedDisplayVoucherNo;
+
+    private String occupiedByUserName;
 }

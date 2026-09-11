@@ -14,6 +14,7 @@ import com.finex.auth.dto.OpeningBalanceTrialResultVO;
 import com.finex.auth.dto.OpeningAssistBalanceLineVO;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
@@ -32,6 +33,7 @@ import com.finex.auth.service.impl.openingbalance.OpeningBalanceTaskSupport;
 import com.finex.auth.service.impl.openingbalance.OpeningBalanceTaskWorker;
 import com.finex.auth.service.impl.openingbalance.OpeningBalanceTrialReconcileSupport;
 import com.finex.auth.service.impl.openingbalance.SharedOpeningBalanceSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,8 +61,11 @@ public class FinanceOpeningBalanceServiceImpl implements FinanceOpeningBalanceSe
             FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper,
             AsyncTaskRecordMapper asyncTaskRecordMapper,
             ObjectMapper objectMapper,
-            OpeningBalanceTaskWorker openingBalanceTaskWorker
+            OpeningBalanceTaskWorker openingBalanceTaskWorker,
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper
     ) {
+        FinanceModuleEnableSupport financeModuleEnableSupport =
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
         SharedOpeningBalanceSupport support = new SharedOpeningBalanceSupport(
                 financeAccountSubjectMapper,
                 financeCustomerMapper,
@@ -72,7 +77,8 @@ public class FinanceOpeningBalanceServiceImpl implements FinanceOpeningBalanceSe
                 userMapper,
                 glAccsumMapper,
                 glAccassMapper,
-                financeOpeningBalanceStateMapper
+                financeOpeningBalanceStateMapper,
+                financeModuleEnableSupport
         );
         this.openingBalanceMetaSupport = new OpeningBalanceMetaSupport(support);
         this.openingBalanceQuerySupport = new OpeningBalanceQuerySupport(support);

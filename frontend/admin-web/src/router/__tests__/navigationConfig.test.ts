@@ -58,15 +58,18 @@ describe('navigation configuration', () => {
     const ledgerGroup = financeGroup?.children?.find((item) => item.index === '/finance/general-ledger')
     const ledgerKeys = ledgerGroup?.children?.map((item) => item.key)
 
-    expect(ledgerKeys?.slice(0, 6)).toEqual([
+    expect(financeGroup?.landingIndex).toBe('/finance')
+    expect(ledgerKeys?.slice(0, 7)).toEqual([
       'finance-new-voucher',
       'finance-query-voucher',
       'finance-review-voucher',
       'finance-opening-balance',
       'finance-post-voucher',
-      'finance-close-ledger'
+      'finance-close-ledger',
+      'finance-period-transfer'
     ])
-    expect(ledgerKeys?.[6]).toBe('finance-ledger-balance-sheet')
+    expect(ledgerKeys?.[7]).toBe('finance-ledger-balance-sheet')
+    expect(ledgerKeys?.[ledgerKeys.length - 1]).toBe('finance-sequence-ledger')
   })
 
   it('nests finance archives under finance system management without changing archive page routes', () => {

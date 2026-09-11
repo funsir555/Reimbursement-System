@@ -66,6 +66,7 @@ async function mountView() {
       stubs: {
         'el-card': defineComponent({ template: '<div><slot /></div>' }),
         'el-button': ButtonStub,
+        FinancePeriodStatusDialog: defineComponent({ template: '<div class="period-status-dialog-stub" />' }),
         'el-input': defineComponent({
           props: {
             modelValue: { type: String, default: '' }

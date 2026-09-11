@@ -13,6 +13,7 @@ export interface FinanceVoucherOption {
   parentValue?: string
   subjectCategory?: string
   subjectCategoryLabel?: string
+  subjectLevel?: number
   bperson?: number
   bcus?: number
   bsup?: number
@@ -69,6 +70,7 @@ export interface FinanceVoucherMeta {
   companyOptions: FinanceVoucherOption[]
   departmentOptions: FinanceVoucherOption[]
   employeeOptions: FinanceVoucherOption[]
+  makerOptions: FinanceVoucherOption[]
   employeeDirectory: EmployeeDirectoryEntry[]
   voucherTypeOptions: FinanceVoucherOption[]
   currencyOptions: FinanceVoucherOption[]
@@ -85,6 +87,8 @@ export interface FinanceVoucherMeta {
   defaultPeriod: number
   defaultVoucherType: string
   suggestedVoucherNo: number
+  periodStatus?: 'OPEN' | 'CLOSED'
+  periodStatusLabel?: string
   defaultMaker: string
   defaultAttachedDocCount: number
   defaultCurrency: string
@@ -100,6 +104,7 @@ export interface FinanceVoucherQueryParams {
   billMonth?: string
   billMonthFrom?: string
   billMonthTo?: string
+  cbill?: string
   summary?: string
   page?: number
   pageSize?: number
@@ -125,6 +130,12 @@ export interface FinanceVoucherSummary {
   status: string
   statusLabel: string
   editable: boolean
+  periodStatus?: 'OPEN' | 'CLOSED'
+  periodStatusLabel?: string
+  voidedAt?: string
+  voidedByName?: string
+  reversedFromVoucherNo?: string
+  reversedByVoucherNo?: string
   entryCount: number
   totalDebit: MoneyValue
   totalCredit: MoneyValue
@@ -151,6 +162,12 @@ export interface FinanceVoucherDetail {
   status: string
   statusLabel: string
   editable: boolean
+  periodStatus?: 'OPEN' | 'CLOSED'
+  periodStatusLabel?: string
+  voidedAt?: string
+  voidedByName?: string
+  reversedFromVoucherNo?: string
+  reversedByVoucherNo?: string
   totalDebit: MoneyValue
   totalCredit: MoneyValue
   entries: FinanceVoucherEntry[]
@@ -170,6 +187,10 @@ export interface FinanceVoucherSaveResult {
   status: string
   checkedAt?: string | null
   postedAt?: string | null
+  voucherNoAutoForwarded?: boolean
+  requestedInoId?: number
+  requestedDisplayVoucherNo?: string
+  occupiedByUserName?: string
 }
 
 export interface FinanceVoucherActionResult {
@@ -179,9 +200,15 @@ export interface FinanceVoucherActionResult {
   iyperiod?: number
   status: string
   statusLabel: string
+  periodStatus?: 'OPEN' | 'CLOSED'
+  periodStatusLabel?: string
   checkerName?: string
   checkedAt?: string | null
   postedAt?: string | null
+  voidedAt?: string | null
+  voidedByName?: string
+  reversedFromVoucherNo?: string
+  reversedByVoucherNo?: string
   nextVoucherNo?: string
   lastVoucherOfMonth?: boolean
 }

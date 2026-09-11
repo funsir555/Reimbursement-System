@@ -229,6 +229,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { expensePaymentApi, type ExpensePaymentOrder, type MoneyValue } from '@/api'
 import { formatMoney } from '@/utils/money'
+import { notifyPersonalTodoCountsChanged } from '@/utils/personalTodo'
 import { buildExpenseBatchPrintHref, openExpensePrintWindow } from './expensePrintSupport'
 
 type PaymentTab = 'pending' | 'paying' | 'paid' | 'finished' | 'exception'
@@ -441,6 +442,7 @@ async function startPayment(row: ExpensePaymentOrder) {
     await expensePaymentApi.startTask(row.taskId)
     ElMessage.success('付款任务已推送至银行')
     await reloadAll({ clearSelection: true })
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     if (isCancel(error)) {
       return
@@ -469,6 +471,7 @@ async function confirmAndCompleteTasks(taskIds: number[]) {
     }
     ElMessage.success('付款任务已标记为已支付')
     await reloadAll({ clearSelection: true })
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     if (isCancel(error)) {
       return
@@ -488,6 +491,7 @@ async function markException(row: ExpensePaymentOrder) {
     await expensePaymentApi.markException(row.taskId, { comment: value || '' })
     ElMessage.success('付款任务已标记异常')
     await reloadAll({ clearSelection: true })
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     if (isCancel(error)) {
       return
@@ -526,6 +530,7 @@ async function submitOrderExport(options: { requireConfirm: boolean, closeStartD
     }
     await reloadAll({ clearSelection: true })
     ElMessage.success('下载任务已提交，请到下载中心查看进度')
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     if (isCancel(error)) {
       return
@@ -571,6 +576,7 @@ async function handleBulkReject() {
     await expensePaymentApi.rejectTasks(selectedTaskIds.value, { comment: value || '' })
     ElMessage.success('付款任务已驳回')
     await reloadAll({ clearSelection: true })
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     if (isCancel(error)) {
       return
@@ -593,6 +599,7 @@ async function handleBulkVoid() {
     await expensePaymentApi.voidTasks(selectedTaskIds.value)
     ElMessage.success(voidSuccessMessage.value)
     await reloadAll({ clearSelection: true })
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     if (isCancel(error)) {
       return

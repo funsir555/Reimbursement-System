@@ -25,19 +25,26 @@
 
       <div class="expense-wb-advanced-panel expense-wb-advanced-panel--embedded">
         <div class="expense-wb-advanced-grid finance-review-voucher-grid">
-          <el-input v-model="filters.voucherNo" clearable placeholder="凭证号" />
-          <el-select v-model="filters.csign" clearable placeholder="凭证类型">
+          <el-input v-model="filters.voucherNo" class="finance-review-voucher-control" clearable placeholder="凭证号" />
+          <el-select v-model="filters.csign" class="finance-review-voucher-control" clearable placeholder="凭证类型">
             <el-option v-for="item in voucherTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
           <el-date-picker
             v-model="filters.billMonth"
+            class="finance-review-voucher-control"
             type="month"
             value-format="YYYY-MM"
             format="YYYY-MM"
             clearable
             placeholder="制单月份"
           />
-          <el-input v-model="filters.summary" clearable placeholder="摘要" />
+          <el-select v-model="filters.status" class="finance-review-voucher-control" clearable placeholder="状态">
+            <el-option v-for="item in reviewStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+          <el-select v-model="filters.cbill" class="finance-review-voucher-control" clearable placeholder="制单人">
+            <el-option v-for="item in makerOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+          <el-input v-model="filters.summary" class="finance-review-voucher-control" clearable placeholder="摘要" />
         </div>
       </div>
     </el-card>
@@ -66,7 +73,7 @@
         <el-table-column prop="idoc" label="附件张数" min-width="100" />
         <el-table-column label="状态" min-width="110">
           <template #default="{ row }">
-            <el-tag :type="resolveStatusTagType(row.status)">{{ row.statusLabel }}</el-tag>
+            <el-tag :type="resolveStatusTagType(row.status)">{{ resolveReviewStatusLabel(row.status, row.statusLabel) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" min-width="120" fixed="right">
@@ -104,6 +111,14 @@ type ReviewAction = 'REVIEW' | 'UNREVIEW' | 'TOGGLE_ERROR'
 type EffectiveReviewAction = 'REVIEW' | 'UNREVIEW' | 'MARK_ERROR' | 'CLEAR_ERROR'
 
 const DEFAULT_STATUS_FILTER = 'UNPOSTED,REVIEWED,ERROR'
+const REVIEW_STATUS_OPTIONS = [
+  { value: 'ALL', label: '全部状态' },
+  { value: 'UNPOSTED', label: '未审核' },
+  { value: 'REVIEWED', label: '已审核' },
+  { value: 'ERROR', label: '已标记错误' },
+  { value: 'POSTED', label: '已记账' },
+  { value: 'VOIDED', label: '已作废' }
+] as const
 
 const router = useRouter()
 const financeCompany = useFinanceCompanyStore()
@@ -126,14 +141,19 @@ const filters = reactive({
   voucherNo: '',
   csign: '',
   billMonth: '',
+  status: '',
+  cbill: '',
   summary: ''
 })
 
 const voucherTypeOptions = computed(() => voucherMeta.value?.voucherTypeOptions || [])
+const makerOptions = computed(() => voucherMeta.value?.makerOptions || [])
+const reviewStatusOptions = REVIEW_STATUS_OPTIONS
 const canReview = computed(() => hasPermission('finance:general_ledger:review_voucher:review', currentUser))
 const canUnreview = computed(() => hasPermission('finance:general_ledger:review_voucher:unreview', currentUser))
 const canMarkError = computed(() => hasPermission('finance:general_ledger:review_voucher:mark_error', currentUser))
 const lastInjectedBillMonth = ref('')
+const suppressBillMonthMetaRefresh = ref(false)
 const effectiveErrorActionLabel = computed(() => {
   const targets = resolveActionTargets(false)
   if (!targets.length) {
@@ -157,6 +177,25 @@ function syncGlobalMonthDefault(force = false) {
   lastInjectedBillMonth.value = nextDefault
 }
 
+function resolveMetaBillDate(billMonth?: string) {
+  const effectiveBillMonth = billMonth || financePeriod.currentMonthText
+  return effectiveBillMonth ? `${effectiveBillMonth}-01` : undefined
+}
+
+watch(
+  () => filters.billMonth,
+  async (billMonth, previousBillMonth) => {
+    if (suppressBillMonthMetaRefresh.value) {
+      suppressBillMonthMetaRefresh.value = false
+      return
+    }
+    if (!financeCompany.currentCompanyId || billMonth === previousBillMonth) {
+      return
+    }
+    await loadVoucherMeta(financeCompany.currentCompanyId, billMonth || financePeriod.currentMonthText)
+  }
+)
+
 watch(
   () => [financeCompany.currentCompanyId, financePeriod.currentMonthText] as const,
   async (companyId, previousCompanyId) => {
@@ -166,8 +205,10 @@ watch(
     if (nextCompanyId !== previousId) {
       currentPage.value = 1
     }
+    suppressBillMonthMetaRefresh.value = true
     syncGlobalMonthDefault(nextCompanyId !== previousId)
-    await loadVoucherMeta(nextCompanyId)
+    await loadVoucherMeta(nextCompanyId, filters.billMonth || financePeriod.currentMonthText)
+    suppressBillMonthMetaRefresh.value = false
     await loadVouchers()
   },
   { immediate: true }
@@ -181,20 +222,27 @@ function buildQueryParams(): FinanceVoucherQueryParams | null {
   return {
     companyId,
     voucherNo: filters.voucherNo.trim() || undefined,
-    status: DEFAULT_STATUS_FILTER,
+    status: filters.status === 'ALL' ? undefined : (filters.status || DEFAULT_STATUS_FILTER),
     csign: filters.csign || undefined,
     billMonth: filters.billMonth || undefined,
+    cbill: filters.cbill.trim() || undefined,
     summary: filters.summary.trim() || undefined,
     page: currentPage.value,
     pageSize: pageSize.value
   }
 }
 
-async function loadVoucherMeta(companyId = financeCompany.currentCompanyId) {
+async function loadVoucherMeta(companyId = financeCompany.currentCompanyId, billMonth = filters.billMonth || financePeriod.currentMonthText) {
   if (!companyId) return
   try {
-    const res = await financeApi.getVoucherMeta({ companyId })
+    const res = await financeApi.getVoucherMeta({
+      companyId,
+      billDate: resolveMetaBillDate(billMonth)
+    })
     voucherMeta.value = res.data
+    if (filters.cbill && !makerOptions.value.some((item) => item.value === filters.cbill)) {
+      filters.cbill = ''
+    }
   } catch (error: unknown) {
     ElMessage.error(error instanceof Error ? error.message : '加载凭证筛选项失败')
   }
@@ -224,12 +272,17 @@ function handleSearch() {
   loadVouchers()
 }
 
-function handleReset() {
+async function handleReset() {
   filters.voucherNo = ''
   filters.csign = ''
+  suppressBillMonthMetaRefresh.value = true
   syncGlobalMonthDefault(true)
+  filters.status = ''
+  filters.cbill = ''
   filters.summary = ''
   currentPage.value = 1
+  await loadVoucherMeta()
+  suppressBillMonthMetaRefresh.value = false
   loadVouchers()
 }
 
@@ -268,7 +321,7 @@ function validateTargetsForAction(action: EffectiveReviewAction, targets: Financ
   switch (action) {
     case 'REVIEW':
       if (currentStatus !== 'UNPOSTED') {
-        ElMessage.warning('只有未记账凭证可以审核')
+        ElMessage.warning('只有未审核凭证可以审核')
         return false
       }
       return true
@@ -280,7 +333,7 @@ function validateTargetsForAction(action: EffectiveReviewAction, targets: Financ
       return true
     case 'MARK_ERROR':
       if (!['UNPOSTED', 'REVIEWED'].includes(currentStatus)) {
-        ElMessage.warning('只有未记账或已审核凭证可以标记错误')
+        ElMessage.warning('只有未审核或已审核凭证可以标记错误')
         return false
       }
       return true
@@ -385,6 +438,8 @@ function resolveStatusTagType(status: string) {
   switch (status) {
     case 'POSTED':
       return 'success'
+    case 'VOIDED':
+      return 'info'
     case 'ERROR':
       return 'danger'
     case 'REVIEWED':
@@ -394,13 +449,24 @@ function resolveStatusTagType(status: string) {
   }
 }
 
+function resolveReviewStatusLabel(status: string, statusLabel?: string) {
+  if (status === 'UNPOSTED') {
+    return '未审核'
+  }
+  return statusLabel || status || '未审核'
+}
+
 defineExpose({
   currentRow,
   selectedRows,
+  filters,
+  reviewStatusOptions,
+  makerOptions,
   effectiveErrorActionLabel,
   handleVoucherStateAction,
   openDetail,
-  pager
+  pager,
+  resolveReviewStatusLabel
 })
 </script>
 
@@ -419,12 +485,29 @@ defineExpose({
 }
 
 .finance-review-voucher-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.finance-review-voucher-control {
+  width: 100%;
+  min-width: 0;
+}
+
+:deep(.finance-review-voucher-control) {
+  width: 100%;
+  min-width: 0;
+}
+
+:deep(.finance-review-voucher-control .el-input__wrapper),
+:deep(.finance-review-voucher-control .el-select__wrapper),
+:deep(.finance-review-voucher-control .el-date-editor.el-input__wrapper) {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 1400px) {
   .finance-review-voucher-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

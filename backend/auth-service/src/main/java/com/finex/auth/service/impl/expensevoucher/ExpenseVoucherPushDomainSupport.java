@@ -1,7 +1,7 @@
-// 涓氬姟鍩燂細鎶ラ攢鍑瘉鐢熸垚涓庢帹閫?
-// 鏂囦欢瑙掕壊锛氶鍩熻鍒欐敮鎾戠被
-// 涓婁笅娓稿叧绯伙細涓婃父閫氬父鏉ヨ嚜 鎶ラ攢鍗曞嚟璇佺敓鎴愭帴鍙ｅ拰璐㈠姟鎿嶄綔鍏ュ彛锛屼笅娓镐細缁х画鍗忚皟 鍑瘉鏄犲皠銆佹帹閫佽褰曞拰鎶ラ攢鍗曞嚟璇佺姸鎬併€?
-// 椋庨櫓鎻愰啋锛氭敼鍧忓悗鏈€瀹规槗褰卞搷 閲嶅鐢熸垚鍑瘉銆佸嚟璇佸唴瀹归敊璇拰鎺ㄩ€佽褰曚笉涓€鑷淬€?
+// 业务域：报销凭证生成与推送
+// 文件角色：领域规则支撑类
+// 上下游关系：上游通常来自 报销单凭证生成接口和财务操作入口，下游会继续协调 凭证映射、推送记录和报销单凭证状态。
+// 风险提醒：改坏后最容易影响 重复生成凭证、凭证内容错误和推送记录不一致。
 
 package com.finex.auth.service.impl.expensevoucher;
 
@@ -37,20 +37,20 @@ import java.util.stream.Collectors;
 
 /**
  * ExpenseVoucherPushDomainSupport锛氶鍩熻鍒欐敮鎾戠被銆?
- * 鎵挎帴 鎶ラ攢鍗曞嚟璇佹帹閫佺殑鏍稿績涓氬姟瑙勫垯銆?
- * 鏀硅繖閲屾椂锛岃鐗瑰埆鍏虫敞 閲嶅鐢熸垚鍑瘉銆佸嚟璇佸唴瀹归敊璇拰鎺ㄩ€佽褰曚笉涓€鑷存槸鍚︿細琚竴璧峰甫鍧忋€?
+ * 承接 报销单凭证推送的核心业务规则。
+     * 改这里时，要特别关注 重复生成凭证、凭证内容错误和推送记录不一致是否会被一起带坏。
  */
 public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGenerationSupport {
 
     /**
-     * 鍒濆鍖栬繖涓被鎵€闇€鐨勪緷璧栫粍浠躲€?
+     * 初始化这个类所需的依赖组件。
      */
     public ExpenseVoucherPushDomainSupport(Dependencies dependencies) {
         super(dependencies);
     }
 
     /**
-     * 鑾峰彇鎺ㄩ€佸崟鎹€?
+     * 获取推送单据。
      */
     public ExpenseVoucherPageVO<ExpenseVoucherPushDocumentVO> getPushDocuments(String companyId, String templateCode, String keyword, String pushStatus, String dateFrom, String dateTo, Integer page, Integer pageSize) {
         Map<String, String> companyMap = companyNameMap();
@@ -103,7 +103,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
     }
 
     /**
-     * 鎺ㄩ€佸崟鎹€?
+     * 推送单据。
      */
     public ExpenseVoucherPushBatchResultVO pushDocuments(ExpenseVoucherPushDTO dto, Long currentUserId, String currentUsername) {
         LinkedHashSet<String> documentCodes = dto == null ? new LinkedHashSet<>() : dto.getDocumentCodes().stream()
@@ -111,7 +111,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (documentCodes.isEmpty()) {
-            throw new IllegalArgumentException("鐠囩兘鈧瀚ㄩ棁鈧憰浣瑰腹闁胶娈戦崡鏇熷祦");
+            throw new IllegalArgumentException("单据编码列表不能为空");
         }
 
         Map<String, ProcessDocumentInstance> documentMap = documentInstanceMapper.selectList(
@@ -127,7 +127,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         for (String documentCode : documentCodes) {
             ProcessDocumentInstance document = documentMap.get(documentCode);
             if (document == null) {
-                result.getResults().add(buildFailureResult(documentCode, null, null, null, "閸楁洘宓佹稉宥呯摠閸︻煉绱濋弮鐘崇《閹恒劑鈧礁鍤熺拠?"));
+                result.getResults().add(buildFailureResult(documentCode, null, null, null, "报销单不存在或未完成审批"));
                 result.setFailureCount(result.getFailureCount() + 1);
                 continue;
             }
@@ -141,7 +141,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
                 result.getResults().add(pushResult);
                 result.setSuccessCount(result.getSuccessCount() + 1);
             } catch (Exception ex) {
-                String errorMessage = defaultText(ex.getMessage(), "閹恒劑鈧礁銇戠拹?");
+                String errorMessage = defaultText(ex.getMessage(), "推送失败");
                 if (companyId != null) {
                     batchContext = batchContext == null ? batchMap.computeIfAbsent(companyId, key -> createBatchContext(key, currentUsername)) : batchContext;
                     saveFailedPushDocument(document, batchContext, errorMessage);
@@ -165,7 +165,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         return result;
     }
     /**
-     * 鎺ㄩ€丱ne鍗曟嵁銆?
+     * 推送One单据。
      */
     private ExpenseVoucherPushResultVO pushOneDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, Long currentUserId, String currentUsername) {
         if (!isVoucherEligibleDocumentStatus(trim(document.getStatus()))) {
@@ -176,7 +176,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         ExpVoucherTemplatePolicy templatePolicy = requireEnabledTemplatePolicy(companyId, document.getTemplateCode());
         List<ProcessDocumentExpenseDetail> details = listExpenseDetails(document.getDocumentCode());
         if (details.isEmpty()) {
-            throw new IllegalStateException("褰撳墠鍗曟嵁娌℃湁鍙敓鎴愬嚟璇佺殑璐圭敤鏄庣粏");
+            throw new IllegalStateException("当前单据没有可生成凭证的费用明细");
         }
 
         LinkedHashMap<String, BigDecimal> debitAmounts = aggregateExpenseAmounts(details);
@@ -185,7 +185,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
                 .collect(Collectors.toMap(ExpVoucherSubjectMapping::getExpenseTypeCode, Function.identity(), (left, right) -> left, LinkedHashMap::new));
         for (String expenseTypeCode : debitAmounts.keySet()) {
             if (!subjectMap.containsKey(expenseTypeCode)) {
-                throw new IllegalStateException("鏈厤缃垂鐢ㄧ被鍨嬪搴旂殑浼氳绉戠洰: " + expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
+                throw new IllegalStateException("未配置费用类型对应的会计科目: " + expenseTypeMap.getOrDefault(expenseTypeCode, expenseTypeCode));
             }
         }
 
@@ -198,7 +198,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         return buildSuccessResult(document, companyId, saveResult);
     }
     /**
-     * 缁勮鍑瘉SaveDTO銆?
+     * 组装凭证SaveDTO。
      */
     private FinanceVoucherSaveDTO buildVoucherSaveDTO(ProcessDocumentInstance document, String companyId, ExpVoucherTemplatePolicy templatePolicy, LinkedHashMap<String, BigDecimal> debitAmounts, Map<String, ExpVoucherSubjectMapping> subjectMap, Map<String, String> expenseTypeMap, String currentUsername) {
         LocalDate businessDate = resolveBusinessDate(document);
@@ -209,7 +209,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         dto.setCsign(defaultText(templatePolicy.getVoucherType(), DEFAULT_VOUCHER_TYPE));
         dto.setCbill(currentUsername);
         dto.setIdoc(0);
-        dto.setCtext1("閹躲儵鏀㈤崙顓＄槈-" + document.getDocumentCode());
+        dto.setCtext1("报销单-" + document.getDocumentCode());
         dto.setCtext2(defaultText(document.getTemplateName(), document.getTemplateCode()));
 
         List<FinanceVoucherEntryDTO> entries = new ArrayList<>();
@@ -227,7 +227,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
             totalAmount = totalAmount.add(amount);
         }
         FinanceVoucherEntryDTO creditEntry = new FinanceVoucherEntryDTO();
-        creditEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, "闁炬儼顢戠粔鎴犳窗"));
+        creditEntry.setCdigest(resolveSummary(templatePolicy.getSummaryRule(), document, "报销汇总"));
         creditEntry.setCcode(templatePolicy.getCreditAccountCode());
         creditEntry.setMd(ZERO);
         creditEntry.setMc(totalAmount);
@@ -237,7 +237,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
     }
 
     /**
-     * 淇濆瓨Success鎺ㄩ€佸崟鎹€?
+     * 保存Success推送单据。
      */
     private ExpVoucherPushDocument saveSuccessPushDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, FinanceVoucherSaveResultVO saveResult) {
         ExpVoucherPushDocument row = findPushDocument(batchContext.batch.getCompanyId(), document.getDocumentCode());
@@ -270,7 +270,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
     }
 
     /**
-     * 淇濆瓨Failed鎺ㄩ€佸崟鎹€?
+     * 保存Failed推送单据。
      */
     private void saveFailedPushDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, String errorMessage) {
         ExpVoucherPushDocument row = findPushDocument(batchContext.batch.getCompanyId(), document.getDocumentCode());
@@ -335,7 +335,7 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
     }
 
     /**
-     * 鍒涘缓Batch涓婁笅鏂囥€?
+     * 创建Batch上下文。
      */
     private CompanyBatchContext createBatchContext(String companyId, String currentUsername) {
         ExpVoucherPushBatch batch = new ExpVoucherPushBatch();

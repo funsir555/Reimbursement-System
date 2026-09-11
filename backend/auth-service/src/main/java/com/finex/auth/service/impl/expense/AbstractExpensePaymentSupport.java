@@ -23,8 +23,10 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.service.ExpenseAttachmentService;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -100,11 +102,15 @@ abstract class AbstractExpensePaymentSupport {
         if (documentCodes == null || documentCodes.isEmpty()) {
             return Collections.emptyMap();
         }
-        return processDocumentExpenseDetailMapper.selectList(
+        List<ProcessDocumentExpenseDetail> details = processDocumentExpenseDetailMapper.selectList(
                 Wrappers.<ProcessDocumentExpenseDetail>lambdaQuery()
                         .in(ProcessDocumentExpenseDetail::getDocumentCode, documentCodes)
                         .orderByAsc(ProcessDocumentExpenseDetail::getSortOrder, ProcessDocumentExpenseDetail::getId)
-        ).stream().collect(Collectors.groupingBy(
+        );
+        if (details == null || details.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return details.stream().collect(Collectors.groupingBy(
                 ProcessDocumentExpenseDetail::getDocumentCode,
                 LinkedHashMap::new,
                 Collectors.toList()
@@ -265,6 +271,55 @@ abstract class AbstractExpensePaymentSupport {
             }
         }
         return null;
+    }
+
+    /**
+     * 解析付款单主表中明确标记为 AMOUNT 的控件。
+     *
+     * <p>这里不使用字段名模糊匹配，也不读取 __totalAmount：
+     * 付款单没有费用明细时，只有唯一的主表金额控件才是可用于支付的金额来源。</p>
+     */
+    protected MainFormPaymentAmountResolution resolveMainFormPaymentAmount(
+            ProcessDocumentInstance instance
+    ) {
+        if (instance == null) {
+            return MainFormPaymentAmountResolution.empty();
+        }
+        Map<String, Object> schema = readSchema(instance.getFormSchemaSnapshotJson());
+        Map<String, Object> formData = readMap(instance.getFormDataJson());
+        List<String> amountFieldKeys = new ArrayList<>();
+        Object rawBlocks = schema.get("blocks");
+        if (rawBlocks instanceof List<?> blocks) {
+            for (Object rawBlock : blocks) {
+                if (!(rawBlock instanceof Map<?, ?> blockMap)
+                        || !Objects.equals("CONTROL", String.valueOf(blockMap.get("kind")))) {
+                    continue;
+                }
+                Object rawProps = blockMap.get("props");
+                if (!(rawProps instanceof Map<?, ?> props)
+                        || !Objects.equals("AMOUNT", String.valueOf(props.get("controlType")))) {
+                    continue;
+                }
+                String fieldKey = trimToNull(
+                        blockMap.get("fieldKey") == null ? null : String.valueOf(blockMap.get("fieldKey"))
+                );
+                if (fieldKey != null) {
+                    amountFieldKeys.add(fieldKey);
+                }
+            }
+        }
+        if (amountFieldKeys.size() != 1) {
+            return new MainFormPaymentAmountResolution(
+                    amountFieldKeys.size(),
+                    null,
+                    amountFieldKeys.isEmpty() ? null : amountFieldKeys.get(0)
+            );
+        }
+        return new MainFormPaymentAmountResolution(
+                1,
+                toBigDecimal(formData.get(amountFieldKeys.get(0))),
+                amountFieldKeys.get(0)
+        );
     }
 
     protected String resolvePayeeBankProvince(
@@ -474,6 +529,27 @@ abstract class AbstractExpensePaymentSupport {
         }
     }
 
+    protected BigDecimal toBigDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        String normalized = trimToNull(String.valueOf(value));
+        if (normalized == null) {
+            return null;
+        }
+        try {
+            return new BigDecimal(normalized);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     protected String firstNonBlank(String... values) {
         if (values == null) {
             return null;
@@ -497,6 +573,20 @@ abstract class AbstractExpensePaymentSupport {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    protected record MainFormPaymentAmountResolution(
+            int amountControlCount,
+            BigDecimal amount,
+            String fieldKey
+    ) {
+        static MainFormPaymentAmountResolution empty() {
+            return new MainFormPaymentAmountResolution(0, null, null);
+        }
+
+        boolean hasMultipleAmountControls() {
+            return amountControlCount > 1;
+        }
     }
 
     private Map<String, Object> defaultSchema() {

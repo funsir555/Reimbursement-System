@@ -24,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -55,6 +56,10 @@ public class FinanceVoucherController {
     private static final String MESSAGE_UNREVIEWED = "凭证反审核成功";
     private static final String MESSAGE_MARKED_ERROR = "凭证已标记错误";
     private static final String MESSAGE_CLEARED_ERROR = "凭证错误标记已取消";
+    private static final String MESSAGE_VOIDED = "凭证作废成功";
+    private static final String MESSAGE_RESTORED = "凭证恢复成功";
+    private static final String MESSAGE_REVERSED = "凭证冲销成功";
+    private static final String MESSAGE_DELETED = "凭证删除成功";
     private static final String MESSAGE_BATCH_UPDATED = "凭证批量状态更新成功";
     private static final String MESSAGE_USER_MISSING = "当前登录用户不存在";
     private static final String EXPORT_PREFIX = "凭证查询-";
@@ -73,6 +78,7 @@ public class FinanceVoucherController {
             @RequestParam(required = false) String billMonth,
             @RequestParam(required = false) String billMonthFrom,
             @RequestParam(required = false) String billMonthTo,
+            @RequestParam(required = false) String cbill,
             @RequestParam(required = false) String summary,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer pageSize,
@@ -87,6 +93,7 @@ public class FinanceVoucherController {
         dto.setBillMonth(billMonth);
         dto.setBillMonthFrom(billMonthFrom);
         dto.setBillMonthTo(billMonthTo);
+        dto.setCbill(cbill);
         dto.setSummary(summary);
         dto.setPage(page);
         dto.setPageSize(pageSize);
@@ -122,6 +129,7 @@ public class FinanceVoucherController {
             @RequestParam(required = false) String billMonth,
             @RequestParam(required = false) String billMonthFrom,
             @RequestParam(required = false) String billMonthTo,
+            @RequestParam(required = false) String cbill,
             @RequestParam(required = false) String summary,
             HttpServletRequest request
     ) {
@@ -135,6 +143,7 @@ public class FinanceVoucherController {
         dto.setBillMonth(billMonth);
         dto.setBillMonthFrom(billMonthFrom);
         dto.setBillMonthTo(billMonthTo);
+        dto.setCbill(cbill);
         dto.setSummary(summary);
 
         byte[] content = financeVoucherService.exportVouchers(dto);
@@ -228,6 +237,58 @@ public class FinanceVoucherController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), REVIEW_VOUCHER_MARK_ERROR);
         return Result.success(MESSAGE_CLEARED_ERROR, financeVoucherService.clearVoucherError(companyId, voucherNo));
+    }
+
+    @PostMapping("/{voucherNo}/void")
+    public Result<FinanceVoucherActionResultVO> voidVoucher(
+            @PathVariable String voucherNo,
+            @RequestParam String companyId,
+            HttpServletRequest request
+    ) {
+        Long currentUserId = getCurrentUserId(request);
+        accessControlService.requirePermission(currentUserId, QUERY_VOUCHER_EDIT);
+        return Result.success(
+                MESSAGE_VOIDED,
+                financeVoucherService.voidVoucher(companyId, voucherNo, currentUserId, getCurrentUsername(request))
+        );
+    }
+
+    @PostMapping("/{voucherNo}/restore")
+    public Result<FinanceVoucherActionResultVO> restoreVoucher(
+            @PathVariable String voucherNo,
+            @RequestParam String companyId,
+            HttpServletRequest request
+    ) {
+        Long currentUserId = getCurrentUserId(request);
+        accessControlService.requirePermission(currentUserId, QUERY_VOUCHER_EDIT);
+        return Result.success(
+                MESSAGE_RESTORED,
+                financeVoucherService.restoreVoucher(companyId, voucherNo, currentUserId, getCurrentUsername(request))
+        );
+    }
+
+    @PostMapping("/{voucherNo}/reverse")
+    public Result<FinanceVoucherActionResultVO> reverseVoucher(
+            @PathVariable String voucherNo,
+            @RequestParam String companyId,
+            HttpServletRequest request
+    ) {
+        Long currentUserId = getCurrentUserId(request);
+        accessControlService.requirePermission(currentUserId, QUERY_VOUCHER_EDIT);
+        return Result.success(
+                MESSAGE_REVERSED,
+                financeVoucherService.reverseVoucher(companyId, voucherNo, currentUserId, getCurrentUsername(request))
+        );
+    }
+
+    @DeleteMapping("/{voucherNo}")
+    public Result<FinanceVoucherActionResultVO> deleteVoucher(
+            @PathVariable String voucherNo,
+            @RequestParam String companyId,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), QUERY_VOUCHER_EDIT);
+        return Result.success(MESSAGE_DELETED, financeVoucherService.deleteVoucher(companyId, voucherNo));
     }
 
     @PostMapping("/actions")

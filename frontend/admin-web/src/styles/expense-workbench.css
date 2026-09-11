@@ -1121,6 +1121,22 @@
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
 }
 
+.expense-wb-related-document-card {
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.expense-wb-related-document-card:hover {
+  background: linear-gradient(180deg, #eff6ff 0%, #e8f1ff 100%);
+  border-color: #93c5fd;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.1);
+}
+
+.expense-wb-related-document-card:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
 .expense-wb-detail-card__body {
   display: flex;
   flex-wrap: wrap;

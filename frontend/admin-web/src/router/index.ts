@@ -1,6 +1,7 @@
 import { ElMessage } from 'element-plus'
 import { createRouter, createWebHistory } from 'vue-router'
 import { authApi } from '@/api'
+import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { hasAnyPermission, readStoredUser, resolveFirstAccessiblePath } from '@/utils/permissions'
 import { buildRouteRecords } from './route-catalog'
 import { getRoutePermissionCodes } from './route-meta'
@@ -42,16 +43,29 @@ router.beforeEach(async (to) => {
   try {
     // 页面权限判断依赖后端返回的 permissionCodes。
     const currentUser = await ensureCurrentUser()
-    if (hasAnyPermission(requiredCodes, currentUser)) {
+    if (!hasAnyPermission(requiredCodes, currentUser)) {
+      // 目标页无权访问时，跳转到该用户当前第一个可访问页面。
+      const fallbackPath = resolveFirstAccessiblePath(currentUser)
+      if (fallbackPath !== to.fullPath) {
+        ElMessage.warning('当前没有该页面访问权限，已跳转到可访问的首页。')
+        return fallbackPath
+      }
       return true
     }
 
-    // 目标页无权访问时，跳转到该用户当前第一个可访问页面。
-    const fallbackPath = resolveFirstAccessiblePath(currentUser)
-    if (fallbackPath !== to.fullPath) {
-      ElMessage.warning('当前没有该页面访问权限，已跳转到可访问的首页。')
-      return fallbackPath
+    const financeModuleCode =
+      typeof to.meta.financeModuleCode === 'string' && to.meta.financeModuleCode.trim()
+        ? to.meta.financeModuleCode.trim()
+        : ''
+    if (financeModuleCode) {
+      const financeCompany = useFinanceCompanyStore()
+      await financeCompany.ensureInitialized(currentUser.companyId)
+      if (financeCompany.currentCompanyHasActiveAccountSet && !financeCompany.isCurrentModuleEnabled(financeModuleCode)) {
+        ElMessage.warning('系统未启用')
+        return false
+      }
     }
+
     return true
   } catch {
     // 当前用户信息加载失败时，通常说明登录态不可用，统一退回登录页。

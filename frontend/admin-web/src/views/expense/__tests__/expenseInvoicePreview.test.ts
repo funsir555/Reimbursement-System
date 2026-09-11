@@ -129,7 +129,7 @@ describe('expenseInvoicePreview', () => {
       attachmentId: 'ATT-009',
       fileName: 'meal.jpg',
       contentType: 'image/jpeg',
-      fileSize: null,
+      fileSize: undefined,
       previewUrl: '/api/auth/expenses/attachments/ATT-009/content',
       ocr: {
         status: 'SUCCESS',
@@ -142,8 +142,8 @@ describe('expenseInvoicePreview', () => {
         invoiceDate: '',
         invoiceType: '',
         sellerName: '',
-        totalAmount: null,
-        taxAmount: null,
+        totalAmount: undefined,
+        taxAmount: undefined,
         message: ''
       }
     }])

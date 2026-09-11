@@ -18,9 +18,13 @@ vi.mock('@/api', () => ({
   notificationApi: mocks.notificationApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 const DrawerStub = defineComponent({
   props: {

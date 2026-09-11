@@ -13,6 +13,7 @@ import type { ExpenseDetailActionItem } from '@/views/expense/expenseDetailActio
 
 type UserActionMode = 'transfer' | 'add-sign' | ''
 type TaskActionMode = 'approve' | 'reject' | ''
+type AddSignPosition = 'BEFORE' | 'AFTER'
 type ApprovableTask = NonNullable<ExpenseDocumentDetail['currentTasks']>[number]
 
 type RejectTargetOption = {
@@ -70,7 +71,8 @@ export function useExpenseDocumentDetailActionOwner(
   const userOptions = ref<ExpenseActionUserOption[]>([])
   const userActionForm = ref({
     targetUserId: undefined as number | undefined,
-    remark: ''
+    remark: '',
+    position: 'BEFORE' as AddSignPosition
   })
 
   const taskActionDialogTitle = computed(() =>
@@ -83,7 +85,7 @@ export function useExpenseDocumentDetailActionOwner(
     taskActionMode.value === 'approve' ? '请输入审批意见（可空）' : '请输入驳回原因'
   )
   const userActionDialogTitle = computed(() =>
-    userActionMode.value === 'transfer' ? '转交审批任务' : '发起前加签'
+    userActionMode.value === 'transfer' ? '转交审批任务' : '发起加签'
   )
   const userActionDialogLabel = computed(() =>
     userActionMode.value === 'transfer' ? '转交给' : '加签人'
@@ -364,7 +366,8 @@ export function useExpenseDocumentDetailActionOwner(
     userActionMode.value = actionKey
     userActionForm.value = {
       targetUserId: undefined,
-      remark: ''
+      remark: '',
+      position: 'BEFORE'
     }
     userActionDialogVisible.value = true
     await loadActionUsers('')
@@ -375,7 +378,8 @@ export function useExpenseDocumentDetailActionOwner(
     userActionMode.value = ''
     userActionForm.value = {
       targetUserId: undefined,
-      remark: ''
+      remark: '',
+      position: 'BEFORE'
     }
   }
 
@@ -401,22 +405,24 @@ export function useExpenseDocumentDetailActionOwner(
       return
     }
     userActionSubmitting.value = true
+    const actionMode = userActionMode.value
     try {
       const payload = {
         targetUserId: userActionForm.value.targetUserId,
-        remark: userActionForm.value.remark.trim()
+        remark: userActionForm.value.remark.trim(),
+        ...(actionMode === 'add-sign' ? { position: userActionForm.value.position } : {})
       }
-      const res = userActionMode.value === 'transfer'
+      const res = actionMode === 'transfer'
         ? await expenseApprovalApi.transfer(task.id, payload)
         : await expenseApprovalApi.addSign(task.id, payload)
       closeUserActionDialog()
       await options.refreshAfterAction(res.data)
-      ElMessage.success(userActionMode.value === 'transfer' ? '审批任务已转交' : '已发起加签')
+      ElMessage.success(actionMode === 'transfer' ? '审批任务已转交' : '已发起加签')
     } catch (error: unknown) {
       ElMessage.error(
         options.resolveErrorMessage(
           error,
-          userActionMode.value === 'transfer' ? '转交审批失败' : '加签失败'
+          actionMode === 'transfer' ? '转交审批失败' : '加签失败'
         )
       )
     } finally {

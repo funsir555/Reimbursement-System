@@ -10,6 +10,7 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 public class SharedCloseLedgerSupport extends AbstractFinanceCloseLedgerSupport {
 
@@ -23,7 +24,8 @@ public class SharedCloseLedgerSupport extends AbstractFinanceCloseLedgerSupport 
             GlAccvouchMapper glAccvouchMapper,
             GlAccsumMapper glAccsumMapper,
             GlAccassMapper glAccassMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         super(
                 systemCompanyMapper,
@@ -35,7 +37,8 @@ public class SharedCloseLedgerSupport extends AbstractFinanceCloseLedgerSupport 
                 glAccvouchMapper,
                 glAccsumMapper,
                 glAccassMapper,
-                userMapper
+                userMapper,
+                financeModuleEnableSupport
         );
     }
 }

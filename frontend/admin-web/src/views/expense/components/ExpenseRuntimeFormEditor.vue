@@ -691,10 +691,14 @@
 
                 :key="`${block.fieldKey}-${item.documentCode}`"
 
-                class="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
+                class="expense-wb-related-document-card rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
 
                 :data-testid="`selected-document-${block.fieldKey}-${item.documentCode}`"
-
+                role="button"
+                tabindex="0"
+                @click="emit('open-document-detail', item.documentCode)"
+                @keydown.enter.prevent="emit('open-document-detail', item.documentCode)"
+                @keydown.space.prevent="emit('open-document-detail', item.documentCode)"
               >
 
                 <div class="flex flex-wrap items-start justify-between gap-3">
@@ -731,7 +735,7 @@
 
                     :disabled="isReadOnly(block)"
 
-                    @click="removeDocumentRecord(block, item.documentCode)"
+                    @click.stop="removeDocumentRecord(block, item.documentCode)"
 
                   >
 
@@ -777,11 +781,12 @@
 
                     <p class="text-xs text-slate-400">核销金额</p>
 
-                    <money-input
+                    <div class="mt-2" @click.stop @mousedown.stop @keydown.stop>
+                      <money-input
 
                       :model-value="item.writeOffAmount || ''"
 
-                      class="mt-2 w-full expense-runtime-control"
+                      class="w-full expense-runtime-control"
 
                       :data-testid="`writeoff-amount-${block.fieldKey}-${item.documentCode}`"
 
@@ -789,7 +794,8 @@
 
                       @update:model-value="updateWriteOffAmount(block, item.documentCode, $event)"
 
-                    />
+                      />
+                    </div>
 
                   </div>
 
@@ -1064,6 +1070,10 @@ import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 
 
 const formData = defineModel<Record<string, unknown>>({ required: true })
+
+const emit = defineEmits<{
+  'open-document-detail': [documentCode: string]
+}>()
 
 const props = withDefaults(defineProps<{
 

@@ -111,6 +111,10 @@
             :period-month="financePeriod.currentPeriod"
             :period-year-options="financePeriod.yearOptions"
             :period-month-options="financePeriod.monthOptions"
+            :period-start-year="financePeriod.periodStartYear"
+            :period-start-month="financePeriod.periodStartMonth"
+            :period-end-year="financePeriod.periodEndYear"
+            :period-end-month="financePeriod.periodEndMonth"
             :period-disabled="!financePeriod.hasAvailableRange"
             :period-hint="financePeriodHint"
             @select="handleFinanceTabSelect"
@@ -125,7 +129,7 @@
                 <component
                   :is="Component"
                   v-if="isFinancePath(viewRoute.path)"
-                  :key="viewRoute.fullPath"
+                  :key="financeWorkspace.resolveViewCacheKey(viewRoute.fullPath)"
                 />
               </keep-alive>
               <component
@@ -155,7 +159,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { authApi, downloadApi, notificationApi, type UserProfile } from '@/api'
+import {
+  authApi,
+  downloadApi,
+  expenseApprovalApi,
+  expensePaymentApi,
+  notificationApi,
+  type UserProfile
+} from '@/api'
 import DownloadCenterDrawer from '@/components/DownloadCenterDrawer.vue'
 import MainNavigationTree from '@/components/navigation/MainNavigationTree.vue'
 import NotificationCenterDrawer from '@/components/NotificationCenterDrawer.vue'
@@ -164,9 +175,11 @@ import FinanceWorkspaceTabs from '@/components/finance/FinanceWorkspaceTabs.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
+import { FINANCE_HOME_PATH, recordFinanceHomeVisit } from '@/utils/financeHomeModules'
 import { onDownloadCenterOpen } from '@/utils/downloadCenter'
+import { countUniqueTodoDocuments, PERSONAL_TODO_COUNTS_CHANGED_EVENT } from '@/utils/personalTodo'
 import { EXPENSE_CREATE_ENTRY_PERMISSION_CODES, hasAnyPermission } from '@/utils/permissions'
-import { MAIN_NAVIGATION_MENU, filterVisibleNavigationMenu } from '@/router/navigation-config'
+import { applyNavigationBadgeCounts, MAIN_NAVIGATION_MENU, filterVisibleNavigationMenu } from '@/router/navigation-config'
 import { getRouteMenuPermissionCodes, resolveRouteMeta } from '@/router/route-meta'
 import {
   Search,
@@ -192,6 +205,8 @@ const downloadDrawerRefreshKey = ref(0)
 const downloadPendingCount = ref(0)
 const notificationDrawerVisible = ref(false)
 const notificationUnreadCount = ref(0)
+const pendingApprovalCount = ref(0)
+const pendingPaymentCount = ref(0)
 const currentUser = ref<UserProfile | null>(null)
 
 const PROFILE_MENU_PERMISSION_CODES = getRouteMenuPermissionCodes(resolveRouteMeta('profile'))
@@ -200,7 +215,13 @@ const SETTINGS_MENU_PERMISSION_CODES = getRouteMenuPermissionCodes(resolveRouteM
 const activeMenu = computed(() => route.path)
 const userName = computed(() => currentUser.value?.name || currentUser.value?.username || '未登录用户')
 const permissionCodes = computed(() => currentUser.value?.permissionCodes || [])
-const visibleNavigationMenu = computed(() => filterVisibleNavigationMenu(MAIN_NAVIGATION_MENU, permissionCodes.value))
+const visibleNavigationMenu = computed(() => applyNavigationBadgeCounts(
+  filterVisibleNavigationMenu(MAIN_NAVIGATION_MENU, permissionCodes.value),
+  {
+    '/expense/approval': pendingApprovalCount.value,
+    '/expense/payment/orders': pendingPaymentCount.value
+  }
+))
 
 const canAny = (codes: string[]) => hasAnyPermission(codes, permissionCodes.value)
 
@@ -258,10 +279,30 @@ const loadNotificationSummary = async () => {
   }
 }
 
+const loadPersonalTodoCounts = async () => {
+  const approvalRequest = canAny(['expense:approval:view'])
+    ? expenseApprovalApi.listPending()
+    : Promise.resolve({ data: [] })
+  const paymentRequest = canAny(['expense:payment:payment_order:view'])
+    ? expensePaymentApi.listOrders('PENDING_PAYMENT')
+    : Promise.resolve({ data: [] })
+
+  const [approvalResult, paymentResult] = await Promise.allSettled([approvalRequest, paymentRequest])
+  pendingApprovalCount.value = approvalResult.status === 'fulfilled'
+    ? countUniqueTodoDocuments(approvalResult.value.data)
+    : 0
+  pendingPaymentCount.value = paymentResult.status === 'fulfilled'
+    ? countUniqueTodoDocuments(paymentResult.value.data)
+    : 0
+}
+
 onMounted(async () => {
+  window.addEventListener(PERSONAL_TODO_COUNTS_CHANGED_EVENT, loadPersonalTodoCounts)
+  window.addEventListener('focus', loadPersonalTodoCounts)
   await loadCurrentUser()
   await loadDownloadCount()
   await loadNotificationSummary()
+  await loadPersonalTodoCounts()
 })
 
 const stopListeningDownloadCenter = onDownloadCenterOpen(() => {
@@ -272,12 +313,20 @@ const stopListeningDownloadCenter = onDownloadCenterOpen(() => {
 
 onBeforeUnmount(() => {
   stopListeningDownloadCenter()
+  window.removeEventListener(PERSONAL_TODO_COUNTS_CHANGED_EVENT, loadPersonalTodoCounts)
+  window.removeEventListener('focus', loadPersonalTodoCounts)
 })
 
 watch(
   () => route.fullPath,
   () => {
     financeWorkspace.syncRoute(route)
+    if (isFinancePath(route.path)) {
+      recordFinanceHomeVisit(route.path)
+    }
+    if (currentUser.value) {
+      void loadPersonalTodoCounts()
+    }
   },
   { immediate: true }
 )
@@ -374,7 +423,13 @@ async function handleFinanceCompanyChange(companyId: string) {
   }
 }
 
-function handleFinancePeriodChange(payload: { year: number; month: number }) {
+async function handleFinancePeriodChange(payload: { year: number; month: number }) {
+  const allowed = await financeWorkspace.requestPeriodSwitch()
+  if (!allowed) {
+    return
+  }
+  financeWorkspace.resetToHome()
+  await router.push(FINANCE_HOME_PATH)
   financePeriod.switchPeriod(payload.year, payload.month)
 }
 </script>

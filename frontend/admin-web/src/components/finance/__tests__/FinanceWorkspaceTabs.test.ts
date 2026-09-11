@@ -34,8 +34,9 @@ function mountView(extraProps: Record<string, unknown> = {}) {
   return mount(FinanceWorkspaceTabs, {
     props: {
       tabs: [
-        { path: '/finance/general-ledger/new-voucher', title: '新建凭证' },
-        { path: '/finance/general-ledger/opening-balance', title: '期初余额' }
+        { path: '/finance/home', title: '财务管理', closable: false, pinned: true, kind: 'home' },
+        { path: '/finance/general-ledger/new-voucher', title: '新建凭证', closable: true, pinned: false, kind: 'page' },
+        { path: '/finance/general-ledger/opening-balance', title: '期初余额', closable: true, pinned: false, kind: 'page' }
       ],
       activePath: '/finance/general-ledger/new-voucher',
       companyOptions: [
@@ -59,6 +60,10 @@ function mountView(extraProps: Record<string, unknown> = {}) {
       periodMonth: 4,
       periodYearOptions: [2026],
       periodMonthOptions: [4],
+      periodStartYear: 2026,
+      periodStartMonth: 4,
+      periodEndYear: 2026,
+      periodEndMonth: 4,
       ...extraProps
     },
     global: {
@@ -78,6 +83,8 @@ describe('FinanceWorkspaceTabs', () => {
     expect(wrapper.find('.finance-tabs-wrap').exists()).toBe(true)
     expect(wrapper.find('.finance-tab').exists()).toBe(true)
     expect(wrapper.find('.finance-tab-active').exists()).toBe(true)
+    expect(wrapper.find('[data-tab-path="/finance/home"] .finance-tab-close').exists()).toBe(false)
+    expect(wrapper.find('[data-tab-path="/finance/general-ledger/new-voucher"] .finance-tab-close').exists()).toBe(true)
     expect(wrapper.find('.finance-tool-inline-group.finance-period-group').exists()).toBe(true)
     expect(wrapper.find('.finance-tool-inline-group.finance-company-group').exists()).toBe(true)
     expect(wrapper.text()).toContain('会计期间')
@@ -125,5 +132,55 @@ describe('FinanceWorkspaceTabs', () => {
       [{ year: 2026, month: 4 }],
       [{ year: 2026, month: 4 }]
     ])
+  })
+
+  it('uses the last available month when switching to a year where the current month is unavailable', async () => {
+    const wrapper = mountView({
+      periodYear: 2022,
+      periodMonth: 11,
+      periodYearOptions: [2022, 2023],
+      periodMonthOptions: [11, 12],
+      periodStartYear: 2022,
+      periodStartMonth: 11,
+      periodEndYear: 2023,
+      periodEndMonth: 1
+    })
+
+    const yearSelect = wrapper.findAllComponents(SelectStub)[0]
+    await yearSelect.vm.$emit('update:modelValue', 2023)
+
+    expect(wrapper.emitted('changePeriod')).toEqual([
+      [{ year: 2023, month: 1 }]
+    ])
+  })
+
+  it('does not emit a period switch when the target year has no available months', async () => {
+    const wrapper = mountView({
+      periodYear: 2022,
+      periodMonth: 11,
+      periodYearOptions: [2022, 2023],
+      periodMonthOptions: [11, 12],
+      periodStartYear: 2022,
+      periodStartMonth: 11,
+      periodEndYear: 2022,
+      periodEndMonth: 12
+    })
+
+    const yearSelect = wrapper.findAllComponents(SelectStub)[0]
+    await yearSelect.vm.$emit('update:modelValue', 2023)
+
+    expect(wrapper.emitted('changePeriod')).toBeUndefined()
+  })
+
+  it('keeps the close button visible for a single closable functional tab', () => {
+    const wrapper = mountView({
+      tabs: [
+        { path: '/finance/home', title: '财务管理', closable: false, pinned: true, kind: 'home' },
+        { path: '/finance/general-ledger/new-voucher', title: '新建凭证', closable: true, pinned: false, kind: 'page' }
+      ]
+    })
+
+    expect(wrapper.find('[data-tab-path="/finance/home"] .finance-tab-close').exists()).toBe(false)
+    expect(wrapper.find('[data-tab-path="/finance/general-ledger/new-voucher"] .finance-tab-close').exists()).toBe(true)
   })
 })

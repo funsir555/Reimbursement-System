@@ -23,6 +23,7 @@
 
         <div class="fpv-actions">
           <el-button :loading="loading.meta" @click="loadMeta">刷新</el-button>
+          <el-button :disabled="!financePeriod.hasPeriodContext" @click="periodStatusVisible = true">期间状态</el-button>
           <el-button type="primary" :loading="loading.run" :disabled="!financePeriod.hasPeriodContext" @click="startPosting">
             开始记账
           </el-button>
@@ -62,6 +63,8 @@
         </div>
       </div>
     </el-card>
+
+    <FinancePeriodStatusDialog v-model="periodStatusVisible" @completed="handlePeriodStatusCompleted" />
   </div>
 </template>
 
@@ -69,6 +72,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { postVoucherApi, type FinancePostVoucherMeta, type FinancePostVoucherTaskStatus } from '@/api'
+import FinancePeriodStatusDialog from '@/components/finance/FinancePeriodStatusDialog.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 
@@ -77,6 +81,7 @@ const financePeriod = useFinancePeriodStore()
 
 const meta = ref<FinancePostVoucherMeta | null>(null)
 const taskStatus = ref<FinancePostVoucherTaskStatus | null>(null)
+const periodStatusVisible = ref(false)
 const loading = reactive({
   meta: false,
   run: false,
@@ -248,6 +253,12 @@ function buildSampleText(voucherNos: string[]) {
 
 function isActiveTaskStatus(status?: string) {
   return status === 'PENDING' || status === 'RUNNING'
+}
+
+async function handlePeriodStatusCompleted() {
+  stopPolling()
+  taskStatus.value = null
+  await loadMeta()
 }
 </script>
 

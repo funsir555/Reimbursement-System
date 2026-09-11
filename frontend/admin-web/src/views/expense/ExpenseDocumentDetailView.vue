@@ -40,12 +40,12 @@
           <ExpenseDocumentReadonlyFormPanel
             :amount-text="amountText"
             :display="readonlyFormDisplay"
+            @open-document-detail="openBoundDocument"
           />
 
           <ExpenseDocumentBindingPanels
             :panels="bindingPanels"
             :binding-count-suffix="bindingCountSuffix"
-            :view-bound-document-label="viewBoundDocumentLabel"
             @open-bound-document="openBoundDocument"
           />
 
@@ -206,6 +206,13 @@
           />
         </el-form-item>
 
+        <el-form-item v-if="userActionMode === 'add-sign'" label="加签位置" required>
+          <el-select v-model="userActionForm.position" class="w-full" placeholder="请选择加签位置">
+            <el-option label="在我之前" value="BEFORE" />
+            <el-option label="在我之后" value="AFTER" />
+          </el-select>
+        </el-form-item>
+
         <el-form-item label="备注">
           <el-input
             v-model="userActionForm.remark"
@@ -234,11 +241,16 @@
       multiple
       @change="handleCommentFileChange"
     >
+
+    <ExpenseDocumentReadonlyDrawer
+      v-model="boundDocumentDrawerVisible"
+      :document-code="boundDocumentCode"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { type ProcessFormDesignSchema } from '@/api'
@@ -248,6 +260,7 @@ import ExpenseDocumentBankSection from './components/ExpenseDocumentBankSection.
 import ExpenseDocumentBindingPanels from './components/ExpenseDocumentBindingPanels.vue'
 import ExpenseDocumentExpenseDetailSection from './components/ExpenseDocumentExpenseDetailSection.vue'
 import ExpenseDocumentPrintSheet from './components/ExpenseDocumentPrintSheet.vue'
+import ExpenseDocumentReadonlyDrawer from './components/ExpenseDocumentReadonlyDrawer.vue'
 import ExpenseDocumentReadonlyFormPanel from './components/ExpenseDocumentReadonlyFormPanel.vue'
 import { buildAuthorizedAttachmentPreviewUrl } from './expenseInvoicePreview'
 import { useExpenseDocumentDetailRuntime } from './composables/useExpenseDocumentDetailRuntime'
@@ -300,7 +313,6 @@ const {
   expandText,
   collapseText,
   businessDocumentLabel,
-  viewBoundDocumentLabel,
   relatedCardTitle,
   relatedCardDescription,
   relatedOutboundTitle,
@@ -325,7 +337,6 @@ const {
   goBack,
   buildReturnToQuery,
   openExpenseDetail,
-  openBoundDocument,
   selectExpenseDetail,
   loadDetail,
   handlePrint,
@@ -467,6 +478,18 @@ const {
   loadActionUsers,
   submitUserAction
 } = actionRuntime
+
+const boundDocumentDrawerVisible = ref(false)
+const boundDocumentCode = ref('')
+
+function openBoundDocument(documentCode?: string) {
+  const normalizedCode = String(documentCode || '').trim()
+  if (!normalizedCode) {
+    return
+  }
+  boundDocumentCode.value = normalizedCode
+  boundDocumentDrawerVisible.value = true
+}
 
 </script>
 

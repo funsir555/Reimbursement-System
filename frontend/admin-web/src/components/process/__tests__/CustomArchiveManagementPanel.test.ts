@@ -211,6 +211,31 @@ const DepartmentTreeSelectStub = defineComponent({
   `
 })
 
+const EmployeeTreeSelectStub = defineComponent({
+  props: {
+    placeholder: {
+      type: String,
+      default: ''
+    },
+    multiple: {
+      type: Boolean,
+      default: false
+    },
+    allowCreate: {
+      type: Boolean,
+      default: false
+    }
+  },
+  template: `
+    <div
+      data-testid="employee-tree-select"
+      :data-placeholder="placeholder"
+      :data-multiple="String(multiple)"
+      :data-allow-create="String(allowCreate)"
+    />
+  `
+})
+
 const FormItemStub = defineComponent({
   props: {
     label: {
@@ -315,6 +340,8 @@ async function mountPanel() {
       stubs: {
         DepartmentTreeSelect: DepartmentTreeSelectStub,
         'department-tree-select': DepartmentTreeSelectStub,
+        EmployeeTreeSelect: EmployeeTreeSelectStub,
+        'employee-tree-select': EmployeeTreeSelectStub,
         'el-card': SimpleContainer,
         'el-button': ButtonStub,
         'el-dialog': DialogStub,

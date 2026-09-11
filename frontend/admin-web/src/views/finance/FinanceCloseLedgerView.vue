@@ -23,6 +23,7 @@
 
         <div class="fcl-actions">
           <el-button :loading="loading.meta" @click="loadMeta">刷新</el-button>
+          <el-button :disabled="!financePeriod.hasPeriodContext" @click="periodStatusVisible = true">期间状态</el-button>
         </div>
       </div>
     </el-card>
@@ -189,6 +190,8 @@
         </el-button>
       </div>
     </el-card>
+
+    <FinancePeriodStatusDialog v-model="periodStatusVisible" @completed="handlePeriodStatusCompleted" />
   </div>
 </template>
 
@@ -201,6 +204,7 @@ import {
   type FinanceCloseLedgerReconcileResult,
   type FinanceCloseLedgerValidationResult
 } from '@/api'
+import FinancePeriodStatusDialog from '@/components/finance/FinancePeriodStatusDialog.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 
@@ -220,6 +224,7 @@ const closeNote = ref('')
 const meta = ref<FinanceCloseLedgerMeta | null>(null)
 const reconcileResult = ref<FinanceCloseLedgerReconcileResult | null>(null)
 const validationResult = ref<FinanceCloseLedgerValidationResult | null>(null)
+const periodStatusVisible = ref(false)
 const loading = reactive({
   meta: false,
   reconcile: false,
@@ -435,6 +440,11 @@ function statusClass(passed?: boolean) {
   if (passed === true) return 'is-success'
   if (passed === false) return 'is-danger'
   return 'is-neutral'
+}
+
+async function handlePeriodStatusCompleted() {
+  resetWorkflow()
+  await loadMeta()
 }
 </script>
 

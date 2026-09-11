@@ -7,11 +7,12 @@
         type="button"
         class="finance-tab"
         :class="{ 'finance-tab-active': tab.path === activePath }"
+        :data-tab-path="tab.path"
         @click="$emit('select', tab.path)"
       >
         <span class="finance-tab-title">{{ tab.title }}</span>
         <span
-          v-if="tabs.length > 1"
+          v-if="tab.closable"
           class="finance-tab-close"
           role="button"
           tabindex="0"
@@ -103,6 +104,9 @@ import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 type FinanceTabItem = {
   path: string
   title: string
+  closable?: boolean
+  pinned?: boolean
+  kind?: 'home' | 'page'
 }
 
 type FinanceCompanyOption = {
@@ -128,6 +132,10 @@ const props = withDefaults(defineProps<{
   periodMonth?: number
   periodYearOptions?: number[]
   periodMonthOptions?: number[]
+  periodStartYear?: number
+  periodStartMonth?: number
+  periodEndYear?: number
+  periodEndMonth?: number
   periodDisabled?: boolean
   periodHint?: string
 }>(), {
@@ -138,6 +146,10 @@ const props = withDefaults(defineProps<{
   periodMonth: 0,
   periodYearOptions: () => [],
   periodMonthOptions: () => [],
+  periodStartYear: 0,
+  periodStartMonth: 0,
+  periodEndYear: 0,
+  periodEndMonth: 0,
   periodDisabled: false,
   periodHint: ''
 })
@@ -176,16 +188,48 @@ function handleCompanyDropdownVisibleChange(visible: boolean) {
   }
 }
 
+function resolveMonthsForYear(year: number) {
+  if (
+    !year
+    || !props.periodStartYear
+    || !props.periodStartMonth
+    || !props.periodEndYear
+    || !props.periodEndMonth
+  ) {
+    return [] as number[]
+  }
+
+  const startMonth = year === props.periodStartYear ? props.periodStartMonth : 1
+  const endMonth = year === props.periodEndYear ? props.periodEndMonth : 12
+  if (endMonth < startMonth) {
+    return [] as number[]
+  }
+
+  return Array.from({ length: endMonth - startMonth + 1 }, (_, index) => startMonth + index)
+}
+
 function handleCompanyChange(companyId: string | number) {
   emit('changeCompany', String(companyId || ''))
 }
 
 function handleYearChange(year: string | number) {
   const nextYear = Number(year || 0)
-  const nextMonth = props.periodMonthOptions.includes(props.periodMonth)
+  if (
+    !nextYear
+    || (props.periodYearOptions.length > 0 && !props.periodYearOptions.includes(nextYear))
+  ) {
+    return
+  }
+
+  const availableMonths = resolveMonthsForYear(nextYear)
+  if (!availableMonths.length) {
+    return
+  }
+
+  const nextMonth = availableMonths.includes(props.periodMonth)
     ? props.periodMonth
-    : (props.periodMonthOptions[0] || 0)
-  if (nextYear > 0 && nextMonth > 0) {
+    : availableMonths[availableMonths.length - 1]
+  if (nextYear > 0 && nextMonth !== undefined && nextMonth > 0) {
     emit('changePeriod', { year: nextYear, month: nextMonth })
   }
 }

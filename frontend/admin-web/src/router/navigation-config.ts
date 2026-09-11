@@ -15,7 +15,9 @@ export interface NavigationMenuNode {
   index: string
   title: string
   iconKey?: NavigationIconKey
+  landingIndex?: string
   permissionCodes: string[]
+  badgeCount?: number
   children?: NavigationMenuNode[]
 }
 
@@ -46,12 +48,13 @@ function createRouteMenuNode(routeName: string): NavigationMenuNode {
   }
 }
 
-function createMenuGroup(index: string, title: string, children: NavigationMenuNode[], iconKey?: NavigationIconKey): NavigationMenuNode {
+function createMenuGroup(index: string, title: string, children: NavigationMenuNode[], iconKey?: NavigationIconKey, landingIndex?: string): NavigationMenuNode {
   return {
     key: index,
     index,
     title,
     iconKey,
+    landingIndex,
     permissionCodes: mergePermissionCodes(children.map((item) => item.permissionCodes)),
     children
   }
@@ -131,6 +134,7 @@ export const MAIN_NAVIGATION_MENU: NavigationMenuNode[] = [
           createRouteMenuNode('finance-opening-balance'),
           createRouteMenuNode('finance-post-voucher'),
           createRouteMenuNode('finance-close-ledger'),
+          createRouteMenuNode('finance-period-transfer'),
           createRouteMenuNode('finance-ledger-balance-sheet'),
           createRouteMenuNode('finance-detail-ledger'),
           createRouteMenuNode('finance-general-ledger-book'),
@@ -138,7 +142,8 @@ export const MAIN_NAVIGATION_MENU: NavigationMenuNode[] = [
           createRouteMenuNode('finance-supplier-detail-ledger'),
           createRouteMenuNode('finance-customer-detail-ledger'),
           createRouteMenuNode('finance-personal-detail-ledger'),
-          createRouteMenuNode('finance-quantity-amount-detail-ledger')
+          createRouteMenuNode('finance-quantity-amount-detail-ledger'),
+          createRouteMenuNode('finance-sequence-ledger')
         ]
       ),
       createRouteMenuNode('finance-fixed-assets'),
@@ -172,7 +177,8 @@ export const MAIN_NAVIGATION_MENU: NavigationMenuNode[] = [
         ]
       )
     ],
-    'Coin'
+    'Coin',
+    '/finance'
   ),
   createMenuGroup(
     '/archives',
@@ -245,4 +251,20 @@ export function filterVisibleNavigationMenu(source: NavigationMenuNode[], ownedC
       }
     })
     .filter((node): node is NavigationMenuNode => Boolean(node))
+}
+
+export function applyNavigationBadgeCounts(
+  source: NavigationMenuNode[],
+  badgeCounts: Record<string, number>
+): NavigationMenuNode[] {
+  return source.map((node) => {
+    const children = node.children
+      ? applyNavigationBadgeCounts(node.children, badgeCounts)
+      : undefined
+    return {
+      ...node,
+      badgeCount: children ? undefined : Math.max(0, badgeCounts[node.index] || 0),
+      ...(children ? { children } : {})
+    }
+  })
 }

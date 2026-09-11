@@ -46,6 +46,18 @@ public class FinanceVoucherSummaryVO {
 
     private Boolean editable;
 
+    private String periodStatus;
+
+    private String periodStatusLabel;
+
+    private String voidedAt;
+
+    private String voidedByName;
+
+    private String reversedFromVoucherNo;
+
+    private String reversedByVoucherNo;
+
     private Integer entryCount;
 
     @MoneyValue

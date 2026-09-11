@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.FinanceAccountSetTaskPayload;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.entity.FinanceAccountSet;
+import com.finex.auth.entity.FinanceAccountSetModuleEnable;
 import com.finex.auth.entity.FinanceAccountSetCodeRule;
 import com.finex.auth.entity.FinanceAccountSetTemplate;
 import com.finex.auth.entity.FinanceAccountSetTemplateSubject;
@@ -20,6 +21,7 @@ import com.finex.auth.entity.User;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSetCodeRuleMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
@@ -28,6 +30,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.NotificationService;
 import com.finex.auth.support.AsyncTaskSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -69,6 +72,7 @@ public class FinanceAccountSetTaskWorker {
 
     private final AsyncTaskRecordMapper asyncTaskRecordMapper;
     private final FinanceAccountSetMapper financeAccountSetMapper;
+    private final FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
     private final FinanceAccountSetCodeRuleMapper financeAccountSetCodeRuleMapper;
     private final FinanceAccountSetTemplateMapper financeAccountSetTemplateMapper;
     private final FinanceAccountSetTemplateSubjectMapper financeAccountSetTemplateSubjectMapper;
@@ -163,6 +167,7 @@ public class FinanceAccountSetTaskWorker {
         accountSet.setSubjectCodeScheme(subjectCodeScheme);
         accountSet.setSubjectCount(subjects.size());
         financeAccountSetMapper.insert(accountSet);
+        seedDefaultModuleEnables(targetCompany.getCompanyId());
 
         markTask(task, AsyncTaskSupport.TASK_STATUS_RUNNING, 55, "正在写入编码规则", null);
         FinanceAccountSetCodeRule codeRule = new FinanceAccountSetCodeRule();
@@ -584,6 +589,18 @@ public class FinanceAccountSetTaskWorker {
             item.setStatus(1);
             item.setSortOrder(seed.sortOrder());
             financeCashFlowItemMapper.insert(item);
+        }
+    }
+
+    private void seedDefaultModuleEnables(String companyId) {
+        String normalizedCompanyId = trimToNull(companyId);
+        if (normalizedCompanyId == null) {
+            return;
+        }
+        FinanceModuleEnableSupport moduleEnableSupport =
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
+        for (FinanceAccountSetModuleEnable record : moduleEnableSupport.buildDefaultModules(normalizedCompanyId)) {
+            financeAccountSetModuleEnableMapper.insert(record);
         }
     }
 

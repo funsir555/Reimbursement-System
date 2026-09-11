@@ -273,6 +273,7 @@ import {
   type ExpenseWorkbenchColumnKey
 } from './expenseWorkbenchListHelper'
 import { openDownloadCenter } from '@/utils/downloadCenter'
+import { notifyPersonalTodoCountsChanged } from '@/utils/personalTodo'
 
 type RejectTargetOption = {
   nodeKey: string
@@ -535,6 +536,7 @@ async function handleAction(taskId: number, action: 'approve' | 'reject') {
     await expenseApprovalApi.approve(taskId, { comment: value || '' })
     ElMessage.success('审批已通过')
     await loadPending()
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     if (error === 'cancel' || String(error).includes('cancel')) {
       return
@@ -568,6 +570,7 @@ async function submitRejectAction() {
     closeRejectDialog()
     ElMessage.success('审批已驳回')
     await loadPending()
+    notifyPersonalTodoCountsChanged()
   } catch (error: unknown) {
     ElMessage.error(resolveErrorMessage(error, '审批驳回失败'))
   } finally {

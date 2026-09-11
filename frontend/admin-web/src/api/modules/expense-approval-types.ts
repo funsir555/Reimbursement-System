@@ -45,6 +45,7 @@ export interface ExpenseTaskTransferPayload {
 export interface ExpenseTaskAddSignPayload {
   targetUserId: number
   remark?: string
+  position?: 'BEFORE' | 'AFTER'
 }
 
 export interface ExpenseActionUserOption {

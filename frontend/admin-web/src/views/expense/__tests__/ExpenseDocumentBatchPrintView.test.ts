@@ -40,9 +40,13 @@ vi.mock('@/api', () => ({
   expenseApi: mocks.expenseApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 const ButtonStub = defineComponent({
   props: {

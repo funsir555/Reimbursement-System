@@ -10,18 +10,51 @@ import com.finex.auth.dto.FinanceAccountSetCreateDTO;
 import com.finex.auth.dto.FinanceAccountSetMetaVO;
 import com.finex.auth.dto.FinanceAccountSetSummaryVO;
 import com.finex.auth.dto.FinanceAccountSetTaskStatusVO;
+import com.finex.auth.dto.FinanceModuleBackupDTO;
+import com.finex.auth.dto.FinanceModuleBackupRecordVO;
+import com.finex.auth.dto.FinanceModuleClearDTO;
+import com.finex.auth.dto.FinanceModuleEnableMetaVO;
+import com.finex.auth.dto.FinanceModuleEnableToggleDTO;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
+import com.finex.auth.mapper.FaAssetCardMapper;
+import com.finex.auth.mapper.FaAssetCategoryMapper;
+import com.finex.auth.mapper.FaAssetChangeBillMapper;
+import com.finex.auth.mapper.FaAssetChangeLineMapper;
+import com.finex.auth.mapper.FaAssetDeprLineMapper;
+import com.finex.auth.mapper.FaAssetDeprRunMapper;
+import com.finex.auth.mapper.FaAssetDisposalBillMapper;
+import com.finex.auth.mapper.FaAssetDisposalLineMapper;
+import com.finex.auth.mapper.FaAssetOpeningImportLineMapper;
+import com.finex.auth.mapper.FaAssetOpeningImportMapper;
+import com.finex.auth.mapper.FaAssetPeriodCloseMapper;
+import com.finex.auth.mapper.FaAssetVoucherLinkMapper;
 import com.finex.auth.mapper.FinanceAccountSetCodeRuleMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleBackupLogMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
+import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
+import com.finex.auth.mapper.FinancePeriodCloseLogMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
+import com.finex.auth.mapper.FinancePostVoucherStateMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceSystemManagementService;
 import com.finex.auth.service.impl.financesystem.FinanceAccountSetMetaSupport;
 import com.finex.auth.service.impl.financesystem.FinanceAccountSetQueryDomainSupport;
 import com.finex.auth.service.impl.financesystem.FinanceAccountSetTaskDomainSupport;
+import com.finex.auth.service.impl.financesystem.FinanceModuleBackupStorageService;
+import com.finex.auth.service.impl.financesystem.FinanceModuleCompanyContextSupport;
+import com.finex.auth.service.impl.financesystem.FinanceModuleDataMaintenanceDomainSupport;
+import com.finex.auth.service.impl.financesystem.FinanceModuleDataSupport;
+import com.finex.auth.service.impl.financesystem.FinanceModuleEnableDomainSupport;
+import com.finex.auth.mapper.GlAccassMapper;
+import com.finex.auth.mapper.GlAccsumMapper;
+import com.finex.auth.mapper.GlAccvouchMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -36,6 +69,8 @@ public class FinanceSystemManagementServiceImpl implements FinanceSystemManageme
     private final FinanceAccountSetMetaSupport financeAccountSetMetaSupport;
     private final FinanceAccountSetQueryDomainSupport financeAccountSetQueryDomainSupport;
     private final FinanceAccountSetTaskDomainSupport financeAccountSetTaskDomainSupport;
+    private final FinanceModuleEnableDomainSupport financeModuleEnableDomainSupport;
+    private final FinanceModuleDataMaintenanceDomainSupport financeModuleDataMaintenanceDomainSupport;
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -49,7 +84,29 @@ public class FinanceSystemManagementServiceImpl implements FinanceSystemManageme
             UserMapper userMapper,
             AsyncTaskRecordMapper asyncTaskRecordMapper,
             FinanceAccountSetTaskWorker financeAccountSetTaskWorker,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper,
+            FinanceAccountSetModuleBackupLogMapper financeAccountSetModuleBackupLogMapper,
+            GlAccvouchMapper glAccvouchMapper,
+            GlAccsumMapper glAccsumMapper,
+            GlAccassMapper glAccassMapper,
+            FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper,
+            FinancePostVoucherStateMapper financePostVoucherStateMapper,
+            FinancePeriodCloseMapper financePeriodCloseMapper,
+            FinancePeriodCloseLogMapper financePeriodCloseLogMapper,
+            FaAssetCategoryMapper faAssetCategoryMapper,
+            FaAssetCardMapper faAssetCardMapper,
+            FaAssetChangeBillMapper faAssetChangeBillMapper,
+            FaAssetChangeLineMapper faAssetChangeLineMapper,
+            FaAssetDeprRunMapper faAssetDeprRunMapper,
+            FaAssetDeprLineMapper faAssetDeprLineMapper,
+            FaAssetDisposalBillMapper faAssetDisposalBillMapper,
+            FaAssetDisposalLineMapper faAssetDisposalLineMapper,
+            FaAssetOpeningImportMapper faAssetOpeningImportMapper,
+            FaAssetOpeningImportLineMapper faAssetOpeningImportLineMapper,
+            FaAssetPeriodCloseMapper faAssetPeriodCloseMapper,
+            FaAssetVoucherLinkMapper faAssetVoucherLinkMapper,
+            FinanceModuleBackupStorageService financeModuleBackupStorageService
     ) {
         this.financeAccountSetMetaSupport = new FinanceAccountSetMetaSupport(
                 financeAccountSetMapper,
@@ -84,6 +141,64 @@ public class FinanceSystemManagementServiceImpl implements FinanceSystemManageme
                 financeAccountSetTaskWorker,
                 objectMapper
         );
+        FinanceModuleEnableSupport financeModuleEnableSupport =
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
+        FinanceModuleCompanyContextSupport financeModuleCompanyContextSupport =
+                new FinanceModuleCompanyContextSupport(systemCompanyMapper, financeAccountSetMapper);
+        FinanceModuleDataSupport financeModuleDataSupport = new FinanceModuleDataSupport(
+                glAccvouchMapper,
+                glAccsumMapper,
+                glAccassMapper,
+                financeOpeningBalanceStateMapper,
+                financePostVoucherStateMapper,
+                financePeriodCloseMapper,
+                financePeriodCloseLogMapper,
+                faAssetCategoryMapper,
+                faAssetCardMapper,
+                faAssetChangeBillMapper,
+                faAssetChangeLineMapper,
+                faAssetDeprRunMapper,
+                faAssetDeprLineMapper,
+                faAssetDisposalBillMapper,
+                faAssetDisposalLineMapper,
+                faAssetOpeningImportMapper,
+                faAssetOpeningImportLineMapper,
+                faAssetPeriodCloseMapper,
+                faAssetVoucherLinkMapper
+        );
+        this.financeModuleEnableDomainSupport = new FinanceModuleEnableDomainSupport(
+                systemCompanyMapper,
+                financeAccountSetMapper,
+                financeAccountSetModuleEnableMapper,
+                glAccvouchMapper,
+                glAccsumMapper,
+                glAccassMapper,
+                financeOpeningBalanceStateMapper,
+                financePostVoucherStateMapper,
+                financePeriodCloseMapper,
+                financePeriodCloseLogMapper,
+                faAssetCategoryMapper,
+                faAssetCardMapper,
+                faAssetChangeBillMapper,
+                faAssetChangeLineMapper,
+                faAssetDeprRunMapper,
+                faAssetDeprLineMapper,
+                faAssetDisposalBillMapper,
+                faAssetDisposalLineMapper,
+                faAssetOpeningImportMapper,
+                faAssetOpeningImportLineMapper,
+                faAssetPeriodCloseMapper,
+                faAssetVoucherLinkMapper,
+                financeModuleEnableSupport
+        );
+        this.financeModuleDataMaintenanceDomainSupport = new FinanceModuleDataMaintenanceDomainSupport(
+                financeModuleCompanyContextSupport,
+                financeModuleEnableSupport,
+                financeModuleDataSupport,
+                financeModuleBackupStorageService,
+                financeAccountSetModuleBackupLogMapper,
+                userMapper
+        );
     }
 
     /**
@@ -116,5 +231,32 @@ public class FinanceSystemManagementServiceImpl implements FinanceSystemManageme
     @Override
     public FinanceAccountSetTaskStatusVO getTaskStatus(String taskNo) {
         return financeAccountSetTaskDomainSupport.getTaskStatus(taskNo);
+    }
+
+    @Override
+    public FinanceModuleEnableMetaVO getModuleEnableMeta(String companyId) {
+        return financeModuleEnableDomainSupport.getModuleEnableMeta(companyId);
+    }
+
+    @Override
+    public FinanceModuleEnableMetaVO toggleModuleEnable(FinanceModuleEnableToggleDTO dto) {
+        return financeModuleEnableDomainSupport.toggleModule(dto);
+    }
+
+    @Override
+    public FinanceModuleBackupRecordVO backupModuleData(Long currentUserId, FinanceModuleBackupDTO dto) {
+        return financeModuleDataMaintenanceDomainSupport.backupModuleData(currentUserId, dto);
+    }
+
+    @Override
+    public List<FinanceModuleBackupRecordVO> listModuleBackupRecords(String companyId, String moduleCode) {
+        return financeModuleDataMaintenanceDomainSupport.listModuleBackupRecords(companyId, moduleCode);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceModuleEnableMetaVO clearModuleData(Long currentUserId, FinanceModuleClearDTO dto) {
+        financeModuleDataMaintenanceDomainSupport.clearModuleData(currentUserId, dto);
+        return financeModuleEnableDomainSupport.getModuleEnableMeta(dto.getCompanyId());
     }
 }

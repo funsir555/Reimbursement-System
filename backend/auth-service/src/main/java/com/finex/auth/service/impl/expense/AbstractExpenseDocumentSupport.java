@@ -795,7 +795,7 @@ class AbstractExpenseDocumentSupport {
         Set<DocumentBusinessTargetKey> selectedWriteOffKeys = new LinkedHashSet<>();
 
         for (RelatedDocumentSelection selection : relatedSelections) {
-            ProcessDocumentInstance target = requireRelationSelectableTargetDocument(
+            ProcessDocumentInstance target = requireRelatedDocumentSelectableTargetDocument(
                     targetDocumentMap,
                     selection.documentCode(),
                     sourceSubmitterUserId,
@@ -1209,6 +1209,21 @@ class AbstractExpenseDocumentSupport {
         if (target == null
                 || !Objects.equals(target.getSubmitterUserId(), submitterUserId)
                 || !isRelationSelectableStatus(target.getStatus())) {
+            throw new IllegalStateException(invalidMessage);
+        }
+        return target;
+    }
+
+    private ProcessDocumentInstance requireRelatedDocumentSelectableTargetDocument(
+            Map<String, ProcessDocumentInstance> targetDocumentMap,
+            String documentCode,
+            Long submitterUserId,
+            String invalidMessage
+    ) {
+        ProcessDocumentInstance target = targetDocumentMap.get(documentCode);
+        if (target == null
+                || !Objects.equals(target.getSubmitterUserId(), submitterUserId)
+                || !isRelatedDocumentSelectableStatus(target.getStatus())) {
             throw new IllegalStateException(invalidMessage);
         }
         return target;
@@ -3330,6 +3345,11 @@ class AbstractExpenseDocumentSupport {
                 || DOCUMENT_STATUS_PAYING.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(normalized)
                 || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
+    }
+
+    private boolean isRelatedDocumentSelectableStatus(String status) {
+        return DOCUMENT_STATUS_COMPLETED.equals(trimToNull(status))
+                || isRelationSelectableStatus(status);
     }
 
     /**

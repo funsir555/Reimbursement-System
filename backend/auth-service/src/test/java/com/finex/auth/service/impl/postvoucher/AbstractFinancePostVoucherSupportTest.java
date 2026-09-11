@@ -6,6 +6,7 @@ import com.finex.auth.entity.GlAccsum;
 import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
@@ -15,6 +16,7 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +55,8 @@ class AbstractFinancePostVoucherSupportTest {
     private SystemCompanyMapper systemCompanyMapper;
     @Mock
     private UserMapper userMapper;
+    @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
 
     @Test
     void loadOrCreateAccsumRowCarriesNegativeEndingBalanceAsOppositeBeginDirection() {
@@ -137,7 +141,8 @@ class AbstractFinancePostVoucherSupportTest {
                     glAccsumMapper,
                     glAccassMapper,
                     systemCompanyMapper,
-                    userMapper
+                    userMapper,
+                    new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper)
             );
         }
     }

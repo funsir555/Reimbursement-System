@@ -27,8 +27,10 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -94,6 +96,55 @@ class ExpensePaymentExecutionSupportTest {
 
         assertSame(detail, actual);
         verify(expenseWorkflowRuntimeSupport).markPaymentStarted(eq(instance), eq(task), eq(9L), eq("tester"), eq(false), eq(8L), eq("Main（尾号 5555）"), any());
+    }
+
+    @Test
+    void startPaymentTaskMarksPaymentExceptionWhenMainFormHasMultipleAmountControls() {
+        ExpensePaymentExecutionSupport support = newSupport();
+
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(11L);
+        task.setDocumentCode("DOC-MULTI-AMOUNT");
+        task.setAssigneeUserId(9L);
+        task.setNodeType("PAYMENT");
+        task.setStatus("PENDING");
+
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-MULTI-AMOUNT");
+        instance.setStatus("PENDING_PAYMENT");
+        instance.setFormSchemaSnapshotJson("""
+                {"blocks":[
+                  {"kind":"CONTROL","fieldKey":"amountA","props":{"controlType":"AMOUNT"}},
+                  {"kind":"CONTROL","fieldKey":"amountB","props":{"controlType":"AMOUNT"}}
+                ]}
+                """);
+        instance.setFormDataJson("{\"amountA\":\"100.00\",\"amountB\":\"200.00\"}");
+
+        ProcessDocumentInstance refreshed = new ProcessDocumentInstance();
+        refreshed.setDocumentCode("DOC-MULTI-AMOUNT");
+        refreshed.setStatus("PAYMENT_EXCEPTION");
+        ExpenseDocumentDetailVO detail = new ExpenseDocumentDetailVO();
+
+        when(processDocumentTaskMapper.selectById(11L)).thenReturn(task);
+        when(expenseDocumentReadSupport.requireDocument("DOC-MULTI-AMOUNT")).thenReturn(instance, refreshed);
+        when(expenseDocumentReadSupport.buildDocumentDetail(refreshed)).thenReturn(detail);
+        when(expenseWorkflowRuntimeSupport.paymentTaskAllowsRetry(instance, task)).thenReturn(false);
+        when(pmBankPaymentRecordMapper.selectOne(any())).thenReturn(null);
+
+        ExpenseDocumentDetailVO actual = support.startPaymentTask(9L, "tester", 11L);
+
+        assertSame(detail, actual);
+        verify(expenseWorkflowRuntimeSupport).markPaymentException(
+                eq(instance),
+                eq(task),
+                eq(9L),
+                eq("tester"),
+                eq("付款单主表存在多个金额控件，无法确定实际支付金额"),
+                eq(false)
+        );
+        verify(expenseWorkflowRuntimeSupport, never()).markPaymentStarted(
+                any(), any(), any(), any(), anyBoolean(), any(), any(), any()
+        );
     }
 
     @Test

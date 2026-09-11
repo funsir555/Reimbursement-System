@@ -13,9 +13,11 @@ import com.finex.auth.entity.FinancePeriodClose;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.service.UserService;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 import java.time.YearMonth;
 import java.util.List;
@@ -36,6 +38,7 @@ public final class VoucherContextSupport {
     private final FinanceAccountSetMapper financeAccountSetMapper;
     private final FinancePeriodCloseMapper financePeriodCloseMapper;
     private final UserService userService;
+    private final FinanceModuleEnableSupport financeModuleEnableSupport;
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -44,12 +47,14 @@ public final class VoucherContextSupport {
             SystemCompanyMapper systemCompanyMapper,
             FinanceAccountSetMapper financeAccountSetMapper,
             FinancePeriodCloseMapper financePeriodCloseMapper,
-            UserService userService
+            UserService userService,
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper
     ) {
         this.systemCompanyMapper = systemCompanyMapper;
         this.financeAccountSetMapper = financeAccountSetMapper;
         this.financePeriodCloseMapper = financePeriodCloseMapper;
         this.userService = userService;
+        this.financeModuleEnableSupport = new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
     }
 
     /**
@@ -58,10 +63,15 @@ public final class VoucherContextSupport {
     public FinanceContextMetaVO getMeta(Long currentUserId) {
         List<SystemCompany> companies = loadEnabledCompanies();
         Map<String, FinanceAccountSet> activeAccountSets = loadActiveAccountSets();
+        Map<String, List<String>> enabledModules = financeModuleEnableSupport.loadEnabledModuleMap(activeAccountSets.keySet());
 
         FinanceContextMetaVO meta = new FinanceContextMetaVO();
         meta.setCompanyOptions(companies.stream()
-                .map(company -> toOption(company, activeAccountSets.get(company.getCompanyId())))
+                .map(company -> toOption(
+                        company,
+                        activeAccountSets.get(company.getCompanyId()),
+                        enabledModules.getOrDefault(company.getCompanyId(), List.of())
+                ))
                 .toList());
 
         User currentUser = currentUserId == null ? null : userService.getById(currentUserId);
@@ -112,7 +122,11 @@ public final class VoucherContextSupport {
                 ));
     }
 
-    private FinanceContextCompanyOptionVO toOption(SystemCompany company, FinanceAccountSet accountSet) {
+    private FinanceContextCompanyOptionVO toOption(
+            SystemCompany company,
+            FinanceAccountSet accountSet,
+            List<String> enabledModules
+    ) {
         FinanceContextCompanyOptionVO option = new FinanceContextCompanyOptionVO();
         option.setCompanyId(company.getCompanyId());
         option.setCompanyCode(company.getCompanyCode());
@@ -127,6 +141,7 @@ public final class VoucherContextSupport {
             option.setPeriodEndYear(periodEnd.getYear());
             option.setPeriodEndMonth(periodEnd.getMonthValue());
         }
+        option.setEnabledModules(enabledModules == null ? List.of() : enabledModules);
         option.setValue(company.getCompanyId());
         option.setLabel(normalize(company.getCompanyCode()) == null
                 ? company.getCompanyName()

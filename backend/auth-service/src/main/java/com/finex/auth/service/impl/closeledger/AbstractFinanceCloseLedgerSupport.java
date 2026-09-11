@@ -27,6 +27,8 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.FinanceBalanceRowSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
+import com.finex.auth.support.FinanceVoucherAmountSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -48,11 +50,13 @@ abstract class AbstractFinanceCloseLedgerSupport {
 
     protected static final String ACCOUNT_SET_STATUS_ACTIVE = "ACTIVE";
     protected static final String CLOSE_STATUS_CLOSED = "CLOSED";
+    protected static final String POST_STATUS_NOT_POSTED = "NOT_POSTED";
     protected static final String POST_STATUS_FULLY_POSTED = "FULLY_POSTED";
     protected static final String VOUCHER_STATUS_UNPOSTED = "UNPOSTED";
     protected static final String VOUCHER_STATUS_REVIEWED = "REVIEWED";
     protected static final String VOUCHER_STATUS_ERROR = "ERROR";
     protected static final String VOUCHER_STATUS_POSTED = "POSTED";
+    protected static final String VOUCHER_STATUS_VOIDED = "VOIDED";
     protected static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     protected static final BigDecimal ZERO_QTY = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
     protected static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -67,6 +71,7 @@ abstract class AbstractFinanceCloseLedgerSupport {
     private final GlAccsumMapper glAccsumMapper;
     private final GlAccassMapper glAccassMapper;
     private final UserMapper userMapper;
+    private final FinanceModuleEnableSupport financeModuleEnableSupport;
 
     protected AbstractFinanceCloseLedgerSupport(
             SystemCompanyMapper systemCompanyMapper,
@@ -78,7 +83,8 @@ abstract class AbstractFinanceCloseLedgerSupport {
             GlAccvouchMapper glAccvouchMapper,
             GlAccsumMapper glAccsumMapper,
             GlAccassMapper glAccassMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         this.systemCompanyMapper = systemCompanyMapper;
         this.financeAccountSetMapper = financeAccountSetMapper;
@@ -90,6 +96,7 @@ abstract class AbstractFinanceCloseLedgerSupport {
         this.glAccsumMapper = glAccsumMapper;
         this.glAccassMapper = glAccassMapper;
         this.userMapper = userMapper;
+        this.financeModuleEnableSupport = financeModuleEnableSupport;
     }
 
     protected SystemCompany resolveEffectiveCompany(Long currentUserId, String companyId) {
@@ -104,6 +111,7 @@ abstract class AbstractFinanceCloseLedgerSupport {
             if (company == null) {
                 throw new IllegalArgumentException("当前公司不存在或已停用");
             }
+            requireGeneralLedgerEnabled(company.getCompanyId());
             return company;
         }
         User currentUser = currentUserId == null ? null : userMapper.selectById(currentUserId);
@@ -157,6 +165,7 @@ abstract class AbstractFinanceCloseLedgerSupport {
     }
 
     protected FinanceAccountSet requireActiveAccountSet(String companyId) {
+        requireGeneralLedgerEnabled(companyId);
         FinanceAccountSet accountSet = financeAccountSetMapper.selectOne(
                 Wrappers.<FinanceAccountSet>lambdaQuery()
                         .eq(FinanceAccountSet::getCompanyId, companyId)
@@ -167,6 +176,18 @@ abstract class AbstractFinanceCloseLedgerSupport {
             throw new IllegalStateException("当前公司未启用账套");
         }
         return accountSet;
+    }
+
+    protected void requireGeneralLedgerEnabled(String companyId) {
+        financeModuleEnableSupport.requireEnabled(companyId, FinanceModuleEnableSupport.GENERAL_LEDGER);
+    }
+
+    protected Map<String, FinanceAccountSubject> loadSubjectMap(String companyId) {
+        return financeAccountSubjectMapper.selectList(
+                        Wrappers.<FinanceAccountSubject>lambdaQuery()
+                                .eq(FinanceAccountSubject::getCompanyId, companyId)
+                ).stream()
+                .collect(Collectors.toMap(FinanceAccountSubject::getSubjectCode, item -> item, (left, right) -> left, LinkedHashMap::new));
     }
 
     protected FinancePeriodClose findPeriodClose(String companyId, int iyear, int iperiod) {
@@ -232,6 +253,9 @@ abstract class AbstractFinanceCloseLedgerSupport {
     }
 
     protected String resolveVoucherStatus(GlAccvouch row) {
+        if (Objects.equals(row.getVoidFlag(), 1) || row.getVoidedAt() != null) {
+            return VOUCHER_STATUS_VOIDED;
+        }
         if (Objects.equals(row.getIbook(), 1) || row.getPostedAt() != null) {
             return VOUCHER_STATUS_POSTED;
         }
@@ -415,6 +439,18 @@ abstract class AbstractFinanceCloseLedgerSupport {
             blockingReasons.add("每月对账正确后才能结账");
         }
 
+        NextPeriodCarryForwardPlan nextPeriodPlan = inspectNextPeriodCarryForward(companyId, iyear, iperiod);
+        boolean nextPeriodCarryForwardReady = nextPeriodPlan.status() != NextPeriodCarryForwardStatus.BLOCKED;
+        generalChecks.add(buildCheck(
+                "next_period_rollup_ready",
+                "下一期间可接收本期滚转余额",
+                nextPeriodCarryForwardReady,
+                nextPeriodPlan.message()
+        ));
+        if (!nextPeriodCarryForwardReady) {
+            blockingReasons.add(nextPeriodPlan.message());
+        }
+
         List<FinanceCloseLedgerCheckItemVO> externalChecks = externalResults.stream()
                 .map(item -> buildCheck(item.code(), item.label(), item.passed(), item.message()))
                 .toList();
@@ -487,44 +523,163 @@ abstract class AbstractFinanceCloseLedgerSupport {
     }
 
     protected CarryForwardResult carryForwardBalances(String companyId, int iyear, int iperiod) {
-        YearMonth nextPeriod = YearMonth.of(iyear, iperiod).plusMonths(1);
-        ensureNextPeriodEmpty(companyId, nextPeriod);
+        NextPeriodCarryForwardPlan nextPeriodPlan = inspectNextPeriodCarryForward(companyId, iyear, iperiod);
+        if (nextPeriodPlan.status() == NextPeriodCarryForwardStatus.BLOCKED) {
+            throw new IllegalStateException(nextPeriodPlan.message());
+        }
+        YearMonth nextPeriod = nextPeriodPlan.nextPeriod();
+        if (nextPeriodPlan.status() == NextPeriodCarryForwardStatus.REPLACEABLE_CARRY_FORWARD) {
+            deleteNextPeriodCarryForwardRows(companyId, nextPeriod);
+        }
+        int nextIyperiod = buildYearPeriod(nextPeriod.getYear(), nextPeriod.getMonthValue());
+        int sumCount = 0;
+        for (GlAccsum target : nextPeriodPlan.expectedSums()) {
+            glAccsumMapper.insert(target);
+            sumCount++;
+        }
 
-        List<GlAccsum> sourceSums = glAccsumMapper.selectList(
+        int assistCount = 0;
+        for (GlAccass target : nextPeriodPlan.expectedAssists()) {
+            glAccassMapper.insert(target);
+            assistCount++;
+        }
+
+        return new CarryForwardResult(nextIyperiod, sumCount, assistCount);
+    }
+
+    protected NextPeriodCarryForwardPlan inspectNextPeriodCarryForward(String companyId, int iyear, int iperiod) {
+        YearMonth nextPeriod = YearMonth.of(iyear, iperiod).plusMonths(1);
+        long nextVoucherCount = safeLong(glAccvouchMapper.selectCount(
+                Wrappers.<GlAccvouch>lambdaQuery()
+                        .eq(GlAccvouch::getCompanyId, companyId)
+                        .eq(GlAccvouch::getIyear, nextPeriod.getYear())
+                        .eq(GlAccvouch::getIperiod, nextPeriod.getMonthValue())
+        ));
+        if (nextVoucherCount > 0) {
+            return new NextPeriodCarryForwardPlan(
+                    nextPeriod,
+                    NextPeriodCarryForwardStatus.BLOCKED,
+                    "下一期间已存在真实凭证数据，不能重复滚转，请先检查期初或期间数据",
+                    List.of(),
+                    List.of()
+            );
+        }
+
+        FinancePostVoucherState nextPostState = findPostState(companyId, nextPeriod.getYear(), nextPeriod.getMonthValue());
+        if (nextPostState != null
+                && (!Objects.equals(trimToNull(nextPostState.getStatus()), POST_STATUS_NOT_POSTED)
+                || safeInt(nextPostState.getPostedVoucherCount()) > 0)) {
+            return new NextPeriodCarryForwardPlan(
+                    nextPeriod,
+                    NextPeriodCarryForwardStatus.BLOCKED,
+                    "下一期间已存在已记账状态数据，不能重复滚转，请先检查期初或期间数据",
+                    List.of(),
+                    List.of()
+            );
+        }
+
+        FinancePeriodClose nextClose = findPeriodClose(companyId, nextPeriod.getYear(), nextPeriod.getMonthValue());
+        if (nextClose != null) {
+            return new NextPeriodCarryForwardPlan(
+                    nextPeriod,
+                    NextPeriodCarryForwardStatus.BLOCKED,
+                    "下一期间已存在结账记录，不能重复滚转，请先检查期初或期间数据",
+                    List.of(),
+                    List.of()
+            );
+        }
+
+        List<GlAccsum> sourceSums = loadAccsumRows(companyId, iyear, iperiod);
+        List<GlAccass> sourceAssists = loadAccassRows(companyId, iyear, iperiod);
+        List<GlAccsum> nextSums = loadAccsumRows(companyId, nextPeriod.getYear(), nextPeriod.getMonthValue());
+        List<GlAccass> nextAssists = loadAccassRows(companyId, nextPeriod.getYear(), nextPeriod.getMonthValue());
+
+        if (containsEffectiveMovement(nextSums)) {
+            return new NextPeriodCarryForwardPlan(
+                    nextPeriod,
+                    NextPeriodCarryForwardStatus.BLOCKED,
+                    "下一期间总账已存在发生额，不能重复滚转，请先检查期初或期间数据",
+                    List.of(),
+                    List.of()
+            );
+        }
+        if (containsEffectiveAssistMovement(nextAssists)) {
+            return new NextPeriodCarryForwardPlan(
+                    nextPeriod,
+                    NextPeriodCarryForwardStatus.BLOCKED,
+                    "下一期间辅助账已存在发生额，不能重复滚转，请先检查期初或期间数据",
+                    List.of(),
+                    List.of()
+            );
+        }
+
+        Map<String, FinanceAccountSubject> subjectMap = loadSubjectMap(companyId);
+        List<GlAccsum> expectedSums = buildCarryForwardSums(companyId, nextPeriod, subjectMap, sourceSums);
+        List<GlAccass> expectedAssists = buildCarryForwardAssists(companyId, nextPeriod, subjectMap, sourceAssists);
+
+        if (nextSums.isEmpty() && nextAssists.isEmpty()) {
+            return new NextPeriodCarryForwardPlan(
+                    nextPeriod,
+                    NextPeriodCarryForwardStatus.EMPTY,
+                    "下一期间无账表基础，可正常滚转",
+                    expectedSums,
+                    expectedAssists
+            );
+        }
+
+        if (matchesCarryForwardSums(expectedSums, nextSums) && matchesCarryForwardAssists(expectedAssists, nextAssists)) {
+            return new NextPeriodCarryForwardPlan(
+                    nextPeriod,
+                    NextPeriodCarryForwardStatus.REPLACEABLE_CARRY_FORWARD,
+                    "下一期间仅存在可替换的旧滚转基础，结账时将自动覆盖重建",
+                    expectedSums,
+                    expectedAssists
+            );
+        }
+
+        return new NextPeriodCarryForwardPlan(
+                nextPeriod,
+                NextPeriodCarryForwardStatus.BLOCKED,
+                "下一期间基础数据与当前期间应滚转结果不一致，不能自动覆盖，请先检查期初或期间数据",
+                expectedSums,
+                expectedAssists
+        );
+    }
+
+    protected List<GlAccsum> loadAccsumRows(String companyId, int iyear, int iperiod) {
+        return glAccsumMapper.selectList(
                 Wrappers.<GlAccsum>lambdaQuery()
                         .eq(GlAccsum::getCompanyId, companyId)
                         .eq(GlAccsum::getIyear, iyear)
                         .eq(GlAccsum::getIperiod, iperiod)
                         .orderByAsc(GlAccsum::getId)
         );
-        List<GlAccass> sourceAssists = glAccassMapper.selectList(
+    }
+
+    protected List<GlAccass> loadAccassRows(String companyId, int iyear, int iperiod) {
+        return glAccassMapper.selectList(
                 Wrappers.<GlAccass>lambdaQuery()
                         .eq(GlAccass::getCompanyId, companyId)
                         .eq(GlAccass::getIyear, iyear)
                         .eq(GlAccass::getIperiod, iperiod)
                         .orderByAsc(GlAccass::getId)
         );
-        if (sourceSums.isEmpty() && sourceAssists.isEmpty()) {
-            return new CarryForwardResult(buildYearPeriod(nextPeriod.getYear(), nextPeriod.getMonthValue()), 0, 0);
-        }
+    }
 
-        Map<String, FinanceAccountSubject> subjectMap = financeAccountSubjectMapper.selectList(
-                        Wrappers.<FinanceAccountSubject>lambdaQuery()
-                                .eq(FinanceAccountSubject::getCompanyId, companyId)
-                ).stream()
-                .collect(Collectors.toMap(FinanceAccountSubject::getSubjectCode, item -> item, (left, right) -> left, LinkedHashMap::new));
-
-        int nextYear = nextPeriod.getYear();
-        int nextMonth = nextPeriod.getMonthValue();
-        int nextIyperiod = buildYearPeriod(nextYear, nextMonth);
-
-        int sumCount = 0;
+    protected List<GlAccsum> buildCarryForwardSums(
+            String companyId,
+            YearMonth nextPeriod,
+            Map<String, FinanceAccountSubject> subjectMap,
+            List<GlAccsum> sourceSums
+    ) {
+        int nextIyperiod = buildYearPeriod(nextPeriod.getYear(), nextPeriod.getMonthValue());
+        List<GlAccsum> result = new ArrayList<>();
         for (GlAccsum source : sourceSums) {
             FinanceAccountSubject subject = requireCarryForwardSubject(subjectMap, source.getCcode());
             GlAccsum target = new GlAccsum();
             target.setCompanyId(companyId);
-            target.setIyear(nextYear);
-            target.setIperiod(nextMonth);
+            target.setIyear(nextPeriod.getYear());
+            target.setIperiod(nextPeriod.getMonthValue());
             target.setIyperiod(nextIyperiod);
             target.setCcode(source.getCcode());
             FinanceBalanceRowSupport.fillBalanceRow(
@@ -540,17 +695,25 @@ abstract class AbstractFinanceCloseLedgerSupport {
                     ZERO_QTY,
                     ZERO_QTY
             );
-            glAccsumMapper.insert(target);
-            sumCount++;
+            result.add(target);
         }
+        return result;
+    }
 
-        int assistCount = 0;
+    protected List<GlAccass> buildCarryForwardAssists(
+            String companyId,
+            YearMonth nextPeriod,
+            Map<String, FinanceAccountSubject> subjectMap,
+            List<GlAccass> sourceAssists
+    ) {
+        int nextIyperiod = buildYearPeriod(nextPeriod.getYear(), nextPeriod.getMonthValue());
+        List<GlAccass> result = new ArrayList<>();
         for (GlAccass source : sourceAssists) {
             FinanceAccountSubject subject = requireCarryForwardSubject(subjectMap, source.getCcode());
             GlAccass target = new GlAccass();
             target.setCompanyId(companyId);
-            target.setIyear(nextYear);
-            target.setIperiod(nextMonth);
+            target.setIyear(nextPeriod.getYear());
+            target.setIperiod(nextPeriod.getMonthValue());
             target.setIyperiod(nextIyperiod);
             target.setCcode(source.getCcode());
             target.setCdeptId(trimToNull(source.getCdeptId()));
@@ -572,29 +735,100 @@ abstract class AbstractFinanceCloseLedgerSupport {
                     ZERO_QTY,
                     ZERO_QTY
             );
-            glAccassMapper.insert(target);
-            assistCount++;
+            result.add(target);
         }
-
-        return new CarryForwardResult(nextIyperiod, sumCount, assistCount);
+        return result;
     }
 
-    protected void ensureNextPeriodEmpty(String companyId, YearMonth nextPeriod) {
-        long sumCount = safeLong(glAccsumMapper.selectCount(
+    protected void deleteNextPeriodCarryForwardRows(String companyId, YearMonth nextPeriod) {
+        glAccsumMapper.delete(
                 Wrappers.<GlAccsum>lambdaQuery()
                         .eq(GlAccsum::getCompanyId, companyId)
                         .eq(GlAccsum::getIyear, nextPeriod.getYear())
                         .eq(GlAccsum::getIperiod, nextPeriod.getMonthValue())
-        ));
-        long assistCount = safeLong(glAccassMapper.selectCount(
+        );
+        glAccassMapper.delete(
                 Wrappers.<GlAccass>lambdaQuery()
                         .eq(GlAccass::getCompanyId, companyId)
                         .eq(GlAccass::getIyear, nextPeriod.getYear())
                         .eq(GlAccass::getIperiod, nextPeriod.getMonthValue())
-        ));
-        if (sumCount > 0 || assistCount > 0) {
-            throw new IllegalStateException("下一期间已存在账务数据，不能重复滚转，请先检查期初或期间数据");
-        }
+        );
+    }
+
+    protected boolean matchesCarryForwardSums(List<GlAccsum> expectedRows, List<GlAccsum> actualRows) {
+        return buildCarryForwardSumSignatures(expectedRows).equals(buildCarryForwardSumSignatures(actualRows));
+    }
+
+    protected boolean matchesCarryForwardAssists(List<GlAccass> expectedRows, List<GlAccass> actualRows) {
+        return buildCarryForwardAssistSignatures(expectedRows).equals(buildCarryForwardAssistSignatures(actualRows));
+    }
+
+    protected List<String> buildCarryForwardSumSignatures(List<GlAccsum> rows) {
+        return rows.stream()
+                .map(this::buildCarryForwardSumSignature)
+                .sorted()
+                .toList();
+    }
+
+    protected List<String> buildCarryForwardAssistSignatures(List<GlAccass> rows) {
+        return rows.stream()
+                .map(this::buildCarryForwardAssistSignature)
+                .sorted()
+                .toList();
+    }
+
+    protected String buildCarryForwardSumSignature(GlAccsum row) {
+        return String.join("|",
+                trimToEmpty(row.getCcode()),
+                trimToEmpty(row.getCbegindC()),
+                trimToEmpty(row.getCbegindCEngl()),
+                trimToEmpty(row.getCenddC()),
+                trimToEmpty(row.getCenddCEngl()),
+                trimToEmpty(row.getCurrencyCode()),
+                trimToEmpty(row.getCexchName()),
+                money(row.getMb()).toPlainString(),
+                money(row.getMbF()).toPlainString(),
+                money(row.getMd()).toPlainString(),
+                money(row.getMdF()).toPlainString(),
+                money(row.getMc()).toPlainString(),
+                money(row.getMcF()).toPlainString(),
+                money(row.getMe()).toPlainString(),
+                money(row.getMeF()).toPlainString(),
+                qty(row.getNbS()).toPlainString(),
+                qty(row.getNdS()).toPlainString(),
+                qty(row.getNcS()).toPlainString(),
+                qty(row.getNeS()).toPlainString()
+        );
+    }
+
+    protected String buildCarryForwardAssistSignature(GlAccass row) {
+        return String.join("|",
+                trimToEmpty(row.getCcode()),
+                trimToEmpty(row.getCdeptId()),
+                trimToEmpty(row.getCpersonId()),
+                trimToEmpty(row.getCcusId()),
+                trimToEmpty(row.getCsupId()),
+                trimToEmpty(row.getCitemClass()),
+                trimToEmpty(row.getCitemId()),
+                trimToEmpty(row.getCbegindC()),
+                trimToEmpty(row.getCbegindCEngl()),
+                trimToEmpty(row.getCenddC()),
+                trimToEmpty(row.getCenddCEngl()),
+                trimToEmpty(row.getCurrencyCode()),
+                trimToEmpty(row.getCexchName()),
+                money(row.getMb()).toPlainString(),
+                money(row.getMbF()).toPlainString(),
+                money(row.getMd()).toPlainString(),
+                money(row.getMdF()).toPlainString(),
+                money(row.getMc()).toPlainString(),
+                money(row.getMcF()).toPlainString(),
+                money(row.getMe()).toPlainString(),
+                money(row.getMeF()).toPlainString(),
+                qty(row.getNbS()).toPlainString(),
+                qty(row.getNdS()).toPlainString(),
+                qty(row.getNcS()).toPlainString(),
+                qty(row.getNeS()).toPlainString()
+        );
     }
 
     protected FinanceAccountSubject requireCarryForwardSubject(Map<String, FinanceAccountSubject> subjectMap, String subjectCode) {
@@ -732,20 +966,370 @@ abstract class AbstractFinanceCloseLedgerSupport {
         financePeriodCloseLogMapper.insert(log);
     }
 
+    protected void deleteCloseRecord(Long id) {
+        if (id == null) {
+            return;
+        }
+        financePeriodCloseMapper.deleteById(id);
+    }
+
+    protected FinanceGeneralLedgerRollbackSnapshot rollbackPostedPeriod(
+            String companyId,
+            int iyear,
+            int iperiod,
+            String operatorName
+    ) {
+        requireActiveAccountSet(companyId);
+        FinanceAccountSet accountSet = requireActiveAccountSet(companyId);
+        boolean closedPeriodDetected = reopenClosedPeriodIfNecessary(companyId, iyear, iperiod, operatorName);
+        Map<VoucherKey, List<GlAccvouch>> voucherGroups = loadVoucherGroups(companyId, iyear, iperiod);
+        VoucherCounts counts = summarizeVoucherGroups(voucherGroups);
+        if (counts.postedCount() <= 0) {
+            throw new IllegalStateException("当前期间没有已记账凭证，无需执行专项回退");
+        }
+
+        int rolledBackVoucherCount = 0;
+        for (VoucherKey voucherKey : counts.postedKeys()) {
+            glAccvouchMapper.update(
+                    null,
+                    Wrappers.<GlAccvouch>lambdaUpdate()
+                            .eq(GlAccvouch::getCompanyId, voucherKey.companyId())
+                            .eq(GlAccvouch::getIyear, voucherKey.iyear())
+                            .eq(GlAccvouch::getIperiod, voucherKey.iperiod())
+                            .eq(GlAccvouch::getCsign, voucherKey.csign())
+                            .eq(GlAccvouch::getInoId, voucherKey.inoId())
+                            .set(GlAccvouch::getIbook, 0)
+                            .set(GlAccvouch::getPostedAt, null)
+                            .set(GlAccvouch::getCbook, null)
+            );
+            rolledBackVoucherCount++;
+        }
+
+        FinancePostVoucherState postState = findPostState(companyId, iyear, iperiod);
+        if (postState == null) {
+            postState = new FinancePostVoucherState();
+            postState.setCompanyId(companyId);
+            postState.setIyear(iyear);
+            postState.setIperiod(iperiod);
+            postState.setIyperiod(buildYearPeriod(iyear, iperiod));
+            postState.setCreatedAt(LocalDateTime.now());
+        }
+        postState.setStatus(POST_STATUS_NOT_POSTED);
+        postState.setPostedVoucherCount(0);
+        postState.setLastTaskNo(null);
+        postState.setLastTaskStatus("ROLLBACK_SUCCESS");
+        postState.setLastErrorMessage(null);
+        postState.setLastPostedBy(trimToNull(operatorName));
+        postState.setLastPostedAt(LocalDateTime.now());
+        postState.setUpdatedAt(LocalDateTime.now());
+        if (postState.getId() == null) {
+            financePostVoucherStateMapper.insert(postState);
+        } else {
+            financePostVoucherStateMapper.updateById(postState);
+        }
+
+        LedgerRebuildResult rebuildResult = rebuildCurrentPeriodLedgerBase(
+                companyId,
+                iyear,
+                iperiod,
+                accountSet,
+                loadSubjectMap(companyId)
+        );
+        insertLog(
+                companyId,
+                iyear,
+                iperiod,
+                "ROLLBACK_UNPOST_SUCCESS",
+                "SUCCESS",
+                operatorName,
+                "专项回退成功，当前期间已回退为已审核未记账",
+                "{\"rolledBackVoucherCount\":" + rolledBackVoucherCount
+                        + ",\"rebuildAccsumCount\":" + rebuildResult.glAccsumCount()
+                        + ",\"rebuildAccassCount\":" + rebuildResult.glAccassCount()
+                        + ",\"closedPeriodDetected\":" + closedPeriodDetected + "}"
+        );
+        return new FinanceGeneralLedgerRollbackSnapshot(
+                closedPeriodDetected,
+                rolledBackVoucherCount,
+                rebuildResult.glAccsumCount(),
+                rebuildResult.glAccassCount()
+        );
+    }
+
+    protected boolean reopenClosedPeriodIfNecessary(String companyId, int iyear, int iperiod, String operatorName) {
+        FinancePeriodClose close = findPeriodClose(companyId, iyear, iperiod);
+        if (close == null) {
+            return false;
+        }
+        YearMonth nextPeriod = YearMonth.of(iyear, iperiod).plusMonths(1);
+        long nextVoucherCount = safeLong(glAccvouchMapper.selectCount(
+                Wrappers.<GlAccvouch>lambdaQuery()
+                        .eq(GlAccvouch::getCompanyId, companyId)
+                        .eq(GlAccvouch::getIyear, nextPeriod.getYear())
+                        .eq(GlAccvouch::getIperiod, nextPeriod.getMonthValue())
+        ));
+        if (nextVoucherCount > 0) {
+            throw new IllegalStateException("下一期间已存在真实凭证数据，不能直接反结账，请先处理下一期间业务");
+        }
+        FinancePostVoucherState nextPostState = findPostState(companyId, nextPeriod.getYear(), nextPeriod.getMonthValue());
+        if (nextPostState != null
+                && (!Objects.equals(trimToNull(nextPostState.getStatus()), POST_STATUS_NOT_POSTED)
+                || safeInt(nextPostState.getPostedVoucherCount()) > 0)) {
+            throw new IllegalStateException("下一期间已存在记账状态数据，不能直接反结账，请先处理下一期间业务");
+        }
+        FinancePeriodClose nextClose = findPeriodClose(companyId, nextPeriod.getYear(), nextPeriod.getMonthValue());
+        if (nextClose != null) {
+            throw new IllegalStateException("下一期间已存在结账记录，不能直接反结账，请先处理下一期间业务");
+        }
+
+        List<GlAccsum> nextSums = glAccsumMapper.selectList(
+                Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, companyId)
+                        .eq(GlAccsum::getIyear, nextPeriod.getYear())
+                        .eq(GlAccsum::getIperiod, nextPeriod.getMonthValue())
+        );
+        if (containsEffectiveMovement(nextSums)) {
+            throw new IllegalStateException("下一期间总账已存在发生额，不能直接反结账，请先处理下一期间业务");
+        }
+        List<GlAccass> nextAssists = glAccassMapper.selectList(
+                Wrappers.<GlAccass>lambdaQuery()
+                        .eq(GlAccass::getCompanyId, companyId)
+                        .eq(GlAccass::getIyear, nextPeriod.getYear())
+                        .eq(GlAccass::getIperiod, nextPeriod.getMonthValue())
+        );
+        if (containsEffectiveAssistMovement(nextAssists)) {
+            throw new IllegalStateException("下一期间辅助账已存在发生额，不能直接反结账，请先处理下一期间业务");
+        }
+
+        glAccsumMapper.delete(
+                Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, companyId)
+                        .eq(GlAccsum::getIyear, nextPeriod.getYear())
+                        .eq(GlAccsum::getIperiod, nextPeriod.getMonthValue())
+        );
+        glAccassMapper.delete(
+                Wrappers.<GlAccass>lambdaQuery()
+                        .eq(GlAccass::getCompanyId, companyId)
+                        .eq(GlAccass::getIyear, nextPeriod.getYear())
+                        .eq(GlAccass::getIperiod, nextPeriod.getMonthValue())
+        );
+        financePeriodCloseMapper.deleteById(close.getId());
+        insertLog(
+                companyId,
+                iyear,
+                iperiod,
+                "ROLLBACK_REOPEN_SUCCESS",
+                "SUCCESS",
+                operatorName,
+                "专项反结账成功，已删除当前期间结账记录并清理下一期间滚转基础",
+                "{\"nextIyperiod\":" + buildYearPeriod(nextPeriod.getYear(), nextPeriod.getMonthValue())
+                        + ",\"deletedAccsumCount\":" + nextSums.size()
+                        + ",\"deletedAccassCount\":" + nextAssists.size() + "}"
+        );
+        return true;
+    }
+
+    protected LedgerRebuildResult rebuildCurrentPeriodLedgerBase(
+            String companyId,
+            int iyear,
+            int iperiod,
+            FinanceAccountSet accountSet,
+            Map<String, FinanceAccountSubject> subjectMap
+    ) {
+        List<GlAccsum> currentSums = glAccsumMapper.selectList(
+                Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, companyId)
+                        .eq(GlAccsum::getIyear, iyear)
+                        .eq(GlAccsum::getIperiod, iperiod)
+                        .orderByAsc(GlAccsum::getId)
+        );
+        List<GlAccass> currentAssists = glAccassMapper.selectList(
+                Wrappers.<GlAccass>lambdaQuery()
+                        .eq(GlAccass::getCompanyId, companyId)
+                        .eq(GlAccass::getIyear, iyear)
+                        .eq(GlAccass::getIperiod, iperiod)
+                        .orderByAsc(GlAccass::getId)
+        );
+        YearMonth previousPeriod = YearMonth.of(iyear, iperiod).minusMonths(1);
+        boolean usePreviousBalanceAsBaseline =
+                YearMonth.of(accountSet.getEnabledYear(), accountSet.getEnabledPeriod()).isBefore(YearMonth.of(iyear, iperiod));
+
+        List<GlAccsum> previousSums = usePreviousBalanceAsBaseline
+                ? glAccsumMapper.selectList(
+                Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, companyId)
+                        .eq(GlAccsum::getIyear, previousPeriod.getYear())
+                        .eq(GlAccsum::getIperiod, previousPeriod.getMonthValue())
+                        .orderByAsc(GlAccsum::getId)
+        )
+                : List.of();
+        List<GlAccass> previousAssists = usePreviousBalanceAsBaseline
+                ? glAccassMapper.selectList(
+                Wrappers.<GlAccass>lambdaQuery()
+                        .eq(GlAccass::getCompanyId, companyId)
+                        .eq(GlAccass::getIyear, previousPeriod.getYear())
+                        .eq(GlAccass::getIperiod, previousPeriod.getMonthValue())
+                        .orderByAsc(GlAccass::getId)
+        )
+                : List.of();
+
+        glAccsumMapper.delete(
+                Wrappers.<GlAccsum>lambdaQuery()
+                        .eq(GlAccsum::getCompanyId, companyId)
+                        .eq(GlAccsum::getIyear, iyear)
+                        .eq(GlAccsum::getIperiod, iperiod)
+        );
+        glAccassMapper.delete(
+                Wrappers.<GlAccass>lambdaQuery()
+                        .eq(GlAccass::getCompanyId, companyId)
+                        .eq(GlAccass::getIyear, iyear)
+                        .eq(GlAccass::getIperiod, iperiod)
+        );
+
+        int rebuiltSumCount = 0;
+        if (usePreviousBalanceAsBaseline && !previousSums.isEmpty()) {
+            for (GlAccsum previous : previousSums) {
+                FinanceAccountSubject subject = requireCarryForwardSubject(subjectMap, previous.getCcode());
+                GlAccsum target = new GlAccsum();
+                target.setCompanyId(companyId);
+                target.setIyear(iyear);
+                target.setIperiod(iperiod);
+                target.setIyperiod(buildYearPeriod(iyear, iperiod));
+                target.setCcode(previous.getCcode());
+                target.setCurrencyCode(normalizeCurrency(previous.getCurrencyCode(), previous.getCexchName()));
+                FinanceBalanceRowSupport.fillBalanceRow(
+                        target,
+                        subject,
+                        previous.getMe(),
+                        previous.getMeF(),
+                        previous.getNeS(),
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO_QTY,
+                        ZERO_QTY
+                );
+                glAccsumMapper.insert(target);
+                rebuiltSumCount++;
+            }
+        } else {
+            for (GlAccsum current : currentSums) {
+                FinanceAccountSubject subject = subjectMap.get(trimToNull(current.getCcode()));
+                GlAccsum target = new GlAccsum();
+                target.setCompanyId(companyId);
+                target.setIyear(iyear);
+                target.setIperiod(iperiod);
+                target.setIyperiod(buildYearPeriod(iyear, iperiod));
+                target.setCcode(current.getCcode());
+                target.setCurrencyCode(normalizeCurrency(current.getCurrencyCode(), current.getCexchName()));
+                FinanceBalanceRowSupport.fillBalanceRow(
+                        target,
+                        subject,
+                        current.getMb(),
+                        current.getMbF(),
+                        current.getNbS(),
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO_QTY,
+                        ZERO_QTY
+                );
+                glAccsumMapper.insert(target);
+                rebuiltSumCount++;
+            }
+        }
+
+        int rebuiltAssistCount = 0;
+        if (usePreviousBalanceAsBaseline && !previousAssists.isEmpty()) {
+            for (GlAccass previous : previousAssists) {
+                FinanceAccountSubject subject = requireCarryForwardSubject(subjectMap, previous.getCcode());
+                GlAccass target = new GlAccass();
+                target.setCompanyId(companyId);
+                target.setIyear(iyear);
+                target.setIperiod(iperiod);
+                target.setIyperiod(buildYearPeriod(iyear, iperiod));
+                target.setCcode(previous.getCcode());
+                target.setCdeptId(trimToNull(previous.getCdeptId()));
+                target.setCpersonId(trimToNull(previous.getCpersonId()));
+                target.setCcusId(trimToNull(previous.getCcusId()));
+                target.setCsupId(trimToNull(previous.getCsupId()));
+                target.setCitemClass(trimToNull(previous.getCitemClass()));
+                target.setCitemId(trimToNull(previous.getCitemId()));
+                target.setCurrencyCode(normalizeCurrency(previous.getCurrencyCode(), previous.getCexchName()));
+                FinanceBalanceRowSupport.fillBalanceRow(
+                        target,
+                        subject,
+                        previous.getMe(),
+                        previous.getMeF(),
+                        previous.getNeS(),
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO_QTY,
+                        ZERO_QTY
+                );
+                glAccassMapper.insert(target);
+                rebuiltAssistCount++;
+            }
+        } else {
+            for (GlAccass current : currentAssists) {
+                FinanceAccountSubject subject = subjectMap.get(trimToNull(current.getCcode()));
+                GlAccass target = new GlAccass();
+                target.setCompanyId(companyId);
+                target.setIyear(iyear);
+                target.setIperiod(iperiod);
+                target.setIyperiod(buildYearPeriod(iyear, iperiod));
+                target.setCcode(current.getCcode());
+                target.setCdeptId(trimToNull(current.getCdeptId()));
+                target.setCpersonId(trimToNull(current.getCpersonId()));
+                target.setCcusId(trimToNull(current.getCcusId()));
+                target.setCsupId(trimToNull(current.getCsupId()));
+                target.setCitemClass(trimToNull(current.getCitemClass()));
+                target.setCitemId(trimToNull(current.getCitemId()));
+                target.setCurrencyCode(normalizeCurrency(current.getCurrencyCode(), current.getCexchName()));
+                FinanceBalanceRowSupport.fillBalanceRow(
+                        target,
+                        subject,
+                        current.getMb(),
+                        current.getMbF(),
+                        current.getNbS(),
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO,
+                        ZERO_QTY,
+                        ZERO_QTY
+                );
+                glAccassMapper.insert(target);
+                rebuiltAssistCount++;
+            }
+        }
+        return new LedgerRebuildResult(rebuiltSumCount, rebuiltAssistCount);
+    }
+
     protected Map<MovementKey, MovementTotals> buildVoucherSubjectMap(String companyId, int iyear, int iperiod) {
-        return glAccvouchMapper.selectList(
-                        Wrappers.<GlAccvouch>lambdaQuery()
-                                .eq(GlAccvouch::getCompanyId, companyId)
-                                .eq(GlAccvouch::getIyear, iyear)
-                                .eq(GlAccvouch::getIperiod, iperiod)
-                                .eq(GlAccvouch::getIbook, 1)
-                ).stream()
-                .collect(Collectors.toMap(
-                        row -> new MovementKey(trimToNull(row.getCcode()), normalizeCurrency(row.getCurrencyCode(), row.getCexchName())),
-                        row -> MovementTotals.fromVoucher(row.getMd(), row.getMc(), row.getMdF(), row.getMcF(), row.getNdS(), row.getNcS()),
-                        MovementTotals::merge,
-                        LinkedHashMap::new
-                ));
+        Map<String, FinanceAccountSubject> subjectMap = loadSubjectMap(companyId);
+        Map<MovementKey, MovementTotals> movementMap = new LinkedHashMap<>();
+        for (GlAccvouch row : glAccvouchMapper.selectList(
+                Wrappers.<GlAccvouch>lambdaQuery()
+                        .eq(GlAccvouch::getCompanyId, companyId)
+                        .eq(GlAccvouch::getIyear, iyear)
+                        .eq(GlAccvouch::getIperiod, iperiod)
+                        .eq(GlAccvouch::getIbook, 1)
+        )) {
+            MovementTotals totals = MovementTotals.fromPostedVoucher(row);
+            for (String subjectCode : resolveSubjectRollupCodes(subjectMap, row.getCcode())) {
+                movementMap.merge(
+                        new MovementKey(subjectCode, normalizeCurrency(row.getCurrencyCode(), row.getCexchName())),
+                        totals,
+                        MovementTotals::merge
+                );
+            }
+        }
+        return movementMap;
     }
 
     protected Map<AssistKey, MovementTotals> buildVoucherAssistMap(String companyId, int iyear, int iperiod) {
@@ -768,7 +1352,7 @@ abstract class AbstractFinanceCloseLedgerSupport {
                                 trimToNull(row.getCitemClass()),
                                 trimToNull(row.getCitemId())
                         ),
-                        row -> MovementTotals.fromVoucher(row.getMd(), row.getMc(), row.getMdF(), row.getMcF(), row.getNdS(), row.getNcS()),
+                        MovementTotals::fromPostedVoucher,
                         MovementTotals::merge,
                         LinkedHashMap::new
                 ));
@@ -840,6 +1424,11 @@ abstract class AbstractFinanceCloseLedgerSupport {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    protected String trimToEmpty(String value) {
+        String normalized = trimToNull(value);
+        return normalized == null ? "" : normalized;
+    }
+
     protected String normalizeCurrency(String currencyCode, String cexchName) {
         String normalizedCode = trimToNull(currencyCode);
         if (normalizedCode != null) {
@@ -876,6 +1465,26 @@ abstract class AbstractFinanceCloseLedgerSupport {
 
     protected BigDecimal qty(BigDecimal value) {
         return value == null ? ZERO_QTY : value.setScale(6, RoundingMode.HALF_UP);
+    }
+
+    protected List<String> resolveSubjectRollupCodes(Map<String, FinanceAccountSubject> subjectMap, String subjectCode) {
+        List<String> subjectCodes = new ArrayList<>();
+        String currentCode = trimToNull(subjectCode);
+        Set<String> visited = new LinkedHashSet<>();
+        while (currentCode != null && visited.add(currentCode)) {
+            subjectCodes.add(currentCode);
+            FinanceAccountSubject subject = subjectMap.get(currentCode);
+            currentCode = subject == null ? null : trimToNull(subject.getParentSubjectCode());
+        }
+        return subjectCodes;
+    }
+
+    protected boolean containsEffectiveMovement(List<GlAccsum> rows) {
+        return rows.stream().anyMatch(row -> hasMovement(row.getMd(), row.getMc(), row.getMdF(), row.getMcF(), row.getNdS(), row.getNcS()));
+    }
+
+    protected boolean containsEffectiveAssistMovement(List<GlAccass> rows) {
+        return rows.stream().anyMatch(row -> hasMovement(row.getMd(), row.getMc(), row.getMdF(), row.getMcF(), row.getNdS(), row.getNcS()));
     }
 
     private int safeInt(Integer value) {
@@ -917,6 +1526,32 @@ abstract class AbstractFinanceCloseLedgerSupport {
     }
 
     protected record CarryForwardResult(int nextIyperiod, int glAccsumCount, int glAccassCount) {
+    }
+
+    protected enum NextPeriodCarryForwardStatus {
+        EMPTY,
+        REPLACEABLE_CARRY_FORWARD,
+        BLOCKED
+    }
+
+    protected record NextPeriodCarryForwardPlan(
+            YearMonth nextPeriod,
+            NextPeriodCarryForwardStatus status,
+            String message,
+            List<GlAccsum> expectedSums,
+            List<GlAccass> expectedAssists
+    ) {
+    }
+
+    protected record LedgerRebuildResult(int glAccsumCount, int glAccassCount) {
+    }
+
+    protected record FinanceGeneralLedgerRollbackSnapshot(
+            boolean closedPeriodDetected,
+            int rolledBackVoucherCount,
+            int rebuildAccsumCount,
+            int rebuildAccassCount
+    ) {
     }
 
     protected record MovementKey(String subjectCode, String currencyCode) {
@@ -983,6 +1618,17 @@ abstract class AbstractFinanceCloseLedgerSupport {
                     scaleMoney(mcF),
                     scaleQty(ndS),
                     scaleQty(ncS)
+            );
+        }
+
+        static MovementTotals fromPostedVoucher(GlAccvouch row) {
+            return new MovementTotals(
+                    scaleMoney(FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc())),
+                    scaleMoney(FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc())),
+                    scaleMoney(FinanceVoucherAmountSupport.effectiveDebit(row.getMdF(), row.getMcF())),
+                    scaleMoney(FinanceVoucherAmountSupport.effectiveCredit(row.getMdF(), row.getMcF())),
+                    scaleQty(row.getNdS()),
+                    scaleQty(row.getNcS())
             );
         }
 

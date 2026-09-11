@@ -194,7 +194,8 @@ describe('FinanceReviewVoucherView', () => {
     financePeriodStore.currentMonthText = '2026-06'
     mocks.financeApi.getVoucherMeta.mockResolvedValue({
       data: {
-        voucherTypeOptions: [{ value: '记', label: '记账凭证' }]
+        voucherTypeOptions: [{ value: '记', label: '记账凭证' }],
+        makerOptions: [{ value: '财务制单员', label: '财务制单员' }]
       }
     })
     mocks.financeApi.listVouchers.mockResolvedValue({
@@ -222,10 +223,43 @@ describe('FinanceReviewVoucherView', () => {
     const wrapper = await mountView()
 
     expect(wrapper.text()).toContain('审核凭证')
+    expect(wrapper.text()).toContain('未审核')
+    expect(wrapper.text()).toContain('财务制单员')
     expect(mocks.financeApi.listVouchers).toHaveBeenCalledWith(
       expect.objectContaining({
         companyId: 'COMPANY_A',
         status: 'UNPOSTED,REVIEWED,ERROR',
+        billMonth: '2026-06'
+      })
+    )
+    expect(mocks.financeApi.getVoucherMeta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: 'COMPANY_A',
+        billDate: '2026-06-01'
+      })
+    )
+  })
+
+  it('passes the selected status and maker filters when searching', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      filters: {
+        status: string
+        cbill: string
+      }
+      handleSearch: () => void
+    }
+
+    vm.filters.status = 'REVIEWED'
+    vm.filters.cbill = '财务制单员'
+    vm.handleSearch()
+    await flushPromises()
+
+    expect(mocks.financeApi.listVouchers).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        companyId: 'COMPANY_A',
+        status: 'REVIEWED',
+        cbill: '财务制单员',
         billMonth: '2026-06'
       })
     )

@@ -57,12 +57,21 @@ const ButtonStub = defineComponent({
   template: '<button type="button" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>'
 })
 
+async function clickButton(wrapper: Awaited<ReturnType<typeof mountView>>, label: string) {
+  const buttons = wrapper.findAll('button')
+  const target = buttons.find((item) => item.text().trim() === label) || buttons.find((item) => item.text().includes(label))
+  expect(target, `button ${label} should exist`).toBeTruthy()
+  await target!.trigger('click')
+  await flushPromises()
+}
+
 async function mountView() {
   const wrapper = mount(FinancePostVoucherView, {
     global: {
       stubs: {
         'el-card': defineComponent({ template: '<div><slot /></div>' }),
         'el-button': ButtonStub,
+        FinancePeriodStatusDialog: defineComponent({ template: '<div class="period-status-dialog-stub" />' }),
         'el-progress': defineComponent({
           props: { percentage: { type: Number, default: 0 } },
           template: '<div class="progress-stub">{{ percentage }}</div>'
@@ -154,8 +163,7 @@ describe('FinancePostVoucherView', () => {
     })
 
     const wrapper = await mountView()
-    const buttons = wrapper.findAll('button')
-    await buttons[1]?.trigger('click')
+    await clickButton(wrapper, '开始记账')
 
     expect(mocks.message.warning).toHaveBeenCalledWith('当前期间存在 2 张未审核凭证，不能继续记账：记-0003、记-0005')
     expect(mocks.postVoucherApi.runPosting).not.toHaveBeenCalled()
@@ -172,8 +180,7 @@ describe('FinancePostVoucherView', () => {
     })
 
     const wrapper = await mountView()
-    const buttons = wrapper.findAll('button')
-    await buttons[1]?.trigger('click')
+    await clickButton(wrapper, '开始记账')
 
     expect(mocks.message.warning).toHaveBeenCalledWith('当前期间存在 1 张错误凭证，不能继续记账：记-0012')
     expect(mocks.postVoucherApi.runPosting).not.toHaveBeenCalled()
@@ -181,10 +188,8 @@ describe('FinancePostVoucherView', () => {
 
   it('submits posting task and refreshes progress by polling task status', async () => {
     const wrapper = await mountView()
-    const buttons = wrapper.findAll('button')
 
-    await buttons[1]?.trigger('click')
-    await flushPromises()
+    await clickButton(wrapper, '开始记账')
 
     expect(mocks.postVoucherApi.runPosting).toHaveBeenCalledWith({
       companyId: 'COMP-001',

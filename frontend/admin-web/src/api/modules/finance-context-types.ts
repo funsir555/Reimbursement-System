@@ -7,6 +7,7 @@ export interface FinanceCompanyOption {
   companyCode: string
   companyName: string
   hasActiveAccountSet?: boolean
+  enabledModules?: string[]
   enabledYear?: number
   enabledPeriod?: number
   periodStartYear?: number

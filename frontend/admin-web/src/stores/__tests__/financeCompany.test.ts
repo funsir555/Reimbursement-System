@@ -20,6 +20,7 @@ function buildMeta() {
         companyCode: 'COMP202603260001',
         companyName: '广州远智教育科技有限公司',
         hasActiveAccountSet: false,
+        enabledModules: [],
         label: 'COMP202603260001 - 广州远智教育科技有限公司',
         value: 'COMPANY202603260001'
       },
@@ -28,6 +29,7 @@ function buildMeta() {
         companyCode: 'COMP202604050001',
         companyName: '广州市黄埔区远智自学考试辅导中心',
         hasActiveAccountSet: true,
+        enabledModules: ['GENERAL_LEDGER'],
         label: 'COMP202604050001 - 广州市黄埔区远智自学考试辅导中心',
         value: 'COMPANY202604050001'
       }
@@ -91,5 +93,16 @@ describe('financeCompany store', () => {
 
     expect(store.currentCompanyId).toBe('COMPANY202604050001')
     expect(store.currentCompanyOption?.periodEndMonth).toBe(5)
+  })
+
+  it('exposes enabled modules and module checks for the current company', async () => {
+    const store = useFinanceCompanyStore()
+
+    await store.ensureInitialized()
+
+    expect(store.currentCompanyEnabledModules).toEqual(['GENERAL_LEDGER'])
+    expect(store.isCurrentModuleEnabled('GENERAL_LEDGER')).toBe(true)
+    expect(store.isCurrentModuleEnabled('FIXED_ASSETS')).toBe(false)
+    expect(store.isModuleEnabled('COMPANY202603260001', 'GENERAL_LEDGER')).toBe(false)
   })
 })

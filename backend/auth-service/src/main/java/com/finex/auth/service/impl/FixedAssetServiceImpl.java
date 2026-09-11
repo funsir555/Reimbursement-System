@@ -35,6 +35,7 @@ import com.finex.auth.mapper.FaAssetOpeningImportLineMapper;
 import com.finex.auth.mapper.FaAssetOpeningImportMapper;
 import com.finex.auth.mapper.FaAssetPeriodCloseMapper;
 import com.finex.auth.mapper.FaAssetVoucherLinkMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
@@ -46,6 +47,7 @@ import com.finex.auth.service.impl.fixedasset.FixedAssetDepreciationPeriodSuppor
 import com.finex.auth.service.impl.fixedasset.FixedAssetMetaCategorySupport;
 import com.finex.auth.service.impl.fixedasset.FixedAssetVoucherQuerySupport;
 import com.finex.auth.service.impl.fixedasset.SharedFixedAssetSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -87,8 +89,11 @@ public class FixedAssetServiceImpl implements FixedAssetService {
             GlAccvouchMapper glAccvouchMapper,
             SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper
     ) {
+        FinanceModuleEnableSupport financeModuleEnableSupport =
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
         SharedFixedAssetSupport support = new SharedFixedAssetSupport(
                 faAssetCategoryMapper,
                 faAssetAccountPolicyMapper,
@@ -106,7 +111,8 @@ public class FixedAssetServiceImpl implements FixedAssetService {
                 glAccvouchMapper,
                 systemCompanyMapper,
                 systemDepartmentMapper,
-                userMapper
+                userMapper,
+                financeModuleEnableSupport
         );
         this.fixedAssetMetaCategorySupport = new FixedAssetMetaCategorySupport(support);
         this.fixedAssetCardOpeningSupport = new FixedAssetCardOpeningSupport(support);

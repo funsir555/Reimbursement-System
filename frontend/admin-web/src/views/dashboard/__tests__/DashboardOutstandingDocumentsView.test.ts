@@ -33,9 +33,13 @@ vi.mock('@/api', () => ({
   asyncTaskApi: mocks.asyncTaskApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage
+  }
+})
 
 vi.mock('@/utils/downloadCenter', () => ({
   openDownloadCenter: mocks.downloadCenter.openDownloadCenter

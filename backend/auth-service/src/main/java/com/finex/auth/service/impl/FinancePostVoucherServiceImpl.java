@@ -7,6 +7,7 @@ import com.finex.auth.dto.FinancePostVoucherTaskRequestDTO;
 import com.finex.auth.dto.FinancePostVoucherTaskStatusVO;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
@@ -23,6 +24,7 @@ import com.finex.auth.service.impl.postvoucher.PostVoucherTaskSupport;
 import com.finex.auth.service.impl.postvoucher.PostVoucherTaskWorker;
 import com.finex.auth.service.impl.postvoucher.PostVoucherValidationSupport;
 import com.finex.auth.service.impl.postvoucher.SharedPostVoucherSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -46,8 +48,11 @@ public class FinancePostVoucherServiceImpl implements FinancePostVoucherService 
             SystemCompanyMapper systemCompanyMapper,
             UserMapper userMapper,
             ObjectMapper objectMapper,
-            PostVoucherTaskWorker postVoucherTaskWorker
+            PostVoucherTaskWorker postVoucherTaskWorker,
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper
     ) {
+        FinanceModuleEnableSupport financeModuleEnableSupport =
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
         SharedPostVoucherSupport support = new SharedPostVoucherSupport(
                 financeAccountSetMapper,
                 financeAccountSubjectMapper,
@@ -59,7 +64,8 @@ public class FinancePostVoucherServiceImpl implements FinancePostVoucherService 
                 glAccsumMapper,
                 glAccassMapper,
                 systemCompanyMapper,
-                userMapper
+                userMapper,
+                financeModuleEnableSupport
         );
         this.postVoucherMetaSupport = new PostVoucherMetaSupport(support);
         this.postVoucherValidationSupport = new PostVoucherValidationSupport(support);

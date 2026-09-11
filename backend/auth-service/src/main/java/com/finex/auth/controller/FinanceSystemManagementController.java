@@ -8,6 +8,11 @@ import com.finex.auth.dto.FinanceAccountSetCreateDTO;
 import com.finex.auth.dto.FinanceAccountSetMetaVO;
 import com.finex.auth.dto.FinanceAccountSetSummaryVO;
 import com.finex.auth.dto.FinanceAccountSetTaskStatusVO;
+import com.finex.auth.dto.FinanceModuleBackupDTO;
+import com.finex.auth.dto.FinanceModuleBackupRecordVO;
+import com.finex.auth.dto.FinanceModuleClearDTO;
+import com.finex.auth.dto.FinanceModuleEnableMetaVO;
+import com.finex.auth.dto.FinanceModuleEnableToggleDTO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.FinanceSystemManagementService;
 import com.finex.common.Result;
@@ -20,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -36,6 +42,7 @@ public class FinanceSystemManagementController {
     private static final String VIEW_PERMISSION = "finance:system_management:view";
     private static final String CREATE_PERMISSION = "finance:system_management:create";
     private static final String TASK_VIEW_PERMISSION = "finance:system_management:task:view";
+    private static final String ENABLE_PERMISSION = "finance:system_management:enable";
 
     private final FinanceSystemManagementService financeSystemManagementService;
     private final AccessControlService accessControlService;
@@ -73,6 +80,54 @@ public class FinanceSystemManagementController {
     public Result<FinanceAccountSetTaskStatusVO> getTaskStatus(@PathVariable String taskNo, HttpServletRequest request) {
         accessControlService.requireAnyPermission(getCurrentUserId(request), TASK_VIEW_PERMISSION, VIEW_PERMISSION);
         return Result.success(financeSystemManagementService.getTaskStatus(taskNo));
+    }
+
+    @GetMapping("/module-enables")
+    public Result<FinanceModuleEnableMetaVO> getModuleEnables(
+            @RequestParam String companyId,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), VIEW_PERMISSION);
+        return Result.success(financeSystemManagementService.getModuleEnableMeta(companyId));
+    }
+
+    @PostMapping("/module-enables/toggle")
+    public Result<FinanceModuleEnableMetaVO> toggleModuleEnable(
+            @Valid @RequestBody FinanceModuleEnableToggleDTO dto,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), ENABLE_PERMISSION);
+        return Result.success("模块启停状态已更新", financeSystemManagementService.toggleModuleEnable(dto));
+    }
+
+    @PostMapping("/module-enables/backup")
+    public Result<FinanceModuleBackupRecordVO> backupModuleData(
+            @Valid @RequestBody FinanceModuleBackupDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, ENABLE_PERMISSION);
+        return Result.success("模块数据备份完成", financeSystemManagementService.backupModuleData(userId, dto));
+    }
+
+    @GetMapping("/module-enables/backup-records")
+    public Result<List<FinanceModuleBackupRecordVO>> listModuleBackupRecords(
+            @RequestParam String companyId,
+            @RequestParam String moduleCode,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), VIEW_PERMISSION);
+        return Result.success(financeSystemManagementService.listModuleBackupRecords(companyId, moduleCode));
+    }
+
+    @PostMapping("/module-enables/clear")
+    public Result<FinanceModuleEnableMetaVO> clearModuleData(
+            @Valid @RequestBody FinanceModuleClearDTO dto,
+            HttpServletRequest request
+    ) {
+        Long userId = getCurrentUserId(request);
+        accessControlService.requirePermission(userId, ENABLE_PERMISSION);
+        return Result.success("模块数据已清除", financeSystemManagementService.clearModuleData(userId, dto));
     }
 
     private Long getCurrentUserId(HttpServletRequest request) {

@@ -24,4 +24,6 @@ public class ExpenseDocumentRelationBindingVO {
     private String statusLabel;
 
     private String submitterName;
+
+    private Integer relationCount;
 }

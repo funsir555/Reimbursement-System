@@ -6,6 +6,7 @@ import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSetCodeRuleMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
@@ -35,6 +36,8 @@ class FinanceAccountSetTaskWorkerTest {
     @Mock
     private FinanceAccountSetMapper financeAccountSetMapper;
     @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
+    @Mock
     private FinanceAccountSetCodeRuleMapper financeAccountSetCodeRuleMapper;
     @Mock
     private FinanceAccountSetTemplateMapper financeAccountSetTemplateMapper;
@@ -60,6 +63,7 @@ class FinanceAccountSetTaskWorkerTest {
         worker = new FinanceAccountSetTaskWorker(
                 asyncTaskRecordMapper,
                 financeAccountSetMapper,
+                financeAccountSetModuleEnableMapper,
                 financeAccountSetCodeRuleMapper,
                 financeAccountSetTemplateMapper,
                 financeAccountSetTemplateSubjectMapper,

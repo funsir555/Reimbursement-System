@@ -38,7 +38,13 @@
             <div
               v-for="item in relatedDocumentItems(block)"
               :key="`${block.blockId}-${item.documentCode}`"
-              class="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
+              class="expense-wb-related-document-card rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
+              data-testid="readonly-related-document-item"
+              role="button"
+              tabindex="0"
+              @click="openDocumentDetail(item.documentCode)"
+              @keydown.enter.prevent="openDocumentDetail(item.documentCode)"
+              @keydown.space.prevent="openDocumentDetail(item.documentCode)"
             >
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -61,7 +67,13 @@
             <div
               v-for="item in writeOffDocumentItems(block)"
               :key="`${block.blockId}-${item.documentCode}`"
-              class="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
+              class="expense-wb-related-document-card rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4"
+              data-testid="readonly-writeoff-document-item"
+              role="button"
+              tabindex="0"
+              @click="openDocumentDetail(item.documentCode)"
+              @keydown.enter.prevent="openDocumentDetail(item.documentCode)"
+              @keydown.space.prevent="openDocumentDetail(item.documentCode)"
             >
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -222,6 +234,10 @@ import {
 } from '@/views/expense/expenseReadonlyAttachment'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
 
+const emit = defineEmits<{
+  'open-document-detail': [documentCode: string]
+}>()
+
 type PayeeAccountCard = {
   ownerName: string
   accountNo: string
@@ -306,6 +322,13 @@ function relatedDocumentItems(block: ProcessFormDesignBlock): ExpenseRelatedDocu
 
 function writeOffDocumentItems(block: ProcessFormDesignBlock): ExpenseWriteOffDocumentValue[] {
   return normalizeWriteOffDocumentValues(props.formData?.[block.fieldKey])
+}
+
+function openDocumentDetail(documentCode: string) {
+  const normalizedCode = String(documentCode || '').trim()
+  if (normalizedCode) {
+    emit('open-document-detail', normalizedCode)
+  }
 }
 
 function displayLines(block: ProcessFormDesignBlock) {

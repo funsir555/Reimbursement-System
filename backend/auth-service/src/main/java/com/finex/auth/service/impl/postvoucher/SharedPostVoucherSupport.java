@@ -11,6 +11,7 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 public final class SharedPostVoucherSupport extends AbstractFinancePostVoucherSupport {
 
@@ -25,7 +26,8 @@ public final class SharedPostVoucherSupport extends AbstractFinancePostVoucherSu
             GlAccsumMapper glAccsumMapper,
             GlAccassMapper glAccassMapper,
             SystemCompanyMapper systemCompanyMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         super(
                 financeAccountSetMapper,
@@ -38,7 +40,8 @@ public final class SharedPostVoucherSupport extends AbstractFinancePostVoucherSu
                 glAccsumMapper,
                 glAccassMapper,
                 systemCompanyMapper,
-                userMapper
+                userMapper,
+                financeModuleEnableSupport
         );
     }
 }

@@ -8,12 +8,14 @@ import com.finex.auth.dto.FinancePostVoucherMetaVO;
 import com.finex.auth.dto.FinancePostVoucherTaskRequestDTO;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.entity.FinanceAccountSet;
+import com.finex.auth.entity.FinanceAccountSetModuleEnable;
 import com.finex.auth.entity.FinanceOpeningBalanceState;
 import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
@@ -73,6 +75,8 @@ class FinancePostVoucherServiceImplTest {
     private UserMapper userMapper;
     @Mock
     private PostVoucherTaskWorker postVoucherTaskWorker;
+    @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
 
     private FinancePostVoucherServiceImpl service;
 
@@ -94,7 +98,8 @@ class FinancePostVoucherServiceImplTest {
                 systemCompanyMapper,
                 userMapper,
                 new ObjectMapper(),
-                postVoucherTaskWorker
+                postVoucherTaskWorker,
+                financeAccountSetModuleEnableMapper
         );
 
         lenient().when(systemCompanyMapper.selectOne(any())).thenReturn(company());
@@ -104,6 +109,7 @@ class FinancePostVoucherServiceImplTest {
         lenient().when(financePostVoucherStateMapper.selectOne(any())).thenReturn(null);
         lenient().when(financePeriodCloseMapper.selectOne(any())).thenReturn(null);
         lenient().when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(financeAccountSetModuleEnableMapper.selectOne(any())).thenReturn(generalLedgerModule());
     }
 
     @Test
@@ -220,6 +226,34 @@ class FinancePostVoucherServiceImplTest {
         verify(postVoucherTaskWorker, never()).runPostingTask(any());
     }
 
+    @Test
+    void runPostingAllowsNonFirstPeriodWhenPreviousPeriodHasNoBusiness() {
+        when(financeAccountSetMapper.selectOne(any())).thenReturn(activeAccountSet(2022, 10));
+        when(glAccvouchMapper.selectList(any())).thenReturn(
+                List.of(),
+                List.of(
+                        voucherRow(2022, 12, 21, 1, "\u8d22\u52a1\u738b\u4e94", LocalDateTime.now(), 0, "560101", "210.00", "0.00"),
+                        voucherRow(2022, 12, 21, 2, "\u8d22\u52a1\u738b\u4e94", LocalDateTime.now(), 0, "100201", "0.00", "210.00")
+                )
+        );
+        when(asyncTaskRecordMapper.selectOne(any())).thenReturn(null);
+        doAnswer(invocation -> {
+            AsyncTaskRecord task = invocation.getArgument(0);
+            task.setId(120L);
+            return 1;
+        }).when(asyncTaskRecordMapper).insert(any(AsyncTaskRecord.class));
+
+        FinancePostVoucherTaskRequestDTO dto = new FinancePostVoucherTaskRequestDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIyear(2022);
+        dto.setIperiod(12);
+
+        AsyncTaskSubmitResultVO result = service.runPosting(1L, "\u8d22\u52a1\u738b\u4e94", dto);
+
+        assertEquals("PENDING", result.getStatus());
+        verify(postVoucherTaskWorker).runPostingTask(120L);
+    }
+
     private SystemCompany company() {
         SystemCompany company = new SystemCompany();
         company.setCompanyId("COMP-001");
@@ -239,11 +273,15 @@ class FinancePostVoucherServiceImplTest {
     }
 
     private FinanceAccountSet activeAccountSet() {
+        return activeAccountSet(2026, 4);
+    }
+
+    private FinanceAccountSet activeAccountSet(int enabledYear, int enabledPeriod) {
         FinanceAccountSet set = new FinanceAccountSet();
         set.setCompanyId("COMP-001");
         set.setStatus("ACTIVE");
-        set.setEnabledYear(2026);
-        set.setEnabledPeriod(4);
+        set.setEnabledYear(enabledYear);
+        set.setEnabledPeriod(enabledPeriod);
         return set;
     }
 
@@ -256,7 +294,17 @@ class FinancePostVoucherServiceImplTest {
         return state;
     }
 
+    private FinanceAccountSetModuleEnable generalLedgerModule() {
+        FinanceAccountSetModuleEnable module = new FinanceAccountSetModuleEnable();
+        module.setCompanyId("COMP-001");
+        module.setModuleCode("GENERAL_LEDGER");
+        module.setEnabled(1);
+        return module;
+    }
+
     private GlAccvouch voucherRow(
+            int iyear,
+            int iperiod,
             int inoId,
             int inid,
             String checkerName,
@@ -269,9 +317,9 @@ class FinancePostVoucherServiceImplTest {
         GlAccvouch row = new GlAccvouch();
         row.setId(inoId * 10 + inid);
         row.setCompanyId("COMP-001");
-        row.setIyear(2026);
-        row.setIyperiod(202604);
-        row.setIperiod(4);
+        row.setIyear(iyear);
+        row.setIyperiod(iyear * 100 + iperiod);
+        row.setIperiod(iperiod);
         row.setCsign("\u8bb0");
         row.setInoId(inoId);
         row.setInid(inid);
@@ -284,5 +332,18 @@ class FinancePostVoucherServiceImplTest {
         row.setCurrencyCode("CNY");
         row.setCexchName("\u4eba\u6c11\u5e01");
         return row;
+    }
+
+    private GlAccvouch voucherRow(
+            int inoId,
+            int inid,
+            String checkerName,
+            LocalDateTime checkedAt,
+            int iflag,
+            String subjectCode,
+            String md,
+            String mc
+    ) {
+        return voucherRow(2026, 4, inoId, inid, checkerName, checkedAt, iflag, subjectCode, md, mc);
     }
 }

@@ -187,6 +187,18 @@ public class ExpenseWorkflowRuntimeSupport {
         executionSupport.createAddSignTask(instance, task, targetUser, userId, username, remark);
     }
 
+    public void createAddSignTask(
+            ProcessDocumentInstance instance,
+            ProcessDocumentTask task,
+            User targetUser,
+            Long userId,
+            String username,
+            String remark,
+            String position
+    ) {
+        executionSupport.createAddSignTask(instance, task, targetUser, userId, username, remark, position);
+    }
+
     /**
      * 瀹℃壒閫氳繃AddSign浠诲姟銆?
      */

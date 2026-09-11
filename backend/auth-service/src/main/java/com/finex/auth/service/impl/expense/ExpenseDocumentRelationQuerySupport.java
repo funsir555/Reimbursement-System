@@ -82,7 +82,72 @@ class ExpenseDocumentRelationQuerySupport extends AbstractExpenseRelationWriteOf
                     source == null ? null : source.getTemplateType()
             ));
         }
+        applyRelationCounts(bindings);
         return bindings;
+    }
+
+    private void applyRelationCounts(List<ExpenseDocumentRelationBindingVO> bindings) {
+        Set<String> targetDocumentCodes = bindings.stream()
+                .map(ExpenseDocumentRelationBindingVO::getDocumentCode)
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (targetDocumentCodes.isEmpty()) {
+            return;
+        }
+
+        List<ProcessDocumentRelation> activeRelations = processDocumentRelationMapper.selectList(
+                Wrappers.<ProcessDocumentRelation>lambdaQuery()
+                        .in(ProcessDocumentRelation::getTargetDocumentCode, targetDocumentCodes)
+                        .eq(ProcessDocumentRelation::getStatus, RELATION_STATUS_ACTIVE)
+        );
+        Set<String> sourceDocumentCodes = activeRelations.stream()
+                .map(ProcessDocumentRelation::getSourceDocumentCode)
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (sourceDocumentCodes.isEmpty()) {
+            bindings.forEach(item -> item.setRelationCount(0));
+            return;
+        }
+
+        Set<String> eligibleSourceDocumentCodes = processDocumentInstanceMapper.selectList(
+                Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                                .in(ProcessDocumentInstance::getDocumentCode, sourceDocumentCodes)
+                                .and(wrapper -> wrapper
+                                        .eq(ProcessDocumentInstance::getDeleted, false)
+                                        .or()
+                                        .isNull(ProcessDocumentInstance::getDeleted))
+                                .in(ProcessDocumentInstance::getStatus, List.of(
+                                        DOCUMENT_STATUS_PENDING_APPROVAL,
+                                        DOCUMENT_STATUS_APPROVED,
+                                        DOCUMENT_STATUS_COMPLETED,
+                                        "PAID",
+                                        DOCUMENT_STATUS_PENDING_PAYMENT,
+                                        DOCUMENT_STATUS_PAYING,
+                                        DOCUMENT_STATUS_PAYMENT_COMPLETED,
+                                        DOCUMENT_STATUS_PAYMENT_FINISHED,
+                                        DOCUMENT_STATUS_PAYMENT_EXCEPTION
+                                ))
+                ).stream()
+                .map(ProcessDocumentInstance::getDocumentCode)
+                .map(this::trimToNull)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<String, Integer> countMap = activeRelations.stream()
+                .filter(item -> eligibleSourceDocumentCodes.contains(trimToNull(item.getSourceDocumentCode())))
+                .collect(Collectors.groupingBy(
+                        ProcessDocumentRelation::getTargetDocumentCode,
+                        Collectors.collectingAndThen(
+                                Collectors.mapping(
+                                        ProcessDocumentRelation::getSourceDocumentCode,
+                                        Collectors.filtering(Objects::nonNull, Collectors.toSet())
+                                ),
+                                Set::size
+                        )
+                ));
+        bindings.forEach(item -> item.setRelationCount(countMap.getOrDefault(item.getDocumentCode(), 0)));
     }
 
     List<ExpenseDocumentWriteOffBindingVO> loadWriteOffDocumentBindings(String documentCode) {
@@ -154,17 +219,22 @@ class ExpenseDocumentRelationQuerySupport extends AbstractExpenseRelationWriteOf
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 50);
         String excludedDocumentCode = trimToNull(excludeDocumentCode);
         String normalizedKeyword = trimToNull(keyword);
+        List<String> pickerAllowedStatuses = Objects.equals(normalizedRelationType, RELATION_TYPE_WRITEOFF)
+                ? WRITEOFF_PICKER_ALLOWED_STATUSES
+                : RELATION_PICKER_ALLOWED_STATUSES;
 
         List<ProcessDocumentInstance> visibleApprovedDocuments = processDocumentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
-                        .in(ProcessDocumentInstance::getStatus, RELATION_PICKER_ALLOWED_STATUSES)
+                        .in(ProcessDocumentInstance::getStatus, pickerAllowedStatuses)
                         .in(ProcessDocumentInstance::getTemplateType, normalizedTemplateTypes)
                         .ne(excludedDocumentCode != null, ProcessDocumentInstance::getDocumentCode, excludedDocumentCode)
                         .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
         ).stream()
                 .filter(item -> Objects.equals(item.getSubmitterUserId(), userId))
-                .filter(item -> isRelationSelectableStatus(item.getStatus()))
+                .filter(item -> Objects.equals(normalizedRelationType, RELATION_TYPE_WRITEOFF)
+                        ? isRelationSelectableStatus(item.getStatus())
+                        : isRelatedDocumentSelectableStatus(item.getStatus()))
                 .filter(item -> normalizedTemplateTypes.contains(normalizeTemplateType(item.getTemplateType())))
                 .filter(item -> excludedDocumentCode == null || !Objects.equals(item.getDocumentCode(), excludedDocumentCode))
                 .filter(item -> matchesKeyword(

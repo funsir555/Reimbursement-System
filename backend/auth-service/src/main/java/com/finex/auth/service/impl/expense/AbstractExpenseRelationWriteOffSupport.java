@@ -45,6 +45,7 @@ abstract class AbstractExpenseRelationWriteOffSupport {
     protected static final String DASHBOARD_WRITEOFF_SOURCE_FIELD_KEY = "dashboard-writeoff";
     protected static final String ENTERPRISE_MODE_PREPAY_UNBILLED = "PREPAY_UNBILLED";
     protected static final String DOCUMENT_STATUS_APPROVED = "APPROVED";
+    protected static final String DOCUMENT_STATUS_PENDING_APPROVAL = "PENDING_APPROVAL";
     protected static final String DOCUMENT_STATUS_COMPLETED = "COMPLETED";
     protected static final String DOCUMENT_STATUS_REJECTED = "REJECTED";
     protected static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
@@ -58,6 +59,13 @@ abstract class AbstractExpenseRelationWriteOffSupport {
     protected static final String MESSAGE_RELATED_DOCUMENT_SCOPE_RESTRICTED = "\u4ec5\u53ef\u5173\u8054\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e";
     protected static final String MESSAGE_WRITEOFF_DOCUMENT_SCOPE_RESTRICTED = "\u4ec5\u53ef\u9009\u62e9\u672c\u4eba\u5f85\u652f\u4ed8\u3001\u652f\u4ed8\u4e2d\u3001\u5df2\u652f\u4ed8\u6216\u5df2\u5b8c\u6210\u7684\u5355\u636e\u8fdb\u884c\u6838\u9500";
     protected static final List<String> RELATION_PICKER_ALLOWED_STATUSES = List.of(
+            DOCUMENT_STATUS_COMPLETED,
+            DOCUMENT_STATUS_PENDING_PAYMENT,
+            DOCUMENT_STATUS_PAYING,
+            DOCUMENT_STATUS_PAYMENT_COMPLETED,
+            DOCUMENT_STATUS_PAYMENT_FINISHED
+    );
+    protected static final List<String> WRITEOFF_PICKER_ALLOWED_STATUSES = List.of(
             DOCUMENT_STATUS_PENDING_PAYMENT,
             DOCUMENT_STATUS_PAYING,
             DOCUMENT_STATUS_PAYMENT_COMPLETED,
@@ -151,6 +159,11 @@ abstract class AbstractExpenseRelationWriteOffSupport {
                 || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(normalized);
     }
 
+    protected boolean isRelatedDocumentSelectableStatus(String status) {
+        return DOCUMENT_STATUS_COMPLETED.equals(trimToNull(status))
+                || isRelationSelectableStatus(status);
+    }
+
     protected boolean matchesKeyword(String keyword, String... values) {
         if (keyword == null) {
             return true;
@@ -231,6 +244,21 @@ abstract class AbstractExpenseRelationWriteOffSupport {
         if (target == null
                 || !Objects.equals(target.getSubmitterUserId(), submitterUserId)
                 || !isRelationSelectableStatus(target.getStatus())) {
+            throw new IllegalStateException(invalidMessage);
+        }
+        return target;
+    }
+
+    protected ProcessDocumentInstance requireRelatedDocumentSelectableTargetDocument(
+            Map<String, ProcessDocumentInstance> targetDocumentMap,
+            String documentCode,
+            Long submitterUserId,
+            String invalidMessage
+    ) {
+        ProcessDocumentInstance target = targetDocumentMap.get(documentCode);
+        if (target == null
+                || !Objects.equals(target.getSubmitterUserId(), submitterUserId)
+                || !isRelatedDocumentSelectableStatus(target.getStatus())) {
             throw new IllegalStateException(invalidMessage);
         }
         return target;

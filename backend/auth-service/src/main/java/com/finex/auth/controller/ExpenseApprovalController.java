@@ -111,7 +111,7 @@ public class ExpenseApprovalController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), EXPENSE_APPROVAL_APPROVE);
         return Result.success(
-                "宸插彂璧峰姞绛?",
+                "已发起加签",
                 expenseDocumentService.addSignTask(getCurrentUserId(request), getCurrentUsername(request), taskId, dto)
         );
     }

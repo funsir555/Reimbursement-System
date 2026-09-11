@@ -36,6 +36,7 @@ import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.EmployeeDirectorySupport;
 import com.finex.auth.support.FinanceBalanceDirectionSupport;
 import com.finex.auth.support.FinanceBalanceRowSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -80,6 +81,7 @@ abstract class AbstractFinanceOpeningBalanceSupport {
     private final GlAccsumMapper glAccsumMapper;
     private final GlAccassMapper glAccassMapper;
     private final FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper;
+    private final FinanceModuleEnableSupport financeModuleEnableSupport;
 
     protected AbstractFinanceOpeningBalanceSupport(
             FinanceAccountSubjectMapper financeAccountSubjectMapper,
@@ -92,7 +94,8 @@ abstract class AbstractFinanceOpeningBalanceSupport {
             UserMapper userMapper,
             GlAccsumMapper glAccsumMapper,
             GlAccassMapper glAccassMapper,
-            FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper
+            FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         this.financeAccountSubjectMapper = financeAccountSubjectMapper;
         this.financeCustomerMapper = financeCustomerMapper;
@@ -105,11 +108,13 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         this.glAccsumMapper = glAccsumMapper;
         this.glAccassMapper = glAccassMapper;
         this.financeOpeningBalanceStateMapper = financeOpeningBalanceStateMapper;
+        this.financeModuleEnableSupport = financeModuleEnableSupport;
     }
 
     protected OpeningBalanceMetaVO buildMeta(Long currentUserId, String companyId, Integer iyear, Integer iperiod) {
         List<SystemCompany> companies = loadEnabledCompanies();
         String effectiveCompanyId = resolveEffectiveCompanyId(currentUserId, companyId, companies);
+        requireGeneralLedgerEnabled(effectiveCompanyId);
         int effectiveYear = normalizeYear(iyear);
         int effectivePeriod = normalizePeriod(iperiod);
         FinanceOpeningBalanceState state = findState(effectiveCompanyId, effectiveYear, effectivePeriod);
@@ -690,7 +695,12 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         if (count == null || count == 0) {
             throw new IllegalArgumentException("公司不存在或已停用");
         }
+        requireGeneralLedgerEnabled(effectiveCompanyId);
         return effectiveCompanyId;
+    }
+
+    protected void requireGeneralLedgerEnabled(String companyId) {
+        financeModuleEnableSupport.requireEnabled(companyId, FinanceModuleEnableSupport.GENERAL_LEDGER);
     }
 
     protected List<SystemDepartment> loadEnabledDepartments() {

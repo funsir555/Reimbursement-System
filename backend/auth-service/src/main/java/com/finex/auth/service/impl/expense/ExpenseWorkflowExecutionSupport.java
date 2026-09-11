@@ -84,6 +84,18 @@ class ExpenseWorkflowExecutionSupport {
         support.createAddSignTask(instance, task, targetUser, userId, username, remark);
     }
 
+    void createAddSignTask(
+            ProcessDocumentInstance instance,
+            ProcessDocumentTask task,
+            User targetUser,
+            Long userId,
+            String username,
+            String remark,
+            String position
+    ) {
+        support.createAddSignTask(instance, task, targetUser, userId, username, remark, position);
+    }
+
     /**
      * 审批通过AddSign任务。
      */

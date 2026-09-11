@@ -6,6 +6,7 @@ import com.finex.auth.dto.OpeningBalanceTaskRequestDTO;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
 import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
 import com.finex.auth.mapper.FinanceProjectArchiveMapper;
@@ -18,6 +19,7 @@ import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.NotificationService;
 import com.finex.auth.support.AsyncTaskSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,7 @@ public class OpeningBalanceTaskWorker {
     private final GlAccsumMapper glAccsumMapper;
     private final GlAccassMapper glAccassMapper;
     private final FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper;
+    private final FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
@@ -75,7 +78,8 @@ public class OpeningBalanceTaskWorker {
                     userMapper,
                     glAccsumMapper,
                     glAccassMapper,
-                    financeOpeningBalanceStateMapper
+                    financeOpeningBalanceStateMapper,
+                    new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper)
             );
             transactionTemplate.executeWithoutResult(status -> {
                 if (openBook) {

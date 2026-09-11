@@ -35,6 +35,8 @@ public class GlAccvouch {
 
     private String cbill;
 
+    private Long makerUserId;
+
     private String ccheck;
 
     private LocalDateTime checkedAt;
@@ -46,6 +48,18 @@ public class GlAccvouch {
     private LocalDateTime postedAt;
 
     private Integer iflag;
+
+    private Integer voidFlag;
+
+    private LocalDateTime voidedAt;
+
+    private Long voidedByUserId;
+
+    private String voidedByName;
+
+    private String reversedFromVoucherNo;
+
+    private String reversedByVoucherNo;
 
     private String ctext1;
 

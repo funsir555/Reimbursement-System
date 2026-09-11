@@ -20,6 +20,12 @@ const mocks = vi.hoisted(() => ({
   notificationApi: {
     getSummary: vi.fn()
   },
+  expenseApprovalApi: {
+    listPending: vi.fn()
+  },
+  expensePaymentApi: {
+    listOrders: vi.fn()
+  },
   financeWorkspace: {
     tabs: [] as Array<{ path: string }>,
     activePath: '/dashboard',
@@ -27,10 +33,13 @@ const mocks = vi.hoisted(() => ({
     syncRoute: vi.fn(),
     activate: vi.fn(),
     requestClose: vi.fn(async () => true),
+    requestPeriodSwitch: vi.fn(async () => true),
     close: vi.fn(),
     closeOthers: vi.fn(),
     closeToRight: vi.fn(),
-    getNextPathAfterClose: vi.fn(() => '')
+    getNextPathAfterClose: vi.fn(() => ''),
+    resetToHome: vi.fn(),
+    resolveViewCacheKey: vi.fn((path: string) => path)
   },
   financeCompany: {
     companyOptions: [] as Array<{ companyId: string; label: string }>,
@@ -70,7 +79,9 @@ vi.mock('vue-router', () => ({
 vi.mock('@/api', () => ({
   authApi: mocks.authApi,
   downloadApi: mocks.downloadApi,
-  notificationApi: mocks.notificationApi
+  notificationApi: mocks.notificationApi,
+  expenseApprovalApi: mocks.expenseApprovalApi,
+  expensePaymentApi: mocks.expensePaymentApi
 }))
 
 vi.mock('@/stores/financeWorkspace', () => ({
@@ -92,6 +103,10 @@ vi.mock('@/utils/permissions', () => ({
       ? owned
       : owned?.permissionCodes || permissionState.codes
     return requiredCodes.some((code) => permissionCodes.includes(code))
+  },
+  readStoredUser: () => {
+    const raw = localStorage.getItem('user')
+    return raw ? JSON.parse(raw) : null
   }
 }))
 
@@ -262,6 +277,7 @@ describe('MainLayout', () => {
     mocks.financeWorkspace.activePath = '/dashboard'
     mocks.financeWorkspace.isFinancePath = vi.fn(() => false)
     mocks.financeWorkspace.requestClose = vi.fn(async () => true)
+    mocks.financeWorkspace.requestPeriodSwitch = vi.fn(async () => true)
     mocks.financeCompany.companyOptions = []
     mocks.financeCompany.currentCompanyId = ''
     mocks.financePeriod.currentYear = 2026
@@ -272,6 +288,8 @@ describe('MainLayout', () => {
     mocks.financePeriod.hasAvailableRange = true
     mocks.downloadApi.getCenter.mockResolvedValue({ data: { inProgress: [{ id: 1 }] } })
     mocks.notificationApi.getSummary.mockResolvedValue({ data: { unreadCount: 2 } })
+    mocks.expenseApprovalApi.listPending.mockResolvedValue({ data: [] })
+    mocks.expensePaymentApi.listOrders.mockResolvedValue({ data: [] })
   })
 
   it('shows process management when the user only has process permission', async () => {
@@ -288,6 +306,31 @@ describe('MainLayout', () => {
     expect(wrapper.find('[data-submenu="/expense/payment"]').exists()).toBe(true)
     expect(wrapper.find('[data-index="/expense/payment/orders"]').exists()).toBe(true)
     expect(wrapper.find('[data-index="/expense/payment/bank-link"]').exists()).toBe(true)
+  })
+
+  it('shows unique pending approval and payment counts on the navigation entries', async () => {
+    mocks.expenseApprovalApi.listPending.mockResolvedValue({
+      data: [
+        { documentCode: 'EXP-001' },
+        { documentCode: 'EXP-001' },
+        { documentCode: 'EXP-002' }
+      ]
+    })
+    mocks.expensePaymentApi.listOrders.mockResolvedValue({
+      data: [
+        { documentCode: 'EXP-003' },
+        { documentCode: 'EXP-003' },
+        { documentCode: 'EXP-004' }
+      ]
+    })
+
+    const wrapper = await mountView([
+      'expense:approval:view',
+      'expense:payment:payment_order:view'
+    ])
+
+    expect(wrapper.find('[data-testid="navigation-badge-expense-approval"]').attributes('data-badge-value')).toBe('2')
+    expect(wrapper.find('[data-testid="navigation-badge-expense-payment-orders"]').attributes('data-badge-value')).toBe('2')
   })
 
   it('shows finance system management when the user has the finance system permission', async () => {
@@ -376,6 +419,14 @@ describe('MainLayout', () => {
     expect(mocks.router.push).toHaveBeenCalledWith('/dashboard')
   })
 
+  it('opens the finance home route when clicking the finance management group title', async () => {
+    const wrapper = await mountView(['finance:general_ledger:new_voucher:view'])
+
+    await wrapper.get('[data-landing-index="/finance"]').trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/finance')
+  })
+
   it('passes finance company state to workspace tabs and forwards switch events', async () => {
     routeState.path = '/finance/general-ledger/new-voucher'
     routeState.fullPath = '/finance/general-ledger/new-voucher'
@@ -405,7 +456,31 @@ describe('MainLayout', () => {
 
     expect(wrapper.find('[data-testid="finance-workspace-tabs"]').attributes('data-period')).toBe('2026-4')
     await wrapper.find('[data-testid="period-switch"]').trigger('click')
+    await flushPromises()
+    expect(mocks.financeWorkspace.requestPeriodSwitch).toHaveBeenCalledTimes(1)
+    expect(mocks.financeWorkspace.resetToHome).toHaveBeenCalledTimes(1)
+    expect(mocks.router.push).toHaveBeenCalledWith('/finance/home')
     expect(mocks.financePeriod.switchPeriod).toHaveBeenCalledWith(2026, 5)
+  })
+
+  it('stops the finance period switch when the workspace guard rejects it', async () => {
+    routeState.path = '/finance/general-ledger/new-voucher'
+    routeState.fullPath = '/finance/general-ledger/new-voucher'
+    mocks.financeWorkspace.tabs = [{ path: '/finance/general-ledger/new-voucher' }]
+    mocks.financeWorkspace.activePath = '/finance/general-ledger/new-voucher'
+    mocks.financeWorkspace.isFinancePath = vi.fn(() => true)
+    mocks.financeCompany.currentCompanyId = 'COMPANY_A'
+    mocks.financeWorkspace.requestPeriodSwitch = vi.fn(async () => false)
+
+    const wrapper = await mountView(['finance:general_ledger:new_voucher:view'])
+
+    await wrapper.find('[data-testid="period-switch"]').trigger('click')
+    await flushPromises()
+
+    expect(mocks.financeWorkspace.requestPeriodSwitch).toHaveBeenCalledTimes(1)
+    expect(mocks.financeWorkspace.resetToHome).not.toHaveBeenCalled()
+    expect(mocks.financePeriod.switchPeriod).not.toHaveBeenCalled()
+    expect(mocks.router.push).not.toHaveBeenCalledWith('/finance/home')
   })
 
   it('checks the workspace close guard before closing a finance tab', async () => {

@@ -208,6 +208,16 @@ export const routeCatalog: AppRouteDefinition[] = [
       },
       // 财务模块：总账、固定资产、财务档案、财务系统管理等页面。
       {
+        path: 'finance',
+        redirect: '/finance/home'
+      },
+      {
+        path: 'finance/home',
+        name: 'finance-home',
+        component: () => import('../views/finance/FinanceHomeView.vue'),
+        metaKey: 'finance-home'
+      },
+      {
         path: 'finance/general-ledger/new-voucher',
         name: 'finance-new-voucher',
         component: () => import('../views/finance/FinanceNewVoucherView.vue'),
@@ -265,52 +275,73 @@ export const routeCatalog: AppRouteDefinition[] = [
         metaKey: 'finance-close-ledger'
       },
       {
+        path: 'finance/general-ledger/period-transfer',
+        name: 'finance-period-transfer',
+        component: () => import('../views/finance/FinancePeriodTransferView.vue'),
+        metaKey: 'finance-period-transfer'
+      },
+      {
         path: 'finance/general-ledger/balance-sheet',
         name: 'finance-ledger-balance-sheet',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'BALANCE_SHEET' },
         metaKey: 'finance-ledger-balance-sheet'
       },
       {
         path: 'finance/general-ledger/detail-ledger',
         name: 'finance-detail-ledger',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'DETAIL_LEDGER' },
         metaKey: 'finance-detail-ledger'
       },
       {
         path: 'finance/general-ledger/general-ledger',
         name: 'finance-general-ledger-book',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'GENERAL_LEDGER' },
         metaKey: 'finance-general-ledger-book'
       },
       {
         path: 'finance/general-ledger/project-detail-ledger',
         name: 'finance-project-detail-ledger',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'PROJECT_DETAIL_LEDGER' },
         metaKey: 'finance-project-detail-ledger'
       },
       {
         path: 'finance/general-ledger/supplier-detail-ledger',
         name: 'finance-supplier-detail-ledger',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'SUPPLIER_DETAIL_LEDGER' },
         metaKey: 'finance-supplier-detail-ledger'
       },
       {
         path: 'finance/general-ledger/customer-detail-ledger',
         name: 'finance-customer-detail-ledger',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'CUSTOMER_DETAIL_LEDGER' },
         metaKey: 'finance-customer-detail-ledger'
       },
       {
         path: 'finance/general-ledger/personal-detail-ledger',
         name: 'finance-personal-detail-ledger',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'PERSONAL_DETAIL_LEDGER' },
         metaKey: 'finance-personal-detail-ledger'
       },
       {
         path: 'finance/general-ledger/quantity-amount-detail-ledger',
         name: 'finance-quantity-amount-detail-ledger',
-        component: placeholderView,
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'QUANTITY_AMOUNT_DETAIL_LEDGER' },
         metaKey: 'finance-quantity-amount-detail-ledger'
+      },
+      {
+        path: 'finance/general-ledger/sequence-ledger',
+        name: 'finance-sequence-ledger',
+        component: () => import('../views/finance/FinanceLedgerReportView.vue'),
+        props: { reportKind: 'SEQUENCE_LEDGER' },
+        metaKey: 'finance-sequence-ledger'
       },
       {
         path: 'finance/fixed-assets',

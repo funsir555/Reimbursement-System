@@ -5,6 +5,7 @@ import com.finex.auth.dto.FinancePostVoucherTaskRequestDTO;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
@@ -16,6 +17,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.NotificationService;
 import com.finex.auth.support.AsyncTaskSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,7 @@ public class PostVoucherTaskWorker {
     private final GlAccassMapper glAccassMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final UserMapper userMapper;
+    private final FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
@@ -62,7 +65,8 @@ public class PostVoucherTaskWorker {
                 glAccsumMapper,
                 glAccassMapper,
                 systemCompanyMapper,
-                userMapper
+                userMapper,
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper)
         );
         PostVoucherValidationSupport validationSupport = new PostVoucherValidationSupport(support);
         PostVoucherMutationSupport mutationSupport = new PostVoucherMutationSupport(support);

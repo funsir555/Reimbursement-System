@@ -27,6 +27,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.AsyncTaskSupport;
 import com.finex.auth.support.FinanceBalanceDirectionSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import com.finex.auth.support.FinanceVoucherAmountSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -53,6 +54,7 @@ abstract class AbstractFinancePostVoucherSupport {
     protected static final String VOUCHER_STATUS_REVIEWED = "REVIEWED";
     protected static final String VOUCHER_STATUS_ERROR = "ERROR";
     protected static final String VOUCHER_STATUS_POSTED = "POSTED";
+    protected static final String VOUCHER_STATUS_VOIDED = "VOIDED";
     protected static final String POST_STATUS_NOT_POSTED = "NOT_POSTED";
     protected static final String POST_STATUS_POSTING = "POSTING";
     protected static final String POST_STATUS_PARTIALLY_POSTED = "PARTIALLY_POSTED";
@@ -75,6 +77,7 @@ abstract class AbstractFinancePostVoucherSupport {
     private final GlAccassMapper glAccassMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final UserMapper userMapper;
+    private final FinanceModuleEnableSupport financeModuleEnableSupport;
 
     protected AbstractFinancePostVoucherSupport(
             FinanceAccountSetMapper financeAccountSetMapper,
@@ -87,7 +90,8 @@ abstract class AbstractFinancePostVoucherSupport {
             GlAccsumMapper glAccsumMapper,
             GlAccassMapper glAccassMapper,
             SystemCompanyMapper systemCompanyMapper,
-            UserMapper userMapper
+            UserMapper userMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         this.financeAccountSetMapper = financeAccountSetMapper;
         this.financeAccountSubjectMapper = financeAccountSubjectMapper;
@@ -100,6 +104,7 @@ abstract class AbstractFinancePostVoucherSupport {
         this.glAccassMapper = glAccassMapper;
         this.systemCompanyMapper = systemCompanyMapper;
         this.userMapper = userMapper;
+        this.financeModuleEnableSupport = financeModuleEnableSupport;
     }
 
     protected FinancePostVoucherMetaVO buildMeta(Long currentUserId, String companyId, Integer iyear, Integer iperiod) {
@@ -354,10 +359,17 @@ abstract class AbstractFinancePostVoucherSupport {
             return;
         }
         YearPeriod previous = previousPeriod(iyear, iperiod);
-        FinancePostVoucherState previousState = findPostState(companyId, previous.year(), previous.period());
-        if (previousState == null || !Objects.equals(trimToNull(previousState.getStatus()), POST_STATUS_FULLY_POSTED)) {
+        if (!isPreviousPeriodReadyForPosting(companyId, previous.year(), previous.period())) {
             throw new IllegalStateException("非首期记账前必须确保上一期间已完成记账");
         }
+    }
+
+    protected boolean isPreviousPeriodReadyForPosting(String companyId, int iyear, int iperiod) {
+        FinancePostVoucherState previousState = findPostState(companyId, iyear, iperiod);
+        if (previousState != null && Objects.equals(trimToNull(previousState.getStatus()), POST_STATUS_FULLY_POSTED)) {
+            return true;
+        }
+        return loadVoucherGroups(companyId, iyear, iperiod).isEmpty();
     }
 
     protected Map<VoucherKey, List<GlAccvouch>> loadVoucherGroups(String companyId, int iyear, int iperiod) {
@@ -715,6 +727,7 @@ abstract class AbstractFinancePostVoucherSupport {
             if (company == null) {
                 throw new IllegalArgumentException("当前公司不存在或已停用");
             }
+            requireGeneralLedgerEnabled(company.getCompanyId());
             return company;
         }
         User currentUser = currentUserId == null ? null : userMapper.selectById(currentUserId);
@@ -725,6 +738,7 @@ abstract class AbstractFinancePostVoucherSupport {
                     .eq(SystemCompany::getStatus, 1)
                     .last("limit 1"));
             if (company != null) {
+                requireGeneralLedgerEnabled(company.getCompanyId());
                 return company;
             }
         }
@@ -735,10 +749,12 @@ abstract class AbstractFinancePostVoucherSupport {
         if (fallback == null) {
             throw new IllegalStateException("当前没有可用公司");
         }
+        requireGeneralLedgerEnabled(fallback.getCompanyId());
         return fallback;
     }
 
     protected FinanceAccountSet requireActiveAccountSet(String companyId) {
+        requireGeneralLedgerEnabled(companyId);
         FinanceAccountSet accountSet = financeAccountSetMapper.selectOne(Wrappers.<FinanceAccountSet>lambdaQuery()
                 .eq(FinanceAccountSet::getCompanyId, companyId)
                 .eq(FinanceAccountSet::getStatus, ACCOUNT_SET_STATUS_ACTIVE)
@@ -747,6 +763,10 @@ abstract class AbstractFinancePostVoucherSupport {
             throw new IllegalStateException("当前公司未启用账套，无法记账");
         }
         return accountSet;
+    }
+
+    protected void requireGeneralLedgerEnabled(String companyId) {
+        financeModuleEnableSupport.requireEnabled(companyId, FinanceModuleEnableSupport.GENERAL_LEDGER);
     }
 
     protected List<FinanceAccountSubject> loadEnabledSubjects(String companyId) {
@@ -806,6 +826,9 @@ abstract class AbstractFinancePostVoucherSupport {
     }
 
     protected String resolveVoucherStatus(GlAccvouch row) {
+        if (Objects.equals(row.getVoidFlag(), 1) || row.getVoidedAt() != null) {
+            return VOUCHER_STATUS_VOIDED;
+        }
         if (Objects.equals(row.getIbook(), 1) || row.getPostedAt() != null) {
             return VOUCHER_STATUS_POSTED;
         }

@@ -85,6 +85,45 @@ class ExpensePaymentDomainSupportTest {
     }
 
     @Test
+    void listPaymentOrdersUsesUniqueMainAmountControlWithoutExpenseDetails() {
+        ExpensePaymentDomainSupport support = newSupport();
+        ProcessDocumentTask task = paymentTask(25L, "DOC-MAIN-AMOUNT");
+        ProcessDocumentInstance instance = paymentInstance("DOC-MAIN-AMOUNT", "借款单", "PENDING_PAYMENT");
+        instance.setFormSchemaSnapshotJson("""
+                {"blocks":[
+                  {"kind":"CONTROL","fieldKey":"loanAmount","props":{"controlType":"AMOUNT"}}
+                ]}
+                """);
+        instance.setFormDataJson("{\"loanAmount\":\"30000.00\"}");
+
+        stubListPaymentOrdersBase(task, instance);
+
+        List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PENDING_PAYMENT");
+
+        assertEquals(new BigDecimal("30000.00"), actual.get(0).getActualPaymentAmount());
+    }
+
+    @Test
+    void listPaymentOrdersReturnsZeroWhenMainFormHasMultipleAmountControls() {
+        ExpensePaymentDomainSupport support = newSupport();
+        ProcessDocumentTask task = paymentTask(26L, "DOC-MULTI-AMOUNT");
+        ProcessDocumentInstance instance = paymentInstance("DOC-MULTI-AMOUNT", "异常借款单", "PENDING_PAYMENT");
+        instance.setFormSchemaSnapshotJson("""
+                {"blocks":[
+                  {"kind":"CONTROL","fieldKey":"amountA","props":{"controlType":"AMOUNT"}},
+                  {"kind":"CONTROL","fieldKey":"amountB","props":{"controlType":"AMOUNT"}}
+                ]}
+                """);
+        instance.setFormDataJson("{\"amountA\":\"100.00\",\"amountB\":\"200.00\"}");
+
+        stubListPaymentOrdersBase(task, instance);
+
+        List<ExpensePaymentOrderVO> actual = support.listPaymentOrders(1L, "PENDING_PAYMENT");
+
+        assertEquals(BigDecimal.ZERO, actual.get(0).getActualPaymentAmount());
+    }
+
+    @Test
     void listPaymentOrdersResolvesVendorReceiverInfoAndExportFields() {
         ExpensePaymentDomainSupport support = newSupport();
         ProcessDocumentTask task = paymentTask(21L, "DOC-002");

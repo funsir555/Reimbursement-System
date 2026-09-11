@@ -28,6 +28,8 @@ export const useFinanceCompanyStore = defineStore('financeCompany', {
       state.companyOptions.find((item) => item.companyId === state.currentCompanyId)?.companyName || '',
     currentCompanyLabel: (state) =>
       state.companyOptions.find((item) => item.companyId === state.currentCompanyId)?.label || '',
+    currentCompanyEnabledModules: (state) =>
+      state.companyOptions.find((item) => item.companyId === state.currentCompanyId)?.enabledModules || [],
     currentCompanyHasActiveAccountSet: (state) =>
       Boolean(state.companyOptions.find((item) => item.companyId === state.currentCompanyId)?.hasActiveAccountSet),
     hasCompany: (state) => Boolean(state.currentCompanyId)
@@ -133,6 +135,20 @@ export const useFinanceCompanyStore = defineStore('financeCompany', {
         return undefined
       }
       return this.companyOptions.find((item) => item.companyId === normalizedCompanyId)
+    },
+    isModuleEnabled(companyId: string, moduleCode: string) {
+      const option = this.findCompanyOption(companyId)
+      if (!option?.hasActiveAccountSet) {
+        return false
+      }
+      const enabledModules = Array.isArray(option.enabledModules) ? option.enabledModules : []
+      return enabledModules.includes(moduleCode)
+    },
+    isCurrentModuleEnabled(moduleCode: string) {
+      if (!this.currentCompanyId) {
+        return false
+      }
+      return this.isModuleEnabled(this.currentCompanyId, moduleCode)
     },
     applyCurrentCompany(companyId: string) {
       this.currentCompanyId = companyId

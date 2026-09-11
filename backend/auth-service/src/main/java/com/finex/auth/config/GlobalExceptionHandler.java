@@ -233,7 +233,10 @@ public class GlobalExceptionHandler {
         return uri.startsWith("/auth/finance/archives/customers")
                 || uri.startsWith("/auth/finance/archives/suppliers")
                 || uri.startsWith("/auth/finance/vouchers")
-                || uri.startsWith("/auth/finance/post-voucher");
+                || uri.startsWith("/auth/finance/post-voucher")
+                || uri.startsWith("/auth/finance/close-ledger")
+                || uri.startsWith("/auth/finance/general-ledger/reports")
+                || uri.startsWith("/auth/finance/general-ledger/period-status");
     }
 
     private boolean isPmRequest(HttpServletRequest request) {

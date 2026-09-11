@@ -2,6 +2,7 @@ import { FALLBACK_NAVIGATION_TARGETS } from '@/router/navigation-config'
 import { EXPENSE_CREATE_ENTRY_PERMISSION_CODES } from './permissionConstants'
 
 type StoredUserLike = {
+  companyId?: string
   permissionCodes?: string[]
 }
 

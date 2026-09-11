@@ -24,6 +24,7 @@ export type BindingPanelItem = {
   title: string
   templateTypeLabel: string
   statusLabel?: string
+  relationCount?: number
   metaLine: string
   detailLine: string
 }
@@ -388,6 +389,7 @@ function buildRelatedBindingItem(
     title: item.documentTitle || item.documentCode,
     templateTypeLabel: item.templateTypeLabel || options.businessDocumentLabel,
     statusLabel: item.statusLabel,
+    relationCount: item.relationCount,
     metaLine: `${options.documentCodeLabel}${item.documentCode} ${options.bindingInlineSeparator} ${options.submitterLabel}${item.submitterName || '-'}`,
     detailLine: `${options.fieldLabel}${item.fieldKey || '-'}`
   }

@@ -255,6 +255,7 @@ export interface ExpenseDocumentRelationBinding {
   status?: string
   statusLabel?: string
   submitterName?: string
+  relationCount?: number
 }
 
 export interface ExpenseDocumentWriteOffBinding extends ExpenseDocumentRelationBinding {

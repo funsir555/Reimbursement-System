@@ -79,6 +79,9 @@ export function useFinanceNewVoucherHeaderMetaOwner(options: UseFinanceNewVouche
     if (!options.voucherMeta.value) {
       return notices
     }
+    if (options.voucherMeta.value.periodStatus === 'CLOSED') {
+      notices.push({ level: 'warning', text: '当前所属期间已结账，仅允许查询和阅读。' })
+    }
     if (!options.voucherMeta.value.accountOptions?.length) {
       notices.push({ level: 'danger', text: '当前公司账套已启用，但暂无会计科目数据，请检查账套初始化结果。' })
     }

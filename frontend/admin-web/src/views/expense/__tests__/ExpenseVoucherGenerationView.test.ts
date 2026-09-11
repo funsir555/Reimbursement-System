@@ -30,10 +30,14 @@ vi.mock('@/api', () => ({
   expenseVoucherGenerationApi: mocks.expenseVoucherGenerationApi
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: mocks.elMessage,
-  ElMessageBox: mocks.elMessageBox
-}))
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return {
+    ...actual,
+    ElMessage: mocks.elMessage,
+    ElMessageBox: mocks.elMessageBox
+  }
+})
 
 vi.mock('@/utils/permissions', () => ({
   hasPermission: (permissionCode: string, source?: string[] | { permissionCodes?: string[] } | null) => {

@@ -56,7 +56,7 @@ public class ExpenseVoucherRecordQuerySupport extends AbstractExpenseVoucherGene
     public ExpenseVoucherGeneratedRecordDetailVO getGeneratedVoucherDetail(Long id) {
         ExpVoucherPushDocument pushDocument = pushDocumentMapper.selectById(id);
         if (pushDocument == null) {
-            throw new IllegalArgumentException("鎺ㄩ€佽褰曚笉瀛樺湪");
+            throw new IllegalArgumentException("推送记录不存在");
         }
         ExpenseVoucherGeneratedRecordDetailVO detail = new ExpenseVoucherGeneratedRecordDetailVO();
         detail.setRecord(toGeneratedRecordVO(pushDocument, companyNameMap()));

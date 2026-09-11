@@ -92,7 +92,6 @@ export function useExpenseDocumentDetailRuntime(options: UseExpenseDocumentDetai
   const expandText = '\u5c55\u5f00'
   const collapseText = '\u6536\u8d77'
   const businessDocumentLabel = '\u4e1a\u52a1\u5355\u636e'
-  const viewBoundDocumentLabel = '\u67e5\u770b\u5355\u636e'
   const relatedCardTitle = '\u5173\u8054\u5355\u636e'
   const relatedCardDescription = '\u5c55\u793a\u5f53\u524d\u5355\u636e\u4e3b\u52a8\u5173\u8054\u4e0e\u88ab\u5176\u5b83\u5355\u636e\u53cd\u5411\u5f15\u7528\u7684\u771f\u5b9e\u4e1a\u52a1\u5173\u7cfb\u3002'
   const relatedOutboundTitle = '\u5f53\u524d\u5355\u636e\u4e3b\u52a8\u5173\u8054'
@@ -432,7 +431,6 @@ export function useExpenseDocumentDetailRuntime(options: UseExpenseDocumentDetai
     expandText,
     collapseText,
     businessDocumentLabel,
-    viewBoundDocumentLabel,
     relatedCardTitle,
     relatedCardDescription,
     relatedOutboundTitle,

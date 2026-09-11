@@ -19,6 +19,8 @@ public class FinanceVoucherOptionVO {
 
     private String subjectCategoryLabel;
 
+    private Integer subjectLevel;
+
     private Integer bperson;
 
     private Integer bcus;

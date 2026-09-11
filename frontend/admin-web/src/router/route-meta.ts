@@ -46,6 +46,7 @@ export interface AppRouteMetaDefinition {
   permissionCode?: string
   permissionCodes?: string[]
   menuPermissionCodes?: string[]
+  financeModuleCode?: string
   public?: boolean
   recentModule?: AppRouteRecentModuleMeta
 }
@@ -248,32 +249,70 @@ export const ROUTE_META_REGISTRY = {
     placeholderDescription: '预算管理功能建设中',
     permissionCode: 'expense:budget_management:view'
   }),
+  'finance-home': routeMeta({
+    title: '财务管理',
+    tabTitle: '财务管理',
+    description: '财务管理常用功能首页',
+    permissionCodes: [
+      'finance:general_ledger:new_voucher:view',
+      'finance:general_ledger:query_voucher:view',
+      'finance:general_ledger:review_voucher:view',
+      'finance:general_ledger:opening_balance:view',
+      'finance:general_ledger:post_voucher:view',
+      'finance:general_ledger:close_ledger:view',
+      'finance:general_ledger:period_transfer:view',
+      'finance:general_ledger:balance_sheet:view',
+      'finance:general_ledger:detail_ledger:view',
+      'finance:general_ledger:general_ledger:view',
+      'finance:general_ledger:project_detail_ledger:view',
+      'finance:general_ledger:supplier_detail_ledger:view',
+      'finance:general_ledger:customer_detail_ledger:view',
+      'finance:general_ledger:personal_detail_ledger:view',
+      'finance:general_ledger:quantity_amount_detail_ledger:view',
+      'finance:general_ledger:sequence_ledger:view',
+      'finance:fixed_assets:view',
+      'finance:reports:balance_sheet:view',
+      'finance:reports:income_statement:view',
+      'finance:reports:cash_flow:view',
+      'finance:system_management:view',
+      'finance:archives:customers:view',
+      'finance:archives:suppliers:view',
+      'finance:archives:employees:view',
+      'finance:archives:departments:view',
+      'finance:archives:account_subjects:view',
+      'finance:archives:projects:view'
+    ]
+  }),
   'finance-new-voucher': routeMeta({
     title: '新建凭证',
     tabTitle: '新建凭证',
     menuTitle: '新建凭证',
     description: '新建总账凭证',
-    permissionCode: 'finance:general_ledger:new_voucher:view'
+    permissionCode: 'finance:general_ledger:new_voucher:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-query-voucher': routeMeta({
     title: '查询凭证',
     tabTitle: '查询凭证',
     menuTitle: '查询凭证',
     description: '查询总账凭证',
-    permissionCode: 'finance:general_ledger:query_voucher:view'
+    permissionCode: 'finance:general_ledger:query_voucher:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-query-voucher-detail': routeMeta({
     title: '凭证详情',
     tabTitle: '凭证详情',
     description: '查看和修改凭证详情',
-    permissionCode: 'finance:general_ledger:query_voucher:view'
+    permissionCode: 'finance:general_ledger:query_voucher:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-review-voucher': routeMeta({
     title: '审核凭证',
     tabTitle: '审核凭证',
     menuTitle: '审核凭证',
     description: '审核总账凭证',
-    permissionCode: 'finance:general_ledger:review_voucher:view'
+    permissionCode: 'finance:general_ledger:review_voucher:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-opening-balance': routeMeta({
     title: '期初余额',
@@ -282,7 +321,8 @@ export const ROUTE_META_REGISTRY = {
     description: '总账期初余额功能建设中',
     placeholderTitle: '期初余额',
     placeholderDescription: '总账期初余额功能建设中',
-    permissionCode: 'finance:general_ledger:opening_balance:view'
+    permissionCode: 'finance:general_ledger:opening_balance:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-post-voucher': routeMeta({
     title: '记账',
@@ -291,7 +331,8 @@ export const ROUTE_META_REGISTRY = {
     description: '总账记账功能建设中',
     placeholderTitle: '记账',
     placeholderDescription: '总账记账功能建设中',
-    permissionCode: 'finance:general_ledger:post_voucher:view'
+    permissionCode: 'finance:general_ledger:post_voucher:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-close-ledger': routeMeta({
     title: '结账',
@@ -300,13 +341,23 @@ export const ROUTE_META_REGISTRY = {
     description: '总账结账功能建设中',
     placeholderTitle: '结账',
     placeholderDescription: '总账结账功能建设中',
-    permissionCode: 'finance:general_ledger:close_ledger:view'
+    permissionCode: 'finance:general_ledger:close_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
+  }),
+  'finance-period-transfer': routeMeta({
+    title: '期末结转',
+    tabTitle: '期末结转',
+    menuTitle: '期末结转',
+    description: '总账期末结转工作台',
+    permissionCode: 'finance:general_ledger:period_transfer:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-review-voucher-detail': routeMeta({
     title: '审核凭证详情',
     tabTitle: '审核凭证详情',
     description: '查看和审核凭证详情',
-    permissionCode: 'finance:general_ledger:review_voucher:view'
+    permissionCode: 'finance:general_ledger:review_voucher:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-ledger-balance-sheet': routeMeta({
     title: '余额表',
@@ -315,7 +366,8 @@ export const ROUTE_META_REGISTRY = {
     description: '查看余额表',
     placeholderTitle: '余额表',
     placeholderDescription: '查看余额表',
-    permissionCode: 'finance:general_ledger:balance_sheet:view'
+    permissionCode: 'finance:general_ledger:balance_sheet:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-detail-ledger': routeMeta({
     title: '明细账',
@@ -324,7 +376,8 @@ export const ROUTE_META_REGISTRY = {
     description: '明细账功能建设中',
     placeholderTitle: '明细账',
     placeholderDescription: '明细账功能建设中',
-    permissionCode: 'finance:general_ledger:detail_ledger:view'
+    permissionCode: 'finance:general_ledger:detail_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-general-ledger-book': routeMeta({
     title: '总分类账',
@@ -333,7 +386,8 @@ export const ROUTE_META_REGISTRY = {
     description: '总分类账功能建设中',
     placeholderTitle: '总分类账',
     placeholderDescription: '总分类账功能建设中',
-    permissionCode: 'finance:general_ledger:general_ledger:view'
+    permissionCode: 'finance:general_ledger:general_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-project-detail-ledger': routeMeta({
     title: '项目明细账',
@@ -342,7 +396,8 @@ export const ROUTE_META_REGISTRY = {
     description: '项目明细账功能建设中',
     placeholderTitle: '项目明细账',
     placeholderDescription: '项目明细账功能建设中',
-    permissionCode: 'finance:general_ledger:project_detail_ledger:view'
+    permissionCode: 'finance:general_ledger:project_detail_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-supplier-detail-ledger': routeMeta({
     title: '供应商明细账',
@@ -351,7 +406,8 @@ export const ROUTE_META_REGISTRY = {
     description: '供应商明细账功能建设中',
     placeholderTitle: '供应商明细账',
     placeholderDescription: '供应商明细账功能建设中',
-    permissionCode: 'finance:general_ledger:supplier_detail_ledger:view'
+    permissionCode: 'finance:general_ledger:supplier_detail_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-customer-detail-ledger': routeMeta({
     title: '客户明细账',
@@ -360,7 +416,8 @@ export const ROUTE_META_REGISTRY = {
     description: '客户明细账功能建设中',
     placeholderTitle: '客户明细账',
     placeholderDescription: '客户明细账功能建设中',
-    permissionCode: 'finance:general_ledger:customer_detail_ledger:view'
+    permissionCode: 'finance:general_ledger:customer_detail_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-personal-detail-ledger': routeMeta({
     title: '个人明细账',
@@ -369,23 +426,32 @@ export const ROUTE_META_REGISTRY = {
     description: '个人明细账功能建设中',
     placeholderTitle: '个人明细账',
     placeholderDescription: '个人明细账功能建设中',
-    permissionCode: 'finance:general_ledger:personal_detail_ledger:view'
+    permissionCode: 'finance:general_ledger:personal_detail_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-quantity-amount-detail-ledger': routeMeta({
     title: '数量金额明细账',
     tabTitle: '数量金额明细账',
     menuTitle: '数量金额明细账',
-    description: '数量金额明细账功能建设中',
-    placeholderTitle: '数量金额明细账',
-    placeholderDescription: '数量金额明细账功能建设中',
-    permissionCode: 'finance:general_ledger:quantity_amount_detail_ledger:view'
+    description: '查看数量金额明细账',
+    permissionCode: 'finance:general_ledger:quantity_amount_detail_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
+  }),
+  'finance-sequence-ledger': routeMeta({
+    title: '序时账',
+    tabTitle: '序时账',
+    menuTitle: '序时账',
+    description: '查看序时账',
+    permissionCode: 'finance:general_ledger:sequence_ledger:view',
+    financeModuleCode: 'GENERAL_LEDGER'
   }),
   'finance-fixed-assets': routeMeta({
     title: '固定资产',
     tabTitle: '固定资产',
     menuTitle: '固定资产',
     description: '固定资产业务工作台',
-    permissionCode: 'finance:fixed_assets:view'
+    permissionCode: 'finance:fixed_assets:view',
+    financeModuleCode: 'FIXED_ASSETS'
   }),
   'finance-reports-balance-sheet': routeMeta({
     title: '资产负债表',

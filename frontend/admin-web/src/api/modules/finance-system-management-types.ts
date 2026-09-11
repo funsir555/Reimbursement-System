@@ -82,3 +82,57 @@ export interface FinanceAccountSetTaskStatus {
   updatedAt?: string
   finishedAt?: string
 }
+
+export interface FinanceModuleEnableSummary {
+  companyId: string
+  moduleCode: string
+  moduleName: string
+  enabled: boolean
+  implemented: boolean
+  toggleAllowed: boolean
+  disableAllowed: boolean
+  backupAllowed?: boolean
+  clearAllowed?: boolean
+  backupRecordAllowed?: boolean
+  blockedMessage?: string
+  clearBlockedMessage?: string
+  placeholderActions?: string[]
+}
+
+export interface FinanceModuleEnableMeta {
+  companyId: string
+  companyName?: string
+  modules: FinanceModuleEnableSummary[]
+}
+
+export interface FinanceModuleEnableTogglePayload {
+  companyId: string
+  moduleCode: string
+  enabled: boolean
+}
+
+export interface FinanceModuleBackupPayload {
+  companyId: string
+  moduleCode: string
+}
+
+export interface FinanceModuleClearPayload {
+  companyId: string
+  moduleCode: string
+}
+
+export interface FinanceModuleBackupRecord {
+  id: number
+  companyId: string
+  moduleCode: string
+  moduleName?: string
+  backupFileName?: string
+  backupFilePath?: string
+  backupStatus?: string
+  backupStartedAt?: string
+  backupFinishedAt?: string
+  backupUserId?: number
+  backupUserName?: string
+  fileSizeBytes?: number
+  remark?: string
+}

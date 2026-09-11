@@ -16,6 +16,7 @@ import com.finex.auth.dto.FinanceVoucherSaveDTO;
 import com.finex.auth.dto.FinanceVoucherSaveResultVO;
 import com.finex.auth.dto.FinanceVoucherSummaryVO;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceCashFlowItemMapper;
 import com.finex.auth.mapper.FinanceCustomerMapper;
@@ -33,6 +34,7 @@ import com.finex.auth.service.impl.voucher.VoucherContextSupport;
 import com.finex.auth.service.impl.voucher.VoucherMetaSupport;
 import com.finex.auth.service.impl.voucher.VoucherMutationDomainSupport;
 import com.finex.auth.service.impl.voucher.VoucherQueryDomainSupport;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,9 +66,18 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
             UserMapper userMapper,
             FinanceAccountSetMapper financeAccountSetMapper,
             FinancePeriodCloseMapper financePeriodCloseMapper,
-            UserService userService
+            UserService userService,
+            FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper
     ) {
-        VoucherContextSupport voucherContextSupport = new VoucherContextSupport(systemCompanyMapper, financeAccountSetMapper, financePeriodCloseMapper, userService);
+        FinanceModuleEnableSupport financeModuleEnableSupport =
+                new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
+        VoucherContextSupport voucherContextSupport = new VoucherContextSupport(
+                systemCompanyMapper,
+                financeAccountSetMapper,
+                financePeriodCloseMapper,
+                userService,
+                financeAccountSetModuleEnableMapper
+        );
         this.voucherMetaSupport = new VoucherMetaSupport(
                 glAccvouchMapper,
                 financeAccountSubjectMapper,
@@ -79,6 +90,7 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 systemDepartmentMapper,
                 userMapper,
                 financePeriodCloseMapper,
+                financeModuleEnableSupport,
                 voucherContextSupport
         );
         this.voucherQueryDomainSupport = new VoucherQueryDomainSupport(
@@ -92,7 +104,8 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 systemCompanyMapper,
                 systemDepartmentMapper,
                 userMapper,
-                financePeriodCloseMapper
+                financePeriodCloseMapper,
+                financeModuleEnableSupport
         );
         this.voucherMutationDomainSupport = new VoucherMutationDomainSupport(
                 glAccvouchMapper,
@@ -105,7 +118,8 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
                 systemCompanyMapper,
                 systemDepartmentMapper,
                 userMapper,
-                financePeriodCloseMapper
+                financePeriodCloseMapper,
+                financeModuleEnableSupport
         );
     }
 
@@ -179,6 +193,30 @@ public class FinanceVoucherServiceImpl implements FinanceVoucherService {
     @Transactional(rollbackFor = Exception.class)
     public FinanceVoucherActionResultVO clearVoucherError(String companyId, String voucherNo) {
         return voucherMutationDomainSupport.clearVoucherError(companyId, voucherNo);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO voidVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return voucherMutationDomainSupport.voidVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO restoreVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return voucherMutationDomainSupport.restoreVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO reverseVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return voucherMutationDomainSupport.reverseVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FinanceVoucherActionResultVO deleteVoucher(String companyId, String voucherNo) {
+        return voucherMutationDomainSupport.deleteVoucher(companyId, voucherNo);
     }
 
     @Override

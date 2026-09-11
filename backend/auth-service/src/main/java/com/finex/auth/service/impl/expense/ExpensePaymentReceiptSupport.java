@@ -61,6 +61,19 @@ class ExpensePaymentReceiptSupport extends AbstractExpensePaymentSupport {
             throw new IllegalStateException("付款任务不存在");
         }
         ProcessDocumentInstance instance = expenseDocumentReadSupport.requireDocument(record.getDocumentCode());
+        String status = trimToNull(instance.getStatus());
+        if (DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(status) || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(status)) {
+            pmBankPaymentRecordMapper.updateById(record);
+            return expenseDocumentReadSupport.buildDocumentDetail(
+                    expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
+            );
+        }
+        if (executionSupport.hasMultipleMainFormAmountControls(instance)) {
+            executionSupport.markPaymentConfigurationException(instance, task, null, SYSTEM_OPERATOR);
+            return expenseDocumentReadSupport.buildDocumentDetail(
+                    expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
+            );
+        }
         LocalDateTime paidAt = parseFlexibleDateTime(dto == null ? null : dto.getPaidAt(), now);
         record.setManualPaid(0);
         record.setPaidAt(paidAt);
@@ -70,12 +83,6 @@ class ExpensePaymentReceiptSupport extends AbstractExpensePaymentSupport {
         record.setLastErrorMessage(null);
         pmBankPaymentRecordMapper.updateById(record);
 
-        String status = trimToNull(instance.getStatus());
-        if (DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(status) || DOCUMENT_STATUS_PAYMENT_FINISHED.equals(status)) {
-            return expenseDocumentReadSupport.buildDocumentDetail(
-                    expenseDocumentReadSupport.requireDocument(instance.getDocumentCode())
-            );
-        }
         return executionSupport.completePaymentTaskInternal(
                 null,
                 SYSTEM_OPERATOR,

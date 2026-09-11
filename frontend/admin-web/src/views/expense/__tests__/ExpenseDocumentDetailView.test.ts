@@ -193,6 +193,20 @@ const globalStubs = {
   ExpenseDocumentPrintSheet: {
     props: ['detail', 'expenseDetails'],
     template: '<div data-testid="expense-print-sheet">{{ detail?.documentCode }} / {{ expenseDetails?.length || 0 }}</div>'
+  },
+  ExpenseDocumentReadonlyDrawer: {
+    name: 'ExpenseDocumentReadonlyDrawer',
+    props: {
+      modelValue: {
+        type: Boolean,
+        default: false
+      },
+      documentCode: {
+        type: String,
+        default: ''
+      }
+    },
+    template: '<div v-if="modelValue" data-testid="expense-document-readonly-drawer">{{ documentCode }}</div>'
   }
 }
 
@@ -400,6 +414,7 @@ describe('ExpenseDocumentDetailView', () => {
             documentTitle: '项目申请单',
             templateTypeLabel: '申请单',
             statusLabel: '已完成',
+            relationCount: 2,
             submitterName: '王五'
           },
           {
@@ -448,20 +463,20 @@ describe('ExpenseDocumentDetailView', () => {
     expect(wrapper.get('[data-testid="related-bindings-card"]').text()).toContain('被其它单据关联')
     expect(wrapper.get('[data-testid="writeoff-bindings-card"]').text()).toContain('核销单据')
     expect(wrapper.text()).toContain('项目申请单')
+    expect(wrapper.text()).toContain('关联 2 次')
     expect(wrapper.text()).toContain('差旅报销单')
     expect(wrapper.text()).toContain('借款单')
     expect(wrapper.text()).toContain('预付报销单')
     expect(wrapper.text()).toContain('¥ 120.00')
     expect(wrapper.text()).toContain('¥ 66.00')
 
-    await wrapper.get('[data-testid="open-bound-document-DOC-REL-001"]').trigger('click')
+    await wrapper.get('[data-testid="related-binding-item"]').trigger('click')
 
-    expect(mocks.router.push).toHaveBeenCalledWith({
-      path: '/expense/documents/DOC-REL-001',
-      query: {
-        returnTo: '/expense/documents/DOC-001'
-      }
-    })
+    expect(mocks.router.push).not.toHaveBeenCalledWith(expect.objectContaining({
+      path: '/expense/documents/DOC-REL-001'
+    }))
+    expect(wrapper.get('[data-testid="expense-document-readonly-drawer"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="open-bound-document-DOC-REL-001"]').exists()).toBe(false)
   })
 
 
@@ -547,7 +562,7 @@ describe('ExpenseDocumentDetailView', () => {
     })
   })
 
-  it('opens related or writeoff target documents with the current detail page as returnTo', async () => {
+  it('opens related documents from the whole card without navigating away', async () => {
     mocks.expenseApi.getDetail.mockResolvedValue({
       data: buildDocumentDetail(1880.5, {
         relatedDocumentBindings: [
@@ -567,19 +582,15 @@ describe('ExpenseDocumentDetailView', () => {
     })
 
     const wrapper = await mountView()
-    const openButton = wrapper.findAll('button').find((item) => item.text().includes('查看单据'))
-
-    expect(openButton).toBeTruthy()
-
-    await openButton!.trigger('click')
+    const relatedCard = wrapper.get('[data-testid="related-binding-item"]')
+    await relatedCard.trigger('click')
     await flushPromises()
 
-    expect(mocks.router.push).toHaveBeenCalledWith({
-      path: '/expense/documents/DOC-REL-002',
-      query: {
-        returnTo: '/expense/documents/DOC-001'
-      }
-    })
+    expect(mocks.router.push).not.toHaveBeenCalledWith(expect.objectContaining({
+      path: '/expense/documents/DOC-REL-002'
+    }))
+    expect(wrapper.findComponent({ name: 'ExpenseDocumentReadonlyDrawer' }).exists()).toBe(true)
+    expect(wrapper.findAll('button').some((item) => item.text().includes('查看单据'))).toBe(false)
   })
 
   it('does not render approval node status cards after the real-task-status section is removed', async () => {

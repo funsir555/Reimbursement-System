@@ -21,6 +21,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 /**
  * VoucherMutationDomainSupport：领域规则支撑类。
@@ -43,9 +44,10 @@ public final class VoucherMutationDomainSupport extends AbstractFinanceVoucherSu
             SystemCompanyMapper systemCompanyMapper,
             SystemDepartmentMapper systemDepartmentMapper,
             UserMapper userMapper,
-            FinancePeriodCloseMapper financePeriodCloseMapper
+            FinancePeriodCloseMapper financePeriodCloseMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
-        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper);
+        super(glAccvouchMapper, financeAccountSubjectMapper, financeCashFlowItemMapper, financeCustomerMapper, financeVendorMapper, financeProjectClassMapper, financeProjectArchiveMapper, systemCompanyMapper, systemDepartmentMapper, userMapper, financePeriodCloseMapper, financeModuleEnableSupport);
     }
 
     /**
@@ -82,6 +84,22 @@ public final class VoucherMutationDomainSupport extends AbstractFinanceVoucherSu
 
     public FinanceVoucherActionResultVO clearVoucherError(String companyId, String voucherNo) {
         return super.clearVoucherError(companyId, voucherNo);
+    }
+
+    public FinanceVoucherActionResultVO voidVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return super.voidVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    public FinanceVoucherActionResultVO restoreVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return super.restoreVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    public FinanceVoucherActionResultVO reverseVoucher(String companyId, String voucherNo, Long currentUserId, String currentUsername) {
+        return super.reverseVoucher(companyId, voucherNo, currentUserId, currentUsername);
+    }
+
+    public FinanceVoucherActionResultVO deleteVoucher(String companyId, String voucherNo) {
+        return super.deleteVoucher(companyId, voucherNo);
     }
 
     public FinanceVoucherBatchActionResultVO batchUpdateVoucherState(FinanceVoucherBatchActionDTO dto, Long currentUserId, String currentUsername) {

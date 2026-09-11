@@ -5,6 +5,7 @@ import com.finex.auth.dto.FinanceAccountSetCreateDTO;
 import com.finex.auth.dto.FinanceAccountSetMetaVO;
 import com.finex.auth.dto.FinanceAccountSetSummaryVO;
 import com.finex.auth.dto.FinanceAccountSetTaskStatusVO;
+import com.finex.auth.mapper.FinanceAccountSetModuleBackupLogMapper;
 import com.finex.auth.entity.AsyncTaskRecord;
 import com.finex.auth.entity.FinanceAccountSet;
 import com.finex.auth.entity.FinanceAccountSetTemplateSubject;
@@ -12,13 +13,34 @@ import com.finex.auth.entity.FinanceAccountSetTemplate;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
+import com.finex.auth.mapper.FaAssetCardMapper;
+import com.finex.auth.mapper.FaAssetCategoryMapper;
+import com.finex.auth.mapper.FaAssetChangeBillMapper;
+import com.finex.auth.mapper.FaAssetChangeLineMapper;
+import com.finex.auth.mapper.FaAssetDeprLineMapper;
+import com.finex.auth.mapper.FaAssetDeprRunMapper;
+import com.finex.auth.mapper.FaAssetDisposalBillMapper;
+import com.finex.auth.mapper.FaAssetDisposalLineMapper;
+import com.finex.auth.mapper.FaAssetOpeningImportLineMapper;
+import com.finex.auth.mapper.FaAssetOpeningImportMapper;
+import com.finex.auth.mapper.FaAssetPeriodCloseMapper;
+import com.finex.auth.mapper.FaAssetVoucherLinkMapper;
 import com.finex.auth.mapper.FinanceAccountSetCodeRuleMapper;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
+import com.finex.auth.mapper.FinanceOpeningBalanceStateMapper;
+import com.finex.auth.mapper.FinancePeriodCloseLogMapper;
+import com.finex.auth.mapper.FinancePeriodCloseMapper;
+import com.finex.auth.mapper.FinancePostVoucherStateMapper;
+import com.finex.auth.mapper.GlAccassMapper;
+import com.finex.auth.mapper.GlAccsumMapper;
+import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.AsyncTaskSupport;
+import com.finex.auth.service.impl.financesystem.FinanceModuleBackupStorageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,6 +83,50 @@ class FinanceSystemManagementServiceImplTest {
 
     @Mock
     private FinanceAccountSetTaskWorker financeAccountSetTaskWorker;
+    @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
+    @Mock
+    private FinanceAccountSetModuleBackupLogMapper financeAccountSetModuleBackupLogMapper;
+    @Mock
+    private GlAccvouchMapper glAccvouchMapper;
+    @Mock
+    private GlAccsumMapper glAccsumMapper;
+    @Mock
+    private GlAccassMapper glAccassMapper;
+    @Mock
+    private FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper;
+    @Mock
+    private FinancePostVoucherStateMapper financePostVoucherStateMapper;
+    @Mock
+    private FinancePeriodCloseMapper financePeriodCloseMapper;
+    @Mock
+    private FinancePeriodCloseLogMapper financePeriodCloseLogMapper;
+    @Mock
+    private FaAssetCategoryMapper faAssetCategoryMapper;
+    @Mock
+    private FaAssetCardMapper faAssetCardMapper;
+    @Mock
+    private FaAssetChangeBillMapper faAssetChangeBillMapper;
+    @Mock
+    private FaAssetChangeLineMapper faAssetChangeLineMapper;
+    @Mock
+    private FaAssetDeprRunMapper faAssetDeprRunMapper;
+    @Mock
+    private FaAssetDeprLineMapper faAssetDeprLineMapper;
+    @Mock
+    private FaAssetDisposalBillMapper faAssetDisposalBillMapper;
+    @Mock
+    private FaAssetDisposalLineMapper faAssetDisposalLineMapper;
+    @Mock
+    private FaAssetOpeningImportMapper faAssetOpeningImportMapper;
+    @Mock
+    private FaAssetOpeningImportLineMapper faAssetOpeningImportLineMapper;
+    @Mock
+    private FaAssetPeriodCloseMapper faAssetPeriodCloseMapper;
+    @Mock
+    private FaAssetVoucherLinkMapper faAssetVoucherLinkMapper;
+    @Mock
+    private FinanceModuleBackupStorageService financeModuleBackupStorageService;
 
     private FinanceSystemManagementServiceImpl service;
 
@@ -75,7 +141,29 @@ class FinanceSystemManagementServiceImplTest {
                 userMapper,
                 asyncTaskRecordMapper,
                 financeAccountSetTaskWorker,
-                new ObjectMapper()
+                new ObjectMapper(),
+                financeAccountSetModuleEnableMapper,
+                financeAccountSetModuleBackupLogMapper,
+                glAccvouchMapper,
+                glAccsumMapper,
+                glAccassMapper,
+                financeOpeningBalanceStateMapper,
+                financePostVoucherStateMapper,
+                financePeriodCloseMapper,
+                financePeriodCloseLogMapper,
+                faAssetCategoryMapper,
+                faAssetCardMapper,
+                faAssetChangeBillMapper,
+                faAssetChangeLineMapper,
+                faAssetDeprRunMapper,
+                faAssetDeprLineMapper,
+                faAssetDisposalBillMapper,
+                faAssetDisposalLineMapper,
+                faAssetOpeningImportMapper,
+                faAssetOpeningImportLineMapper,
+                faAssetPeriodCloseMapper,
+                faAssetVoucherLinkMapper,
+                financeModuleBackupStorageService
         );
     }
 

@@ -11,6 +11,7 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.support.FinanceModuleEnableSupport;
 
 public final class SharedOpeningBalanceSupport extends AbstractFinanceOpeningBalanceSupport {
 
@@ -25,7 +26,8 @@ public final class SharedOpeningBalanceSupport extends AbstractFinanceOpeningBal
             UserMapper userMapper,
             GlAccsumMapper glAccsumMapper,
             GlAccassMapper glAccassMapper,
-            FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper
+            FinanceOpeningBalanceStateMapper financeOpeningBalanceStateMapper,
+            FinanceModuleEnableSupport financeModuleEnableSupport
     ) {
         super(
                 financeAccountSubjectMapper,
@@ -38,7 +40,8 @@ public final class SharedOpeningBalanceSupport extends AbstractFinanceOpeningBal
                 userMapper,
                 glAccsumMapper,
                 glAccassMapper,
-                financeOpeningBalanceStateMapper
+                financeOpeningBalanceStateMapper,
+                financeModuleEnableSupport
         );
     }
 }

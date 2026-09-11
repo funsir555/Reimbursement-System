@@ -409,6 +409,40 @@ describe('ExpenseFormReadonlyRenderer', () => {
     expect(wrapper.text()).not.toContain('{"documentCode"')
   })
 
+  it('opens related document cards with click and keyboard actions', async () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createBusinessBlock('relatedDocs', '关联单据', 'related-document')
+          ]
+        },
+        formData: {
+          relatedDocs: [
+            {
+              documentCode: 'DOC-REL-001',
+              documentTitle: '差旅报销单',
+              templateType: 'report',
+              templateTypeLabel: '报销单'
+            }
+          ]
+        }
+      }
+    })
+
+    const card = wrapper.get('[data-testid="readonly-related-document-item"]')
+    await card.trigger('click')
+    await card.trigger('keydown', { key: 'Enter' })
+    await card.trigger('keydown', { key: ' ' })
+
+    expect(wrapper.emitted('open-document-detail')).toEqual([
+      ['DOC-REL-001'],
+      ['DOC-REL-001'],
+      ['DOC-REL-001']
+    ])
+  })
+
   it('renders writeoff document cards with amount summary fields', () => {
     const wrapper = mount(ExpenseFormReadonlyRenderer, {
       props: {
@@ -450,6 +484,39 @@ describe('ExpenseFormReadonlyRenderer', () => {
     expect(wrapper.text()).toContain('120.00')
     expect(wrapper.text()).toContain('核销后余额')
     expect(wrapper.text()).toContain('380.00')
+  })
+
+  it('opens writeoff document cards from the whole card', async () => {
+    const wrapper = mount(ExpenseFormReadonlyRenderer, {
+      props: {
+        schema: {
+          layoutMode: 'TWO_COLUMN',
+          blocks: [
+            createBusinessBlock('writeoffDocs', '核销单据', 'writeoff-document')
+          ]
+        },
+        formData: {
+          writeoffDocs: [
+            {
+              documentCode: 'DOC-WO-001',
+              documentTitle: '项目借款单',
+              templateType: 'loan',
+              templateTypeLabel: '借款单',
+              writeOffSourceKind: 'LOAN',
+              availableWriteOffAmount: 500,
+              writeOffAmount: 120,
+              remainingAmount: 380
+            }
+          ]
+        }
+      }
+    })
+
+    await wrapper.get('[data-testid="readonly-writeoff-document-item"]').trigger('click')
+
+    expect(wrapper.emitted('open-document-detail')).toEqual([
+      ['DOC-WO-001']
+    ])
   })
 
   it('renders generic attachments as structured actions instead of raw json', () => {
