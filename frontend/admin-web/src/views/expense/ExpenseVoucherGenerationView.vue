@@ -152,13 +152,33 @@
         <el-select v-model="templatePolicyDialog.form.templateCode" filterable v-bind="globalFilterableSelectProps" placeholder="报销模板">
           <el-option v-for="item in meta.templateOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="templatePolicyDialog.form.creditAccountCode" filterable v-bind="globalFilterableSelectProps" placeholder="统一贷方科目">
-          <el-option v-for="item in meta.accountOptions" :key="item.value" :label="item.label" :value="item.value" />
+        <el-select v-model="templatePolicyDialog.form.creditAccountCode" filterable v-bind="globalFilterableSelectProps" placeholder="统一贷方科目" @change="handleCreditAccountChange">
+          <el-option v-for="item in dynamicAccountOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-select v-model="templatePolicyDialog.form.voucherType" placeholder="凭证类别">
           <el-option v-for="item in meta.voucherTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-input v-model="templatePolicyDialog.form.summaryRule" class="md:col-span-2" placeholder="摘要规则，例如：报销单${documentCode}-${expenseTypeName}" />
+
+        <!-- 辅助核算配置 -->
+        <div class="md:col-span-2">
+          <el-divider content-position="left">辅助核算配置</el-divider>
+        </div>
+        <el-select v-if="creditAuxiliaryConfig.showPerson" v-model="templatePolicyDialog.form.personRule" clearable filterable placeholder="个人核算规则">
+          <el-option value="SUBMITTER" label="按提单人" />
+          <el-option value="PAYEE" label="按收款人" />
+        </el-select>
+        <el-select v-if="creditAuxiliaryConfig.showSupplier" v-model="templatePolicyDialog.form.supplierRule" clearable filterable placeholder="供应商核算规则">
+          <el-option value="PAYEE_COMPANY" label="按收款单位" />
+        </el-select>
+        <el-select v-if="creditAuxiliaryConfig.showDept" v-model="templatePolicyDialog.form.deptRule" clearable filterable placeholder="部门核算规则">
+          <el-option value="SUBMITTER_DEPT" label="按提单人部门" />
+          <el-option value="EXPENSE_DEPT" label="按承担部门" />
+        </el-select>
+        <el-select v-if="creditAuxiliaryConfig.showProject" v-model="templatePolicyDialog.form.projectRule" clearable filterable placeholder="项目核算规则">
+          <el-option value="BY_PROJECT" label="按项目" />
+        </el-select>
+
         <el-switch v-model="templatePolicyDialog.form.enabled" :active-value="1" :inactive-value="0" inline-prompt active-text="启用" inactive-text="停用" />
       </div>
       <template #footer>
@@ -178,9 +198,29 @@
         <el-select v-model="subjectMappingDialog.form.expenseTypeCode" filterable v-bind="globalFilterableSelectProps" placeholder="费用类型">
           <el-option v-for="item in meta.expenseTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="subjectMappingDialog.form.debitAccountCode" filterable v-bind="globalFilterableSelectProps" placeholder="借方科目">
-          <el-option v-for="item in meta.accountOptions" :key="item.value" :label="item.label" :value="item.value" />
+        <el-select v-model="subjectMappingDialog.form.debitAccountCode" filterable v-bind="globalFilterableSelectProps" placeholder="借方科目" @change="handleDebitAccountChange">
+          <el-option v-for="item in dynamicAccountOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
+
+        <!-- 辅助核算配置 -->
+        <div class="md:col-span-2">
+          <el-divider content-position="left">辅助核算配置</el-divider>
+        </div>
+        <el-select v-if="debitAuxiliaryConfig.showPerson" v-model="subjectMappingDialog.form.personRule" clearable filterable placeholder="个人核算规则">
+          <el-option value="SUBMITTER" label="按提单人" />
+          <el-option value="PAYEE" label="按收款人" />
+        </el-select>
+        <el-select v-if="debitAuxiliaryConfig.showSupplier" v-model="subjectMappingDialog.form.supplierRule" clearable filterable placeholder="供应商核算规则">
+          <el-option value="PAYEE_COMPANY" label="按收款单位" />
+        </el-select>
+        <el-select v-if="debitAuxiliaryConfig.showDept" v-model="subjectMappingDialog.form.deptRule" clearable filterable placeholder="部门核算规则">
+          <el-option value="SUBMITTER_DEPT" label="按提单人部门" />
+          <el-option value="EXPENSE_DEPT" label="按承担部门" />
+        </el-select>
+        <el-select v-if="debitAuxiliaryConfig.showProject" v-model="subjectMappingDialog.form.projectRule" clearable filterable placeholder="项目核算规则">
+          <el-option value="BY_PROJECT" label="按项目" />
+        </el-select>
+
         <el-switch v-model="subjectMappingDialog.form.enabled" :active-value="1" :inactive-value="0" inline-prompt active-text="启用" inactive-text="停用" />
       </div>
       <template #footer>
@@ -219,11 +259,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Promotion, RefreshRight } from '@element-plus/icons-vue'
 import {
   expenseVoucherGenerationApi,
+  financeApi,
+  financeArchiveApi,
   type PageResult,
   type VoucherGeneratedDetail,
   type VoucherGeneratedRecord,
@@ -232,7 +274,8 @@ import {
   type VoucherSubjectMapping,
   type VoucherSubjectMappingPayload,
   type VoucherTemplatePolicy,
-  type VoucherTemplatePolicyPayload
+  type VoucherTemplatePolicyPayload,
+  type FinanceAccountSubjectAuxiliary
 } from '@/api'
 import { formatMoney } from '@/utils/money'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
@@ -287,14 +330,46 @@ const selectedPushDocumentCodes = ref<string[]>([])
 const templatePolicyDialog = reactive({
   visible: false,
   editingId: 0,
-  form: { companyId: '', templateCode: '', creditAccountCode: '', voucherType: '', summaryRule: '', enabled: 1 }
+  form: { companyId: '', templateCode: '', creditAccountCode: '', voucherType: '', summaryRule: '', personRule: '', supplierRule: '', deptRule: '', projectRule: '', enabled: 1 }
 })
 const subjectMappingDialog = reactive({
   visible: false,
   editingId: 0,
-  form: { companyId: '', templateCode: '', expenseTypeCode: '', debitAccountCode: '', enabled: 1 }
+  form: { companyId: '', templateCode: '', expenseTypeCode: '', debitAccountCode: '', personRule: '', supplierRule: '', deptRule: '', projectRule: '', enabled: 1 }
 })
 const generatedDetailDrawer = reactive<{ visible: boolean; detail: VoucherGeneratedDetail | null }>({ visible: false, detail: null })
+
+// 辅助核算配置
+const creditAuxiliaryConfig = reactive({
+  showPerson: false,
+  showSupplier: false,
+  showDept: false,
+  showProject: false
+})
+
+const debitAuxiliaryConfig = reactive({
+  showPerson: false,
+  showSupplier: false,
+  showDept: false,
+  showProject: false
+})
+
+// 动态加载的会计科目选项
+const dynamicAccountOptions = ref<Array<{ value: string; label: string }>>([])
+
+// 监听模板策略对话框的公司变化
+watch(() => templatePolicyDialog.form.companyId, async (newCompanyId) => {
+  if (newCompanyId && templatePolicyDialog.visible) {
+    await loadAccountOptions(newCompanyId)
+  }
+})
+
+// 监听科目映射对话框的公司变化
+watch(() => subjectMappingDialog.form.companyId, async (newCompanyId) => {
+  if (newCompanyId && subjectMappingDialog.visible) {
+    await loadAccountOptions(newCompanyId)
+  }
+})
 
 onMounted(async () => {
   await loadMeta()
@@ -316,6 +391,21 @@ function syncPageState<T>(target: PageResult<T>, source: PageResult<T>) {
 async function loadMeta() {
   const response = await expenseVoucherGenerationApi.getMeta()
   Object.assign(meta, response.data)
+}
+
+async function loadAccountOptions(companyId: string) {
+  if (!companyId) {
+    dynamicAccountOptions.value = []
+    return
+  }
+  try {
+    const response = await financeApi.getVoucherMeta({ companyId })
+    dynamicAccountOptions.value = response.data.accountOptions || []
+  } catch (error) {
+    console.error('Failed to load account options:', error)
+    ElMessage.error('加载会计科目失败')
+    dynamicAccountOptions.value = []
+  }
 }
 
 async function loadTemplatePolicies() {
@@ -394,6 +484,30 @@ function fillAccountName(accountCode: string) {
   return meta.accountOptions.find((item) => item.value === accountCode)?.label || accountCode
 }
 
+async function loadSubjectAuxiliary(companyId: string, subjectCode: string, isCredit: boolean) {
+  if (!companyId || !subjectCode) return
+  try {
+    const response = await financeArchiveApi.getAccountSubjectAuxiliary(companyId, subjectCode)
+    const config = isCredit ? creditAuxiliaryConfig : debitAuxiliaryConfig
+    config.showPerson = response.data.bperson
+    config.showSupplier = response.data.bsup
+    config.showDept = response.data.bdept
+    config.showProject = response.data.bitem
+  } catch (error) {
+    console.error('Failed to load subject auxiliary config:', error)
+  }
+}
+
+async function handleCreditAccountChange(accountCode: string) {
+  const companyId = templatePolicyDialog.form.companyId
+  await loadSubjectAuxiliary(companyId, accountCode, true)
+}
+
+async function handleDebitAccountChange(accountCode: string) {
+  const companyId = subjectMappingDialog.form.companyId
+  await loadSubjectAuxiliary(companyId, accountCode, false)
+}
+
 function openTemplatePolicyDialog(row?: VoucherTemplatePolicy) {
   templatePolicyDialog.visible = true
   templatePolicyDialog.editingId = row?.id || 0
@@ -403,7 +517,15 @@ function openTemplatePolicyDialog(row?: VoucherTemplatePolicy) {
     creditAccountCode: row?.creditAccountCode || '',
     voucherType: row?.voucherType || meta.voucherTypeOptions[0]?.value || '记',
     summaryRule: row?.summaryRule || '报销单${documentCode}-${expenseTypeName}',
+    personRule: row?.personRule || '',
+    supplierRule: row?.supplierRule || '',
+    deptRule: row?.deptRule || '',
+    projectRule: row?.projectRule || '',
     enabled: row?.enabled ? 1 : 0
+  }
+  // 加载辅助核算配置
+  if (row?.creditAccountCode && row?.companyId) {
+    loadSubjectAuxiliary(row.companyId, row.creditAccountCode, true)
   }
 }
 
@@ -415,7 +537,15 @@ function openSubjectMappingDialog(row?: VoucherSubjectMapping) {
     templateCode: row?.templateCode || '',
     expenseTypeCode: row?.expenseTypeCode || '',
     debitAccountCode: row?.debitAccountCode || '',
+    personRule: row?.personRule || '',
+    supplierRule: row?.supplierRule || '',
+    deptRule: row?.deptRule || '',
+    projectRule: row?.projectRule || '',
     enabled: row?.enabled ? 1 : 0
+  }
+  // 加载辅助核算配置
+  if (row?.debitAccountCode && row?.companyId) {
+    loadSubjectAuxiliary(row.companyId, row.debitAccountCode, false)
   }
 }
 

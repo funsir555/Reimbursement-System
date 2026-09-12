@@ -28,6 +28,10 @@ export interface VoucherTemplatePolicy {
   templateName?: string
   creditAccountCode: string
   creditAccountName?: string
+  personRule?: string
+  supplierRule?: string
+  deptRule?: string
+  projectRule?: string
   voucherType: string
   voucherTypeLabel?: string
   summaryRule?: string
@@ -41,6 +45,10 @@ export interface VoucherTemplatePolicyPayload {
   templateName?: string
   creditAccountCode: string
   creditAccountName?: string
+  personRule?: string
+  supplierRule?: string
+  deptRule?: string
+  projectRule?: string
   voucherType: string
   summaryRule?: string
   enabled?: number
@@ -56,6 +64,10 @@ export interface VoucherSubjectMapping {
   expenseTypeName?: string
   debitAccountCode: string
   debitAccountName?: string
+  personRule?: string
+  supplierRule?: string
+  deptRule?: string
+  projectRule?: string
   enabled: boolean
   updatedAt?: string
 }
@@ -68,6 +80,10 @@ export interface VoucherSubjectMappingPayload {
   expenseTypeName?: string
   debitAccountCode: string
   debitAccountName?: string
+  personRule?: string
+  supplierRule?: string
+  deptRule?: string
+  projectRule?: string
   enabled?: number
 }
 

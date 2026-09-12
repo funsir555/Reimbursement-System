@@ -82,6 +82,7 @@ public class ExpenseReadonlyPayeeAccountSnapshotEnhancer {
         String accountName = firstNonBlank(account.getAccountName(), snapshot.get("accountName"), snapshot.get("ownerName"));
         String bankDisplayName = firstNonBlank(account.getBranchName(), account.getBankName(), snapshot.get("bankName"), snapshot.get("bankBranchName"));
         snapshot.put("sourceType", firstNonBlank(snapshot.get("sourceType"), "USER"));
+        snapshot.put("ownerCode", firstNonBlank(account.getAccountId(), snapshot.get("ownerCode")));
         snapshot.put("ownerName", accountName);
         snapshot.put("accountName", accountName);
         snapshot.put("accountNo", firstNonBlank(account.getAccountNo(), snapshot.get("accountNo")));

@@ -11,6 +11,7 @@ import com.finex.auth.dto.FinanceAccountSubjectMetaVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
 import com.finex.auth.dto.FinanceAccountSubjectStatusDTO;
 import com.finex.auth.dto.FinanceAccountSubjectSummaryVO;
+import com.finex.auth.dto.FinanceAccountSubjectAuxiliaryVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.FinanceAccountSubjectArchiveService;
 import com.finex.common.Result;
@@ -77,6 +78,17 @@ public class FinanceAccountSubjectArchiveController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), SUBJECT_VIEW);
         return Result.success(financeAccountSubjectArchiveService.getSubjectDetail(companyId, subjectCode));
+    }
+
+    // 处理 getSubjectAuxiliary 请求。
+    @GetMapping("/{subjectCode}/auxiliary")
+    public Result<FinanceAccountSubjectAuxiliaryVO> getSubjectAuxiliary(
+            @RequestParam String companyId,
+            @PathVariable String subjectCode,
+            HttpServletRequest request
+    ) {
+        accessControlService.requirePermission(getCurrentUserId(request), SUBJECT_VIEW);
+        return Result.success(financeAccountSubjectArchiveService.getSubjectAuxiliary(companyId, subjectCode));
     }
 
     @GetMapping("/derived-defaults")

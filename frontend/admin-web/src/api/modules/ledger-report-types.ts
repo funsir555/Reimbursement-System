@@ -44,8 +44,12 @@ export interface FinanceLedgerReportMeta {
 
 export interface FinanceLedgerReportQueryParams {
   companyId: string
-  iyear: number
-  iperiod: number
+  iyear?: number
+  iperiod?: number
+  iyearFrom?: number
+  iperiodFrom?: number
+  iyearTo?: number
+  iperiodTo?: number
   ledgerKind?: DetailLedgerKind
   accountCodeFrom?: string
   accountCodeTo?: string

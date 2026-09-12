@@ -14,6 +14,10 @@ public class ExpenseVoucherSubjectMappingVO {
     private String expenseTypeName;
     private String debitAccountCode;
     private String debitAccountName;
+    private String personRule;
+    private String supplierRule;
+    private String deptRule;
+    private String projectRule;
     private Boolean enabled;
     private String updatedAt;
 }

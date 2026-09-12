@@ -7,6 +7,8 @@ public class BankAccountVO {
 
     private Long id;
 
+    private Long accountId;
+
     private String bankCode;
 
     private String bankName;

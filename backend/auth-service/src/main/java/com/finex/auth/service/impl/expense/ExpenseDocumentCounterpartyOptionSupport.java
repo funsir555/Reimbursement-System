@@ -152,39 +152,57 @@ class ExpenseDocumentCounterpartyOptionSupport {
             List<UserBankAccount> accounts = userBankAccountMapper.selectList(
                     Wrappers.<UserBankAccount>lambdaQuery()
                             .eq(UserBankAccount::getStatus, 1)
-                            .in(UserBankAccount::getUserId, userMap.keySet())
+                            .and(wrapper -> wrapper
+                                    .in(UserBankAccount::getAccountId, userMap.keySet())
+                                    .or()
+                                    .isNull(UserBankAccount::getAccountId)
+                                    .in(UserBankAccount::getUserId, userMap.keySet()))
                             .orderByDesc(UserBankAccount::getDefaultAccount)
                             .orderByAsc(UserBankAccount::getId)
             );
             accounts.stream()
                     .filter(account -> {
-                        User user = userMap.get(account.getUserId());
-                        return user != null && matchesKeyword(
+                        User user = resolveAccountOwner(account, userMap);
+                        return matchesKeyword(
                                 normalizedKeyword,
-                                user.getName(),
-                                user.getUsername(),
+                                user == null ? null : user.getName(),
+                                user == null ? null : user.getUsername(),
                                 account.getBankName(),
                                 account.getAccountName(),
                                 account.getAccountNo()
                         );
                     })
                     .forEach(account -> {
-                        User user = userMap.get(account.getUserId());
+                        User user = resolveAccountOwner(account, userMap);
                         ExpenseCreatePayeeAccountOptionVO option = new ExpenseCreatePayeeAccountOptionVO();
                         option.setValue("USER_ACCOUNT:" + account.getId());
                         option.setLabel(buildAccountLabel(account.getAccountName(), account.getBankName()));
                         option.setSourceType("USER");
-                        option.setOwnerCode(String.valueOf(user.getId()));
-                        option.setOwnerName(user.getName());
+                        option.setOwnerCode(String.valueOf(
+                                account.getAccountId() != null ? account.getAccountId() : account.getUserId()
+                        ));
+                        option.setOwnerName(firstNonBlank(
+                                user == null ? null : user.getName(),
+                                account.getAccountName()
+                        ));
                         option.setBankName(account.getBankName());
                         option.setAccountName(account.getAccountName());
                         option.setAccountNoMasked(maskAccountNo(account.getAccountNo()));
-                        option.setSecondaryLabel(trimToNull(account.getBranchName()) != null ? account.getBranchName() : user.getUsername());
+                        option.setSecondaryLabel(trimToNull(account.getBranchName()) != null
+                                ? account.getBranchName()
+                                : firstNonBlank(user == null ? null : user.getUsername(), "未配置开户行"));
                         options.add(option);
                     });
         }
 
         return options;
+    }
+
+    private User resolveAccountOwner(UserBankAccount account, Map<Long, User> userMap) {
+        if (account.getAccountId() != null) {
+            return userMap.get(account.getAccountId());
+        }
+        return userMap.get(account.getUserId());
     }
 
     private List<ExpenseCreatePayeeOptionVO> listPersonalPayeeOptions(Long userId, String normalizedKeyword) {
@@ -244,7 +262,9 @@ class ExpenseDocumentCounterpartyOptionSupport {
                     option.setValue("USER_ACCOUNT:" + account.getId());
                     option.setLabel(buildAccountLabel(account.getAccountName(), account.getBankName()));
                     option.setSourceType("USER");
-                    option.setOwnerCode(String.valueOf(userId));
+                    option.setOwnerCode(String.valueOf(
+                            account.getAccountId() != null ? account.getAccountId() : userId
+                    ));
                     option.setOwnerName(account.getAccountName());
                     option.setBankName(account.getBankName());
                     option.setAccountName(account.getAccountName());

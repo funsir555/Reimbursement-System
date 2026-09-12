@@ -3,7 +3,6 @@ package com.finex.auth.dto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
@@ -12,13 +11,23 @@ public class FinanceLedgerReportQueryDTO {
     @NotBlank(message = "公司不能为空")
     private String companyId;
 
-    @NotNull(message = "会计年度不能为空")
     private Integer iyear;
 
-    @NotNull(message = "会计月份不能为空")
     @Min(value = 1, message = "会计月份不合法")
     @Max(value = 12, message = "会计月份不合法")
     private Integer iperiod;
+
+    private Integer iyearFrom;
+
+    @Min(value = 1, message = "期间起月份不合法")
+    @Max(value = 12, message = "期间起月份不合法")
+    private Integer iperiodFrom;
+
+    private Integer iyearTo;
+
+    @Min(value = 1, message = "期间止月份不合法")
+    @Max(value = 12, message = "期间止月份不合法")
+    private Integer iperiodTo;
 
     private String ledgerKind;
 

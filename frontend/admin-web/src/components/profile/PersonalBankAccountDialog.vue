@@ -6,6 +6,17 @@
     destroy-on-close
   >
     <el-form label-position="top" class="space-y-5">
+      <el-form-item label="员工" required class="!mb-4">
+        <EmployeeTreeSelect
+          v-model="bankForm.accountId"
+          :departments="departments"
+          :employees="employees"
+          placeholder="请选择员工"
+          value-type="number"
+          :clearable="false"
+        />
+      </el-form-item>
+
       <SupplierPaymentInfoFields
         :form-state="bankForm"
         :required="true"
@@ -56,11 +67,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import SupplierPaymentInfoFields from '@/components/finance/SupplierPaymentInfoFields.vue'
 import {
   profileApi,
+  systemSettingsApi,
   type UserBankAccountRecord,
   type UserBankAccountSavePayload
 } from '@/api'
@@ -99,12 +112,31 @@ const bankFieldMap = {
 } as const
 
 const savingBankAccount = ref(false)
+const departments = ref<any[]>([])
+const employees = ref<any[]>([])
 const bankForm = reactive<UserBankAccountSavePayload>(createEmptyBankForm())
 
 const dialogVisible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value)
 })
+
+onMounted(() => {
+  loadEmployeeTreeData()
+})
+
+async function loadEmployeeTreeData() {
+  try {
+    const [deptResponse, empResponse] = await Promise.all([
+      systemSettingsApi.listDepartments(),
+      systemSettingsApi.queryEmployees({})
+    ])
+    departments.value = deptResponse.data
+    employees.value = empResponse.data
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载员工数据失败')
+  }
+}
 
 watch(
   () => [props.modelValue, props.mode, props.account?.id, props.existingAccountsCount] as const,
@@ -123,6 +155,7 @@ watch(
 
 function createEmptyBankForm() {
   return {
+    accountId: undefined,
     accountName: '',
     accountNo: '',
     accountType: '对私账户',
@@ -145,6 +178,7 @@ function resetBankForm() {
 
 function hydrateBankForm(account: UserBankAccountRecord) {
   Object.assign(bankForm, createEmptyBankForm(), {
+    accountId: account.accountId || 0,
     accountName: account.accountName || '',
     accountNo: account.accountNo || '',
     accountType: account.accountType || '对私账户',
@@ -161,6 +195,7 @@ function hydrateBankForm(account: UserBankAccountRecord) {
 
 function validateBankForm() {
   const incompleteBankDirectoryMessage = '请选择开户银行、开户省、开户市与开户网点后再保存'
+  if (!bankForm.accountId || bankForm.accountId === 0) return '请选择员工'
   if (!String(bankForm.accountName || '').trim()) return '请填写账户名'
   if (!String(bankForm.accountNo || '').trim()) return '请填写银行账号'
   if (

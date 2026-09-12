@@ -21,6 +21,10 @@ public class ExpVoucherSubjectMapping {
     private String expenseTypeName;
     private String debitAccountCode;
     private String debitAccountName;
+    private String personRule;
+    private String supplierRule;
+    private String deptRule;
+    private String projectRule;
     private Integer enabled;
     private String createdBy;
     private String updatedBy;

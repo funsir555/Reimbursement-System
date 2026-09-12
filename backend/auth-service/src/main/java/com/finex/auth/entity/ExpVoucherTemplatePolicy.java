@@ -19,6 +19,10 @@ public class ExpVoucherTemplatePolicy {
     private String templateName;
     private String creditAccountCode;
     private String creditAccountName;
+    private String personRule;
+    private String supplierRule;
+    private String deptRule;
+    private String projectRule;
     private String voucherType;
     private String summaryRule;
     private Integer enabled;

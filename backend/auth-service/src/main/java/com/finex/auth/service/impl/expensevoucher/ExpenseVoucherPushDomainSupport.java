@@ -58,8 +58,25 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         Map<String, ExpVoucherPushDocument> pushMap = listPushDocuments().stream()
                 .collect(Collectors.toMap(ExpVoucherPushDocument::getDocumentCode, Function.identity(), (left, right) -> left));
 
+        // 获取所有已审批单据
+        List<ProcessDocumentInstance> approvedDocuments = listApprovedDocuments();
+
+        // 批量查询模板分类代码
+        List<String> templateCodes = approvedDocuments.stream()
+                .map(ProcessDocumentInstance::getTemplateCode)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<String, String> templateCategoryMap = getTemplateCategoryCodeMap(templateCodes);
+
         List<ExpenseVoucherPushDocumentVO> rows = new ArrayList<>();
-        for (ProcessDocumentInstance document : listApprovedDocuments()) {
+        for (ProcessDocumentInstance document : approvedDocuments) {
+            // 根据模板分类代码过滤：只展示员工费用类(employee-expense)和企业往来类(enterprise-transaction)的报销单
+            // 事项申请类(business-application)不能映射凭证
+            String categoryCode = templateCategoryMap.get(document.getTemplateCode());
+            if (!isVoucherEligibleCategoryCode(categoryCode)) {
+                continue;
+            }
             String resolvedCompanyId = resolveDocumentCompanyId(document);
             if (!matchesCompany(resolvedCompanyId, companyId)) {
                 continue;

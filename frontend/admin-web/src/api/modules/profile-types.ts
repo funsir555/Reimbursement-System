@@ -6,6 +6,7 @@ import type { UserProfile } from './auth-types'
 
 export interface UserBankAccountRecord {
   id: number
+  accountId?: number
   bankCode?: string
   bankName: string
   province?: string
@@ -25,6 +26,7 @@ export interface UserBankAccountRecord {
 }
 
 export interface UserBankAccountSavePayload {
+  accountId: number
   accountName: string
   accountNo: string
   accountType?: string

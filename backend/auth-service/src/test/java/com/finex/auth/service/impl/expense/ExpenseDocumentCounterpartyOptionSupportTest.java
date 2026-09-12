@@ -106,6 +106,45 @@ class ExpenseDocumentCounterpartyOptionSupportTest {
     }
 
     @Test
+    void listPayeeAccountOptionsUsesAccountOwnerIdForAccountsAddedByAnotherUser() {
+        ExpenseDocumentCounterpartyOptionSupport support = newSupport();
+        User maintainer = new User();
+        maintainer.setId(1L);
+        maintainer.setStatus(1);
+        maintainer.setCompanyId("COMPANY_A");
+        User owner = new User();
+        owner.setId(9L);
+        owner.setStatus(1);
+        owner.setName("账户所属人");
+
+        UserBankAccount account = new UserBankAccount();
+        account.setId(12L);
+        account.setUserId(1L);
+        account.setAccountId(9L);
+        account.setStatus(1);
+        account.setAccountName("账户所属人");
+        account.setAccountNo("6222020202020202");
+        account.setBankName("中国银行");
+
+        when(userMapper.selectById(1L)).thenReturn(maintainer);
+        when(userMapper.selectList(any())).thenReturn(List.of(maintainer, owner));
+        when(userBankAccountMapper.selectList(any())).thenReturn(List.of(account));
+
+        List<ExpenseCreatePayeeAccountOptionVO> actual = support.listPayeeAccountOptions(
+                1L,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        assertEquals(1, actual.size());
+        assertEquals("9", actual.get(0).getOwnerCode());
+        assertEquals("账户所属人", actual.get(0).getOwnerName());
+    }
+
+    @Test
     void listPayeeOptionsRejectsUserWithoutCompanyBinding() {
         ExpenseDocumentCounterpartyOptionSupport support = newSupport();
         User user = new User();

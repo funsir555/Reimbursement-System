@@ -16,6 +16,8 @@ public class UserBankAccount {
 
     private Long userId;
 
+    private Long accountId;
+
     private String bankName;
 
     private String branchName;

@@ -66,6 +66,7 @@
 "sys_user","用户表","updated_at","更新时间","DATETIME",""
 "sys_user_bank_account","用户收款账户表","id","银行账户ID","key",""
 "sys_user_bank_account","用户收款账户表","user_id","用户ID","BIGINT",""
+"sys_user_bank_account","用户收款账户表","account_id","账户所属用户ID","BIGINT",""
 "sys_user_bank_account","用户收款账户表","bank_name","银行名称","VARCHAR","100"
 "sys_user_bank_account","用户收款账户表","branch_name","支行名称","VARCHAR","100"
 "sys_user_bank_account","用户收款账户表","account_name","账户名","VARCHAR","100"

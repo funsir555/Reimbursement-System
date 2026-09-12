@@ -54,6 +54,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -371,14 +372,12 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
 
     /**
      * 查询Approved单据列表。
+     * 只允许付款完成和付款结束状态的单据进入待推送池。
      */
     protected List<ProcessDocumentInstance> listApprovedDocuments() {
         return documentInstanceMapper.selectList(
                 Wrappers.<ProcessDocumentInstance>lambdaQuery()
                         .in(ProcessDocumentInstance::getStatus, List.of(
-                                DOCUMENT_STATUS_APPROVED,
-                                DOCUMENT_STATUS_COMPLETED,
-                                DOCUMENT_STATUS_PENDING_PAYMENT,
                                 DOCUMENT_STATUS_PAYMENT_COMPLETED,
                                 DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
@@ -387,11 +386,61 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
     }
 
     protected boolean isVoucherEligibleDocumentStatus(String status) {
-        return Objects.equals(status, DOCUMENT_STATUS_APPROVED)
-                || Objects.equals(status, DOCUMENT_STATUS_COMPLETED)
-                || Objects.equals(status, DOCUMENT_STATUS_PENDING_PAYMENT)
-                || Objects.equals(status, DOCUMENT_STATUS_PAYMENT_COMPLETED)
+        return Objects.equals(status, DOCUMENT_STATUS_PAYMENT_COMPLETED)
                 || Objects.equals(status, DOCUMENT_STATUS_PAYMENT_FINISHED);
+    }
+
+    /**
+     * 判断模板分类代码是否可以生成凭证。
+     * 只有员工费用类和企业往来类可以生成凭证，事项申请类(business-application)不能映射凭证。
+     */
+    protected boolean isVoucherEligibleCategoryCode(String categoryCode) {
+        String value = trim(categoryCode);
+        // 如果 category_code 为空，默认允许（向后兼容）
+        if (value == null || value.isEmpty()) {
+            return true;
+        }
+        // 排除事项申请类
+        if (Objects.equals(value, "business-application")) {
+            return false;
+        }
+        // 其他类型都允许（包括 employee-expense, enterprise-transaction 等）
+        return true;
+    }
+
+    /**
+     * 根据模板代码获取模板分类代码。
+     */
+    protected String getTemplateCategoryCode(String templateCode) {
+        if (templateCode == null || templateCode.trim().isEmpty()) {
+            return null;
+        }
+        ProcessDocumentTemplate template = documentTemplateMapper.selectOne(
+                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .eq(ProcessDocumentTemplate::getTemplateCode, templateCode)
+                        .last("LIMIT 1")
+        );
+        return template != null ? template.getCategoryCode() : null;
+    }
+
+    /**
+     * 批量获取模板分类代码映射。
+     */
+    protected Map<String, String> getTemplateCategoryCodeMap(List<String> templateCodes) {
+        if (templateCodes == null || templateCodes.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<ProcessDocumentTemplate> templates = documentTemplateMapper.selectList(
+                Wrappers.<ProcessDocumentTemplate>lambdaQuery()
+                        .in(ProcessDocumentTemplate::getTemplateCode, templateCodes)
+        );
+        return templates.stream()
+                .filter(t -> t.getTemplateCode() != null && t.getCategoryCode() != null)
+                .collect(Collectors.toMap(
+                        ProcessDocumentTemplate::getTemplateCode,
+                        ProcessDocumentTemplate::getCategoryCode,
+                        (v1, v2) -> v1
+                ));
     }
 
     /**
@@ -629,7 +678,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
                         .last("limit 1")
         );
         if (duplicate != null) {
-            throw new IllegalArgumentException("鍚屼竴鍏徃銆佹姤閿€妯℃澘鍜岃垂鐢ㄧ被鍨嬩笉鑳介噸澶嶇淮鎶ゅ€熸柟绉戠洰");
+            throw new IllegalArgumentException("同一公司、报销模板和费用类型不能重复维护借方科目");
         }
     }
 
@@ -842,7 +891,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
      * 解析汇总。
      */
     protected String resolveSummary(String templateRule, ProcessDocumentInstance document, String expenseTypeName) {
-        String summary = hasText(templateRule) ? trim(templateRule) : "鎶ラ攢鍗?{documentCode}-${expenseTypeName}";
+        String summary = hasText(templateRule) ? trim(templateRule) : "报销单${documentCode}-${expenseTypeName}";
         return summary
                 .replace("${documentCode}", defaultText(document.getDocumentCode(), ""))
                 .replace("${templateName}", defaultText(document.getTemplateName(), ""))
@@ -1026,7 +1075,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         return switch (defaultText(pushStatus, PUSH_STATUS_UNPUSHED)) {
             case PUSH_STATUS_SUCCESS -> "推送成功";
             case PUSH_STATUS_FAILED -> "推送失败";
-            default -> "寰呮帹閫?";
+            default -> "待推送";
         };
     }
 

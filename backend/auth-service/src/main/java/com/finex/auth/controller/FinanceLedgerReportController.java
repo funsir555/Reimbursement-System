@@ -105,7 +105,7 @@ public class FinanceLedgerReportController {
     ) {
         accessControlService.requirePermission(getCurrentUserId(request), "finance:general_ledger:balance_sheet:export");
         return buildExcelResponse(
-                "余额表",
+                buildBalanceReportName(dto),
                 financeLedgerReportService.exportBalanceSheet(getCurrentUserId(request), dto)
         );
     }
@@ -155,6 +155,26 @@ public class FinanceLedgerReportController {
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .contentLength(content.length)
                 .body(new ByteArrayResource(content));
+    }
+
+    private String buildBalanceReportName(FinanceLedgerReportQueryDTO dto) {
+        if (dto != null
+                && dto.getIyearFrom() != null
+                && dto.getIperiodFrom() != null
+                && dto.getIyearTo() != null
+                && dto.getIperiodTo() != null) {
+            return String.format(
+                    "余额表-%04d%02d至%04d%02d",
+                    dto.getIyearFrom(),
+                    dto.getIperiodFrom(),
+                    dto.getIyearTo(),
+                    dto.getIperiodTo()
+            );
+        }
+        if (dto != null && dto.getIyear() != null && dto.getIperiod() != null) {
+            return String.format("余额表-%04d%02d", dto.getIyear(), dto.getIperiod());
+        }
+        return "余额表";
     }
 
     private String resolveDetailViewPermission(String ledgerKind) {

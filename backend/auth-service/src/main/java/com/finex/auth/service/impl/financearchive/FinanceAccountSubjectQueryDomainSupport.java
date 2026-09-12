@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.FinanceAccountSubjectDetailVO;
 import com.finex.auth.dto.FinanceAccountSubjectSummaryVO;
+import com.finex.auth.dto.FinanceAccountSubjectAuxiliaryVO;
 import com.finex.auth.entity.FinanceAccountSubject;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
@@ -69,5 +70,21 @@ public class FinanceAccountSubjectQueryDomainSupport extends AbstractFinanceAcco
      */
     public FinanceAccountSubjectDetailVO getSubjectDetail(String companyId, String subjectCode) {
         return toDetail(requireSubject(companyId, subjectCode));
+    }
+
+    /**
+     * 获取科目辅助核算信息。
+     */
+    public FinanceAccountSubjectAuxiliaryVO getSubjectAuxiliary(String companyId, String subjectCode) {
+        FinanceAccountSubject subject = requireSubject(companyId, subjectCode);
+        FinanceAccountSubjectAuxiliaryVO vo = new FinanceAccountSubjectAuxiliaryVO();
+        vo.setSubjectCode(subject.getSubjectCode());
+        vo.setSubjectName(subject.getSubjectName());
+        vo.setBperson(subject.getBperson() != null && subject.getBperson() == 1);
+        vo.setBsup(subject.getBsup() != null && subject.getBsup() == 1);
+        vo.setBdept(subject.getBdept() != null && subject.getBdept() == 1);
+        vo.setBitem(subject.getBitem() != null && subject.getBitem() == 1);
+        vo.setBcus(subject.getBcus() != null && subject.getBcus() == 1);
+        return vo;
     }
 }

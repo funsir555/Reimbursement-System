@@ -13,6 +13,7 @@ import com.finex.auth.dto.FinanceAccountSubjectMetaVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
 import com.finex.auth.dto.FinanceAccountSubjectStatusDTO;
 import com.finex.auth.dto.FinanceAccountSubjectSummaryVO;
+import com.finex.auth.dto.FinanceAccountSubjectAuxiliaryVO;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
 import com.finex.auth.mapper.FinanceAccountSubjectMapper;
 import com.finex.auth.mapper.FinanceAccountSetTemplateSubjectMapper;
@@ -94,6 +95,14 @@ public class FinanceAccountSubjectArchiveServiceImpl implements FinanceAccountSu
     @Override
     public FinanceAccountSubjectDetailVO getSubjectDetail(String companyId, String subjectCode) {
         return financeAccountSubjectQueryDomainSupport.getSubjectDetail(companyId, subjectCode);
+    }
+
+    /**
+     * 获取科目辅助核算信息。
+     */
+    @Override
+    public FinanceAccountSubjectAuxiliaryVO getSubjectAuxiliary(String companyId, String subjectCode) {
+        return financeAccountSubjectQueryDomainSupport.getSubjectAuxiliary(companyId, subjectCode);
     }
 
     @Override

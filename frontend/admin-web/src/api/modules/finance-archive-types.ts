@@ -111,6 +111,16 @@ export interface FinanceAccountSubjectDetail {
   updated_at?: string
 }
 
+export interface FinanceAccountSubjectAuxiliary {
+  subjectCode: string
+  subjectName: string
+  bperson: boolean
+  bsup: boolean
+  bdept: boolean
+  bitem: boolean
+  bcus: boolean
+}
+
 export interface FinanceAccountSubjectSavePayload {
   subject_code: string
   subject_name: string

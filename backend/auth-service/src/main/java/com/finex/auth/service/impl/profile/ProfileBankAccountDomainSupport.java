@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.BankAccountVO;
 import com.finex.auth.dto.UserBankAccountSaveDTO;
 import com.finex.auth.entity.DownloadRecord;
+import com.finex.auth.entity.User;
 import com.finex.auth.entity.UserBankAccount;
 import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
@@ -140,6 +141,7 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
     private BankAccountVO toBankAccount(UserBankAccount account) {
         BankAccountVO vo = new BankAccountVO();
         vo.setId(account.getId());
+        vo.setAccountId(account.getAccountId());
         vo.setBankCode(account.getBankCode());
         vo.setBankName(account.getBankName());
         vo.setProvince(account.getProvince());
@@ -183,6 +185,7 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
                 || !Objects.equals(previousBranchName, nextBranchName);
 
         account.setAccountName(requireText(dto.getAccountName(), "账户名不能为空"));
+        account.setAccountId(dto.getAccountId());
         account.setAccountNo(requireText(dto.getAccountNo(), "银行账号不能为空"));
         account.setAccountType(defaultText(trimToNull(dto.getAccountType()), "对私账户"));
         account.setBankCode(nextBankCode);
@@ -194,6 +197,15 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         account.setCnapsCode(resolveWeakCnapsCode(previousCnapsCode, trimToNull(dto.getCnapsCode()), branchSelectionChanged));
         account.setStatus(normalizeStatus(dto.getStatus()));
         account.setDefaultAccount(Integer.valueOf(1).equals(account.getStatus()) && normalizeFlag(dto.getDefaultAccount()) == 1 ? 1 : 0);
+    }
+
+    private Long resolveAccountOwnerId(String accountName) {
+        User owner = userService().getOne(
+                Wrappers.<User>lambdaQuery()
+                        .eq(User::getName, accountName)
+                        .last("limit 1")
+        );
+        return owner == null ? null : owner.getId();
     }
 
     private String resolveWeakCnapsCode(String previousCnapsCode, String submittedCnapsCode, boolean branchSelectionChanged) {

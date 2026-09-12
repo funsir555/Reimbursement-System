@@ -375,6 +375,7 @@ DEALLOCATE PREPARE stmt;
 CREATE TABLE IF NOT EXISTS sys_user_bank_account (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '银行账户ID',
     user_id BIGINT NOT NULL COMMENT '用户ID',
+    account_id BIGINT NULL COMMENT '账户所属用户ID',
     bank_name VARCHAR(100) NOT NULL COMMENT '银行名称',
     branch_name VARCHAR(100) COMMENT '支行名称',
     bank_code VARCHAR(64) NULL COMMENT '开户银行编码',
@@ -389,8 +390,60 @@ CREATE TABLE IF NOT EXISTS sys_user_bank_account (
     status TINYINT DEFAULT 1 COMMENT '状态:1启用 0停用',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    KEY idx_user_id (user_id)
+    KEY idx_user_id (user_id),
+    KEY idx_sys_user_bank_account_account_id (account_id),
+    CONSTRAINT fk_sys_user_bank_account_account_id FOREIGN KEY (account_id) REFERENCES sys_user(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户收款账户表';
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user_bank_account'
+          AND COLUMN_NAME = 'account_id'
+    ),
+    'SELECT 1',
+    'ALTER TABLE sys_user_bank_account ADD COLUMN account_id BIGINT NULL COMMENT ''账户所属用户ID'' AFTER user_id'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user_bank_account'
+          AND INDEX_NAME = 'idx_sys_user_bank_account_account_id'
+    ),
+    'SELECT 1',
+    'CREATE INDEX idx_sys_user_bank_account_account_id ON sys_user_bank_account (account_id)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+UPDATE sys_user_bank_account account
+LEFT JOIN sys_user owner ON TRIM(account.account_name) = TRIM(owner.name)
+SET account.account_id = owner.id;
+
+SET @sql = IF(
+    EXISTS (
+        SELECT 1
+        FROM information_schema.TABLE_CONSTRAINTS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'sys_user_bank_account'
+          AND CONSTRAINT_NAME = 'fk_sys_user_bank_account_account_id'
+          AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+    ),
+    'SELECT 1',
+    'ALTER TABLE sys_user_bank_account ADD CONSTRAINT fk_sys_user_bank_account_account_id FOREIGN KEY (account_id) REFERENCES sys_user(id)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS sys_download_record (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '下载记录ID',
@@ -881,9 +934,9 @@ SET u.company_id = 'GROUP_HQ',
 WHERE u.username IN ('smoke07', 'smoke11');
 
 INSERT INTO sys_user_bank_account (
-    user_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
+    user_id, account_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
 )
-SELECT u.id, '招商银行', '上海陆家嘴支行', u.name, '6225888888881001', '工资卡', 1, 1
+SELECT u.id, u.id, '招商银行', '上海陆家嘴支行', u.name, '6225888888881001', '工资卡', 1, 1
 FROM sys_user u
 WHERE u.username = 'admin'
   AND NOT EXISTS (
@@ -892,9 +945,9 @@ WHERE u.username = 'admin'
   );
 
 INSERT INTO sys_user_bank_account (
-    user_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
+    user_id, account_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
 )
-SELECT u.id, '建设银行', '上海张江支行', u.name, '6217000012345678', '报销卡', 1, 1
+SELECT u.id, u.id, '建设银行', '上海张江支行', u.name, '6217000012345678', '报销卡', 1, 1
 FROM sys_user u
 WHERE u.username = 'zhangsan'
   AND NOT EXISTS (
@@ -903,9 +956,9 @@ WHERE u.username = 'zhangsan'
   );
 
 INSERT INTO sys_user_bank_account (
-    user_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
+    user_id, account_id, bank_name, branch_name, account_name, account_no, account_type, default_account, status
 )
-SELECT u.id, '工商银行', '上海徐汇支行', u.name, '6222000098765432', '报销卡', 1, 1
+SELECT u.id, u.id, '工商银行', '上海徐汇支行', u.name, '6222000098765432', '报销卡', 1, 1
 FROM sys_user u
 WHERE u.username = 'lisi'
   AND NOT EXISTS (
@@ -2466,6 +2519,7 @@ ALTER TABLE sys_user
 ALTER TABLE sys_user_bank_account
     MODIFY COLUMN id bigint NOT NULL AUTO_INCREMENT COMMENT '银行账户ID',
     MODIFY COLUMN user_id bigint NOT NULL COMMENT '用户ID',
+    MODIFY COLUMN account_id bigint NULL COMMENT '账户所属用户ID',
     MODIFY COLUMN company_id varchar(64) NULL COMMENT '公司主体编码',
     MODIFY COLUMN bank_name varchar(100) NOT NULL COMMENT '银行名称',
     MODIFY COLUMN branch_name varchar(100) NULL COMMENT '支行名称',

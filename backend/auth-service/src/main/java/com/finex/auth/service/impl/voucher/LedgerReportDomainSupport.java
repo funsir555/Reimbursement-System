@@ -1,6 +1,8 @@
 package com.finex.auth.service.impl.voucher;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import com.finex.auth.dto.FinanceBalanceSheetRowVO;
 import com.finex.auth.dto.FinanceContextCompanyOptionVO;
 import com.finex.auth.dto.FinanceContextMetaVO;
@@ -38,6 +40,7 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -162,46 +165,46 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     }
 
     public FinanceLedgerReportPageVO<FinanceBalanceSheetRowVO> queryBalanceSheet(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false);
+        QueryContext context = normalizeQuery(dto, false, true);
         return buildLedgerPage(loadBalanceSheetRows(context), context.page(), context.pageSize());
     }
 
     public FinanceLedgerReportPageVO<FinanceGeneralLedgerSectionVO> queryGeneralLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false);
+        QueryContext context = normalizeQuery(dto, false, false);
         return buildLedgerPage(loadGeneralLedgerSections(context), context.page(), context.pageSize());
     }
 
     public FinanceLedgerReportPageVO<FinanceDetailLedgerRowVO> queryDetailLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, true);
+        QueryContext context = normalizeQuery(dto, true, false);
         return buildLedgerPage(loadDetailLedgerRows(context), context.page(), context.pageSize());
     }
 
     public FinanceLedgerReportPageVO<FinanceSequenceLedgerRowVO> querySequenceLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false);
+        QueryContext context = normalizeQuery(dto, false, false);
         return buildLedgerPage(loadSequenceLedgerRows(context), context.page(), context.pageSize());
     }
 
     public byte[] exportBalanceSheet(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false);
+        QueryContext context = normalizeQuery(dto, false, true);
         return exportBalanceWorkbook(context, loadBalanceSheetRows(context));
     }
 
     public byte[] exportGeneralLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false);
+        QueryContext context = normalizeQuery(dto, false, false);
         return exportGeneralLedgerWorkbook(context, loadGeneralLedgerSections(context));
     }
 
     public byte[] exportDetailLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, true);
+        QueryContext context = normalizeQuery(dto, true, false);
         return exportDetailLedgerWorkbook(context, loadDetailLedgerRows(context));
     }
 
     public byte[] exportSequenceLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false);
+        QueryContext context = normalizeQuery(dto, false, false);
         return exportSequenceLedgerWorkbook(context, loadSequenceLedgerRows(context));
     }
 
-    private QueryContext normalizeQuery(FinanceLedgerReportQueryDTO dto, boolean detailLedger) {
+    private QueryContext normalizeQuery(FinanceLedgerReportQueryDTO dto, boolean detailLedger, boolean balanceSheet) {
         FinanceLedgerReportQueryDTO source = dto == null ? new FinanceLedgerReportQueryDTO() : dto;
         String companyId = trimToNull(source.getCompanyId());
         if (companyId == null) {
@@ -209,12 +212,9 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         }
         validateCompany(companyId);
         requireGeneralLedgerEnabled(companyId);
-        if (source.getIyear() == null) {
-            throw new IllegalArgumentException("会计年度不能为空");
-        }
-        if (source.getIperiod() == null || source.getIperiod() < 1 || source.getIperiod() > 12) {
-            throw new IllegalArgumentException("会计月份不合法");
-        }
+        PeriodRange periodRange = balanceSheet
+                ? normalizeBalancePeriodRange(source, companyId)
+                : normalizeSinglePeriod(source);
         String ledgerKind = detailLedger ? normalizeLedgerKind(source.getLedgerKind()) : null;
         if (Objects.equals(ledgerKind, LEDGER_KIND_PROJECT)
                 && trimToNull(source.getCitemClass()) == null
@@ -228,8 +228,13 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 : Math.min(source.getPageSize(), 500);
         return new QueryContext(
                 companyId,
-                source.getIyear(),
-                source.getIperiod(),
+                periodRange.to().getYear(),
+                periodRange.to().getMonthValue(),
+                periodRange.from().getYear(),
+                periodRange.from().getMonthValue(),
+                periodRange.to().getYear(),
+                periodRange.to().getMonthValue(),
+                balanceSheet,
                 ledgerKind,
                 trimToNull(source.getAccountCodeFrom()),
                 trimToNull(source.getAccountCodeTo()),
@@ -249,6 +254,96 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 page,
                 pageSize
         );
+    }
+
+    private PeriodRange normalizeSinglePeriod(FinanceLedgerReportQueryDTO source) {
+        if (source.getIyear() == null) {
+            throw new IllegalArgumentException("会计年度不能为空");
+        }
+        if (source.getIperiod() == null || source.getIperiod() < 1 || source.getIperiod() > 12) {
+            throw new IllegalArgumentException("会计月份不合法");
+        }
+        YearMonth period = YearMonth.of(source.getIyear(), source.getIperiod());
+        return new PeriodRange(period, period);
+    }
+
+    private PeriodRange normalizeBalancePeriodRange(FinanceLedgerReportQueryDTO source, String companyId) {
+        boolean hasRangeValue = source.getIyearFrom() != null
+                || source.getIperiodFrom() != null
+                || source.getIyearTo() != null
+                || source.getIperiodTo() != null;
+        YearMonth from;
+        YearMonth to;
+        if (!hasRangeValue) {
+            if (source.getIyear() == null) {
+                throw new IllegalArgumentException("会计年度不能为空");
+            }
+            validateBalanceYear(source.getIyear());
+            YearMonth legacyPeriod = normalizeSinglePeriod(source).from();
+            from = legacyPeriod;
+            to = legacyPeriod;
+        } else {
+            if (source.getIyearFrom() == null
+                    || source.getIperiodFrom() == null
+                    || source.getIyearTo() == null
+                    || source.getIperiodTo() == null) {
+                throw new IllegalArgumentException("余额表期间范围不完整");
+            }
+            validateBalanceYear(source.getIyearFrom());
+            validateBalanceYear(source.getIyearTo());
+            validateBalanceMonth(source.getIperiodFrom());
+            validateBalanceMonth(source.getIperiodTo());
+            from = YearMonth.of(source.getIyearFrom(), source.getIperiodFrom());
+            to = YearMonth.of(source.getIyearTo(), source.getIperiodTo());
+        }
+        validateBalanceYear(from.getYear());
+        validateBalanceYear(to.getYear());
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("余额表期间起不能晚于期间止");
+        }
+
+        FinanceContextMetaVO contextMeta = voucherContextSupport.getMeta(null);
+        FinanceContextCompanyOptionVO companyOption = contextMeta.getCompanyOptions().stream()
+                .filter(item -> Objects.equals(item.getCompanyId(), companyId))
+                .findFirst()
+                .orElse(null);
+        if (companyOption == null
+                || companyOption.getPeriodStartYear() == null
+                || companyOption.getPeriodStartMonth() == null
+                || companyOption.getPeriodEndYear() == null
+                || companyOption.getPeriodEndMonth() == null) {
+            throw new IllegalArgumentException("当前公司尚未启用账套");
+        }
+        YearMonth accountSetStart = YearMonth.of(
+                companyOption.getPeriodStartYear(),
+                companyOption.getPeriodStartMonth()
+        );
+        YearMonth accountSetEnd = YearMonth.of(
+                companyOption.getPeriodEndYear(),
+                companyOption.getPeriodEndMonth()
+        );
+        if (accountSetStart.isAfter(accountSetEnd)) {
+            throw new IllegalArgumentException("当前账套期间范围不合法");
+        }
+        if (from.isBefore(accountSetStart)) {
+            throw new IllegalArgumentException("期间起早于账套启用期间");
+        }
+        if (to.isAfter(accountSetEnd)) {
+            throw new IllegalArgumentException("期间止超过账套当前可用期间");
+        }
+        return new PeriodRange(from, to);
+    }
+
+    private void validateBalanceYear(Integer year) {
+        if (year == null || year < 1990 || year > 2090) {
+            throw new IllegalArgumentException("余额表期间年份不合法");
+        }
+    }
+
+    private void validateBalanceMonth(Integer month) {
+        if (month == null || month < 1 || month > 12) {
+            throw new IllegalArgumentException("余额表期间月份不合法");
+        }
     }
 
     private String normalizeLedgerKind(String ledgerKind) {
@@ -296,12 +391,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     private List<FinanceBalanceSheetRowVO> loadBalanceSheetRows(QueryContext context) {
         Map<String, FinanceAccountSubject> subjectMap = loadSelectableAccountMap(context.companyId());
         Map<String, BalanceAccumulator> accumulators = new LinkedHashMap<>();
-        List<GlAccsum> balances = glAccsumMapper.selectList(
-                Wrappers.<GlAccsum>lambdaQuery()
-                        .eq(GlAccsum::getCompanyId, context.companyId())
-                        .eq(GlAccsum::getIyear, context.iyear())
-                        .eq(GlAccsum::getIperiod, context.iperiod())
-        );
+        LambdaQueryWrapper<GlAccsum> balanceQuery = Wrappers.<GlAccsum>lambdaQuery()
+                .eq(GlAccsum::getCompanyId, context.companyId());
+        applyPeriodRange(balanceQuery, context, GlAccsum::getIyear, GlAccsum::getIperiod);
+        List<GlAccsum> balances = glAccsumMapper.selectList(balanceQuery);
         balances.stream()
                 .filter(item -> matchesSubjectRange(item.getCcode(), context))
                 .filter(item -> matchesSubjectLevel(item.getCcode(), subjectMap.get(item.getCcode()), context))
@@ -310,18 +403,25 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                     if (subject == null) {
                         return;
                     }
-                    accumulators.computeIfAbsent(subject.getSubjectCode(), unused -> new BalanceAccumulator(subject))
-                            .addBase(item.getMb(), item.getMd(), item.getMc(), item.getMe());
+                    BalanceAccumulator accumulator = accumulators.computeIfAbsent(
+                            subject.getSubjectCode(),
+                            unused -> new BalanceAccumulator(subject)
+                    );
+                    if (isPeriod(item.getIyear(), item.getIperiod(), context.iyearFrom(), context.iperiodFrom())) {
+                        accumulator.addOpeningBase(item.getMb());
+                    }
+                    accumulator.addPeriodBase(item.getMd(), item.getMc());
+                    if (isPeriod(item.getIyear(), item.getIperiod(), context.iyearTo(), context.iperiodTo())) {
+                        accumulator.addEndingBase(item.getMe());
+                    }
                 });
 
         Map<BalanceAssistKey, BalanceAccumulator> assistAccumulators = new LinkedHashMap<>();
         if (context.balanceAssistDisplay() != null) {
-            List<GlAccass> assistBalances = glAccassMapper.selectList(
-                    Wrappers.<GlAccass>lambdaQuery()
-                            .eq(GlAccass::getCompanyId, context.companyId())
-                            .eq(GlAccass::getIyear, context.iyear())
-                            .eq(GlAccass::getIperiod, context.iperiod())
-            );
+            LambdaQueryWrapper<GlAccass> assistBalanceQuery = Wrappers.<GlAccass>lambdaQuery()
+                    .eq(GlAccass::getCompanyId, context.companyId());
+            applyPeriodRange(assistBalanceQuery, context, GlAccass::getIyear, GlAccass::getIperiod);
+            List<GlAccass> assistBalances = glAccassMapper.selectList(assistBalanceQuery);
             assistBalances.stream()
                     .filter(item -> matchesSubjectRange(item.getCcode(), context))
                     .filter(item -> matchesSubjectLevel(item.getCcode(), subjectMap.get(item.getCcode()), context))
@@ -332,8 +432,17 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                             return;
                         }
                         BalanceAssistKey key = BalanceAssistKey.from(item);
-                        assistAccumulators.computeIfAbsent(key, unused -> new BalanceAccumulator(subject))
-                                .addBase(item.getMb(), item.getMd(), item.getMc(), item.getMe());
+                        BalanceAccumulator accumulator = assistAccumulators.computeIfAbsent(
+                                key,
+                                unused -> new BalanceAccumulator(subject)
+                        );
+                        if (isPeriod(item.getIyear(), item.getIperiod(), context.iyearFrom(), context.iperiodFrom())) {
+                            accumulator.addOpeningBase(item.getMb());
+                        }
+                        accumulator.addPeriodBase(item.getMd(), item.getMc());
+                        if (isPeriod(item.getIyear(), item.getIperiod(), context.iyearTo(), context.iperiodTo())) {
+                            accumulator.addEndingBase(item.getMe());
+                        }
                     });
         }
 
@@ -415,6 +524,9 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     private List<FinanceBalanceSheetRowVO> buildBalanceCategoryTotals(List<FinanceBalanceSheetRowVO> subjectRows) {
         Map<String, BalanceTotalAccumulator> totals = new LinkedHashMap<>();
         for (FinanceBalanceSheetRowVO row : subjectRows) {
+            if (!isTopLevelBalanceSubject(row)) {
+                continue;
+            }
             String category = resolveBalanceCategory(row.getSubjectCategory());
             BalanceTotalAccumulator total = totals.computeIfAbsent(category, unused -> new BalanceTotalAccumulator());
             total.addRow(row);
@@ -426,6 +538,12 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 toCategoryTotalRow("COST", "成本合计", totals.get("COST")),
                 toCategoryTotalRow("PROFIT", "损益合计", totals.get("PROFIT"))
         );
+    }
+
+    private boolean isTopLevelBalanceSubject(FinanceBalanceSheetRowVO row) {
+        return row != null
+                && "SUBJECT".equals(row.getRowType())
+                && Objects.equals(row.getSubjectLevel(), 1);
     }
 
     private FinanceBalanceSheetRowVO toCategoryTotalRow(
@@ -797,11 +915,17 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     }
 
     private List<GlAccvouch> loadVoucherRowsForContext(QueryContext context) {
+        LambdaQueryWrapper<GlAccvouch> voucherQuery = Wrappers.<GlAccvouch>lambdaQuery()
+                .eq(GlAccvouch::getCompanyId, context.companyId());
+        if (context.balanceSheet()) {
+            applyPeriodRange(voucherQuery, context, GlAccvouch::getIyear, GlAccvouch::getIperiod);
+        } else {
+            voucherQuery
+                    .eq(GlAccvouch::getIyear, context.iyear())
+                    .eq(GlAccvouch::getIperiod, context.iperiod());
+        }
         List<GlAccvouch> rows = glAccvouchMapper.selectList(
-                Wrappers.<GlAccvouch>lambdaQuery()
-                        .eq(GlAccvouch::getCompanyId, context.companyId())
-                        .eq(GlAccvouch::getIyear, context.iyear())
-                        .eq(GlAccvouch::getIperiod, context.iperiod())
+                voucherQuery
                         .eq(trimToNull(context.csign()) != null, GlAccvouch::getCsign, context.csign())
                         .orderByAsc(GlAccvouch::getDbillDate, GlAccvouch::getInoId, GlAccvouch::getInid, GlAccvouch::getId)
         );
@@ -830,6 +954,28 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             return false;
         }
         return trimToNull(context.accountCodeTo()) == null || normalizedSubjectCode.compareTo(context.accountCodeTo()) <= 0;
+    }
+
+    private boolean isPeriod(Integer year, Integer period, Integer targetYear, Integer targetPeriod) {
+        return Objects.equals(year, targetYear) && Objects.equals(period, targetPeriod);
+    }
+
+    private <T> void applyPeriodRange(
+            LambdaQueryWrapper<T> query,
+            QueryContext context,
+            SFunction<T, Integer> yearColumn,
+            SFunction<T, Integer> periodColumn
+    ) {
+        query.and(item -> item
+                        .gt(yearColumn, context.iyearFrom())
+                        .or(inner -> inner
+                                .eq(yearColumn, context.iyearFrom())
+                                .ge(periodColumn, context.iperiodFrom())))
+                .and(item -> item
+                        .lt(yearColumn, context.iyearTo())
+                        .or(inner -> inner
+                                .eq(yearColumn, context.iyearTo())
+                                .le(periodColumn, context.iperiodTo())));
     }
 
     private boolean matchesAssistFilters(GlAccass row, QueryContext context) {
@@ -1538,6 +1684,11 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             String companyId,
             Integer iyear,
             Integer iperiod,
+            Integer iyearFrom,
+            Integer iperiodFrom,
+            Integer iyearTo,
+            Integer iperiodTo,
+            boolean balanceSheet,
             String ledgerKind,
             String accountCodeFrom,
             String accountCodeTo,
@@ -1557,6 +1708,9 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             int page,
             int pageSize
     ) {
+    }
+
+    private record PeriodRange(YearMonth from, YearMonth to) {
     }
 
     private record BalanceDisplay(BigDecimal debit, BigDecimal credit, String directionLabel) {
@@ -1755,10 +1909,16 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             this.subject = subject;
         }
 
-        private void addBase(BigDecimal mb, BigDecimal md, BigDecimal mc, BigDecimal me) {
+        private void addOpeningBase(BigDecimal mb) {
             beginSigned = normalizeSigned(beginSigned, mb);
+        }
+
+        private void addPeriodBase(BigDecimal md, BigDecimal mc) {
             periodDebit = normalizeSigned(periodDebit, md);
             periodCredit = normalizeSigned(periodCredit, mc);
+        }
+
+        private void addEndingBase(BigDecimal me) {
             endSigned = normalizeSigned(endSigned, me);
         }
 

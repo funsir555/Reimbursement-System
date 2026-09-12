@@ -131,6 +131,49 @@ class ProfileBankAccountDomainSupportTest {
     }
 
     @Test
+    void createBankAccountResolvesAccountOwnerByAccountName() {
+        User maintainer = new User();
+        maintainer.setId(3L);
+        when(userService.getById(3L)).thenReturn(maintainer);
+
+        User owner = new User();
+        owner.setId(8L);
+        owner.setName("New User");
+        when(userService.getOne(any())).thenReturn(owner);
+        when(userBankAccountMapper.insert(any())).thenAnswer(invocation -> {
+            UserBankAccount inserted = invocation.getArgument(0);
+            inserted.setId(31L);
+            return 1;
+        });
+
+        UserBankAccount persisted = new UserBankAccount();
+        persisted.setId(31L);
+        persisted.setUserId(3L);
+        persisted.setAccountId(8L);
+        persisted.setAccountName("New User");
+        when(userBankAccountMapper.selectOne(any())).thenReturn(persisted);
+
+        UserBankAccountSaveDTO dto = new UserBankAccountSaveDTO();
+        dto.setAccountName("New User");
+        dto.setAccountNo("6222020202020202");
+        dto.setBankCode("CMB");
+        dto.setBankName("招商银行");
+        dto.setProvince("广东");
+        dto.setCity("深圳");
+        dto.setBranchCode("CMB-SZ");
+        dto.setBranchName("深圳分行");
+        dto.setStatus(1);
+        dto.setDefaultAccount(0);
+
+        support.createBankAccount(3L, dto);
+
+        ArgumentCaptor<UserBankAccount> captor = ArgumentCaptor.forClass(UserBankAccount.class);
+        verify(userBankAccountMapper).insert(captor.capture());
+        assertEquals(3L, captor.getValue().getUserId());
+        assertEquals(8L, captor.getValue().getAccountId());
+    }
+
+    @Test
     void setDefaultBankAccountRejectsDisabledAccount() {
         User user = new User();
         user.setId(3L);

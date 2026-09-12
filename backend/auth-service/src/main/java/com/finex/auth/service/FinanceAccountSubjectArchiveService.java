@@ -12,6 +12,7 @@ import com.finex.auth.dto.FinanceAccountSubjectMetaVO;
 import com.finex.auth.dto.FinanceAccountSubjectSaveDTO;
 import com.finex.auth.dto.FinanceAccountSubjectStatusDTO;
 import com.finex.auth.dto.FinanceAccountSubjectSummaryVO;
+import com.finex.auth.dto.FinanceAccountSubjectAuxiliaryVO;
 
 import java.util.List;
 
@@ -36,6 +37,11 @@ public interface FinanceAccountSubjectArchiveService {
      * 获取科目明细。
      */
     FinanceAccountSubjectDetailVO getSubjectDetail(String companyId, String subjectCode);
+
+    /**
+     * 获取科目辅助核算信息。
+     */
+    FinanceAccountSubjectAuxiliaryVO getSubjectAuxiliary(String companyId, String subjectCode);
 
     FinanceAccountSubjectDerivedDefaultsVO getDerivedDefaults(String companyId, String subjectCode);
 

@@ -25,6 +25,14 @@ public class ExpVoucherPushEntry {
     private String expenseTypeCode;
     private String expenseTypeName;
     private BigDecimal amount;
+    private Long personId;
+    private String personName;
+    private Long supplierId;
+    private String supplierName;
+    private Long deptId;
+    private String deptName;
+    private Long projectId;
+    private String projectName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

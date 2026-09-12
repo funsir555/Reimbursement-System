@@ -8,7 +8,9 @@
             <div class="expense-wb-toolbar__meta">
               <span class="expense-wb-soft-badge">当前公司 {{ financeCompany.currentCompanyName || '未设置' }}</span>
               <span class="expense-wb-soft-badge">默认期间 {{ financePeriod.currentMonthText || '未设置' }}</span>
-              <span class="expense-wb-soft-badge expense-wb-soft-badge--success">本地查询 {{ filters.iyear }}-{{ String(filters.iperiod).padStart(2, '0') }}</span>
+              <span class="expense-wb-soft-badge expense-wb-soft-badge--success">
+                本地查询 {{ localPeriodText || '未设置' }}
+              </span>
             </div>
           </div>
         </div>
@@ -32,12 +34,34 @@
               :value="item.companyId"
             />
           </el-select>
-          <el-select v-model="filters.iyear" placeholder="会计年度">
-            <el-option v-for="item in yearOptions" :key="item" :label="`${item}年`" :value="item" />
-          </el-select>
-          <el-select v-model="filters.iperiod" placeholder="会计月份">
-            <el-option v-for="item in monthOptions" :key="item" :label="`${item}月`" :value="item" />
-          </el-select>
+          <template v-if="isBalanceReport">
+            <el-date-picker
+              v-model="filters.periodFrom"
+              class="finance-ledger-report-period-picker"
+              type="month"
+              value-format="YYYY-MM"
+              format="YYYY年MM月"
+              placeholder="期间起"
+              :disabled-date="disableBalanceStartPeriod"
+            />
+            <el-date-picker
+              v-model="filters.periodTo"
+              class="finance-ledger-report-period-picker"
+              type="month"
+              value-format="YYYY-MM"
+              format="YYYY年MM月"
+              placeholder="期间止"
+              :disabled-date="disableBalanceEndPeriod"
+            />
+          </template>
+          <template v-else>
+            <el-select v-model="filters.iyear" placeholder="会计年度">
+              <el-option v-for="item in yearOptions" :key="item" :label="`${item}年`" :value="item" />
+            </el-select>
+            <el-select v-model="filters.iperiod" placeholder="会计月份">
+              <el-option v-for="item in monthOptions" :key="item" :label="`${item}月`" :value="item" />
+            </el-select>
+          </template>
           <el-select v-model="filters.accountCodeFrom" filterable clearable placeholder="科目范围起">
             <el-option v-for="item in accountOptions" :key="`from-${item.value}`" :label="item.label" :value="item.value" />
           </el-select>
@@ -360,6 +384,8 @@ const filters = reactive({
   companyId: '',
   iyear: 0,
   iperiod: 0,
+  periodFrom: '',
+  periodTo: '',
   accountCodeFrom: '',
   accountCodeTo: '',
   cdeptId: '',
@@ -376,6 +402,11 @@ const filters = reactive({
   summary: '',
   cbill: ''
 })
+
+type YearMonthPoint = {
+  year: number
+  month: number
+}
 
 const reportConfig = computed(() => REPORT_CONFIG[props.reportKind])
 const reportTitle = computed(() => reportConfig.value.title)
@@ -401,6 +432,20 @@ const filteredProjectOptions = computed(() => {
     return projectOptions.value
   }
   return projectOptions.value.filter((item) => item.parentValue === filters.citemClass)
+})
+const localPeriodText = computed(() => {
+  if (isBalanceReport.value) {
+    const from = formatYearMonth(filters.periodFrom)
+    const to = formatYearMonth(filters.periodTo)
+    if (!from || !to) {
+      return ''
+    }
+    return `${from} - ${to}`
+  }
+  if (!filters.iyear || !filters.iperiod) {
+    return ''
+  }
+  return `${filters.iyear}-${String(filters.iperiod).padStart(2, '0')}`
 })
 const subjectLevelOptions = computed(() => {
   const maxLevel = Math.max(
@@ -475,6 +520,24 @@ watch(
 )
 
 watch(
+  () => filters.periodFrom,
+  (value) => {
+    if (value && filters.periodTo && compareYearMonthText(value, filters.periodTo) > 0) {
+      filters.periodTo = value
+    }
+  }
+)
+
+watch(
+  () => filters.periodTo,
+  (value) => {
+    if (value && filters.periodFrom && compareYearMonthText(value, filters.periodFrom) < 0) {
+      filters.periodFrom = value
+    }
+  }
+)
+
+watch(
   () => filters.citemClass,
   () => {
     if (filters.citemId && !filteredProjectOptions.value.some((item) => item.value === filters.citemId)) {
@@ -493,6 +556,16 @@ function applyDefaultsFromStores(force: boolean) {
   if (force || !filters.companyId) {
     filters.companyId = financeCompany.currentCompanyId || filters.companyId
   }
+  if (isBalanceReport.value) {
+    const currentPeriod = buildYearMonth(financePeriod.currentYear, financePeriod.currentPeriod)
+    if (force || !filters.periodFrom) {
+      filters.periodFrom = currentPeriod
+    }
+    if (force || !filters.periodTo) {
+      filters.periodTo = currentPeriod
+    }
+    return
+  }
   if (force || !filters.iyear) {
     filters.iyear = financePeriod.currentYear || filters.iyear
   }
@@ -506,14 +579,27 @@ function applyRouteQuery() {
   const queryCompanyId = normalizeText(query.companyId)
   const queryYear = toPositiveInteger(query.iyear)
   const queryPeriod = toPositiveInteger(query.iperiod)
+  const queryPeriodFrom = normalizeYearMonth(query.periodFrom)
+  const queryPeriodTo = normalizeYearMonth(query.periodTo)
   if (queryCompanyId) {
     filters.companyId = queryCompanyId
   }
-  if (queryYear) {
-    filters.iyear = queryYear
-  }
-  if (queryPeriod) {
-    filters.iperiod = queryPeriod
+  if (isBalanceReport.value) {
+    if (queryPeriodFrom || queryPeriodTo) {
+      filters.periodFrom = queryPeriodFrom
+      filters.periodTo = queryPeriodTo
+    } else if (queryYear && queryPeriod) {
+      const legacyPeriod = buildYearMonth(queryYear, queryPeriod)
+      filters.periodFrom = legacyPeriod
+      filters.periodTo = legacyPeriod
+    }
+  } else {
+    if (queryYear) {
+      filters.iyear = queryYear
+    }
+    if (queryPeriod) {
+      filters.iperiod = queryPeriod
+    }
   }
   filters.accountCodeFrom = normalizeText(query.accountCodeFrom)
   filters.accountCodeTo = normalizeText(query.accountCodeTo)
@@ -532,17 +618,25 @@ function applyRouteQuery() {
 }
 
 async function loadMeta() {
-  if (!filters.companyId || !filters.iyear || !filters.iperiod) {
+  if (!filters.companyId) {
     return
   }
+  const selectedPeriod = isBalanceReport.value
+    ? parseYearMonth(filters.periodTo || filters.periodFrom)
+    : filters.iyear && filters.iperiod
+      ? { year: filters.iyear, month: filters.iperiod }
+      : null
   metaLoading.value = true
   try {
     const res = await ledgerReportApi.getMeta({
       companyId: filters.companyId,
-      iyear: filters.iyear,
-      iperiod: filters.iperiod
+      iyear: selectedPeriod?.year,
+      iperiod: selectedPeriod?.month
     })
     ledgerMeta.value = res.data
+    if (isBalanceReport.value) {
+      normalizeBalanceRange()
+    }
   } catch (error: unknown) {
     ElMessage.error(error instanceof Error ? error.message : '加载账簿筛选项失败')
   } finally {
@@ -551,13 +645,24 @@ async function loadMeta() {
 }
 
 function buildPayload(withPaging = true): FinanceLedgerReportQueryParams | null {
-  if (!filters.companyId || !filters.iyear || !filters.iperiod) {
+  if (!filters.companyId) {
+    return null
+  }
+  const balanceRange = isBalanceReport.value ? getBalancePeriodRange(false) : null
+  if (isBalanceReport.value && !balanceRange) {
+    return null
+  }
+  if (!isBalanceReport.value && (!filters.iyear || !filters.iperiod)) {
     return null
   }
   return {
     companyId: filters.companyId,
-    iyear: filters.iyear,
-    iperiod: filters.iperiod,
+    iyear: isBalanceReport.value ? undefined : filters.iyear,
+    iperiod: isBalanceReport.value ? undefined : filters.iperiod,
+    iyearFrom: balanceRange?.from.year,
+    iperiodFrom: balanceRange?.from.month,
+    iyearTo: balanceRange?.to.year,
+    iperiodTo: balanceRange?.to.month,
     ledgerKind: reportConfig.value.detailKind,
     accountCodeFrom: normalizeText(filters.accountCodeFrom) || undefined,
     accountCodeTo: normalizeText(filters.accountCodeTo) || undefined,
@@ -623,11 +728,14 @@ async function reloadCurrent() {
 }
 
 function handleSearch() {
+  if (isBalanceReport.value && !getBalancePeriodRange(true)) {
+    return
+  }
   pager.page = 1
   loadReport()
 }
 
-function handleReset() {
+async function handleReset() {
   applyDefaultsFromStores(true)
   filters.accountCodeFrom = ''
   filters.accountCodeTo = ''
@@ -645,7 +753,7 @@ function handleReset() {
   filters.summary = ''
   filters.cbill = ''
   pager.page = 1
-  loadMeta()
+  await loadMeta()
   loadReport()
 }
 
@@ -655,6 +763,9 @@ function handlePageSizeChange() {
 }
 
 async function handleExport() {
+  if (isBalanceReport.value && !getBalancePeriodRange(true)) {
+    return
+  }
   const payload = buildPayload(false)
   if (!payload) {
     return
@@ -731,6 +842,166 @@ function formatMoney(value: unknown) {
     : '0.00'
 }
 
+function buildYearMonth(year: number, month: number) {
+  return year > 0 && month > 0 ? `${year}-${String(month).padStart(2, '0')}` : ''
+}
+
+function normalizeYearMonth(value: unknown) {
+  const normalized = normalizeText(value)
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(normalized) ? normalized : ''
+}
+
+function parseYearMonth(value: unknown): YearMonthPoint | null {
+  const normalized = normalizeYearMonth(value)
+  if (!normalized) {
+    return null
+  }
+  const matched = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(normalized)
+  if (!matched) {
+    return null
+  }
+  return { year: Number(matched[1]), month: Number(matched[2]) }
+}
+
+function formatYearMonth(value: unknown) {
+  const parsed = parseYearMonth(value)
+  return parsed ? `${parsed.year}年${String(parsed.month).padStart(2, '0')}月` : ''
+}
+
+function compareYearMonthText(left: string, right: string) {
+  const leftPeriod = parseYearMonth(left)
+  const rightPeriod = parseYearMonth(right)
+  if (!leftPeriod || !rightPeriod) {
+    return 0
+  }
+  return (leftPeriod.year * 100 + leftPeriod.month) - (rightPeriod.year * 100 + rightPeriod.month)
+}
+
+function getBalancePeriodBounds() {
+  const option = currentCompanyOption.value
+  const startYear = option?.periodStartYear || ledgerMeta.value?.periodStartYear || 0
+  const startMonth = option?.periodStartMonth || ledgerMeta.value?.periodStartMonth || 0
+  const endYear = option?.periodEndYear || ledgerMeta.value?.periodEndYear || 0
+  const endMonth = option?.periodEndMonth || ledgerMeta.value?.periodEndMonth || 0
+  if (!startYear || !startMonth || !endYear || !endMonth) {
+    return null
+  }
+  const from = { year: startYear, month: startMonth }
+  const to = { year: endYear, month: endMonth }
+  if (balancePeriodValue(from) > balancePeriodValue(to)) {
+    return null
+  }
+  return {
+    from,
+    to
+  }
+}
+
+function balancePeriodValue(period: YearMonthPoint) {
+  return period.year * 100 + period.month
+}
+
+function isOutsideBalancePickerRange(date: Date, endpoint: 'from' | 'to') {
+  const candidate = { year: date.getFullYear(), month: date.getMonth() + 1 }
+  const candidateValue = balancePeriodValue(candidate)
+  const hardMin = 199001
+  const hardMax = 209012
+  if (candidateValue < hardMin || candidateValue > hardMax) {
+    return true
+  }
+  const bounds = getBalancePeriodBounds()
+  if (bounds
+    && (candidateValue < balancePeriodValue(bounds.from) || candidateValue > balancePeriodValue(bounds.to))) {
+    return true
+  }
+  if (endpoint === 'from' && filters.periodTo) {
+    const to = parseYearMonth(filters.periodTo)
+    if (to && candidateValue > to.year * 100 + to.month) {
+      return true
+    }
+  }
+  if (endpoint === 'to' && filters.periodFrom) {
+    const from = parseYearMonth(filters.periodFrom)
+    if (from && candidateValue < from.year * 100 + from.month) {
+      return true
+    }
+  }
+  return false
+}
+
+function disableBalanceStartPeriod(date: Date) {
+  return isOutsideBalancePickerRange(date, 'from')
+}
+
+function disableBalanceEndPeriod(date: Date) {
+  return isOutsideBalancePickerRange(date, 'to')
+}
+
+function normalizeBalanceRange() {
+  const bounds = getBalancePeriodBounds()
+  if (!bounds) {
+    return
+  }
+  const minValue = balancePeriodValue(bounds.from)
+  const maxValue = balancePeriodValue(bounds.to)
+  const fallback = buildYearMonth(financePeriod.currentYear, financePeriod.currentPeriod)
+  const fallbackPeriod = parseYearMonth(fallback)
+  const fallbackValue = fallbackPeriod ? balancePeriodValue(fallbackPeriod) : minValue
+  const defaultValue = fallbackValue >= minValue && fallbackValue <= maxValue
+    ? fallback
+    : `${bounds.from.year}-${String(bounds.from.month).padStart(2, '0')}`
+  const defaultPeriod = parseYearMonth(defaultValue) || bounds.from
+  let from = parseYearMonth(filters.periodFrom) || defaultPeriod
+  let to = parseYearMonth(filters.periodTo) || defaultPeriod
+  if (balancePeriodValue(from) < minValue || balancePeriodValue(from) > maxValue) {
+    from = defaultPeriod
+  }
+  if (balancePeriodValue(to) < minValue || balancePeriodValue(to) > maxValue) {
+    to = defaultPeriod
+  }
+  if (balancePeriodValue(from) > balancePeriodValue(to)) {
+    to = from
+  }
+  filters.periodFrom = buildYearMonth(from.year, from.month)
+  filters.periodTo = buildYearMonth(to.year, to.month)
+}
+
+function getBalancePeriodRange(showMessage: boolean) {
+  const from = parseYearMonth(filters.periodFrom)
+  const to = parseYearMonth(filters.periodTo)
+  const bounds = getBalancePeriodBounds()
+  const message = (text: string) => {
+    if (showMessage) {
+      ElMessage.warning(text)
+    }
+  }
+  if (!from || !to) {
+    message('请选择完整的余额表期间起止范围')
+    return null
+  }
+  if (from.year < 1990 || from.year > 2090 || to.year < 1990 || to.year > 2090) {
+    message('余额表期间年份必须在1990年至2090年之间')
+    return null
+  }
+  if (compareYearMonthText(filters.periodFrom, filters.periodTo) > 0) {
+    message('期间起不能晚于期间止')
+    return null
+  }
+  if (!bounds) {
+    message('当前账套没有可用的余额表期间')
+    return null
+  }
+  if (balancePeriodValue(from) < balancePeriodValue(bounds.from)) {
+    message('期间起早于账套启用期间')
+    return null
+  }
+  if (balancePeriodValue(to) > balancePeriodValue(bounds.to)) {
+    message('期间止超过账套当前可用期间')
+    return null
+  }
+  return { from, to }
+}
+
 function normalizeText(value: unknown) {
   return String(value || '').trim()
 }
@@ -772,6 +1043,15 @@ function balanceRowClassName({ row }: { row: FinanceBalanceSheetRow }) {
 
 .finance-ledger-report-grid {
   grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.finance-ledger-report-period-picker {
+  width: 100%;
+  min-width: 0;
+}
+
+:deep(.finance-ledger-report-period-picker.el-date-editor) {
+  width: 100%;
 }
 
 .finance-ledger-report-panel--section {
