@@ -555,10 +555,59 @@ export const ROUTE_META_REGISTRY = {
   'archives-agents': routeMeta({
     title: 'Agent 工作台',
     tabTitle: 'Agent',
-    menuTitle: 'Agent',
+    menuTitle: 'Agent 工作台',
     description: '个人可配置的自动化 Agent 平台',
     permissionCode: 'agents:view',
     menuPermissionCodes: ['agents:menu', 'agents:view']
+  }),
+  'agent-workbench': routeMeta({
+    title: 'Agent 工作台',
+    tabTitle: 'Agent',
+    menuTitle: 'Agent 工作台',
+    description: '工具设计、调试发布与 Agent 编排工作台',
+    permissionCodes: ['agent:workbench:view', 'agents:view'],
+    menuPermissionCodes: ['agent:workbench:view', 'agents:view']
+  }),
+  'agent-workflow-canvas': routeMeta({
+    title: '流程编排画布',
+    tabTitle: '流程画布',
+    description: 'Dify / Coze 风格的 Agent 低代码流程编排画布',
+    permissionCodes: ['agent:workbench:view', 'agents:view']
+  }),
+  'agent-chat': routeMeta({
+    title: 'FinWork',
+    tabTitle: 'FinWork',
+    menuTitle: 'FinWork',
+    description: '与 AI 助手对话，处理报销、费用管理相关问题',
+    permissionCode: 'agent:chat:view'
+  }),
+  'agent-personal-avatar': routeMeta({
+    title: '个人数字分身管理',
+    tabTitle: '个人数字分身',
+    menuTitle: '个人数字分身',
+    description: '创建和管理您的个人 AI 数字分身',
+    permissionCode: 'agent:personal_avatar:view'
+  }),
+  'agent-digital-employee': routeMeta({
+    title: '数字员工管理',
+    tabTitle: '数字员工',
+    menuTitle: '数字员工',
+    description: '管理企业级 AI 数字员工',
+    permissionCode: 'agent:digital_employee:view'
+  }),
+  'agent-business-ontology': routeMeta({
+    title: '业务本体查询',
+    tabTitle: '业务本体',
+    menuTitle: '业务本体',
+    description: '查询和管理报销系统的业务数据结构',
+    permissionCode: 'agent:business_ontology:view'
+  }),
+  'agent-knowledge-base': routeMeta({
+    title: '企业知识库管理',
+    tabTitle: '企业知识库',
+    menuTitle: '企业知识库',
+    description: '构建和管理企业专属知识库',
+    permissionCode: 'agent:knowledge_base:view'
   }),
   'archives-account-books': routeMeta({
     title: '账套管理',
@@ -567,6 +616,13 @@ export const ROUTE_META_REGISTRY = {
     placeholderTitle: '账套管理',
     placeholderDescription: '账套管理功能建设中',
     permissionCode: 'archives:account_books:view'
+  }),
+  'agent-desensitization': routeMeta({
+    title: '脱敏规则配置',
+    tabTitle: '脱敏规则配置',
+    menuTitle: '脱敏规则配置',
+    description: '配置敏感数据的识别规则和脱敏策略，保护数据安全',
+    permissionCode: 'agent:desensitization:view'
   }),
   settings: routeMeta({
     title: '系统设置',

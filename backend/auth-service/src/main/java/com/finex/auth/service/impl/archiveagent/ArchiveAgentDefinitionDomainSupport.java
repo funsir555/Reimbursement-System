@@ -10,7 +10,11 @@ import com.finex.auth.dto.ArchiveAgentDetailVO;
 import com.finex.auth.dto.ArchiveAgentSaveDTO;
 import com.finex.auth.dto.ArchiveAgentSummaryVO;
 import com.finex.auth.dto.ArchiveAgentVersionVO;
+import com.finex.auth.agent.workflow.WorkflowGraphPlan;
 import com.finex.auth.entity.ArchiveAgentDefinition;
+import com.finex.auth.entity.ArchiveAgentRun;
+import com.finex.auth.entity.ArchiveAgentRunArtifact;
+import com.finex.auth.entity.ArchiveAgentRunStep;
 import com.finex.auth.entity.ArchiveAgentSchedule;
 import com.finex.auth.entity.ArchiveAgentToolBinding;
 import com.finex.auth.entity.ArchiveAgentTrigger;
@@ -156,7 +160,7 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
                 .eq(ArchiveAgentVersion::getAgentId, id)
                 .set(ArchiveAgentVersion::getPublished, 0));
         latestVersion.setPublished(1);
-        latestVersion.setVersionLabel("鍙戝竷浜?" + DATE_TIME_FORMATTER.format(LocalDateTime.now()) + " by " + operatorName);
+        latestVersion.setVersionLabel("发布于 " + DATE_TIME_FORMATTER.format(LocalDateTime.now()) + " by " + operatorName);
         archiveAgentVersionMapper.updateById(latestVersion);
 
         definition.setPublishedVersionId(latestVersion.getId());
@@ -180,12 +184,52 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
                 ArchiveAgentSupport.AGENT_STATUS_DISABLED,
                 ArchiveAgentSupport.AGENT_STATUS_ARCHIVED
         ).contains(normalizedStatus)) {
-            throw new IllegalArgumentException("涓嶆敮鎸佺殑 Agent 鐘舵€? " + status);
+            throw new IllegalArgumentException("不支持的 Agent 状态: " + status);
         }
         definition.setStatus(normalizedStatus);
         archiveAgentDefinitionMapper.updateById(definition);
         refreshScheduleState(definition.getId(), normalizedStatus);
         return buildDetail(requireOwnedAgent(ownerUserId, id));
+    }
+
+    /**
+     * 删除 Agent 的专属数据。凭据引用可能被同一用户的其他 Agent 复用，不在这里删除。
+     */
+    public void deleteAgent(Long ownerUserId, Long id) {
+        ArchiveAgentDefinition definition = requireOwnedAgent(ownerUserId, id);
+        Long activeRunCount = archiveAgentRunMapper.selectCount(
+                Wrappers.<ArchiveAgentRun>lambdaQuery()
+                        .eq(ArchiveAgentRun::getAgentId, definition.getId())
+                        .in(ArchiveAgentRun::getStatus,
+                                ArchiveAgentSupport.RUN_STATUS_PENDING,
+                                ArchiveAgentSupport.RUN_STATUS_RUNNING)
+        );
+        if (activeRunCount != null && activeRunCount > 0) {
+            throw new IllegalStateException("Agent 正在运行，请等待运行结束后再删除");
+        }
+
+        List<Long> runIds = archiveAgentRunMapper.selectList(
+                Wrappers.<ArchiveAgentRun>lambdaQuery()
+                        .eq(ArchiveAgentRun::getAgentId, definition.getId())
+        ).stream().map(ArchiveAgentRun::getId).filter(Objects::nonNull).toList();
+
+        if (!runIds.isEmpty()) {
+            archiveAgentRunArtifactMapper.delete(Wrappers.<ArchiveAgentRunArtifact>lambdaQuery()
+                    .in(ArchiveAgentRunArtifact::getRunId, runIds));
+            archiveAgentRunStepMapper.delete(Wrappers.<ArchiveAgentRunStep>lambdaQuery()
+                    .in(ArchiveAgentRunStep::getRunId, runIds));
+        }
+        archiveAgentScheduleMapper.delete(Wrappers.<ArchiveAgentSchedule>lambdaQuery()
+                .eq(ArchiveAgentSchedule::getAgentId, definition.getId()));
+        archiveAgentTriggerMapper.delete(Wrappers.<ArchiveAgentTrigger>lambdaQuery()
+                .eq(ArchiveAgentTrigger::getAgentId, definition.getId()));
+        archiveAgentToolBindingMapper.delete(Wrappers.<ArchiveAgentToolBinding>lambdaQuery()
+                .eq(ArchiveAgentToolBinding::getAgentId, definition.getId()));
+        archiveAgentRunMapper.delete(Wrappers.<ArchiveAgentRun>lambdaQuery()
+                .eq(ArchiveAgentRun::getAgentId, definition.getId()));
+        archiveAgentVersionMapper.delete(Wrappers.<ArchiveAgentVersion>lambdaQuery()
+                .eq(ArchiveAgentVersion::getAgentId, definition.getId()));
+        archiveAgentDefinitionMapper.deleteById(definition.getId());
     }
 
     /**
@@ -354,24 +398,29 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
      */
     private void validateSavePayload(ArchiveAgentSaveDTO dto) {
         if (dto == null) {
-            throw new IllegalArgumentException("Agent 閰嶇疆涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("Agent 配置不能为空");
+        }
+        validateModelConfig(dto.getModelConfig());
+        if (dto.getInputSchema() == null || dto.getInputSchema().isEmpty()) {
+            throw new IllegalArgumentException("输入 Schema 不能为空");
         }
         if (dto.getWorkflow() == null) {
-            return;
+            throw new IllegalArgumentException("工作流配置不能为空");
         }
+        WorkflowGraphPlan.from(dto.getWorkflow());
         List<Map<String, Object>> nodes = readList(dto.getWorkflow().get("nodes"));
         List<Map<String, Object>> edges = readList(dto.getWorkflow().get("edges"));
         boolean hasStart = nodes.stream().anyMatch(node -> "start".equalsIgnoreCase(String.valueOf(node.get("nodeType"))));
         boolean hasEnd = nodes.stream().anyMatch(node -> "end".equalsIgnoreCase(String.valueOf(node.get("nodeType"))));
-        if (!nodes.isEmpty() && (!hasStart || !hasEnd)) {
-            throw new IllegalArgumentException("娴佺▼缂栨帓鑷冲皯闇€瑕佷竴涓?start 鑺傜偣鍜屼竴涓?end 鑺傜偣");
+        if (nodes.isEmpty() || !hasStart || !hasEnd) {
+            throw new IllegalArgumentException("工作流至少需要一个 start 节点和一个 end 节点");
         }
         List<String> nodeKeys = nodes.stream().map(node -> String.valueOf(node.getOrDefault("nodeKey", ""))).toList();
         for (Map<String, Object> edge : edges) {
             String source = String.valueOf(edge.getOrDefault("source", ""));
             String target = String.valueOf(edge.getOrDefault("target", ""));
             if (!nodeKeys.contains(source) || !nodeKeys.contains(target)) {
-                throw new IllegalArgumentException("娴佺▼杩炵嚎瀛樺湪鏃犳晥鑺傜偣寮曠敤");
+                throw new IllegalArgumentException("工作流连线存在无效节点引用");
             }
         }
         for (Map<String, Object> trigger : dto.getTriggers() == null ? List.<Map<String, Object>>of() : dto.getTriggers()) {
@@ -383,6 +432,19 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
                 ArchiveAgentSupport.computeNextFireAt(scheduleMode, cronExpression, intervalMinutes, LocalDateTime.now());
             }
         }
+    }
+
+    private void validateModelConfig(Map<String, Object> modelConfig) {
+        if (modelConfig == null || trimToNull(stringValue(modelConfig.get("provider"))) == null) {
+            throw new IllegalArgumentException("请选择模型提供商");
+        }
+        if (trimToNull(stringValue(modelConfig.get("model"))) == null) {
+            throw new IllegalArgumentException("请选择模型");
+        }
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private ArchiveAgentVersionVO toVersionVo(ArchiveAgentVersion version) {

@@ -10,7 +10,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * 认证服务启动类
  */
 @SpringBootApplication
-@MapperScan("com.finex.auth.mapper")
+@MapperScan({
+    "com.finex.auth.mapper",
+    "com.finex.auth.agent.mapper",
+    "com.finex.auth.agent.desensitization"
+})
 @EnableAsync
 @EnableScheduling
 public class AuthApplication {

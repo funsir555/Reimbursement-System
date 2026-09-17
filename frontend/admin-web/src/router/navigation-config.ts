@@ -189,13 +189,20 @@ export const MAIN_NAVIGATION_MENU: NavigationMenuNode[] = [
     ],
     'FolderOpened'
   ),
-  {
-    key: 'archives-agents',
-    index: getRoutePathByName('archives-agents'),
-    title: resolveRouteMenuTitle(resolveRouteMeta('archives-agents')),
-    iconKey: 'Agent',
-    permissionCodes: getRouteMenuPermissionCodes(resolveRouteMeta('archives-agents'))
-  },
+  createMenuGroup(
+    '/agent',
+    'Agent',
+    [
+      createRouteMenuNode('agent-chat'),
+      createRouteMenuNode('agent-workbench'),
+      createRouteMenuNode('agent-personal-avatar'),
+      createRouteMenuNode('agent-digital-employee'),
+      createRouteMenuNode('agent-business-ontology'),
+      createRouteMenuNode('agent-knowledge-base'),
+      createRouteMenuNode('agent-desensitization')
+    ],
+    'Agent'
+  ),
   {
     key: 'settings',
     index: getRoutePathByName('settings'),
@@ -210,7 +217,7 @@ export const FALLBACK_NAVIGATION_TARGETS: NavigationFallbackTarget[] = [
   createFallbackTarget('/profile', ['profile:menu', 'profile:view']),
   createRouteFallback('expense-create'),
   createRouteFallback('expense-list'),
-  createFallbackTarget('/archives/agents', ['agents:menu', 'agents:view']),
+  createRouteFallback('agent-workbench'),
   createRouteFallback('archives-invoices'),
   createFallbackTarget('/settings?tab=companyAccounts', ['settings:company_accounts:view']),
   createFallbackTarget('/settings?tab=apiInterfaces', ['settings:api_interfaces:view']),

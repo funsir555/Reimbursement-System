@@ -1,0 +1,98 @@
+# FinEx Agent Platform 配置
+finex:
+  agent:
+    # 安全配置
+    security:
+      mode: demo  # demo | enterprise
+      demo:
+        defaultTenantId: "default"
+        defaultCompanyId: 1
+        warnOnFallback: true
+
+    # 本地模型配置开关
+    model:
+      local:
+        enabled: true  # 启用本地模型 Provider
+
+      rules:
+        # 规则 1: 普通对话查询（低敏感度）
+        - useCase: "CHAT_QUERY"
+          sensitivity: "LOW"
+          primary: "DEEPSEEK"
+          fallback:
+            - "KIMI"
+            - "LOCAL_7B"
+
+        # 规则 2: 深度分析（低敏感度）
+        - useCase: "DEEP_ANALYSIS"
+          sensitivity: "LOW"
+          primary: "KIMI"
+          fallback:
+            - "DEEPSEEK"
+
+        # 规则 3: 数据脱敏（高敏感度，必须本地）
+        - useCase: "DATA_MASKING"
+          sensitivity: "HIGH"
+          primary: "LOCAL_7B"
+          fallback:
+            - "RULE_BASED"
+          required:
+            dataResidency: "ON_PREMISE"
+
+        # 规则 4: 内容摘要（低敏感度）
+        - useCase: "SUMMARIZATION"
+          sensitivity: "LOW"
+          primary: "DEEPSEEK"
+          fallback:
+            - "LOCAL_7B"
+
+      providers:
+        # DeepSeek 配置
+        - code: "DEEPSEEK"
+          apiKey: "${DEEPSEEK_API_KEY:}"
+          endpoint: "https://api.deepseek.com/v1"
+          capabilities:
+            chatCompletion: true
+            streamingSupport: true
+            maxContextTokens: 64000
+            deployment: "CLOUD"
+            dataResidency: "CHINA"
+            avgLatencyMs: 1500
+            costPerMillion: 20.0
+            useCases:
+              - "CHAT_QUERY"
+              - "DEEP_ANALYSIS"
+              - "SUMMARIZATION"
+
+        # Kimi 配置
+        - code: "KIMI"
+          apiKey: "${KIMI_API_KEY:}"
+          endpoint: "https://api.moonshot.cn/v1"
+          capabilities:
+            chatCompletion: true
+            streamingSupport: true
+            maxContextTokens: 200000
+            deployment: "CLOUD"
+            dataResidency: "CHINA"
+            avgLatencyMs: 2000
+            costPerMillion: 50.0
+            useCases:
+              - "DEEP_ANALYSIS"
+              - "CHAT_QUERY"
+
+        # 本地模型配置（Ollama）
+        - code: "LOCAL_7B"
+          endpoint: "${LOCAL_MODEL_ENDPOINT:http://localhost:11434/api/chat}"
+          modelPath: "${LOCAL_MODEL_NAME:deepseek-r1:7b}"
+          capabilities:
+            chatCompletion: true
+            streamingSupport: false
+            maxContextTokens: 8192
+            deployment: "ON_PREMISE"
+            dataResidency: "ON_PREMISE"
+            avgLatencyMs: 500
+            costPerMillion: 0.0
+            useCases:
+              - "DATA_MASKING"
+              - "CHAT_QUERY"
+              - "SUMMARIZATION"

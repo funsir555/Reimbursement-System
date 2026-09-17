@@ -428,6 +428,25 @@ export const routeCatalog: AppRouteDefinition[] = [
         component: () => import('../views/invoice/InvoiceListView.vue'),
         metaKey: 'archives-invoices'
       },
+      // Agent 平台路由组
+      {
+        path: 'agent/chat',
+        name: 'agent-chat',
+        component: () => import('../views/agent/AgentChatView.vue'),
+        metaKey: 'agent-chat'
+      },
+      {
+        path: 'agent/workbench',
+        name: 'agent-workbench',
+        component: () => import('../views/archives/ArchiveAgentView.vue'),
+        metaKey: 'agent-workbench'
+      },
+      {
+        path: 'agent/workbench/:id/workflow',
+        name: 'agent-workflow-canvas',
+        component: () => import('../views/agent/AgentWorkflowCanvasView.vue'),
+        metaKey: 'agent-workflow-canvas'
+      },
       {
         path: 'archives/agents',
         name: 'archives-agents',
@@ -435,10 +454,47 @@ export const routeCatalog: AppRouteDefinition[] = [
         metaKey: 'archives-agents'
       },
       {
+        path: 'agent/personal-avatar',
+        name: 'agent-personal-avatar',
+        component: () => import('../views/agent/PersonalAvatarView.vue'),
+        metaKey: 'agent-personal-avatar'
+      },
+      {
+        path: 'agent/digital-employee',
+        name: 'agent-digital-employee',
+        component: () => import('../views/agent/DigitalEmployeeView.vue'),
+        metaKey: 'agent-digital-employee'
+      },
+      {
+        path: 'agent/business-ontology',
+        name: 'agent-business-ontology',
+        component: () => import('../views/agent/BusinessOntologyView.vue'),
+        metaKey: 'agent-business-ontology'
+      },
+      {
+        path: 'agent/knowledge-base',
+        name: 'agent-knowledge-base',
+        component: () => import('../views/agent/KnowledgeBaseView.vue'),
+        metaKey: 'agent-knowledge-base'
+      },
+      {
+        path: 'agent/desensitization',
+        name: 'agent-desensitization',
+        component: () => import('../views/agent/desensitization/DesensitizationConfigView.vue'),
+        metaKey: 'agent-desensitization'
+      },
+      {
         path: 'archives/account-books',
         name: 'archives-account-books',
         component: placeholderView,
         metaKey: 'archives-account-books'
+      },
+      // Agent 脱敏规则配置
+      {
+        path: 'agent/desensitization',
+        name: 'agent-desensitization',
+        component: () => import('../views/agent/desensitization/DesensitizationConfigView.vue'),
+        metaKey: 'agent-desensitization'
       },
       // 系统设置：组织、角色、同步配置等系统级管理页面。
       {

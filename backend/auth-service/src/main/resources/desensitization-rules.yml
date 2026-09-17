@@ -1,0 +1,99 @@
+# 智能脱敏规则配置
+desensitization:
+  # 敏感实体类型定义
+  entityTypes:
+    - code: "PERSON"
+      name: "人名"
+      description: "员工姓名、客户姓名等"
+      placeholderPrefix: "PERSON"
+      regexPatterns:
+        - "[一-龥]{2,4}"  # 2-4个汉字
+      examples: ["张三", "李四", "王小明"]
+
+    - code: "AMOUNT"
+      name: "金额"
+      description: "报销金额、发票金额等"
+      placeholderPrefix: "AMOUNT"
+      regexPatterns:
+        - "\\d+(\\.\\d{1,2})?元"
+        - "¥\\d+(\\.\\d{1,2})?"
+        - "\\d+(\\.\\d{1,2})?RMB"
+      examples: ["1000元", "¥500.50", "1200.00元"]
+
+    - code: "DOCUMENT_ID"
+      name: "单据编号"
+      description: "报销单号、发票号等"
+      placeholderPrefix: "DOC"
+      regexPatterns:
+        - "EXP\\d{8,12}"
+        - "INV\\d{8,12}"
+        - "[A-Z]{2,4}\\d{6,12}"
+      examples: ["EXP20240101001", "INV202401010001"]
+
+    - code: "PHONE"
+      name: "手机号"
+      description: "联系电话"
+      placeholderPrefix: "PHONE"
+      regexPatterns:
+        - "1[3-9]\\d{9}"
+        - "\\d{3}-\\d{4}-\\d{4}"
+      examples: ["13812345678", "021-1234-5678"]
+
+    - code: "ID_CARD"
+      name: "身份证号"
+      description: "身份证号码"
+      placeholderPrefix: "ID"
+      regexPatterns:
+        - "\\d{17}[\\dXx]"
+      examples: ["110101199001011234"]
+
+    - code: "BANK_ACCOUNT"
+      name: "银行账号"
+      description: "银行卡号"
+      placeholderPrefix: "BANK"
+      regexPatterns:
+        - "\\d{16,19}"
+      examples: ["6222021234567890123"]
+
+    - code: "EMAIL"
+      name: "邮箱"
+      description: "电子邮件地址"
+      placeholderPrefix: "EMAIL"
+      regexPatterns:
+        - "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+      examples: ["zhangsan@company.com"]
+
+    - code: "ADDRESS"
+      name: "地址"
+      description: "详细地址"
+      placeholderPrefix: "ADDR"
+      regexPatterns:
+        - "[一-龥]+省[一-龥]+市"
+      examples: ["北京市朝阳区某某街道123号"]
+
+  # 脱敏策略配置
+  strategies:
+    # 正则规则脱敏（唯一策略）
+    - type: "REGEX"
+      enabled: true
+      priority: 1
+
+    # 后验检测
+  postValidation:
+    enabled: true
+    leakagePatterns:
+      - type: "PHONE"
+        pattern: "1[3-9]\\d{9}"
+        severity: "HIGH"
+      - type: "ID_CARD"
+        pattern: "\\d{17}[\\dXx]"
+        severity: "CRITICAL"
+      - type: "BANK_ACCOUNT"
+        pattern: "\\d{16,19}"
+        severity: "CRITICAL"
+
+  # 映射表配置
+  mapping:
+    ttlHours: 24  # 映射表保留时间（小时）
+    autoCleanup: true  # 自动清理过期映射
+    cleanupCron: "0 0 * * * ?"  # 每小时清理一次

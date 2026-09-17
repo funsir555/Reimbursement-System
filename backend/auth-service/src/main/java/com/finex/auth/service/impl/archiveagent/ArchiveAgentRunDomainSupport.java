@@ -41,15 +41,17 @@ public class ArchiveAgentRunDomainSupport extends AbstractArchiveAgentSupport {
         ArchiveAgentDefinition definition = requireOwnedAgent(ownerUserId, id);
         if (ArchiveAgentSupport.AGENT_STATUS_DISABLED.equals(definition.getStatus())
                 || ArchiveAgentSupport.AGENT_STATUS_ARCHIVED.equals(definition.getStatus())) {
-            throw new IllegalStateException("褰撳墠 Agent 宸插仠鐢ㄦ垨褰掓。锛屾棤娉曡繍琛?");
+            throw new IllegalStateException("当前 Agent 已停用或归档，无法运行");
         }
-        ArchiveAgentVersion version = resolveRunnableVersion(definition);
+        // Manual workbench runs are previews of the latest saved canvas. Scheduled and
+        // FinWork executions continue to use the published version.
+        ArchiveAgentVersion version = requireLatestVersion(definition.getId());
         ArchiveAgentRun run = createPendingRun(
                 definition,
                 version,
                 ArchiveAgentSupport.TRIGGER_TYPE_MANUAL,
                 dto == null ? null : dto.getTriggerSource(),
-                "Agent 璇曡窇宸叉彁浜?",
+                "Agent 试跑已提交",
                 null,
                 dto == null ? Map.of() : dto.getInputPayload()
         );
@@ -77,7 +79,7 @@ public class ArchiveAgentRunDomainSupport extends AbstractArchiveAgentSupport {
     public ArchiveAgentRunDetailVO getRunDetail(Long ownerUserId, Long runId) {
         ArchiveAgentRun run = archiveAgentRunMapper.selectById(runId);
         if (run == null || !Objects.equals(run.getOwnerUserId(), ownerUserId)) {
-            throw new SecurityException("娌℃湁鏉冮檺鏌ョ湅璇ヨ繍琛岃褰?");
+            throw new SecurityException("没有权限查看该运行记录");
         }
         ArchiveAgentDefinition definition = archiveAgentDefinitionMapper.selectById(run.getAgentId());
         ArchiveAgentVersion version = archiveAgentVersionMapper.selectById(run.getAgentVersionId());

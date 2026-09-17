@@ -139,6 +139,7 @@ export interface ArchiveAgentTestRunPayload {
 
 export interface ArchiveAgentMeta {
   modelProviders: Array<Record<string, unknown>>
+  modelOptions: Array<Record<string, unknown>>
   tools: Array<Record<string, unknown>>
   nodeTypes: Array<Record<string, unknown>>
   triggerTypes: Array<Record<string, unknown>>

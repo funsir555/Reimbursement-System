@@ -11,6 +11,9 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AgentPlaceholder: typeof import('./src/components/common/AgentPlaceholder.vue')['default']
+    ChatInputBox: typeof import('./src/components/agent/ChatInputBox.vue')['default']
+    ChatMessageList: typeof import('./src/components/agent/ChatMessageList.vue')['default']
     CustomArchiveManagementPanel: typeof import('./src/components/process/CustomArchiveManagementPanel.vue')['default']
     DepartmentTreeSelect: typeof import('./src/components/inputs/DepartmentTreeSelect.vue')['default']
     DownloadCenterDrawer: typeof import('./src/components/DownloadCenterDrawer.vue')['default']

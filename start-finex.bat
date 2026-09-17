@@ -22,6 +22,11 @@ call :apply_default FINEX_FRONTEND_PORT "5173"
 call :apply_default FINEX_AUTH_SERVICE_URL "http://localhost:%FINEX_AUTH_SERVICE_PORT%"
 call :apply_default FINEX_GATEWAY_PROXY_TARGET "http://localhost:%FINEX_GATEWAY_PORT%"
 
+REM Agent Platform Configuration
+call :apply_default FINEX_AGENT_SECURITY_MODE "demo"
+call :apply_default DEEPSEEK_API_KEY ""
+call :apply_default KIMI_API_KEY ""
+
 call :require_env FINEX_DB_PASSWORD "replace-with-your-db-password" "set FINEX_DB_PASSWORD=your-real-db-password"
 if errorlevel 1 goto :failed
 

@@ -83,4 +83,18 @@ class ArchiveAgentServiceImplTest {
         assertSame(expected, result);
         verify(archiveAgentRunDomainSupport).runAgent(1L, 2L, null);
     }
+
+    @Test
+    void deleteAgentDelegatesToDefinitionSupport() {
+        ArchiveAgentServiceImpl service = new ArchiveAgentServiceImpl(
+                archiveAgentMetaSupport,
+                archiveAgentDefinitionDomainSupport,
+                archiveAgentRunDomainSupport,
+                archiveAgentScheduleDomainSupport
+        );
+
+        service.deleteAgent(1L, 2L);
+
+        verify(archiveAgentDefinitionDomainSupport).deleteAgent(1L, 2L);
+    }
 }

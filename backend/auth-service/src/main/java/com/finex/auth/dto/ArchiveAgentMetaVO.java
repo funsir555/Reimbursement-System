@@ -11,6 +11,8 @@ public class ArchiveAgentMetaVO {
 
     private List<Map<String, Object>> modelProviders = new ArrayList<>();
 
+    private List<Map<String, Object>> modelOptions = new ArrayList<>();
+
     private List<Map<String, Object>> tools = new ArrayList<>();
 
     private List<Map<String, Object>> nodeTypes = new ArrayList<>();

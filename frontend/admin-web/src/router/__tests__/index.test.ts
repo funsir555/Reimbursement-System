@@ -138,6 +138,20 @@ describe('router process management routes', () => {
     expect(module.default).toBe(ArchiveAgentView)
   })
 
+  it('maps agent workbench route to ArchiveAgentView with the new workbench permission', async () => {
+    const route = router.getRoutes().find((item) => item.name === 'agent-workbench')
+
+    expect(route).toBeTruthy()
+    expect(route?.path).toBe('/agent/workbench')
+    expect(route?.meta.permissionCodes).toEqual(['agent:workbench:view', 'agents:view'])
+
+    const loader = route?.components?.default as (() => Promise<{ default: unknown }>) | undefined
+    expect(loader).toBeTypeOf('function')
+
+    const module = await loader!()
+    expect(module.default).toBe(ArchiveAgentView)
+  })
+
   it('registers opening balance, post voucher, close ledger, period transfer and ledger reports as real views', async () => {
     const openingRoute = router.getRoutes().find((item) => item.name === 'finance-opening-balance')
     const postRoute = router.getRoutes().find((item) => item.name === 'finance-post-voucher')

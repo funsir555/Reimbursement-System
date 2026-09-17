@@ -3,6 +3,8 @@ package com.finex.auth.support.archiveagent;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.agent.workflow.AgentWorkflowRuntimeService;
+import com.finex.auth.agent.workflow.WorkflowGraphPlan;
 import com.finex.auth.entity.ArchiveAgentDefinition;
 import com.finex.auth.entity.ArchiveAgentRun;
 import com.finex.auth.entity.ArchiveAgentRunArtifact;
@@ -37,8 +39,9 @@ public class ArchiveAgentExecutionWorker {
     private final ArchiveAgentDefinitionMapper archiveAgentDefinitionMapper;
     private final ArchiveAgentVersionMapper archiveAgentVersionMapper;
     private final ObjectMapper objectMapper;
-    private final List<ModelProviderAdapter> modelProviderAdapters;
     private final List<ToolExecutor> toolExecutors;
+    private final AgentWorkflowRuntimeService agentWorkflowRuntimeService;
+    private final ArchiveAgentModelRuntime archiveAgentModelRuntime;
 
     public void process(Long runId) {
         ArchiveAgentRun run = archiveAgentRunMapper.selectById(runId);
@@ -49,39 +52,31 @@ public class ArchiveAgentExecutionWorker {
         ArchiveAgentDefinition definition = archiveAgentDefinitionMapper.selectById(run.getAgentId());
         ArchiveAgentVersion version = archiveAgentVersionMapper.selectById(run.getAgentVersionId());
         if (definition == null || version == null) {
-            markRunFailed(run, "Agent ?????");
+            markRunFailed(run, "Agent 或运行版本不存在");
+            return;
+        }
+
+        Map<String, Object> config = readMap(version.getConfigJson());
+        if (agentWorkflowRuntimeService.isControlledQueryWorkflow(config)) {
+            agentWorkflowRuntimeService.executeWorkbenchWorkflow(run, definition, version, config);
             return;
         }
 
         LocalDateTime startedAt = LocalDateTime.now();
         run.setStatus(ArchiveAgentSupport.RUN_STATUS_RUNNING);
         run.setStartedAt(startedAt);
-        run.setSummary("Agent ????");
+        run.setSummary("Agent 工作流执行中");
         archiveAgentRunMapper.updateById(run);
 
         try {
-            Map<String, Object> config = readMap(version.getConfigJson());
             Map<String, Object> promptConfig = readNestedMap(config, "promptConfig");
             Map<String, Object> modelConfig = readNestedMap(config, "modelConfig");
             Map<String, Object> workflow = readNestedMap(config, "workflow");
-            List<Map<String, Object>> nodes = readList(workflow.get("nodes"));
+            List<Map<String, Object>> nodes = WorkflowGraphPlan.from(workflow).orderedNodes();
 
             Map<String, Object> runtimeContext = new LinkedHashMap<>(readMap(run.getInputJson()));
             runtimeContext.putIfAbsent("agentName", definition.getAgentName());
             runtimeContext.putIfAbsent("triggerType", run.getTriggerType());
-
-            String providerCode = String.valueOf(modelConfig.getOrDefault("provider", "MOCK")).toUpperCase(Locale.ROOT);
-            ModelProviderAdapter modelProvider = modelProviderAdapters.stream()
-                    .filter(item -> item.getProviderCode().equalsIgnoreCase(providerCode))
-                    .findFirst()
-                    .orElse(null);
-
-            if (modelProvider == null) {
-                throw new IllegalStateException("?? provider " + providerCode + " ????????? MOCK ????????");
-            }
-            if (!"MOCK".equals(providerCode) && isBlank(modelConfig.get("credentialCode"))) {
-                throw new IllegalStateException("?? provider ?? credentialCode???????????");
-            }
 
             int stepNo = 1;
             for (Map<String, Object> node : nodes) {
@@ -90,7 +85,7 @@ public class ArchiveAgentExecutionWorker {
                 String nodeLabel = String.valueOf(node.getOrDefault("label", nodeKey));
 
                 if (!ArchiveAgentSupport.NODE_TYPES.contains(nodeType)) {
-                    throw new IllegalStateException("??????????: " + nodeType);
+                    throw new IllegalStateException("不支持的工作流节点类型: " + nodeType);
                 }
 
                 LocalDateTime stepStartedAt = LocalDateTime.now();
@@ -106,7 +101,15 @@ public class ArchiveAgentExecutionWorker {
                 archiveAgentRunStepMapper.insert(step);
 
                 try {
-                    Map<String, Object> stepOutput = executeNode(definition, modelProvider, runtimeContext, promptConfig, modelConfig, nodeType, node);
+                    Map<String, Object> stepOutput = executeNode(
+                            runId,
+                            definition,
+                            runtimeContext,
+                            promptConfig,
+                            modelConfig,
+                            nodeType,
+                            node
+                    );
                     runtimeContext.put(nodeKey, stepOutput);
                     runtimeContext.put("lastNodeKey", nodeKey);
                     runtimeContext.put("lastOutput", stepOutput);
@@ -130,15 +133,15 @@ public class ArchiveAgentExecutionWorker {
             artifact.setRunId(runId);
             artifact.setArtifactKey("final-output");
             artifact.setArtifactType("JSON");
-            artifact.setArtifactName("?????");
-            artifact.setSummary("Agent ??????");
+            artifact.setArtifactName("最终输出");
+            artifact.setSummary("Agent 工作流执行结果");
             artifact.setContentJson(writeJson(runtimeContext));
             archiveAgentRunArtifactMapper.insert(artifact);
 
             run.setStatus(ArchiveAgentSupport.RUN_STATUS_SUCCESS);
             run.setFinishedAt(LocalDateTime.now());
             run.setDurationMs(Duration.between(startedAt, run.getFinishedAt()).toMillis());
-            run.setSummary(String.valueOf(runtimeContext.getOrDefault("summary", "Agent ????")));
+            run.setSummary(String.valueOf(runtimeContext.getOrDefault("summary", "Agent 工作流执行成功")));
             run.setOutputJson(writeJson(runtimeContext));
             archiveAgentRunMapper.updateById(run);
             updateDefinitionAfterRun(definition, run, "SUCCESS");
@@ -149,8 +152,8 @@ public class ArchiveAgentExecutionWorker {
     }
 
     private Map<String, Object> executeNode(
+            Long runId,
             ArchiveAgentDefinition definition,
-            ModelProviderAdapter modelProvider,
             Map<String, Object> runtimeContext,
             Map<String, Object> promptConfig,
             Map<String, Object> modelConfig,
@@ -159,23 +162,22 @@ public class ArchiveAgentExecutionWorker {
     ) {
         Map<String, Object> nodeConfig = readNestedMap(node, "config");
         return switch (nodeType) {
-            case "start" -> Map.of("message", "?????", "inputKeys", runtimeContext.keySet());
-            case "llm" -> modelProvider.invoke(
-                    new ModelProviderAdapter.InvocationContext(
-                            definition.getOwnerUserId(),
-                            definition.getAgentName(),
-                            modelConfig,
-                            promptConfig,
-                            nodeConfig,
-                            runtimeContext
-                    )
-            ).outputPayload();
+            case "start" -> Map.of("message", "流程开始", "inputKeys", List.copyOf(runtimeContext.keySet()));
+            case "llm" -> archiveAgentModelRuntime.invoke(
+                    "archive-agent-run-" + runId,
+                    definition.getOwnerUserId(),
+                    definition.getAgentName(),
+                    modelConfig,
+                    promptConfig,
+                    nodeConfig,
+                    runtimeContext
+            );
             case "condition" -> evaluateCondition(nodeConfig, runtimeContext);
             case "tool" -> executeTool(definition.getOwnerUserId(), nodeConfig, runtimeContext);
             case "transform" -> transform(nodeConfig, runtimeContext);
             case "notify" -> notifyStep(definition.getOwnerUserId(), nodeConfig, runtimeContext);
-            case "end" -> Map.of("message", "??????", "result", runtimeContext.get("lastOutput"));
-            default -> throw new IllegalStateException("????????: " + nodeType);
+            case "end" -> Map.of("message", "流程执行完成", "result", runtimeContext.get("lastOutput"));
+            default -> throw new IllegalStateException("不支持的节点类型: " + nodeType);
         };
     }
 
@@ -184,7 +186,12 @@ public class ArchiveAgentExecutionWorker {
         Object actual = runtimeContext.get(field);
         Object expected = nodeConfig.get("equals");
         boolean matched = expected == null ? actual != null : Objects.equals(String.valueOf(actual), String.valueOf(expected));
-        return Map.of("matched", matched, "field", field, "actual", actual, "expected", expected);
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put("matched", matched);
+        output.put("field", field);
+        output.put("actual", actual);
+        output.put("expected", expected);
+        return output;
     }
 
     private Map<String, Object> executeTool(Long userId, Map<String, Object> nodeConfig, Map<String, Object> runtimeContext) {
@@ -192,7 +199,7 @@ public class ArchiveAgentExecutionWorker {
         ToolExecutor executor = toolExecutors.stream()
                 .filter(item -> item.supportedToolCodes().stream().anyMatch(code -> code.equalsIgnoreCase(toolCode)))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("???? " + toolCode + " ????"));
+                .orElseThrow(() -> new IllegalStateException("工具 " + toolCode + " 未注册"));
 
         ToolExecutor.ToolResult result = executor.execute(
                 new ToolExecutor.ToolContext(userId, toolCode, nodeConfig, runtimeContext)
@@ -204,7 +211,7 @@ public class ArchiveAgentExecutionWorker {
     }
 
     private Map<String, Object> transform(Map<String, Object> nodeConfig, Map<String, Object> runtimeContext) {
-        String template = String.valueOf(nodeConfig.getOrDefault("template", "Agent {{agentName}} ????????? {{lastNodeKey}}"));
+        String template = String.valueOf(nodeConfig.getOrDefault("template", "Agent {{agentName}} 已执行到节点 {{lastNodeKey}}"));
         String rendered = template;
         for (Map.Entry<String, Object> entry : runtimeContext.entrySet()) {
             rendered = rendered.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
@@ -213,8 +220,8 @@ public class ArchiveAgentExecutionWorker {
     }
 
     private Map<String, Object> notifyStep(Long userId, Map<String, Object> nodeConfig, Map<String, Object> runtimeContext) {
-        String title = String.valueOf(nodeConfig.getOrDefault("title", "Agent ????"));
-        String content = String.valueOf(nodeConfig.getOrDefault("content", runtimeContext.getOrDefault("lastOutput", "Agent ???")));
+        String title = String.valueOf(nodeConfig.getOrDefault("title", "Agent 执行通知"));
+        String content = String.valueOf(nodeConfig.getOrDefault("content", runtimeContext.getOrDefault("lastOutput", "Agent 已完成")));
         return executeTool(userId, Map.of("toolCode", "notify.send_message", "title", title, "content", content), runtimeContext);
     }
 
@@ -285,7 +292,4 @@ public class ArchiveAgentExecutionWorker {
         }
     }
 
-    private boolean isBlank(Object value) {
-        return value == null || String.valueOf(value).isBlank();
-    }
 }

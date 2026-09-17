@@ -16,6 +16,11 @@ spring:
           filters:
             - StripPrefix=1
 
+        - id: agent-service
+          uri: ${FINEX_AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/agent/**
+
 logging:
   level:
     com.finex: ${FINEX_GATEWAY_LOG_LEVEL:info}

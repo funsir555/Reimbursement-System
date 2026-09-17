@@ -53,12 +53,8 @@
               </div>
               <el-tag size="small" :type="summaryStatusType(agent.runtimeStatus || agent.status)">{{ runtimeStatusLabel(agent.runtimeStatus || agent.status) }}</el-tag>
             </div>
-            <p class="muted sm mt-sm">{{ agent.agentDescription || '尚未填写描述。' }}</p>
-            <div class="agent-meta"><span>最近运行</span><strong>{{ agent.lastRunAt || '暂无' }}</strong></div>
-            <div class="agent-meta"><span>最近结果</span><strong>{{ agent.lastRunSummary || agent.lastRunStatus || '待命中' }}</strong></div>
-            <div class="row wrap gap-xs mt-sm">
+            <div v-if="agent.tags.length" class="row wrap gap-xs mt-xs compact-tags">
               <el-tag v-for="tag in agent.tags.slice(0, 3)" :key="`${agent.id}-${tag}`" size="small" effect="plain">{{ tag }}</el-tag>
-              <span v-if="!agent.tags.length" class="muted xs">未打标签</span>
             </div>
           </button>
           <div v-if="!filteredAgents.length && !listLoading" class="empty-state">
@@ -97,6 +93,7 @@
             <el-button :icon="FolderDelete" :disabled="!editableAgent.id || !canDelete" @click="archiveAgent">归档</el-button>
             <el-button type="primary" :loading="saveLoading" :disabled="!canSave" @click="saveAgent">保存配置</el-button>
             <el-button type="warning" :loading="publishLoading" :disabled="!editableAgent.id || !canPublish" @click="publishAgent">发布版本</el-button>
+            <el-button type="danger" plain :icon="Delete" :loading="deleteLoading" :disabled="!editableAgent.id || !canDelete" @click="deleteAgent">删除</el-button>
           </div>
         </div>
       </section>
@@ -146,9 +143,17 @@
           <el-tag type="info" effect="plain">Provider / Model / Credential 分离</el-tag>
         </div>
         <div class="grid three">
-          <el-form-item label="模型提供商"><el-select v-model="editableAgent.modelConfig.provider" placeholder="选择 Provider"><el-option v-for="item in providerOptions" :key="item.code" :label="item.label" :value="item.code" /></el-select></el-form-item>
-          <el-form-item label="模型名称"><el-input v-model="editableAgent.modelConfig.model" placeholder="duck-agent-v1" /></el-form-item>
-          <el-form-item label="凭据引用"><el-input v-model="editableAgent.modelConfig.credentialCode" placeholder="如需外部模型，请填写凭据编码" /></el-form-item>
+          <el-form-item label="模型提供商">
+            <el-select v-model="editableAgent.modelConfig.provider" placeholder="选择 Provider" @change="handleProviderChange">
+              <el-option v-for="item in providerOptions" :key="item.code" :label="item.label" :value="item.code" :disabled="item.available === false" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="模型名称">
+            <el-select v-model="editableAgent.modelConfig.model" filterable allow-create default-first-option placeholder="选择或输入模型名称">
+              <el-option v-for="item in currentModelOptions" :key="item.model" :label="item.label" :value="item.model" :disabled="item.available === false" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="凭据引用（可选）"><el-input v-model="editableAgent.modelConfig.credentialCode" placeholder="预留字段；DeepSeek 当前使用平台环境变量" /></el-form-item>
           <el-form-item label="温度"><el-input-number v-model="editableAgent.modelConfig.temperature" :min="0" :max="2" :step="0.1" /></el-form-item>
           <el-form-item label="最大 Token"><el-input-number v-model="editableAgent.modelConfig.maxTokens" :min="128" :max="8192" :step="128" /></el-form-item>
           <el-form-item label="超时（秒）"><el-input-number v-model="editableAgent.modelConfig.timeoutSeconds" :min="5" :max="300" :step="5" /></el-form-item>
@@ -177,48 +182,35 @@
         </div>
       </section>
 
-      <section class="section">
+      <section
+        class="section workflow-entry-card"
+        role="button"
+        tabindex="0"
+        @click="openWorkflowCanvas"
+        @keydown.enter.prevent="openWorkflowCanvas"
+      >
         <div class="section-head">
           <div><div class="eyebrow">Workflow</div><h3>流程编排</h3></div>
-          <div class="row wrap gap-xs">
-            <el-button size="small" :icon="Plus" @click="addWorkflowNode('llm')">添加 LLM</el-button>
-            <el-button size="small" :icon="Plus" @click="addWorkflowNode('tool')">添加工具</el-button>
-            <el-button size="small" :icon="Plus" @click="addWorkflowNode('condition')">添加条件</el-button>
-            <el-button size="small" :icon="Connection" @click="addWorkflowEdge">添加连线</el-button>
-          </div>
+          <el-button type="primary" :icon="Connection" :disabled="!editableAgent.id" @click.stop="openWorkflowCanvas">进入画布</el-button>
         </div>
-        <div class="workflow-board">
-          <div class="workflow-nodes">
-            <article v-for="node in editableAgent.workflow.nodes" :key="node.nodeKey" class="mini-card node-card">
-              <div class="row between start gap-sm">
-                <div>
-                  <div class="muted xs">{{ node.nodeKey }}</div>
-                  <strong>{{ node.label }}</strong>
-                </div>
-                <el-button v-if="!isProtectedNode(node.nodeType)" link type="danger" @click="removeWorkflowNode(node.nodeKey)">删除</el-button>
-              </div>
-              <div class="stack gap-sm mt-sm">
-                <el-select v-model="node.nodeType" @change="handleNodeTypeChange(node)"><el-option v-for="item in nodeTypeOptions" :key="item.code" :label="item.label" :value="item.code" /></el-select>
-                <el-input v-model="node.label" placeholder="节点标题" />
-                <el-input v-if="node.nodeType === 'llm'" v-model="node.config.promptTemplate" type="textarea" :rows="3" placeholder="节点 Prompt" />
-                <el-input v-if="node.nodeType === 'condition'" v-model="node.config.expression" placeholder="条件表达式" />
-                <el-select v-if="node.nodeType === 'tool'" v-model="node.config.toolCode" placeholder="选择工具"><el-option v-for="tool in enabledToolOptions" :key="tool.toolCode" :label="tool.label" :value="tool.toolCode" /></el-select>
-                <el-input v-if="node.nodeType === 'transform'" v-model="node.config.template" type="textarea" :rows="2" placeholder="变量转换模板" />
-                <el-input v-if="node.nodeType === 'notify'" v-model="node.config.message" type="textarea" :rows="2" placeholder="通知内容" />
-              </div>
-            </article>
+        <div class="workflow-entry-body">
+          <div class="workflow-entry-visual">
+            <span class="flow-dot start">Start</span>
+            <span class="flow-line" />
+            <span class="flow-dot tool">Tool</span>
+            <span class="flow-line" />
+            <span class="flow-dot llm">LLM</span>
+            <span class="flow-line" />
+            <span class="flow-dot end">End</span>
           </div>
-          <div class="edge-box">
-            <div class="row between gap-sm"><strong>流程连线</strong><span class="muted xs">至少保证 start → end 可达</span></div>
-            <div v-if="editableAgent.workflow.edges.length" class="stack gap-sm mt-sm">
-              <div v-for="(edge, index) in editableAgent.workflow.edges" :key="`${edge.source}-${edge.target}-${index}`" class="edge-row">
-                <el-select v-model="edge.source" placeholder="起点"><el-option v-for="node in editableAgent.workflow.nodes" :key="`s-${node.nodeKey}`" :label="node.label" :value="node.nodeKey" /></el-select>
-                <span class="muted">→</span>
-                <el-select v-model="edge.target" placeholder="终点"><el-option v-for="node in editableAgent.workflow.nodes" :key="`t-${node.nodeKey}`" :label="node.label" :value="node.nodeKey" /></el-select>
-                <el-button link type="danger" @click="removeWorkflowEdge(index)">移除</el-button>
-              </div>
+          <div class="workflow-entry-copy">
+            <strong>打开 Dify / Coze 风格低代码画布</strong>
+            <p>拖动节点、拖拽连线，并在右侧属性面板配置查询模板、变量映射、脱敏、模型和还原节点。</p>
+            <div class="row wrap gap-xs">
+              <el-tag size="small" effect="plain">{{ editableAgent.workflow.nodes.length }} 个节点</el-tag>
+              <el-tag size="small" effect="plain">{{ editableAgent.workflow.edges.length }} 条连线</el-tag>
+              <el-tag size="small" type="warning" effect="plain">保存后发布生效</el-tag>
             </div>
-            <div v-else class="empty-inline">尚未配置连线，运行时将无法通过流程校验。</div>
           </div>
         </div>
       </section>
@@ -275,11 +267,11 @@
       </section>
 
       <section class="panel-section">
-        <div class="section-head"><div><div class="eyebrow">Runs</div><h3>最近运行记录</h3></div><el-tag size="small" effect="plain">{{ runRecords.length }} 条</el-tag></div>
+        <div class="section-head"><div><div class="eyebrow">Runs</div><h3>最近运行记录</h3></div><el-tag size="small" effect="plain">{{ recentRunRecords.length }} 条</el-tag></div>
         <div v-if="runPermissionMessage" class="empty-state small"><p>{{ runPermissionMessage }}</p></div>
         <div v-else-if="runsLoading" class="empty-state small"><p>正在加载运行记录...</p></div>
         <div v-else-if="runRecords.length" class="stack gap-sm">
-          <button v-for="run in runRecords" :key="run.id" type="button" class="mini-card run-card" :class="{ active: selectedRunId === run.id }" @click="loadRunDetail(run.id)">
+          <button v-for="run in recentRunRecords" :key="run.id" type="button" class="mini-card run-card" :class="{ active: selectedRunId === run.id }" :aria-label="`查看运行记录 ${run.runNo} 的步骤日志`" @click="openRunDetail(run.id)" @keydown.enter="openRunDetail(run.id)">
             <div class="row between gap-sm"><strong>{{ run.runNo }}</strong><el-tag size="small" :type="runStatusType(run.status)">{{ run.status }}</el-tag></div>
             <div class="stack gap-xs mt-sm muted xs">
               <span>来源：{{ run.triggerSource || run.triggerType }}</span>
@@ -291,8 +283,16 @@
         <div v-else class="empty-state small"><p>还没有运行记录，保存并试跑一次后这里会开始沉淀日志。</p></div>
       </section>
 
-      <section class="panel-section">
-        <div class="section-head"><div><div class="eyebrow">Logs</div><h3>步骤日志</h3></div><el-tag size="small" effect="plain">{{ currentRunDetail?.steps.length || 0 }} steps</el-tag></div>
+    </aside>
+
+    <el-drawer v-model="runDetailDrawerVisible" direction="rtl" size="min(920px, 92vw)" destroy-on-close>
+      <template #header>
+        <div class="drawer-heading">
+          <div><div class="eyebrow">Logs</div><h3>步骤日志</h3></div>
+          <el-tag size="small" effect="plain">{{ currentRunDetail?.steps.length || 0 }} steps</el-tag>
+        </div>
+      </template>
+      <div class="run-detail-drawer">
         <div v-if="runDetailLoading" class="empty-state small"><p>正在加载运行详情...</p></div>
         <template v-else-if="currentRunDetail">
           <div class="log-summary">
@@ -309,20 +309,22 @@
             </article>
           </div>
         </template>
-        <div v-else class="empty-state small"><p>点选一条运行记录后，这里会展示每个节点的输入、输出和错误摘要。</p></div>
-      </section>
-    </aside>
+        <div v-else class="empty-state small"><p>运行详情暂不可用。</p></div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bell, Clock, Connection, DocumentCopy, FolderDelete, Plus, RefreshRight, Search, SwitchButton, VideoPlay } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { Bell, Clock, Connection, Delete, DocumentCopy, FolderDelete, Plus, RefreshRight, Search, SwitchButton, VideoPlay } from '@element-plus/icons-vue'
 import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import { archiveAgentApi, type ArchiveAgentDetail, type ArchiveAgentMeta, type ArchiveAgentRunDetail, type ArchiveAgentRunRecord, type ArchiveAgentSavePayload, type ArchiveAgentSummary, type ArchiveAgentVersionRecord, type ArchiveAgentWorkflowEdge, type ArchiveAgentWorkflowNode } from '@/api'
 import { hasAnyPermission, readStoredUser } from '@/utils/permissions'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
+import { readAgentRunDraft, removeAgentRunDraft, writeAgentRunDraft, type AgentRunDraft } from './agentRunDraft'
 
 
 type PromptConfig = { systemPrompt: string; rolePrompt: string; outputSchema: string; guardrails: string }
@@ -330,6 +332,7 @@ type ModelConfig = { provider: string; model: string; temperature: number; maxTo
 type ToolBinding = { toolCode: string; label?: string; category?: string; credentialRefCode?: string; url?: string; title?: string }
 type TriggerModel = { triggerType: 'MANUAL' | 'SCHEDULE' | 'EVENT'; enabled: boolean; scheduleMode?: 'CRON' | 'INTERVAL'; cronExpression?: string; intervalMinutes?: number; eventCode?: string }
 type NodeModel = ArchiveAgentWorkflowNode & { config: Record<string, any> }
+type ModelOption = { provider: string; model: string; label: string; available?: boolean }
 type EditableAgent = {
   id?: number
   agentCode?: string
@@ -351,11 +354,13 @@ type EditableAgent = {
 }
 type OptionItem = { code: string; label: string; available?: boolean; category?: string }
 
+const router = useRouter()
 const filters = ref({ keyword: '', status: '', tag: '' })
 const meta = ref<ArchiveAgentMeta | null>(null)
 const listLoading = ref(false)
 const saveLoading = ref(false)
 const publishLoading = ref(false)
+const deleteLoading = ref(false)
 const runLoading = ref(false)
 const runsLoading = ref(false)
 const runDetailLoading = ref(false)
@@ -364,24 +369,39 @@ const selectedAgentId = ref<number>()
 const runRecords = ref<ArchiveAgentRunRecord[]>([])
 const selectedRunId = ref<number>()
 const currentRunDetail = ref<ArchiveAgentRunDetail | null>(null)
+const runDetailDrawerVisible = ref(false)
 const runPermissionMessage = ref('')
 const inputSchemaText = ref('')
-const runForm = ref({ triggerSource: 'workbench.manual', inputPayloadText: defaultRunInputText() })
-const permissionCodes = ref(readStoredUser()?.permissionCodes || [])
-const canCreate = computed(() => hasAnyPermission(['agents:create'], permissionCodes.value))
-const canEdit = computed(() => hasAnyPermission(['agents:edit'], permissionCodes.value))
-const canDelete = computed(() => hasAnyPermission(['agents:delete'], permissionCodes.value))
-const canRun = computed(() => hasAnyPermission(['agents:run'], permissionCodes.value))
-const canPublish = computed(() => hasAnyPermission(['agents:publish'], permissionCodes.value))
-const canViewLogs = computed(() => hasAnyPermission(['agents:view_logs'], permissionCodes.value))
+const storedUser = readStoredUser()
+const runDraftUserKey = String(storedUser?.userId ?? storedUser?.username ?? 'anonymous')
+const runForm = ref<AgentRunDraft>(defaultRunDraft())
+const permissionCodes = ref(storedUser?.permissionCodes || [])
+const canCreate = computed(() => hasAnyPermission(['agent:workbench:create', 'agents:create'], permissionCodes.value))
+const canEdit = computed(() => hasAnyPermission(['agent:workbench:edit', 'agents:edit'], permissionCodes.value))
+const canDelete = computed(() => hasAnyPermission(['agent:workbench:delete', 'agents:delete'], permissionCodes.value))
+const canRun = computed(() => hasAnyPermission(['agent:workbench:run', 'agents:run'], permissionCodes.value))
+const canPublish = computed(() => hasAnyPermission(['agent:workbench:publish', 'agents:publish'], permissionCodes.value))
+const canViewLogs = computed(() => hasAnyPermission(['agent:workbench:view_logs', 'agents:view_logs'], permissionCodes.value))
 const canSave = computed(() => (editableAgent.value.id ? canEdit.value : canCreate.value))
 const statusOptions = [{ label: '待命', value: 'READY' }, { label: '草稿', value: 'DRAFT' }, { label: '停用', value: 'DISABLED' }, { label: '归档', value: 'ARCHIVED' }]
 const editableAgent = ref<EditableAgent>(createDefaultAgent())
 const filteredAgents = computed(() => filters.value.tag ? agentList.value.filter((item) => item.tags.includes(filters.value.tag)) : agentList.value)
+const recentRunRecords = computed(() => runRecords.value.slice(0, 5))
 const availableTags = computed(() => Array.from(new Set(agentList.value.flatMap((item) => item.tags))))
 const runningAgentCount = computed(() => agentList.value.filter((item) => item.runtimeStatus === 'RUNNING').length)
 const failedAgentCount = computed(() => agentList.value.filter((item) => item.runtimeStatus === 'FAILED').length)
 const providerOptions = computed(() => toOptions(meta.value?.modelProviders, 'code', 'label'))
+const currentModelOptions = computed<ModelOption[]>(() => {
+  const provider = editableAgent.value.modelConfig.provider
+  return (meta.value?.modelOptions || [])
+    .map((item) => ({
+      provider: stringFrom(item.provider),
+      model: stringFrom(item.model),
+      label: stringFrom(item.label, stringFrom(item.model)),
+      available: Boolean(item.available ?? true)
+    }))
+    .filter((item) => item.provider === provider && item.model)
+})
 const iconOptions = computed(() => toOptions(meta.value?.iconOptions, 'code', 'label'))
 const themeOptions = computed(() => toOptions(meta.value?.themeOptions, 'code', 'label'))
 const nodeTypeOptions = computed(() => toOptions(meta.value?.nodeTypes, 'code', 'label'))
@@ -395,6 +415,8 @@ onMounted(async () => {
   await loadMeta()
   await loadAgents(false)
 })
+
+watch(runForm, () => persistCurrentRunDraft(), { deep: true })
 
 async function loadMeta() {
   try {
@@ -425,13 +447,15 @@ async function loadAgents(keepSelection = true) {
 }
 
 async function selectAgent(id: number) {
+  persistCurrentRunDraft()
   selectedAgentId.value = id
   try {
     const res = await archiveAgentApi.getDetail(id)
     editableAgent.value = detailToEditable(res.data)
     inputSchemaText.value = prettyJson(res.data.inputSchema)
-    runForm.value = { triggerSource: 'workbench.manual', inputPayloadText: defaultRunInputText() }
+    runForm.value = readAgentRunDraft(sessionStorage, runDraftUserKey, id, defaultRunDraft())
     currentRunDetail.value = null
+    runDetailDrawerVisible.value = false
     selectedRunId.value = undefined
     await loadRuns(id)
   } catch (error: any) {
@@ -442,9 +466,10 @@ function startCreateAgent() {
   selectedAgentId.value = undefined
   selectedRunId.value = undefined
   currentRunDetail.value = null
+  runDetailDrawerVisible.value = false
   editableAgent.value = createDefaultAgent(meta.value)
   inputSchemaText.value = prettyJson(defaultInputSchema())
-  runForm.value = { triggerSource: 'workbench.manual', inputPayloadText: defaultRunInputText() }
+  runForm.value = defaultRunDraft()
   runRecords.value = []
   runPermissionMessage.value = canViewLogs.value ? '' : '当前账号没有查看运行日志的权限。'
 }
@@ -452,6 +477,7 @@ function startCreateAgent() {
 async function saveAgent() {
   const payload = buildSavePayload()
   if (!payload) return
+  const runDraft = { ...runForm.value }
   saveLoading.value = true
   try {
     const isUpdate = Boolean(editableAgent.value.id)
@@ -459,6 +485,7 @@ async function saveAgent() {
     editableAgent.value = detailToEditable(res.data)
     selectedAgentId.value = res.data.id
     inputSchemaText.value = prettyJson(res.data.inputSchema)
+    writeAgentRunDraft(sessionStorage, runDraftUserKey, res.data.id, runDraft)
     await loadAgents(true)
     ElMessage.success(isUpdate ? 'Agent 配置已保存' : 'Agent 已创建')
   } catch (error: any) {
@@ -539,6 +566,34 @@ async function archiveAgent() {
   }
 }
 
+async function deleteAgent() {
+  const agentId = editableAgent.value.id
+  if (!agentId) return ElMessage.warning('请先选择一个已保存的 Agent')
+  try {
+    await ElMessageBox.confirm(
+      `删除“${editableAgent.value.agentName}”后，版本、触发器、运行记录和步骤日志都将一并删除，且无法恢复。是否继续？`,
+      '删除 Agent',
+      { type: 'error', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  deleteLoading.value = true
+  try {
+    await archiveAgentApi.remove(agentId)
+    removeAgentRunDraft(sessionStorage, runDraftUserKey, agentId)
+    selectedAgentId.value = undefined
+    runDetailDrawerVisible.value = false
+    await loadAgents(false)
+    ElMessage.success('Agent 及其关联数据已删除')
+  } catch (error: any) {
+    ElMessage.error(error?.message || 'Agent 删除失败')
+  } finally {
+    deleteLoading.value = false
+  }
+}
+
 async function runAgentNow() {
   if (!editableAgent.value.id) return ElMessage.warning('请先保存 Agent 再试跑')
   const inputPayload = parseJson(runForm.value.inputPayloadText, '测试入参 JSON 不合法')
@@ -548,7 +603,8 @@ async function runAgentNow() {
     const res = await archiveAgentApi.run(editableAgent.value.id, { triggerSource: normalizeText(runForm.value.triggerSource) || 'workbench.manual', inputPayload })
     ElMessage.success(`运行请求已提交：${res.data.runNo}`)
     await loadRuns(editableAgent.value.id)
-    await loadRunDetail(res.data.id)
+    await waitForRunCompletion(res.data.id)
+    await loadRuns(editableAgent.value.id)
     await loadAgents(true)
   } catch (error: any) {
     ElMessage.error(error?.message || 'Agent 试跑失败')
@@ -568,13 +624,16 @@ async function loadRuns(agentId: number) {
   try {
     const res = await archiveAgentApi.listRuns(agentId)
     runRecords.value = res.data || []
-    const firstRun = runRecords.value[0]
-    if (firstRun) await loadRunDetail(firstRun.id)
   } catch (error: any) {
     runPermissionMessage.value = error?.message || '运行日志加载失败'
   } finally {
     runsLoading.value = false
   }
+}
+
+async function openRunDetail(runId: number) {
+  runDetailDrawerVisible.value = true
+  await loadRunDetail(runId)
 }
 
 async function loadRunDetail(runId: number) {
@@ -590,6 +649,17 @@ async function loadRunDetail(runId: number) {
   }
 }
 
+async function waitForRunCompletion(runId: number) {
+  selectedRunId.value = runId
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    const res = await archiveAgentApi.getRunDetail(runId)
+    currentRunDetail.value = res.data
+    if (['SUCCESS', 'FAILED', 'COMPLETED'].includes(res.data.status)) return
+    await delay(1000)
+  }
+  ElMessage.warning('流程仍在后台运行，可稍后从运行记录中刷新查看')
+}
+
 function toggleTool(toolCode: string, enabled: boolean) {
   const current = editableAgent.value.tools.find((item) => item.toolCode === toolCode)
   if (enabled && !current) {
@@ -603,6 +673,14 @@ function toggleTool(toolCode: string, enabled: boolean) {
       if (node.nodeType === 'tool' && node.config.toolCode === toolCode) node.config.toolCode = ''
     })
   }
+}
+
+function handleProviderChange() {
+  const provider = editableAgent.value.modelConfig.provider
+  const providerMeta = (meta.value?.modelProviders || []).find((item) => stringFrom(item.code) === provider)
+  const defaultModel = stringFrom(providerMeta?.defaultModel)
+  const firstAvailableModel = currentModelOptions.value.find((item) => item.available !== false)?.model || currentModelOptions.value[0]?.model || ''
+  editableAgent.value.modelConfig.model = defaultModel || firstAvailableModel || editableAgent.value.modelConfig.model
 }
 
 function addWorkflowNode(nodeType: NodeModel['nodeType']) { editableAgent.value.workflow.nodes.push(buildNode(nodeType)) }
@@ -623,7 +701,14 @@ function handleNodeTypeChange(node: NodeModel) { node.config = defaultNodeConfig
 function addTrigger(triggerType: TriggerModel['triggerType']) { editableAgent.value.triggers.push(buildTrigger(triggerType)) }
 function removeTrigger(index: number) { editableAgent.value.triggers.splice(index, 1) }
 function resetInputSchema() { inputSchemaText.value = prettyJson(defaultInputSchema()) }
-function resetRunInput() { runForm.value = { triggerSource: 'workbench.manual', inputPayloadText: defaultRunInputText() } }
+function resetRunInput() { runForm.value = defaultRunDraft() }
+function openWorkflowCanvas() {
+  if (!editableAgent.value.id) {
+    ElMessage.warning('请先保存 Agent，再进入流程编排画布')
+    return
+  }
+  router.push({ name: 'agent-workflow-canvas', params: { id: editableAgent.value.id } })
+}
 
 function buildSavePayload(nameOverride?: string): ArchiveAgentSavePayload | null {
   const inputSchema = parseJson(inputSchemaText.value, '输入 Schema JSON 不合法')
@@ -641,7 +726,7 @@ function buildSavePayload(nameOverride?: string): ArchiveAgentSavePayload | null
     tags: editableAgent.value.tags.filter((item) => normalizeText(item)).map((item) => item.trim()),
     promptConfig: { ...editableAgent.value.promptConfig },
     modelConfig: { ...editableAgent.value.modelConfig, credentialCode: normalizeText(editableAgent.value.modelConfig.credentialCode) },
-    tools: editableAgent.value.tools.map((item) => ({ toolCode: item.toolCode, label: item.label, category: item.category, credentialRefCode: normalizeText(item.credentialRefCode), url: normalizeText(item.url), title: normalizeText(item.title) })),
+    tools: editableAgent.value.tools.map((item) => ({ toolCode: item.toolCode, label: item.label, category: item.category, enabled: true, credentialRefCode: normalizeText(item.credentialRefCode), url: normalizeText(item.url), title: normalizeText(item.title) })),
     workflow: { nodes: editableAgent.value.workflow.nodes.map((item) => ({ nodeKey: item.nodeKey, nodeType: item.nodeType, label: item.label, config: pruneEmpty(item.config) })), edges: editableAgent.value.workflow.edges.map((item) => ({ source: item.source, target: item.target })) },
     triggers: editableAgent.value.triggers.map((item) => ({ triggerType: item.triggerType, enabled: item.enabled, scheduleMode: item.scheduleMode, cronExpression: normalizeText(item.cronExpression), intervalMinutes: item.intervalMinutes, eventCode: normalizeText(item.eventCode) })),
     inputSchema
@@ -692,9 +777,11 @@ function defaultWorkflow() { return { nodes: [buildNode('start', 'start_1', '开
 function buildNode(nodeType: NodeModel['nodeType'], nodeKey?: string, label?: string): NodeModel { return { nodeKey: nodeKey || `${nodeType}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, nodeType, label: label || defaultNodeLabel(nodeType), config: defaultNodeConfig(nodeType) } }
 function buildTrigger(triggerType: TriggerModel['triggerType']): TriggerModel { if (triggerType === 'SCHEDULE') return { triggerType, enabled: false, scheduleMode: 'INTERVAL', intervalMinutes: 60 }; if (triggerType === 'EVENT') return { triggerType, enabled: false, eventCode: '' }; return { triggerType, enabled: true } }
 function defaultNodeLabel(nodeType: NodeModel['nodeType']) { return ({ start: '开始', llm: 'LLM 节点', condition: '条件判断', tool: '工具调用', transform: '变量转换', notify: '发送通知', end: '结束' } as Record<string, string>)[nodeType] || '新节点' }
-function defaultNodeConfig(nodeType: NodeModel['nodeType']) { if (nodeType === 'llm') return { promptTemplate: '' }; if (nodeType === 'condition') return { expression: '' }; if (nodeType === 'tool') return { toolCode: enabledToolOptions.value[0]?.toolCode || '' }; if (nodeType === 'transform') return { template: '' }; if (nodeType === 'notify') return { message: '' }; return {} }
-function defaultInputSchema() { return { type: 'object', properties: { query: { type: 'string', description: '本次想让 Agent 处理的问题' }, context: { type: 'string', description: '补充上下文' } } } }
-function defaultRunInputText() { return prettyJson({ query: '帮我总结最近待处理的报销事项', context: '优先关注待补件和待付款单据' }) }
+function defaultNodeConfig(nodeType: NodeModel['nodeType']) { if (nodeType === 'llm') return { promptTemplate: '' }; if (nodeType === 'condition') return { expression: '' }; if (nodeType === 'tool') return { toolCode: enabledToolOptions.value[0]?.toolCode || '', queryTemplateCode: 'expense.accessible_expenses.v2', variableMapping: '{"scope":"{{input.scope}}","keyword":"{{input.keyword}}","status":"{{input.status}}","startDate":"{{input.startDate}}","endDate":"{{input.endDate}}","minAmount":"{{input.minAmount}}","maxAmount":"{{input.maxAmount}}","limit":"{{input.limit}}"}' }; if (nodeType === 'transform') return { template: '' }; if (nodeType === 'notify') return { message: '' }; return {} }
+function defaultInputSchema() { return { type: 'object', properties: { query: { type: 'string', description: '本次想让 Agent 处理的问题', default: '总结我当前待处理的报销事项' }, context: { type: 'string', description: '补充上下文', default: '优先关注待审批和待付款单据' }, scope: { type: 'string', enum: ['ASSIGNED_TO_ME', 'SUBMITTED_BY_ME'], default: 'ASSIGNED_TO_ME' }, keyword: { type: ['string', 'null'], default: null }, status: { type: ['string', 'null'], default: null }, startDate: { type: ['string', 'null'], default: null }, endDate: { type: ['string', 'null'], default: null }, minAmount: { type: ['number', 'null'], default: null }, maxAmount: { type: ['number', 'null'], default: null }, limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 } } } }
+function defaultRunDraft(): AgentRunDraft { return { triggerSource: 'workbench.manual', inputPayloadText: defaultRunInputText() } }
+function defaultRunInputText() { return prettyJson({ query: '总结我当前待处理的报销事项', context: '优先关注待审批和待付款单据', scope: 'ASSIGNED_TO_ME', keyword: null, status: null, startDate: null, endDate: null, minAmount: null, maxAmount: null, limit: 10 }) }
+function persistCurrentRunDraft() { if (selectedAgentId.value) writeAgentRunDraft(sessionStorage, runDraftUserKey, selectedAgentId.value, runForm.value) }
 function triggerLabel(triggerType: string) { return ({ MANUAL: '手动触发', SCHEDULE: '定时触发', EVENT: '事件触发' } as Record<string, string>)[triggerType] || triggerType }
 function runtimeStatusLabel(status?: string) { return ({ READY: '待命', RUNNING: '运行中', FAILED: '异常', DISABLED: '已停用', ARCHIVED: '已归档', DRAFT: '草稿' } as Record<string, string>)[status || 'DRAFT'] || '草稿' }
 function summaryStatusType(status?: string) { return ({ READY: 'success', RUNNING: 'warning', FAILED: 'danger', DISABLED: 'info', ARCHIVED: 'info', DRAFT: 'info' } as Record<string, string>)[status || 'DRAFT'] || 'info' }
@@ -709,6 +796,7 @@ function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T }
 function normalizeText(value?: string | null) { const text = String(value || '').trim(); return text || undefined }
 function stringFrom(value: unknown, fallback = '') { return typeof value === 'string' ? value : fallback }
 function numberFrom(value: unknown, fallback = 0) { return typeof value === 'number' && !Number.isNaN(value) ? value : fallback }
+function delay(milliseconds: number) { return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds)) }
 </script>
 
 <style scoped>
@@ -730,11 +818,12 @@ function numberFrom(value: unknown, fallback = 0) { return typeof value === 'num
 .hero-stats, .log-summary { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-top: 16px; }
 .hero-stats div, .log-summary div { padding: 12px 14px; border-radius: 18px; background: rgba(255,255,255,.74); border: 1px solid rgba(39,48,71,.08); }
 .hero-stats span, .log-summary span, .agent-meta span { display: block; font-size: 12px; color: rgba(39,48,71,.55); } .hero-stats strong, .log-summary strong, .agent-meta strong { display: block; margin-top: 4px; color: var(--ink); }
-.agent-list { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 280px); overflow: auto; padding-right: 4px; }
+.agent-list { display: flex; flex-direction: column; align-items: stretch; gap: 8px; max-height: calc(100vh - 280px); overflow: auto; padding-right: 4px; }
 .agent-card, .mini-card { border: 1px solid rgba(39,48,71,.08); border-radius: 22px; background: linear-gradient(180deg, #fff 0%, #fffaf1 100%); }
-.agent-card { padding: 16px; text-align: left; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.agent-card { width: 100%; height: auto; min-height: 0; padding: 11px 12px; text-align: left; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
 .agent-card:hover, .agent-card.active, .run-card.active { transform: translateY(-2px); border-color: rgba(217,119,6,.28); box-shadow: 0 12px 24px rgba(217,119,6,.12); }
-.duck-badge { --cover: #d97706; width: 42px; height: 42px; background: linear-gradient(135deg, var(--cover), #ffe17c); }
+.duck-badge { --cover: #d97706; width: 36px; height: 36px; flex: 0 0 36px; background: linear-gradient(135deg, var(--cover), #ffe17c); }
+.compact-tags { padding-left: 46px; }
 .agent-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
 .empty-state { display: flex; min-height: 160px; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border: 1px dashed rgba(39,48,71,.16); border-radius: 24px; background: rgba(255,250,241,.72); color: rgba(39,48,71,.62); text-align: center; padding: 20px; }
 .empty-state.small { min-height: 120px; }
@@ -746,12 +835,24 @@ function numberFrom(value: unknown, fallback = 0) { return typeof value === 'num
 .color-input { width: 52px; height: 40px; border: 1px solid rgba(39,48,71,.12); border-radius: 12px; background: transparent; padding: 2px; }
 .tool-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0,1fr)); }
 .mini-card { padding: 14px; } .mini-card.active { border-color: rgba(31,159,159,.28); box-shadow: 0 10px 24px rgba(31,159,159,.1); }
-.workflow-board { display: grid; gap: 14px; } .workflow-nodes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(230px,1fr)); padding: 12px; border-radius: 24px; background: linear-gradient(rgba(39,48,71,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(39,48,71,.05) 1px, transparent 1px), #fffaf1; background-size: 18px 18px; }
-.edge-box { padding: 16px; border-radius: 24px; border: 1px dashed rgba(39,48,71,.14); background: rgba(255,255,255,.84); } .edge-row { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto; gap: 10px; align-items: center; } .empty-inline { font-size: 13px; color: rgba(39,48,71,.58); margin-top: 10px; }
+.workflow-entry-card { cursor: pointer; background: radial-gradient(circle at top right, rgba(31,159,159,.18), transparent 36%), linear-gradient(135deg, rgba(255,212,77,.22), rgba(255,255,255,.98)); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+.workflow-entry-card:hover, .workflow-entry-card:focus-visible { transform: translateY(-2px); border-color: rgba(31,159,159,.36); box-shadow: 0 18px 38px rgba(31,159,159,.16); background: radial-gradient(circle at top right, rgba(31,159,159,.25), transparent 38%), linear-gradient(135deg, rgba(255,212,77,.3), rgba(255,255,255,.98)); outline: none; }
+.workflow-entry-body { display: grid; grid-template-columns: minmax(260px, .9fr) minmax(0, 1.1fr); gap: 16px; align-items: center; }
+.workflow-entry-visual { min-height: 128px; display: flex; align-items: center; justify-content: center; padding: 18px; border-radius: 22px; background: linear-gradient(rgba(39,48,71,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(39,48,71,.05) 1px, transparent 1px), rgba(255,255,255,.72); background-size: 18px 18px; overflow: hidden; }
+.flow-dot { min-width: 58px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 12px; font-weight: 800; color: #fff; box-shadow: 0 10px 24px rgba(39,48,71,.14); }
+.flow-dot.start { background: #16a34a; } .flow-dot.tool { background: #0f766e; } .flow-dot.llm { background: #7c3aed; } .flow-dot.end { background: #334155; }
+.flow-line { width: 54px; height: 2px; background: linear-gradient(90deg, rgba(39,48,71,.22), rgba(31,159,159,.5)); position: relative; }
+.flow-line::after { content: ''; position: absolute; right: -3px; top: -4px; border-left: 7px solid rgba(31,159,159,.64); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.workflow-entry-copy strong { display: block; font-size: 18px; color: var(--ink); }
+.workflow-entry-copy p { margin: 8px 0 12px; color: rgba(39,48,71,.66); line-height: 1.7; }
 .accent { background: radial-gradient(circle at top right, rgba(255,212,77,.28), transparent 30%), linear-gradient(180deg, #fffdf7 0%, #fff 100%); }
-.run-card { text-align: left; }
+.run-card { width: 100%; cursor: pointer; text-align: left; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease; }
+.run-card:hover, .run-card:focus-visible { transform: translateY(-2px); border-color: rgba(31,159,159,.42); background: linear-gradient(180deg, #f0fdfa 0%, #fff7e8 100%); box-shadow: 0 12px 26px rgba(15,118,110,.14); outline: none; }
+.drawer-heading { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 12px; }
+.drawer-heading h3 { margin: 4px 0 0; color: var(--ink); font-size: 20px; }
+.run-detail-drawer { padding: 0 4px 18px; }
 .payload-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; } .payload-grid label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: rgba(39,48,71,.58); } .payload-grid pre, .monospace :deep(textarea) { font-family: 'Consolas', 'SFMono-Regular', monospace; } .payload-grid pre { min-height: 108px; margin: 0; padding: 10px; border-radius: 16px; background: #f8fafc; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: rgba(39,48,71,.72); }
 .muted { color: rgba(39,48,71,.6); } .muted.sm { font-size: 13px; } .muted.xs { font-size: 12px; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .block { display: block; } .error { color: #dc2626; }
 @media (max-width: 1500px) { .agent-workbench { grid-template-columns: minmax(260px,300px) minmax(0,1fr); } .runtime { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); align-items: start; } }
-@media (max-width: 1120px) { .agent-workbench, .runtime, .grid.two, .grid.three, .tool-grid, .hero-stats, .log-summary, .payload-grid, .edge-row { grid-template-columns: 1fr; } .hero-main, .section-head, .row.between { align-items: flex-start; } }
+@media (max-width: 1120px) { .agent-workbench, .runtime, .grid.two, .grid.three, .tool-grid, .hero-stats, .log-summary, .payload-grid, .edge-row, .workflow-entry-body { grid-template-columns: 1fr; } .hero-main, .section-head, .row.between { align-items: flex-start; } }
 </style>

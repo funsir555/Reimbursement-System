@@ -369,11 +369,17 @@ describe('MainLayout', () => {
     expect(wrapper.text()).toContain('项目档案')
   })
 
-  it('shows the agent entry when the user has agent permission', async () => {
+  it('shows the agent workbench entry when the user has the new workbench permission', async () => {
+    const wrapper = await mountView(['agent:workbench:view'])
+
+    expect(wrapper.find('[data-index="/agent/workbench"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Agent')
+  })
+
+  it('keeps the agent workbench visible for legacy agent permissions', async () => {
     const wrapper = await mountView(['agents:view'])
 
-    expect(wrapper.find('[data-index="/archives/agents"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Agent')
+    expect(wrapper.find('[data-index="/agent/workbench"]').exists()).toBe(true)
   })
 
   it('shows notification and download triggers without breaking layout initialization', async () => {

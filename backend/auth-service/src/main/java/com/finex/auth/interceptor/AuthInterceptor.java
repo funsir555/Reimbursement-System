@@ -1,6 +1,7 @@
 package com.finex.auth.interceptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.util.SecurityUtils;
 import com.finex.common.JwtUtil;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,7 +14,12 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 简单鉴权拦截器。
+ * 简单鉴权拦截器
+ *
+ * 职责：
+ * 1. 验证 JWT Token 有效性
+ * 2. 提取用户信息并存储到 request attribute（兼容现有代码）
+ * 3. 设置用户信息到 SecurityUtils ThreadLocal（支持 Agent Chat）
  */
 @Component
 @RequiredArgsConstructor
@@ -31,9 +37,24 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        request.setAttribute("currentUserId", JwtUtil.getUserId(token));
-        request.setAttribute("currentUsername", JwtUtil.getUsername(token));
+        Long userId = JwtUtil.getUserId(token);
+        String username = JwtUtil.getUsername(token);
+
+        // 存储到 request attribute（保持现有代码兼容性）
+        request.setAttribute("currentUserId", userId);
+        request.setAttribute("currentUsername", username);
+
+        // 设置到 SecurityUtils ThreadLocal（支持 Agent Chat 等新功能）
+        SecurityUtils.setCurrentUserId(userId);
+
         return true;
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
+                               Object handler, Exception ex) throws Exception {
+        // 清理 ThreadLocal，避免内存泄漏
+        SecurityUtils.clear();
     }
 
     private String resolveToken(HttpServletRequest request) {

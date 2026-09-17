@@ -5,6 +5,7 @@ import com.finex.auth.dto.ArchiveAgentDetailVO;
 import com.finex.auth.dto.ArchiveAgentSaveDTO;
 import com.finex.auth.dto.ArchiveAgentSummaryVO;
 import com.finex.auth.entity.ArchiveAgentDefinition;
+import com.finex.auth.entity.ArchiveAgentRun;
 import com.finex.auth.entity.ArchiveAgentSchedule;
 import com.finex.auth.entity.ArchiveAgentTrigger;
 import com.finex.auth.entity.ArchiveAgentVersion;
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -113,7 +115,8 @@ class ArchiveAgentDefinitionDomainSupportTest {
         dto.setAgentName("Expense Duck");
         dto.setTags(List.of("finance"));
         dto.setPromptConfig(Map.of("systemPrompt", "test"));
-        dto.setModelConfig(Map.of("provider", "MOCK"));
+        dto.setModelConfig(Map.of("provider", "MOCK", "model", "mock-agent-v1"));
+        dto.setInputSchema(Map.of("type", "object", "properties", Map.of()));
         dto.setTools(List.of(Map.of("toolCode", "notify.send_message", "enabled", true)));
         dto.setWorkflow(new LinkedHashMap<>(Map.of(
                 "nodes", List.of(
@@ -174,5 +177,47 @@ class ArchiveAgentDefinitionDomainSupportTest {
         ));
 
         assertThrows(IllegalArgumentException.class, () -> support.createAgent(1L, "tester", dto));
+    }
+
+    @Test
+    void deleteAgentRemovesOwnedDataAfterRunsFinish() {
+        ArchiveAgentDefinition definition = new ArchiveAgentDefinition();
+        definition.setId(10L);
+        definition.setOwnerUserId(1L);
+        ArchiveAgentRun run = new ArchiveAgentRun();
+        run.setId(20L);
+
+        when(archiveAgentDefinitionMapper.selectById(10L)).thenReturn(definition);
+        when(archiveAgentRunMapper.selectCount(any())).thenReturn(0L);
+        when(archiveAgentRunMapper.selectList(any())).thenReturn(List.of(run));
+
+        support.deleteAgent(1L, 10L);
+
+        verify(archiveAgentRunArtifactMapper).delete(any());
+        verify(archiveAgentRunStepMapper).delete(any());
+        verify(archiveAgentScheduleMapper).delete(any());
+        verify(archiveAgentTriggerMapper).delete(any());
+        verify(archiveAgentToolBindingMapper).delete(any());
+        verify(archiveAgentRunMapper).delete(any());
+        verify(archiveAgentVersionMapper).delete(any());
+        verify(archiveAgentDefinitionMapper).deleteById(10L);
+    }
+
+    @Test
+    void deleteAgentRejectsActiveRun() {
+        ArchiveAgentDefinition definition = new ArchiveAgentDefinition();
+        definition.setId(10L);
+        definition.setOwnerUserId(1L);
+
+        when(archiveAgentDefinitionMapper.selectById(10L)).thenReturn(definition);
+        when(archiveAgentRunMapper.selectCount(any())).thenReturn(1L);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> support.deleteAgent(1L, 10L)
+        );
+
+        assertEquals("Agent 正在运行，请等待运行结束后再删除", error.getMessage());
+        verify(archiveAgentDefinitionMapper, never()).deleteById(any(Long.class));
     }
 }

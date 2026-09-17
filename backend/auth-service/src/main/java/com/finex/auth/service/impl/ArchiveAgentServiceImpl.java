@@ -157,6 +157,15 @@ public class ArchiveAgentServiceImpl implements ArchiveAgentService {
     }
 
     /**
+     * 删除代理及其专属数据。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteAgent(Long ownerUserId, Long id) {
+        archiveAgentDefinitionDomainSupport.deleteAgent(ownerUserId, id);
+    }
+
+    /**
      * 执行代理。
      */
     @Override

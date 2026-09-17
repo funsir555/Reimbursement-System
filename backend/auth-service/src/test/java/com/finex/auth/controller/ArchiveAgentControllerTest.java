@@ -16,9 +16,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -52,7 +52,6 @@ class ArchiveAgentControllerTest {
         ArchiveAgentDetailVO detail = new ArchiveAgentDetailVO();
         detail.setStatus("ARCHIVED");
 
-        doNothing().when(accessControlService).requirePermission(1L, "agents:delete");
         when(archiveAgentService.updateAgentStatus(1L, 2L, "ARCHIVED")).thenReturn(detail);
 
         mockMvc.perform(post("/auth/archives/agents/2/toggle-status")
@@ -67,7 +66,7 @@ class ArchiveAgentControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
 
-        verify(accessControlService).requirePermission(1L, "agents:delete");
+        verify(accessControlService).requireAnyPermission(1L, "agent:workbench:delete", "agents:delete");
     }
 
     @Test
@@ -75,7 +74,6 @@ class ArchiveAgentControllerTest {
         ArchiveAgentDetailVO detail = new ArchiveAgentDetailVO();
         detail.setStatus("DISABLED");
 
-        doNothing().when(accessControlService).requirePermission(1L, "agents:edit");
         when(archiveAgentService.updateAgentStatus(1L, 2L, "DISABLED")).thenReturn(detail);
 
         mockMvc.perform(post("/auth/archives/agents/2/toggle-status")
@@ -90,7 +88,7 @@ class ArchiveAgentControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.status").value("DISABLED"));
 
-        verify(accessControlService).requirePermission(1L, "agents:edit");
+        verify(accessControlService).requireAnyPermission(1L, "agent:workbench:edit", "agents:edit");
         verify(archiveAgentService).updateAgentStatus(eq(1L), eq(2L), eq("DISABLED"));
     }
 
@@ -99,7 +97,6 @@ class ArchiveAgentControllerTest {
         ArchiveAgentMetaVO meta = new ArchiveAgentMetaVO();
         meta.setDefaultSystemPrompt("test");
 
-        doNothing().when(accessControlService).requirePermission(1L, "agents:view");
         when(archiveAgentService.getMeta()).thenReturn(meta);
 
         mockMvc.perform(get("/auth/archives/agents/meta")
@@ -108,7 +105,19 @@ class ArchiveAgentControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.defaultSystemPrompt").value("test"));
 
-        verify(accessControlService).requirePermission(1L, "agents:view");
+        verify(accessControlService).requireAnyPermission(1L, "agent:workbench:view", "agents:view");
         verify(archiveAgentService).getMeta();
+    }
+
+    @Test
+    void deleteRequiresDeletePermissionAndDelegates() throws Exception {
+        mockMvc.perform(delete("/auth/agent/workbench/2")
+                        .requestAttr("currentUserId", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.message").value("Agent 已删除"));
+
+        verify(accessControlService).requireAnyPermission(1L, "agent:workbench:delete", "agents:delete");
+        verify(archiveAgentService).deleteAgent(1L, 2L);
     }
 }

@@ -36,7 +36,7 @@ public class CoreArchiveToolExecutor implements ToolExecutor {
             case "notify.send_message" -> notifyUser(context);
             case "http.mock_request" -> mockHttp(context);
             default -> new ToolResult(
-                    "?? " + context.toolCode() + " ???????",
+                    "工具 " + context.toolCode() + " 尚未接入真实执行器",
                     Map.of("toolCode", context.toolCode(), "mode", "MOCK")
             );
         };
@@ -47,7 +47,7 @@ public class CoreArchiveToolExecutor implements ToolExecutor {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("count", expenses.size());
         output.put("documents", expenses.stream().limit(3).map(ExpenseSummaryVO::getDocumentCode).toList());
-        return new ToolResult("?????????? " + expenses.size() + " ?", output);
+        return new ToolResult("已查询到当前用户的报销单 " + expenses.size() + " 条", output);
     }
 
     private ToolResult queryInvoices(Long userId) {
@@ -55,18 +55,18 @@ public class CoreArchiveToolExecutor implements ToolExecutor {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("count", invoices.size());
         output.put("invoiceCodes", invoices.stream().limit(3).map(InvoiceSummaryVO::getCode).toList());
-        return new ToolResult("????????? " + invoices.size() + " ?", output);
+        return new ToolResult("已查询到当前用户的发票 " + invoices.size() + " 条", output);
     }
 
     private ToolResult notifyUser(ToolContext context) {
-        String title = String.valueOf(context.toolConfig().getOrDefault("title", "Agent ??"));
-        String content = String.valueOf(context.toolConfig().getOrDefault("content", "?? Agent ?????"));
+        String title = String.valueOf(context.toolConfig().getOrDefault("title", "Agent 通知"));
+        String content = String.valueOf(context.toolConfig().getOrDefault("content", "你的 Agent 已完成执行"));
         notificationService.sendAsyncNotification(context.userId(), "AGENT", title, content, null);
-        return new ToolResult("???????", Map.of("title", title, "content", content));
+        return new ToolResult("站内通知已发送", Map.of("title", title, "content", content));
     }
 
     private ToolResult mockHttp(ToolContext context) {
         String url = String.valueOf(context.toolConfig().getOrDefault("url", "https://example.invalid/mock"));
-        return new ToolResult("HTTP ???????????", Map.of("url", url, "status", 200, "body", "mock-response"));
+        return new ToolResult("HTTP 模拟请求已完成", Map.of("url", url, "status", 200, "body", "mock-response"));
     }
 }

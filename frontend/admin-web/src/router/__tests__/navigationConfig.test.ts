@@ -28,6 +28,8 @@ describe('navigation configuration', () => {
     expect(fallbackMatch('settings:roles:view')).toBe('/settings?tab=organization')
     expect(fallbackMatch('settings:company_accounts:view')).toBe('/settings?tab=companyAccounts')
     expect(fallbackMatch('settings:api_interfaces:view')).toBe('/settings?tab=apiInterfaces')
+    expect(fallbackMatch('agent:workbench:view')).toBe('/agent/workbench')
+    expect(fallbackMatch('agents:view')).toBe('/agent/workbench')
   })
 
   it('resolves finance tab titles and placeholder copy from route meta', () => {

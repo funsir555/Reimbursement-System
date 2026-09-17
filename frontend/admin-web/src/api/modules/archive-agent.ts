@@ -5,39 +5,45 @@
 import request, { buildQueryString } from './core'
 import type { ArchiveAgentDetail, ArchiveAgentMeta, ArchiveAgentRunDetail, ArchiveAgentRunRecord, ArchiveAgentSavePayload, ArchiveAgentSummary, ArchiveAgentTestRunPayload } from './archive-agent-types'
 
+const AGENT_WORKBENCH_API_PREFIX = '/auth/agent/workbench'
+
 // 这一组方法供对应页面统一调用。
 export const archiveAgentApi = {
   list: (params: { keyword?: string; status?: string } = {}) =>
-    request<ArchiveAgentSummary[]>(`/auth/archives/agents${buildQueryString(params)}`),
+    request<ArchiveAgentSummary[]>(`${AGENT_WORKBENCH_API_PREFIX}${buildQueryString(params)}`),
   getMeta: () =>
-    request<ArchiveAgentMeta>('/auth/archives/agents/meta'),
+    request<ArchiveAgentMeta>(`${AGENT_WORKBENCH_API_PREFIX}/meta`),
   getDetail: (id: number) =>
-    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}`),
+    request<ArchiveAgentDetail>(`${AGENT_WORKBENCH_API_PREFIX}/${id}`),
   create: (payload: ArchiveAgentSavePayload) =>
-    request<ArchiveAgentDetail>('/auth/archives/agents', {
+    request<ArchiveAgentDetail>(AGENT_WORKBENCH_API_PREFIX, {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
   update: (id: number, payload: ArchiveAgentSavePayload) =>
-    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}`, {
+    request<ArchiveAgentDetail>(`${AGENT_WORKBENCH_API_PREFIX}/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload)
     }),
   publish: (id: number) =>
-    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}/publish`, {
+    request<ArchiveAgentDetail>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/publish`, {
       method: 'POST'
     }),
+  remove: (id: number) =>
+    request<null>(`${AGENT_WORKBENCH_API_PREFIX}/${id}`, {
+      method: 'DELETE'
+    }),
   run: (id: number, payload: ArchiveAgentTestRunPayload) =>
-    request<ArchiveAgentRunRecord>(`/auth/archives/agents/${id}/run`, {
+    request<ArchiveAgentRunRecord>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/run`, {
       method: 'POST',
       body: JSON.stringify(payload)
     }),
   listRuns: (id: number) =>
-    request<ArchiveAgentRunRecord[]>(`/auth/archives/agents/${id}/runs`),
+    request<ArchiveAgentRunRecord[]>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/runs`),
   getRunDetail: (runId: number) =>
-    request<ArchiveAgentRunDetail>(`/auth/archives/agents/runs/${runId}`),
+    request<ArchiveAgentRunDetail>(`${AGENT_WORKBENCH_API_PREFIX}/runs/${runId}`),
   toggleStatus: (id: number, status: string) =>
-    request<ArchiveAgentDetail>(`/auth/archives/agents/${id}/toggle-status`, {
+    request<ArchiveAgentDetail>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/toggle-status`, {
       method: 'POST',
       body: JSON.stringify({ status })
     })

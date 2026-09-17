@@ -58,6 +58,11 @@ public interface ArchiveAgentService {
     ArchiveAgentDetailVO updateAgentStatus(Long ownerUserId, Long id, String status);
 
     /**
+     * 删除代理及其专属运行和配置数据。
+     */
+    void deleteAgent(Long ownerUserId, Long id);
+
+    /**
      * 执行代理。
      */
     ArchiveAgentRunVO runAgent(Long ownerUserId, Long id, ArchiveAgentRunDTO dto);

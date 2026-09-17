@@ -31,44 +31,51 @@ public class ArchiveAgentMetaSupport extends AbstractArchiveAgentSupport {
     public ArchiveAgentMetaVO getMeta() {
         ArchiveAgentMetaVO meta = new ArchiveAgentMetaVO();
         meta.setModelProviders(List.of(
-                Map.of("code", "MOCK", "label", "Mock Duck Engine", "available", true, "requiresCredential", false),
-                Map.of("code", "OPENAI", "label", "OpenAI", "available", false, "requiresCredential", true),
-                Map.of("code", "AZURE_OPENAI", "label", "Azure OpenAI", "available", false, "requiresCredential", true),
-                Map.of("code", "LOCAL_GATEWAY", "label", "绉佹湁妯″瀷缃戝叧", "available", false, "requiresCredential", true)
+                Map.of("code", "MOCK", "label", "Mock 模型", "available", true, "requiresCredential", false, "defaultModel", "mock-agent-v1"),
+                Map.of("code", "DEEPSEEK", "label", "DeepSeek", "available", true, "requiresCredential", false, "credentialMode", "PLATFORM_ENV", "defaultModel", "deepseek-chat"),
+                Map.of("code", "KIMI", "label", "Kimi", "available", false, "requiresCredential", true, "defaultModel", "moonshot-v1-8k"),
+                Map.of("code", "LOCAL_7B", "label", "本地模型（Ollama）", "available", true, "requiresCredential", false, "defaultModel", "deepseek-r1:7b")
+        ));
+        meta.setModelOptions(List.of(
+                Map.of("provider", "MOCK", "model", "mock-agent-v1", "label", "Mock Agent v1", "available", true),
+                Map.of("provider", "DEEPSEEK", "model", "deepseek-chat", "label", "DeepSeek Chat", "available", true),
+                Map.of("provider", "DEEPSEEK", "model", "deepseek-reasoner", "label", "DeepSeek Reasoner", "available", true),
+                Map.of("provider", "KIMI", "model", "moonshot-v1-8k", "label", "Moonshot v1 8K", "available", false),
+                Map.of("provider", "LOCAL_7B", "model", "deepseek-r1:7b", "label", "本地 DeepSeek R1 7B", "available", true)
         ));
         meta.setTools(List.of(
-                Map.of("toolCode", "expense.query_my_expenses", "label", "???????", "category", "BUSINESS", "available", true),
-                Map.of("toolCode", "invoice.query_my_invoices", "label", "??????", "category", "BUSINESS", "available", true),
-                Map.of("toolCode", "notify.send_message", "label", "??????", "category", "BUSINESS", "available", true),
-                Map.of("toolCode", "http.mock_request", "label", "HTTP ??", "category", "GENERAL", "available", true),
-                Map.of("toolCode", "json.extract", "label", "JSON ??", "category", "GENERAL", "available", false),
-                Map.of("toolCode", "async_task.submit", "label", "??????", "category", "BUSINESS", "available", false)
+                Map.of("toolCode", "expense.query_my_expenses", "label", "受控查询：报销单与待办", "category", "BUSINESS", "available", true, "queryTemplateCode", "expense.accessible_expenses.v2"),
+                Map.of("toolCode", "invoice.query_my_invoices", "label", "查询我的发票", "category", "BUSINESS", "available", true),
+                Map.of("toolCode", "notify.send_message", "label", "发送站内通知", "category", "BUSINESS", "available", true),
+                Map.of("toolCode", "http.mock_request", "label", "HTTP 模拟请求", "category", "GENERAL", "available", true),
+                Map.of("toolCode", "json.extract", "label", "JSON 提取", "category", "GENERAL", "available", false),
+                Map.of("toolCode", "async_task.submit", "label", "提交异步任务", "category", "BUSINESS", "available", false)
         ));
         meta.setNodeTypes(List.of(
-                Map.of("code", "start", "label", "??"),
+                Map.of("code", "start", "label", "开始"),
                 Map.of("code", "llm", "label", "LLM"),
-                Map.of("code", "condition", "label", "??"),
-                Map.of("code", "tool", "label", "????"),
-                Map.of("code", "transform", "label", "????"),
-                Map.of("code", "notify", "label", "??"),
-                Map.of("code", "end", "label", "??")
+                Map.of("code", "condition", "label", "条件判断"),
+                Map.of("code", "tool", "label", "工具调用"),
+                Map.of("code", "transform", "label", "变量转换"),
+                Map.of("code", "notify", "label", "通知"),
+                Map.of("code", "end", "label", "结束")
         ));
         meta.setTriggerTypes(List.of(
-                Map.of("code", ArchiveAgentSupport.TRIGGER_TYPE_MANUAL, "label", "????", "available", true),
-                Map.of("code", ArchiveAgentSupport.TRIGGER_TYPE_SCHEDULE, "label", "????", "available", true),
-                Map.of("code", ArchiveAgentSupport.TRIGGER_TYPE_EVENT, "label", "????", "available", false)
+                Map.of("code", ArchiveAgentSupport.TRIGGER_TYPE_MANUAL, "label", "手动触发", "available", true),
+                Map.of("code", ArchiveAgentSupport.TRIGGER_TYPE_SCHEDULE, "label", "定时触发", "available", true),
+                Map.of("code", ArchiveAgentSupport.TRIGGER_TYPE_EVENT, "label", "事件触发", "available", false)
         ));
         meta.setIconOptions(List.of(
-                Map.of("code", "pixel-duck", "label", "?????"),
-                Map.of("code", "duck-terminal", "label", "???"),
-                Map.of("code", "duck-orbit", "label", "???")
+                Map.of("code", "pixel-duck", "label", "像素助手"),
+                Map.of("code", "duck-terminal", "label", "终端助手"),
+                Map.of("code", "duck-orbit", "label", "轨道助手")
         ));
         meta.setThemeOptions(List.of(
-                Map.of("code", "duck-sunrise", "label", "???"),
-                Map.of("code", "duck-lake", "label", "???"),
-                Map.of("code", "duck-brass", "label", "???")
+                Map.of("code", "duck-sunrise", "label", "日出黄"),
+                Map.of("code", "duck-lake", "label", "湖水青"),
+                Map.of("code", "duck-brass", "label", "黄铜灰")
         ));
-        meta.setDefaultSystemPrompt("????????? Agent????????????????????????????????????????");
+        meta.setDefaultSystemPrompt("你是 FinEx Agent 工作流助手。只在已授权范围内调用工具，优先输出结构化结论，并保留必要的证据引用。");
         return meta;
     }
 }
