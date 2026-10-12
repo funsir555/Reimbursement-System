@@ -12,11 +12,13 @@ import com.finex.auth.dto.PersonalCenterVO;
 import com.finex.auth.dto.UserBankAccountSaveDTO;
 import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.UserCenterService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.profile.ProfileBankAccountDomainSupport;
 import com.finex.auth.service.impl.profile.ProfileCenterDomainSupport;
 import com.finex.auth.service.impl.profile.ProfileDownloadDomainSupport;
+import com.finex.auth.service.impl.expense.ExpenseExportSnapshotService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,7 +43,9 @@ public class UserCenterServiceImpl implements UserCenterService {
             UserService userService,
             UserBankAccountMapper userBankAccountMapper,
             DownloadRecordMapper downloadRecordMapper,
-            DownloadStorageService downloadStorageService
+            DownloadStorageService downloadStorageService,
+            PasswordHashService passwordHashService,
+            ExpenseExportSnapshotService expenseExportSnapshots
     ) {
         this.profileBankAccountDomainSupport = new ProfileBankAccountDomainSupport(
                 userService,
@@ -54,13 +58,15 @@ public class UserCenterServiceImpl implements UserCenterService {
                 userBankAccountMapper,
                 downloadRecordMapper,
                 downloadStorageService,
-                profileBankAccountDomainSupport
+                profileBankAccountDomainSupport,
+                passwordHashService
         );
         this.profileDownloadDomainSupport = new ProfileDownloadDomainSupport(
                 userService,
                 userBankAccountMapper,
                 downloadRecordMapper,
-                downloadStorageService
+                downloadStorageService,
+                expenseExportSnapshots
         );
     }
 

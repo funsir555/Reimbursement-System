@@ -22,7 +22,6 @@ import com.finex.auth.mapper.ExpVoucherPushDocumentMapper;
 import com.finex.auth.mapper.ExpVoucherPushEntryMapper;
 import com.finex.auth.mapper.ExpVoucherSubjectMappingMapper;
 import com.finex.auth.mapper.ExpVoucherTemplatePolicyMapper;
-import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
@@ -31,11 +30,13 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.ExpenseVoucherGenerationService;
 import com.finex.auth.service.FinanceVoucherService;
+import com.finex.auth.service.port.FinanceReferenceQueryPort;
 import com.finex.auth.service.impl.expensevoucher.AbstractExpenseVoucherGenerationSupport;
 import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherMappingDomainSupport;
 import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherMetaSupport;
 import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherPushDomainSupport;
 import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherRecordQuerySupport;
+import com.finex.auth.service.impl.expensevoucher.ExpenseVoucherTransactionRunner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,9 +70,10 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
             ProcessExpenseTypeMapper expenseTypeMapper,
             SystemCompanyMapper systemCompanyMapper,
             UserMapper userMapper,
-            GlAccvouchMapper glAccvouchMapper,
+            FinanceReferenceQueryPort financeReferenceQueryPort,
             FinanceVoucherService financeVoucherService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ExpenseVoucherTransactionRunner transactionRunner
     ) {
         AbstractExpenseVoucherGenerationSupport.Dependencies dependencies = AbstractExpenseVoucherGenerationSupport.dependencies(
                 templatePolicyMapper,
@@ -85,13 +87,13 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
                 expenseTypeMapper,
                 systemCompanyMapper,
                 userMapper,
-                glAccvouchMapper,
+                financeReferenceQueryPort,
                 financeVoucherService,
                 objectMapper
         );
         this.expenseVoucherMetaSupport = new ExpenseVoucherMetaSupport(dependencies);
         this.expenseVoucherMappingDomainSupport = new ExpenseVoucherMappingDomainSupport(dependencies);
-        this.expenseVoucherPushDomainSupport = new ExpenseVoucherPushDomainSupport(dependencies);
+        this.expenseVoucherPushDomainSupport = new ExpenseVoucherPushDomainSupport(dependencies, transactionRunner);
         this.expenseVoucherRecordQuerySupport = new ExpenseVoucherRecordQuerySupport(dependencies);
     }
 
@@ -182,7 +184,6 @@ public class ExpenseVoucherGenerationServiceImpl implements ExpenseVoucherGenera
      * 推送单据。
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public ExpenseVoucherPushBatchResultVO pushDocuments(ExpenseVoucherPushDTO dto, Long currentUserId, String currentUsername) {
         return expenseVoucherPushDomainSupport.pushDocuments(dto, currentUserId, currentUsername);
     }

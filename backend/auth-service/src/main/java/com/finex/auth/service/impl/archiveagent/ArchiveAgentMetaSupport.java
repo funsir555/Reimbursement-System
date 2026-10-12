@@ -7,6 +7,7 @@ package com.finex.auth.service.impl.archiveagent;
 
 import com.finex.auth.dto.ArchiveAgentMetaVO;
 import com.finex.auth.support.archiveagent.ArchiveAgentSupport;
+import com.finex.auth.agent.workflow.ControlledQueryCatalog;
 
 import java.util.List;
 import java.util.Map;
@@ -43,14 +44,8 @@ public class ArchiveAgentMetaSupport extends AbstractArchiveAgentSupport {
                 Map.of("provider", "KIMI", "model", "moonshot-v1-8k", "label", "Moonshot v1 8K", "available", false),
                 Map.of("provider", "LOCAL_7B", "model", "deepseek-r1:7b", "label", "本地 DeepSeek R1 7B", "available", true)
         ));
-        meta.setTools(List.of(
-                Map.of("toolCode", "expense.query_my_expenses", "label", "受控查询：报销单与待办", "category", "BUSINESS", "available", true, "queryTemplateCode", "expense.accessible_expenses.v2"),
-                Map.of("toolCode", "invoice.query_my_invoices", "label", "查询我的发票", "category", "BUSINESS", "available", true),
-                Map.of("toolCode", "notify.send_message", "label", "发送站内通知", "category", "BUSINESS", "available", true),
-                Map.of("toolCode", "http.mock_request", "label", "HTTP 模拟请求", "category", "GENERAL", "available", true),
-                Map.of("toolCode", "json.extract", "label", "JSON 提取", "category", "GENERAL", "available", false),
-                Map.of("toolCode", "async_task.submit", "label", "提交异步任务", "category", "BUSINESS", "available", false)
-        ));
+        meta.setTools(ControlledQueryCatalog.TOOLS.stream()
+                .map(ControlledQueryCatalog.Definition::metadata).toList());
         meta.setNodeTypes(List.of(
                 Map.of("code", "start", "label", "开始"),
                 Map.of("code", "llm", "label", "LLM"),

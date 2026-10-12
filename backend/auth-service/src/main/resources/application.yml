@@ -53,5 +53,7 @@ finex:
     storage-path: ${FINEX_DOWNLOAD_STORAGE_PATH:${user.dir}/storage/downloads}
 
 logging:
+  pattern:
+    level: "%5p [traceId=%X{traceId:-}]"
   level:
     com.finex: ${FINEX_LOG_LEVEL:info}

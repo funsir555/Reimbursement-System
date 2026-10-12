@@ -21,6 +21,7 @@ import com.finex.auth.entity.ExpVoucherSubjectMapping;
 import com.finex.auth.entity.ExpVoucherTemplatePolicy;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -40,13 +42,17 @@ import java.util.stream.Collectors;
  * 承接 报销单凭证推送的核心业务规则。
      * 改这里时，要特别关注 重复生成凭证、凭证内容错误和推送记录不一致是否会被一起带坏。
  */
+@Slf4j
 public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGenerationSupport {
+
+    private final ExpenseVoucherTransactionRunner transactionRunner;
 
     /**
      * 初始化这个类所需的依赖组件。
      */
-    public ExpenseVoucherPushDomainSupport(Dependencies dependencies) {
+    public ExpenseVoucherPushDomainSupport(Dependencies dependencies, ExpenseVoucherTransactionRunner transactionRunner) {
         super(dependencies);
+        this.transactionRunner = transactionRunner;
     }
 
     /**
@@ -153,18 +159,36 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
             CompanyBatchContext batchContext = null;
             try {
                 companyId = requireDocumentCompanyId(document);
-                batchContext = batchMap.computeIfAbsent(companyId, key -> createBatchContext(key, currentUsername));
-                ExpenseVoucherPushResultVO pushResult = pushOneDocument(document, batchContext, currentUserId, currentUsername);
+                batchContext = getOrCreateBatchContext(batchMap, companyId, currentUsername);
+                CompanyBatchContext activeBatchContext = batchContext;
+                ExpenseVoucherPushResultVO pushResult = transactionRunner.execute(
+                        () -> pushOneDocument(document, activeBatchContext, currentUserId, currentUsername)
+                );
+                batchContext.documentCount += 1;
+                batchContext.successCount += 1;
                 result.getResults().add(pushResult);
                 result.setSuccessCount(result.getSuccessCount() + 1);
+                log.info("voucher_push_document outcome=success company_id={} document_code={} batch_no={}",
+                        companyId, documentCode, batchContext.batch.getBatchNo());
             } catch (Exception ex) {
                 String errorMessage = defaultText(ex.getMessage(), "推送失败");
                 if (companyId != null) {
-                    batchContext = batchContext == null ? batchMap.computeIfAbsent(companyId, key -> createBatchContext(key, currentUsername)) : batchContext;
-                    saveFailedPushDocument(document, batchContext, errorMessage);
+                    batchContext = batchContext == null
+                            ? getOrCreateBatchContext(batchMap, companyId, currentUsername)
+                            : batchContext;
+                    CompanyBatchContext failedBatchContext = batchContext;
+                    transactionRunner.execute(() -> {
+                        saveFailedPushDocument(document, failedBatchContext, errorMessage);
+                        return null;
+                    });
+                    batchContext.documentCount += 1;
+                    batchContext.failureCount += 1;
                 }
                 result.getResults().add(buildFailureResult(document.getDocumentCode(), companyId, document.getTemplateCode(), document.getTemplateName(), errorMessage));
                 result.setFailureCount(result.getFailureCount() + 1);
+                log.warn("voucher_push_document outcome=failure company_id={} document_code={} batch_no={} reason={}",
+                        companyId, documentCode,
+                        batchContext == null ? null : batchContext.batch.getBatchNo(), errorMessage);
             }
         }
 
@@ -175,8 +199,14 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
             batch.setSuccessCount(batchContext.successCount);
             batch.setFailureCount(batchContext.failureCount);
             batch.setStatus(batchContext.failureCount > 0 ? (batchContext.successCount > 0 ? "PARTIAL" : PUSH_STATUS_FAILED) : PUSH_STATUS_SUCCESS);
-            pushBatchMapper.updateById(batch);
+            transactionRunner.execute(() -> {
+                pushBatchMapper.updateById(batch);
+                return null;
+            });
             latestBatchNo = batch.getBatchNo();
+            log.info("voucher_push_batch company_id={} batch_no={} status={} success_count={} failure_count={}",
+                    batch.getCompanyId(), batch.getBatchNo(), batch.getStatus(),
+                    batch.getSuccessCount(), batch.getFailureCount());
         }
         result.setLatestBatchNo(latestBatchNo);
         return result;
@@ -190,6 +220,10 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         }
 
         String companyId = requireDocumentCompanyId(document);
+        ExpVoucherPushDocument previousPush = findPushDocument(companyId, document.getDocumentCode());
+        if (previousPush != null && PUSH_STATUS_SUCCESS.equals(previousPush.getPushStatus())) {
+            throw new IllegalStateException("该报销单已生成凭证，请勿重复推送");
+        }
         ExpVoucherTemplatePolicy templatePolicy = requireEnabledTemplatePolicy(companyId, document.getTemplateCode());
         List<ProcessDocumentExpenseDetail> details = listExpenseDetails(document.getDocumentCode());
         if (details.isEmpty()) {
@@ -210,8 +244,6 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         FinanceVoucherSaveResultVO saveResult = financeVoucherService.saveVoucher(saveDTO, currentUserId, currentUsername);
         ExpVoucherPushDocument pushDocument = saveSuccessPushDocument(document, batchContext, saveResult);
         rebuildPushEntries(pushDocument, saveDTO, subjectMap, templatePolicy, expenseTypeMap);
-        batchContext.documentCount += 1;
-        batchContext.successCount += 1;
         return buildSuccessResult(document, companyId, saveResult);
     }
     /**
@@ -291,6 +323,10 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
      */
     private void saveFailedPushDocument(ProcessDocumentInstance document, CompanyBatchContext batchContext, String errorMessage) {
         ExpVoucherPushDocument row = findPushDocument(batchContext.batch.getCompanyId(), document.getDocumentCode());
+        // A failed retry must not erase a previously committed voucher reference.
+        if (row != null && PUSH_STATUS_SUCCESS.equals(row.getPushStatus())) {
+            return;
+        }
         if (row == null) {
             row = new ExpVoucherPushDocument();
             row.setCompanyId(batchContext.batch.getCompanyId());
@@ -317,8 +353,15 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
             pushDocumentMapper.updateById(row);
         }
         pushEntryMapper.delete(Wrappers.<ExpVoucherPushEntry>lambdaQuery().eq(ExpVoucherPushEntry::getPushDocumentId, row.getId()));
-        batchContext.documentCount += 1;
-        batchContext.failureCount += 1;
+    }
+
+    private CompanyBatchContext getOrCreateBatchContext(
+            Map<String, CompanyBatchContext> batchMap,
+            String companyId,
+            String currentUsername
+    ) {
+        return batchMap.computeIfAbsent(companyId,
+                key -> transactionRunner.execute(() -> createBatchContext(key, currentUsername)));
     }
 
     private void rebuildPushEntries(ExpVoucherPushDocument pushDocument, FinanceVoucherSaveDTO saveDTO, Map<String, ExpVoucherSubjectMapping> subjectMap, ExpVoucherTemplatePolicy templatePolicy, Map<String, String> expenseTypeMap) {
@@ -357,7 +400,9 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
     private CompanyBatchContext createBatchContext(String companyId, String currentUsername) {
         ExpVoucherPushBatch batch = new ExpVoucherPushBatch();
         batch.setCompanyId(companyId);
-        batch.setBatchNo("VG" + LocalDateTime.now().format(BATCH_FORMATTER) + companyId.substring(Math.max(companyId.length() - 4, 0)));
+        batch.setBatchNo("VG" + LocalDateTime.now().format(BATCH_FORMATTER)
+                + companyId.substring(Math.max(companyId.length() - 4, 0))
+                + UUID.randomUUID().toString().substring(0, 8));
         batch.setDocumentCount(0);
         batch.setSuccessCount(0);
         batch.setFailureCount(0);
@@ -367,4 +412,3 @@ public class ExpenseVoucherPushDomainSupport extends AbstractExpenseVoucherGener
         return new CompanyBatchContext(batch);
     }
 }
-

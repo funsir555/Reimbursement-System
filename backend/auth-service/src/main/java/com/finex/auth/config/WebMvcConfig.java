@@ -35,9 +35,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
         return registration;
     }
 
+    @Bean
+    public FilterRegistrationBean<RequestTraceFilter> requestTraceFilterRegistration() {
+        FilterRegistrationBean<RequestTraceFilter> registration = new FilterRegistrationBean<>(new RequestTraceFilter());
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+        return registration;
+    }
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
+                .order(0)
                 .addPathPatterns("/auth/**")
                 .excludePathPatterns(
                         "/auth/login",

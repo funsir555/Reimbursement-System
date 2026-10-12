@@ -138,6 +138,7 @@ class UserCenterControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "accountId": 1,
                                   "accountName": "测试账户",
                                   "accountNo": "6222020202020202",
                                   "bankCode": "BOC",
@@ -174,6 +175,7 @@ class UserCenterControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "accountId": 1,
                                   "accountName": "测试账户",
                                   "accountNo": "6222020202020202",
                                   "bankCode": "BOC",
@@ -201,6 +203,7 @@ class UserCenterControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "accountId": 1,
                                   "accountName": "测试账户",
                                   "accountNo": "6222020202020202",
                                   "bankName": "中国银行",

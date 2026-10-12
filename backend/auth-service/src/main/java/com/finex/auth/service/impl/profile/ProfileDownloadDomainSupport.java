@@ -15,6 +15,7 @@ import com.finex.auth.mapper.UserBankAccountMapper;
 import com.finex.auth.service.UserCenterService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.DownloadStorageService;
+import com.finex.auth.service.impl.expense.ExpenseExportSnapshotService;
 import com.finex.auth.support.AsyncTaskSupport;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -29,6 +30,7 @@ import java.util.List;
  * 改这里时，要特别关注 个人信息展示、银行卡维护和下载留痕是否会被一起带坏。
  */
 public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSupport {
+    private final ExpenseExportSnapshotService expenseExportSnapshots;
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -37,9 +39,11 @@ public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSup
             UserService userService,
             UserBankAccountMapper userBankAccountMapper,
             DownloadRecordMapper downloadRecordMapper,
-            DownloadStorageService downloadStorageService
+            DownloadStorageService downloadStorageService,
+            ExpenseExportSnapshotService expenseExportSnapshots
     ) {
         super(userService, userBankAccountMapper, downloadRecordMapper, downloadStorageService);
+        this.expenseExportSnapshots = expenseExportSnapshots;
     }
 
     /**
@@ -70,6 +74,10 @@ public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSup
      */
     public UserCenterService.DownloadContent loadDownloadContent(Long userId, Long downloadId) {
         DownloadRecord record = requireDownloadRecord(userId, downloadId);
+        if (expenseExportSnapshots.isExpenseDownload(record.getBusinessType())
+                && !expenseExportSnapshots.canDownload(userId, downloadId)) {
+            throw new SecurityException("系统查询到您没有相关权限，请换一个问题");
+        }
         if (!AsyncTaskSupport.DOWNLOAD_STATUS_COMPLETED.equalsIgnoreCase(record.getStatus())) {
             throw new IllegalStateException("下载文件尚未生成完成");
         }
@@ -99,7 +107,9 @@ public final class ProfileDownloadDomainSupport extends AbstractProfileDomainSup
     }
 
     private DownloadRecordVO toDownloadRecord(DownloadRecord record) {
-        boolean downloadable = isDownloadable(record);
+        boolean downloadable = isDownloadable(record)
+                && (!expenseExportSnapshots.isExpenseDownload(record.getBusinessType())
+                    || expenseExportSnapshots.canDownload(record.getUserId(), record.getId()));
         DownloadRecordVO vo = new DownloadRecordVO();
         vo.setId(record.getId());
         vo.setFileName(record.getFileName());

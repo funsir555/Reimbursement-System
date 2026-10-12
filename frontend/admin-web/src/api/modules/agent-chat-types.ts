@@ -25,6 +25,28 @@ export interface MessageVO {
   status?: 'pending' | 'success' | 'failed'  // 消息状态
   errorMessage?: string                 // 失败原因
   createdAt?: string | Date
+  kind?: 'ANSWER' | 'CLARIFY' | 'DENIED' | 'NO_CAPABILITY'
+  options?: ChatClarificationOption[]
+  clarifications?: ChatClarificationGroup[]
+  sources?: ChatWorkflowSource[]
+}
+
+export interface ChatClarificationOption {
+  id: string
+  label: string
+}
+
+export interface ChatClarificationGroup {
+  key: string
+  question: string
+  options: ChatClarificationOption[]
+}
+
+export interface ChatWorkflowSource {
+  digitalEmployeeId: number
+  workflowBindingId: number
+  agentVersionId: number
+  permissionCode: string
 }
 
 /**
@@ -34,6 +56,10 @@ export interface ChatRequestDTO {
   message: string
   providerCode?: string
   model?: string
+  digitalEmployeeId?: number
+  workflowBindingId?: number
+  selectedOptions?: string[]
+  selectedAnswers?: Record<string, string>
 }
 
 /**
@@ -44,6 +70,11 @@ export interface ChatResponseVO {
   content: string
   intent?: string
   timestamp?: string | Date
+  digitalEmployeeId?: number
+  kind?: MessageVO['kind'] | 'CHAT'
+  options?: ChatClarificationOption[]
+  clarifications?: ChatClarificationGroup[]
+  sources?: ChatWorkflowSource[]
 }
 
 /**

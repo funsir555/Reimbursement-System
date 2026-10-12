@@ -19,7 +19,7 @@ public class AgentWebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(tenantContextInterceptor)
-                .addPathPatterns("/api/agent/**")
-                .order(1);  // 设置较高优先级
+                .addPathPatterns("/auth/agent/**")
+                .order(10); // AuthInterceptor uses the default order and must run first.
     }
 }

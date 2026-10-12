@@ -48,6 +48,7 @@
     </el-card>
 
     <div class="space-y-6">
+      <div class="grid gap-6 2xl:grid-cols-2">
       <el-card shadow="never">
         <template #header>
           <div class="flex items-center justify-between">
@@ -83,6 +84,9 @@
           </div>
         </template>
       </el-card>
+
+      <RoleDataScopePanel :role="selectedRole" :companies="companies" :can-assign="canAssignDataScope" />
+      </div>
 
       <el-card shadow="never">
         <template #header>
@@ -130,7 +134,8 @@
 </template>
 
 <script setup lang="ts">
-import type { EmployeeRecord, PermissionTreeNode, RoleRecord } from '@/api'
+import type { CompanyRecord, EmployeeRecord, PermissionTreeNode, RoleRecord } from '@/api'
+import RoleDataScopePanel from './RoleDataScopePanel.vue'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 import { nextTick, ref, watch } from 'vue'
 
@@ -139,6 +144,7 @@ const props = defineProps<{
   canEdit: boolean
   canDelete: boolean
   canAssignPermissions: boolean
+  canAssignDataScope: boolean
   canAssignUsers: boolean
   roles: RoleRecord[]
   selectedRole?: RoleRecord
@@ -149,6 +155,7 @@ const props = defineProps<{
   permissions: PermissionTreeNode[]
   selectedRoleUserIds: number[]
   employees: EmployeeRecord[]
+  companies: CompanyRecord[]
   isSuperAdminRole: (role?: Pick<RoleRecord, 'roleCode'>) => boolean
 }>()
 

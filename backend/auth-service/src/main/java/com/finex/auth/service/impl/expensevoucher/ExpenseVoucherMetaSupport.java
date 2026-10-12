@@ -40,6 +40,7 @@ public class ExpenseVoucherMetaSupport extends AbstractExpenseVoucherGenerationS
         List<ProcessDocumentTemplate> templates = listTemplates();
         List<ProcessExpenseType> expenseTypes = listExpenseTypes();
         List<ProcessDocumentInstance> approvedDocuments = listApprovedDocuments();
+        String defaultCompanyId = resolveDefaultCompanyId(currentUserId, companies);
         Map<String, ExpVoucherPushDocument> pushMap = listPushDocuments().stream()
                 .collect(Collectors.toMap(ExpVoucherPushDocument::getDocumentCode, Function.identity(), (left, right) -> left));
 
@@ -54,7 +55,7 @@ public class ExpenseVoucherMetaSupport extends AbstractExpenseVoucherGenerationS
                 option(PUSH_STATUS_SUCCESS, "推送成功"),
                 option(PUSH_STATUS_FAILED, "推送失败")
         ));
-        meta.setDefaultCompanyId(resolveDefaultCompanyId(currentUserId, companies));
+        meta.setDefaultCompanyId(defaultCompanyId);
         meta.setLatestBatchNo(resolveLatestBatchNo());
 
         int pendingCount = 0;

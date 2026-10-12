@@ -42,6 +42,21 @@ export interface ArchiveAgentToolDefinition {
   url?: string
   title?: string
   content?: string
+  [key: string]: unknown
+}
+
+export interface ArchiveAgentToolTestResult {
+  toolCode: string
+  queryTemplateCode: string
+  summary: string
+  scopeDescription: string
+  totalCount?: number
+  totalAmount?: number | string
+  records: Array<Record<string, unknown>>
+  evidenceRefs: string[]
+  page?: number
+  pageSize?: number
+  hasMore?: boolean
 }
 
 // 这是 ArchiveAgentSummary 的数据结构。
@@ -134,7 +149,23 @@ export interface ArchiveAgentRunDetail extends ArchiveAgentRunRecord {
 
 export interface ArchiveAgentTestRunPayload {
   triggerSource?: string
+  expectedVersionId?: number
+  usePublishedVersion?: boolean
   inputPayload: Record<string, unknown>
+}
+
+export interface ArchiveAgentRunPreflight {
+  mode: 'READY' | 'CLARIFY' | 'NO_CAPABILITY'
+  message: string
+  agentId?: number
+  versionId?: number
+  agentName?: string
+  usePublishedVersion: boolean
+  parameters: Record<string, Record<string, unknown>>
+  companyOptions: Array<{ companyId: string; companyName: string }>
+  workflowOptions: Array<{ agentId: number; versionId: number; name: string }>
+  supplierNodeKey?: string | null
+  supplierOptions?: Array<{ code: string; name: string }>
 }
 
 export interface ArchiveAgentMeta {

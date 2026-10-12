@@ -46,7 +46,8 @@ class AsyncTaskControllerTest {
         validator.afterPropertiesSet();
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AsyncTaskController(asyncTaskService, accessControlService))
+                .standaloneSetup(new AsyncTaskController(asyncTaskService, accessControlService,
+                        org.mockito.Mockito.mock(com.finex.auth.service.impl.expense.ExpenseExportSnapshotService.class)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();

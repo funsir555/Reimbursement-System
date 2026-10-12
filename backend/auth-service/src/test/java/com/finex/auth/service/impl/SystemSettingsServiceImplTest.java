@@ -25,6 +25,7 @@ import com.finex.auth.mapper.SystemSyncJobDetailMapper;
 import com.finex.auth.mapper.SystemSyncJobMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.settings.SettingsApiInterfaceDomainSupport;
@@ -101,7 +102,8 @@ class SystemSettingsServiceImplTest {
                 systemSyncJobDetailMapper,
                 new ObjectMapper(),
                 List.of(),
-                settingsApiInterfaceDomainSupport
+                settingsApiInterfaceDomainSupport,
+                new PasswordHashService()
         );
     }
 

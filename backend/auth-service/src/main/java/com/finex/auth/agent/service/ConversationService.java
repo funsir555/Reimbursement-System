@@ -55,6 +55,7 @@ public class ConversationService {
         LambdaQueryWrapper<AgentConversation> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AgentConversation::getSessionId, sessionId)
                .eq(AgentConversation::getTenantId, TenantContext.getEffectiveTenantId())
+               .eq(AgentConversation::getCompanyId, TenantContext.getEffectiveCompanyId())
                .eq(AgentConversation::getDeleted, false);
 
         return conversationMapper.selectOne(wrapper);
@@ -67,6 +68,7 @@ public class ConversationService {
         LambdaQueryWrapper<AgentConversation> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AgentConversation::getUserId, userId)
                .eq(AgentConversation::getTenantId, TenantContext.getEffectiveTenantId())
+               .eq(AgentConversation::getCompanyId, TenantContext.getEffectiveCompanyId())
                .eq(AgentConversation::getDeleted, false)
                .orderByDesc(AgentConversation::getLastMessageAt)
                .last("LIMIT " + limit);
@@ -81,6 +83,7 @@ public class ConversationService {
         LambdaQueryWrapper<AgentMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AgentMessage::getSessionId, sessionId)
                .eq(AgentMessage::getTenantId, TenantContext.getEffectiveTenantId())
+               .eq(AgentMessage::getCompanyId, TenantContext.getEffectiveCompanyId())
                .orderByDesc(AgentMessage::getCreatedAt)
                .last("LIMIT " + limit);
 
@@ -98,7 +101,8 @@ public class ConversationService {
     public int getMessageCount(String sessionId) {
         LambdaQueryWrapper<AgentMessage> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AgentMessage::getSessionId, sessionId)
-               .eq(AgentMessage::getTenantId, TenantContext.getEffectiveTenantId());
+               .eq(AgentMessage::getTenantId, TenantContext.getEffectiveTenantId())
+               .eq(AgentMessage::getCompanyId, TenantContext.getEffectiveCompanyId());
 
         return Math.toIntExact(messageMapper.selectCount(wrapper));
     }
@@ -107,10 +111,15 @@ public class ConversationService {
      * 添加消息到会话
      */
     @Transactional(rollbackFor = Exception.class)
-    public AgentMessage addMessage(String sessionId, String role, String content, String intent) {
+    public AgentMessage addMessage(AgentConversation conversation, String role, String content, String intent) {
+        if (conversation == null || conversation.getSessionId() == null) {
+            throw new IllegalArgumentException("会话不能为空");
+        }
+        String sessionId = conversation.getSessionId();
         // 创建消息
         AgentMessage message = new AgentMessage();
         message.setTenantId(TenantContext.getEffectiveTenantId());
+        message.setCompanyId(TenantContext.getEffectiveCompanyId());
         message.setSessionId(sessionId);
         message.setRole(role);
         message.setContent(content);
@@ -120,13 +129,10 @@ public class ConversationService {
         messageMapper.insert(message);
 
         // 更新会话统计
-        AgentConversation conversation = getConversation(sessionId);
-        if (conversation != null) {
-            conversation.setMessageCount(conversation.getMessageCount() + 1);
-            conversation.setLastMessageAt(Instant.now());
-            conversation.preUpdate();
-            conversationMapper.updateById(conversation);
-        }
+        conversation.setMessageCount((conversation.getMessageCount() == null ? 0 : conversation.getMessageCount()) + 1);
+        conversation.setLastMessageAt(Instant.now());
+        conversation.preUpdate();
+        conversationMapper.updateById(conversation);
 
         log.debug("添加消息到会话: sessionId={}, role={}, contentLength={}",
                   sessionId, role, content.length());

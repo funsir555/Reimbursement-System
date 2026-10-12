@@ -8,6 +8,10 @@ import com.finex.auth.agent.model.ModelRoutingConfig;
 import com.finex.auth.agent.model.ModelRoutingService;
 import com.finex.auth.agent.service.ConversationService;
 import com.finex.auth.agent.workflow.AgentWorkflowRuntimeService;
+import com.finex.auth.agent.workflow.FinWorkOrchestrationService;
+import com.finex.auth.agent.workflow.FinWorkParameterService;
+import com.finex.auth.service.digitalemployee.ControlledMessageAccessService;
+import com.finex.auth.service.queryauth.QueryAuthorizationService;
 import com.finex.auth.agent.workflow.WorkflowExecutionResult;
 import com.finex.auth.util.SecurityUtils;
 import lombok.Data;
@@ -42,6 +46,8 @@ public class AgentChatController {
     private final ModelRoutingService modelRoutingService;
     private final ModelRoutingConfig modelRoutingConfig;
     private final AgentWorkflowRuntimeService workflowRuntimeService;
+    private final ControlledMessageAccessService controlledMessageAccessService;
+    private final FinWorkOrchestrationService orchestrationService;
 
     /**
      * 创建新会话
@@ -135,45 +141,54 @@ public class AgentChatController {
             }
 
             // 保存用户消息
-            conversationService.addMessage(sessionId, "user", request.getMessage(), null);
+            conversationService.addMessage(conversation, "user", request.getMessage(), null);
 
             // 获取上下文（最近10条消息）
             List<AgentMessage> recentMessages = conversationService.getRecentMessages(sessionId, 10);
 
-            // 简单的意图识别
-            String intent = detectIntent(request.getMessage());
-
-            String responseContent;
-
-            // 如果是报销单查询意图，进入受控工作流运行链路
-            if ("query_expense".equals(intent)) {
-                WorkflowExecutionResult workflowResult = workflowRuntimeService.executeQueryWorkflow(
-                        sessionId,
-                        userId,
-                        request.getMessage(),
-                        intent,
-                        request.getProviderCode(),
-                        request.getModel()
-                );
-                responseContent = workflowResult.getContent();
-            } else {
-                // 调用大模型
-                responseContent = callLLM(request, recentMessages);
-            }
+            FinWorkOrchestrationService.Outcome outcome = orchestrationService.respond(
+                    sessionId, userId, request.getMessage(), request.getDigitalEmployeeId(),
+                    request.getWorkflowBindingId(), request.getSelectedOptions(), request.getSelectedAnswers());
+            String intent = "ANSWER".equals(outcome.kind()) ? "controlled_query"
+                    : "CLARIFY".equals(outcome.kind()) ? "clarification" : "chat";
+            String responseContent = "CHAT".equals(outcome.kind())
+                    ? callLLM(request, recentMessages) : outcome.content();
 
             // 保存 assistant 消息
-            conversationService.addMessage(sessionId, "assistant", responseContent, intent);
+            AgentMessage assistantMessage = conversationService.addMessage(conversation, "assistant", responseContent, intent);
+            if ("ANSWER".equals(outcome.kind())) {
+                controlledMessageAccessService.recordComposite(assistantMessage, outcome.executions());
+                if (!controlledMessageAccessService.canRead(userId, assistantMessage)) {
+                    responseContent = QueryAuthorizationService.NO_PERMISSION;
+                }
+            }
 
             return Result.success(ChatResponseVO.builder()
                     .sessionId(sessionId)
                     .content(responseContent)
                     .intent(intent)
+                    .digitalEmployeeId(outcome.executions().isEmpty() ? null
+                            : outcome.executions().get(0).result().getDigitalEmployeeId())
+                    .kind(outcome.kind())
+                    .options(outcome.options())
+                    .clarifications(outcome.clarifications())
+                    .sources(outcome.executions().stream().map(item -> new SourceVO(
+                            item.result().getDigitalEmployeeId(), item.bindingId(),
+                            item.result().getAgentVersionId(), item.result().getQueryPermissionCode())).toList())
                     .timestamp(Instant.now())
                     .build());
-
+        } catch (SecurityException exception) {
+            AgentConversation conversation = conversationService.getConversation(sessionId);
+            if (conversation != null && conversation.getUserId().equals(userId)) {
+                conversationService.addMessage(conversation, "assistant",
+                        QueryAuthorizationService.NO_PERMISSION, "denied");
+            }
+            return Result.success(ChatResponseVO.builder().sessionId(sessionId)
+                    .content(QueryAuthorizationService.NO_PERMISSION).kind("DENIED")
+                    .options(List.of()).sources(List.of()).timestamp(Instant.now()).build());
         } catch (Exception e) {
             log.error("处理消息失败: sessionId={}", sessionId, e);
-            return Result.error("处理消息失败：" + e.getMessage());
+            return Result.error("处理消息失败，请稍后重试");
         }
     }
 
@@ -199,8 +214,29 @@ public class AgentChatController {
 
         List<AgentMessage> messages = conversationService.getRecentMessages(sessionId, 50);
         List<MessageVO> vos = messages.stream()
-                .map(MessageVO::from)
+                .map(message -> {
+                    if ("assistant".equals(message.getRole()) && isProtectedIntent(message.getIntent())
+                            && !controlledMessageAccessService.canRead(userId, message)) {
+                        MessageVO masked = MessageVO.from(message);
+                        masked.setContent(QueryAuthorizationService.NO_PERMISSION);
+                        return masked;
+                    }
+                    return MessageVO.from(message);
+                })
                 .toList();
+
+        List<FinWorkOrchestrationService.Option> pendingOptions = orchestrationService.pendingOptions(sessionId, userId);
+        List<FinWorkParameterService.Group> pendingGroups = orchestrationService.pendingGroups(sessionId, userId);
+        if (!pendingOptions.isEmpty() || !pendingGroups.isEmpty()) {
+            for (int index = vos.size() - 1; index >= 0; index--) {
+                MessageVO item = vos.get(index);
+                if ("assistant".equals(item.getRole()) && "CLARIFY".equals(item.getKind())) {
+                    item.setOptions(pendingOptions);
+                    item.setClarifications(pendingGroups);
+                    break;
+                }
+            }
+        }
 
         return Result.success(vos);
     }
@@ -209,15 +245,26 @@ public class AgentChatController {
      * 简单的意图识别（基于关键词）
      */
     private String detectIntent(String message) {
+        if (message == null) return "chat";
         String lower = message.toLowerCase();
 
+        if (lower.contains("结账") || lower.contains("关账")) return "query_finance_close";
+
         if (lower.contains("报销单") || lower.contains("报销") || lower.contains("费用")) {
-            if (lower.contains("查") || lower.contains("看") || lower.contains("显示") || lower.contains("有哪些")) {
+            if (lower.contains("查") || lower.contains("看") || lower.contains("显示")
+                    || lower.contains("有哪些") || lower.contains("多少") || lower.contains("几个")
+                    || lower.contains("我的") || lower.contains("当前") || lower.contains("本月")
+                    || lower.contains("部门") || lower.contains("公司") || lower.contains("统计")) {
                 return "query_expense";
             }
         }
 
         return "chat";
+    }
+
+    private boolean isProtectedIntent(String intent) {
+        return "query_expense".equals(intent) || "query_finance_close".equals(intent)
+                || "controlled_query".equals(intent);
     }
 
     /**
@@ -229,6 +276,7 @@ public class AgentChatController {
 
         // 添加历史消息
         for (AgentMessage msg : recentMessages) {
+            if (isProtectedIntent(msg.getIntent())) continue;
             messages.add(ChatModelProvider.ChatMessage.builder()
                     .role(msg.getRole())
                     .content(msg.getContent())
@@ -346,6 +394,10 @@ public class AgentChatController {
         private String message;
         private String providerCode;
         private String model;
+        private Long digitalEmployeeId;
+        private Long workflowBindingId;
+        private List<String> selectedOptions;
+        private Map<String, String> selectedAnswers;
     }
 
     @Data
@@ -355,7 +407,15 @@ public class AgentChatController {
         private String content;
         private String intent;
         private Instant timestamp;
+        private Long digitalEmployeeId;
+        private String kind;
+        private List<FinWorkOrchestrationService.Option> options;
+        private List<FinWorkParameterService.Group> clarifications;
+        private List<SourceVO> sources;
     }
+
+    public record SourceVO(Long digitalEmployeeId, Long workflowBindingId,
+                           Long agentVersionId, String permissionCode) { }
 
     @Data
     @lombok.Builder
@@ -411,12 +471,17 @@ public class AgentChatController {
         private String role;
         private String content;
         private Instant createdAt;
+        private String kind;
+        private List<FinWorkOrchestrationService.Option> options;
+        private List<FinWorkParameterService.Group> clarifications;
 
         public static MessageVO from(AgentMessage message) {
             return MessageVO.builder()
                     .role(message.getRole())
                     .content(message.getContent())
                     .createdAt(message.getCreatedAt())
+                    .kind("clarification".equals(message.getIntent()) ? "CLARIFY"
+                            : "controlled_query".equals(message.getIntent()) ? "ANSWER" : null)
                     .build();
         }
     }

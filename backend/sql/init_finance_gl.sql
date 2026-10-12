@@ -233,3 +233,15 @@ CREATE TABLE gl_post_state (
     KEY idx_gl_post_state_status (status),
     KEY idx_gl_post_state_task_no (last_task_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='总账记账期间状态表';
+
+-- Fresh installations use the debit-positive, credit-negative balance convention.
+CREATE TABLE IF NOT EXISTS fin_gl_balance_migration (
+    migration_key VARCHAR(80) NOT NULL PRIMARY KEY,
+    applied_at DATETIME NOT NULL,
+    accsum_rows BIGINT NOT NULL,
+    accass_rows BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT IGNORE INTO fin_gl_balance_migration (migration_key, applied_at, accsum_rows, accass_rows)
+SELECT 'debit_signed_balance_20261002', NOW(), 0, 0
+WHERE NOT EXISTS (SELECT 1 FROM gl_accsum)
+  AND NOT EXISTS (SELECT 1 FROM gl_accass);

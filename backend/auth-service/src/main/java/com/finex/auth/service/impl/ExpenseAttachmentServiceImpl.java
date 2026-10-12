@@ -50,7 +50,8 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
      * 上传附件。
      */
     @Override
-    public ExpenseAttachmentVO uploadAttachment(MultipartFile file) {
+    public ExpenseAttachmentVO uploadAttachment(MultipartFile file, Long uploaderUserId) {
+        if (uploaderUserId == null) throw new SecurityException("附件上传需要登录用户");
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("请先选择附件");
         }
@@ -70,6 +71,7 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
 
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("attachmentId", attachmentId);
+            metadata.put("uploaderUserId", uploaderUserId);
             metadata.put("fileName", fileName);
             metadata.put("contentType", contentType);
             metadata.put("fileSize", file.getSize());
@@ -127,6 +129,26 @@ public class ExpenseAttachmentServiceImpl implements ExpenseAttachmentService {
             return new StoredExpenseAttachment(resource, fileName, contentType, Files.size(binaryPath));
         } catch (IOException ex) {
             throw new IllegalStateException("附件读取失败，请稍后重试", ex);
+        }
+    }
+
+    @Override
+    public StoredExpenseAttachment loadUploadedAttachment(String attachmentId, Long uploaderUserId) {
+        if (uploaderUserId == null) throw new SecurityException("无权查看该附件");
+        String normalizedId = normalizeAttachmentId(attachmentId);
+        Path metadataPath = ensureStorageRoot().resolve(normalizedId + ".json");
+        try {
+            if (!Files.exists(metadataPath)) throw new SecurityException("无权查看该附件");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = objectMapper.readValue(
+                    Files.readString(metadataPath), LinkedHashMap.class);
+            Object owner = metadata.get("uploaderUserId");
+            if (!(owner instanceof Number number) || number.longValue() != uploaderUserId.longValue()) {
+                throw new SecurityException("无权查看该附件");
+            }
+            return loadAttachment(normalizedId);
+        } catch (IOException exception) {
+            throw new IllegalStateException("附件读取失败，请稍后重试", exception);
         }
     }
 

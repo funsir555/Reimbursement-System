@@ -2,14 +2,21 @@
 -- 版本: v1.0
 -- 创建时间: 2026-09-12
 -- 说明: 阶段 0 核心表结构
+-- 前提: sys_user 与 ea_agent_run 已存在。可重复执行；已有表和定时事件不会被重建。
+
+SET NAMES utf8mb4;
+
+-- 在创建任何新表之前校验依赖，避免前提缺失时只执行了一部分。
+SELECT id FROM sys_user LIMIT 0;
+SELECT output_json FROM ea_agent_run LIMIT 0;
 
 -- ============================================================
 -- 1. Agent 会话表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS ea_conversation (
+CREATE TABLE IF NOT EXISTS ea_agent_conversation (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
   tenant_id VARCHAR(50) NOT NULL DEFAULT 'default' COMMENT '租户ID',
-  company_id BIGINT NOT NULL DEFAULT 1 COMMENT '公司ID',
+  company_id VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   session_id VARCHAR(64) NOT NULL COMMENT '会话ID',
   user_id BIGINT NOT NULL COMMENT '用户ID',
   context_json JSON COMMENT '上下文数据',
@@ -24,16 +31,18 @@ CREATE TABLE IF NOT EXISTS ea_conversation (
   created_by BIGINT COMMENT '创建人',
   version_no INT DEFAULT 0 COMMENT '版本号',
   UNIQUE KEY uk_session (session_id),
-  INDEX idx_tenant_user (tenant_id, company_id, user_id),
+  INDEX idx_tenant_company_session (tenant_id, company_id, session_id),
+  INDEX idx_tenant_company_user (tenant_id, company_id, user_id, last_message_at),
   INDEX idx_trace (trace_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent会话表';
 
 -- ============================================================
 -- 2. Agent 消息表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS ea_message (
+CREATE TABLE IF NOT EXISTS ea_agent_message (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
   tenant_id VARCHAR(50) NOT NULL DEFAULT 'default' COMMENT '租户ID',
+  company_id VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   session_id VARCHAR(64) NOT NULL COMMENT '会话ID',
   role ENUM('user', 'assistant', 'system') NOT NULL COMMENT '角色',
   content TEXT NOT NULL COMMENT '消息内容',
@@ -42,8 +51,7 @@ CREATE TABLE IF NOT EXISTS ea_message (
   tokens INT COMMENT 'Token数量',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   trace_id VARCHAR(64) COMMENT '追踪ID',
-  INDEX idx_session (session_id),
-  INDEX idx_tenant (tenant_id),
+  INDEX idx_tenant_company_session (tenant_id, company_id, session_id, created_at),
   INDEX idx_trace (trace_id),
   INDEX idx_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent消息表';
@@ -54,7 +62,7 @@ CREATE TABLE IF NOT EXISTS ea_message (
 CREATE TABLE IF NOT EXISTS ea_tool_execution_log (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
   tenant_id VARCHAR(50) NOT NULL DEFAULT 'default' COMMENT '租户ID',
-  company_id BIGINT NOT NULL DEFAULT 1 COMMENT '公司ID',
+  company_id VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   session_id VARCHAR(64) COMMENT '会话ID',
   run_id BIGINT COMMENT 'Agent Run ID',
   tool_name VARCHAR(100) NOT NULL COMMENT '工具名称',
@@ -119,7 +127,7 @@ CREATE TABLE IF NOT EXISTS ea_desensitization_mapping (
 CREATE TABLE IF NOT EXISTS ea_user_memory (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
   tenant_id VARCHAR(50) NOT NULL DEFAULT 'default' COMMENT '租户ID',
-  company_id BIGINT NOT NULL DEFAULT 1 COMMENT '公司ID',
+  company_id VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   user_id BIGINT NOT NULL COMMENT '用户ID',
   memory_type VARCHAR(50) NOT NULL COMMENT '记忆类型',
   memory_key VARCHAR(100) NOT NULL COMMENT '记忆键',
@@ -138,7 +146,7 @@ CREATE TABLE IF NOT EXISTS ea_user_memory (
 CREATE TABLE IF NOT EXISTS ea_digital_employee (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
   tenant_id VARCHAR(50) NOT NULL DEFAULT 'default' COMMENT '租户ID',
-  company_id BIGINT NOT NULL DEFAULT 1 COMMENT '公司ID',
+  company_id VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   name VARCHAR(100) NOT NULL COMMENT '数字员工名称',
   type ENUM('审核型', '执行型', '咨询型', '催办型') NOT NULL COMMENT '类型',
   responsible_user_id BIGINT NOT NULL COMMENT '责任人ID',
@@ -231,7 +239,7 @@ CREATE TABLE IF NOT EXISTS ea_enum_semantics (
 CREATE TABLE IF NOT EXISTS ea_knowledge_document (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
   tenant_id VARCHAR(50) NOT NULL DEFAULT 'default' COMMENT '租户ID',
-  company_id BIGINT NOT NULL DEFAULT 1 COMMENT '公司ID',
+  company_id VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   title VARCHAR(200) NOT NULL COMMENT '标题',
   category ENUM('制度政策', '会计准则', '税务法规', '流程SOP', '合同模板', '历史案例') NOT NULL COMMENT '分类',
   file_path VARCHAR(500) COMMENT '文件路径',
@@ -269,17 +277,24 @@ CREATE TABLE IF NOT EXISTS ea_knowledge_chunk (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库分块表';
 
 -- ============================================================
--- 扩展现有 agent_run 表（添加执行上下文字段）
+-- 扩展现有 ea_agent_run 表（添加执行上下文字段）
 -- ============================================================
-ALTER TABLE agent_run
-ADD COLUMN IF NOT EXISTS execution_context JSON COMMENT '执行上下文' AFTER run_output;
+SET @has_execution_context = (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ea_agent_run'
+    AND COLUMN_NAME = 'execution_context'
+);
+SET @execution_context_ddl = IF(@has_execution_context = 0,
+  'ALTER TABLE ea_agent_run ADD COLUMN execution_context JSON COMMENT ''执行上下文'' AFTER output_json',
+  'SELECT 1');
+PREPARE execution_context_statement FROM @execution_context_ddl;
+EXECUTE execution_context_statement;
+DEALLOCATE PREPARE execution_context_statement;
 
 -- ============================================================
 -- 定时清理过期脱敏映射
 -- ============================================================
-DROP EVENT IF EXISTS clean_expired_mappings;
-
-CREATE EVENT clean_expired_mappings
+CREATE EVENT IF NOT EXISTS clean_expired_mappings
 ON SCHEDULE EVERY 1 HOUR
 DO
   DELETE FROM ea_desensitization_mapping WHERE expires_at < NOW();

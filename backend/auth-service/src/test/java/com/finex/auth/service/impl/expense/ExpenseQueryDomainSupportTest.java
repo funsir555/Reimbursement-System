@@ -247,7 +247,8 @@ class ExpenseQueryDomainSupportTest {
                 processDocumentRelationMapper,
                 processDocumentWriteOffMapper,
                 pmBankPaymentRecordMapper,
-                notificationService
+                notificationService,
+                org.mockito.Mockito.mock(ExpenseDocumentReadAuthorization.class)
         );
     }
 }

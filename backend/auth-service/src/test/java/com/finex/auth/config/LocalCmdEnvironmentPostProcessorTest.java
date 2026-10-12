@@ -35,6 +35,7 @@ class LocalCmdEnvironmentPostProcessorTest {
         );
 
         ConfigurableEnvironment environment = new StandardEnvironment();
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
 
         new LocalCmdEnvironmentPostProcessor(repoRoot)
                 .postProcessEnvironment(environment, new SpringApplication());

@@ -6,12 +6,32 @@
 -- 说明：
 --   - 添加自增 id 主键
 --   - 保留 session_id 唯一索引
---   - 保留所有现有数据
---   - 幂等执行
+--   - 仅允许活动表为空时执行，不自动恢复或猜测公司编码
+--   - 有正式数据时必须使用单独审批的数据映射方案
 -- ============================================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
+
+-- P0 安全前置：Agent 尚未正式启用，只允许空表结构修正。
+-- 若已有数据，必须停止并另行制定 company_id 映射，禁止把旧值 1 猜测为真实公司。
+DROP PROCEDURE IF EXISTS finex_assert_agent_tables_empty;
+DELIMITER //
+CREATE PROCEDURE finex_assert_agent_tables_empty()
+BEGIN
+  DECLARE agent_row_count BIGINT DEFAULT 0;
+  SELECT (SELECT COUNT(*) FROM ea_agent_conversation)
+       + (SELECT COUNT(*) FROM ea_agent_message)
+    INTO agent_row_count;
+  IF agent_row_count > 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Agent tables contain data; stop and prepare an explicit company mapping plan';
+  END IF;
+END//
+DELIMITER ;
+CALL finex_assert_agent_tables_empty();
+DROP PROCEDURE finex_assert_agent_tables_empty;
+
 
 -- ============================================================================
 -- 步骤 1: 备份现有数据
@@ -39,7 +59,7 @@ CREATE TABLE `ea_agent_conversation` (
 
   -- TenantAwareEntity 字段
   `tenant_id` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户ID',
-  `company_id` BIGINT NOT NULL DEFAULT 1 COMMENT '公司ID',
+  `company_id` VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   `created_by` BIGINT NULL COMMENT '创建人',
   `updated_by` BIGINT NULL COMMENT '更新人',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -52,40 +72,16 @@ CREATE TABLE `ea_agent_conversation` (
 
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_session_id` (`session_id`),
-  KEY `idx_user_id` (`user_id`),
-  KEY `idx_tenant_company` (`tenant_id`, `company_id`),
+  KEY `idx_tenant_company_session` (`tenant_id`, `company_id`, `session_id`),
+  KEY `idx_tenant_company_user` (`tenant_id`, `company_id`, `user_id`, `last_message_at`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_deleted` (`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 会话表';
 
 -- ============================================================================
--- 步骤 3: 恢复数据
+-- 步骤 3: 不自动恢复数据
 -- ============================================================================
-INSERT INTO ea_agent_conversation (
-  session_id, user_id, context_json, summary_text, message_count,
-  last_message_at, expires_at, tenant_id, company_id, created_by,
-  updated_by, created_at, updated_at, deleted, deleted_at,
-  deleted_by, trace_id, version_no
-)
-SELECT
-  session_id, user_id,
-  COALESCE(context_json, NULL),
-  COALESCE(summary_text, NULL),
-  COALESCE(message_count, 0),
-  last_message_at,
-  COALESCE(expires_at, NULL),
-  COALESCE(tenant_id, 'default'),
-  COALESCE(company_id, 1),
-  created_by,
-  updated_by,
-  created_at,
-  updated_at,
-  COALESCE(deleted, 0),
-  deleted_at,
-  deleted_by,
-  COALESCE(trace_id, NULL),
-  COALESCE(version_no, 0)
-FROM ea_agent_conversation_backup_20260914;
+-- 前置过程已断言活动表为空。备份表若存在历史数据，也不得在没有显式公司编码映射时自动恢复。
 
 -- ============================================================================
 -- 步骤 4: 重建 ea_agent_message 表（添加 id 主键）
@@ -95,6 +91,7 @@ DROP TABLE IF EXISTS ea_agent_message;
 CREATE TABLE `ea_agent_message` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '消息ID',
   `tenant_id` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户ID',
+  `company_id` VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   `session_id` VARCHAR(64) NOT NULL COMMENT '会话ID',
   `role` VARCHAR(20) NOT NULL COMMENT '角色：user-用户，assistant-助手，system-系统',
   `content` TEXT NOT NULL COMMENT '消息内容',
@@ -105,30 +102,16 @@ CREATE TABLE `ea_agent_message` (
   `trace_id` VARCHAR(64) NULL COMMENT '追踪ID',
 
   PRIMARY KEY (`id`),
-  KEY `idx_session_id` (`session_id`),
+  KEY `idx_tenant_company_session` (`tenant_id`, `company_id`, `session_id`, `created_at`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_role` (`role`),
   KEY `idx_tenant_id` (`tenant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 消息表';
 
 -- ============================================================================
--- 步骤 5: 恢复消息数据
+-- 步骤 5: 不自动恢复消息数据
 -- ============================================================================
-INSERT INTO ea_agent_message (
-  tenant_id, session_id, role, content, masked_content,
-  intent, tokens, created_at, trace_id
-)
-SELECT
-  COALESCE(tenant_id, 'default'),
-  session_id,
-  role,
-  content,
-  COALESCE(masked_content, NULL),
-  intent,
-  COALESCE(tokens, NULL),
-  created_at,
-  COALESCE(trace_id, NULL)
-FROM ea_agent_message_backup_20260914;
+-- 若备份表包含历史消息，停止本脚本并使用单独审批的数据迁移方案。
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -147,4 +130,4 @@ FROM ea_agent_conversation;
 SELECT CONCAT('ea_agent_message: ', COUNT(*), ' 条记录') AS info
 FROM ea_agent_message;
 
-SELECT '表重建完成！所有数据已恢复。' AS status;
+SELECT '空 Agent 表结构重建完成；未执行任何数据映射或恢复。' AS status;

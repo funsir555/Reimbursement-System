@@ -1,5 +1,4 @@
 export type AgentRunDraft = {
-  triggerSource: string
   inputPayloadText: string
 }
 
@@ -16,7 +15,6 @@ export function readAgentRunDraft(
     if (!raw) return { ...fallback }
     const parsed = JSON.parse(raw) as Partial<AgentRunDraft>
     return {
-      triggerSource: normalizeText(parsed.triggerSource) || fallback.triggerSource,
       inputPayloadText: typeof parsed.inputPayloadText === 'string' ? parsed.inputPayloadText : fallback.inputPayloadText
     }
   } catch {
@@ -26,7 +24,6 @@ export function readAgentRunDraft(
 
 export function writeAgentRunDraft(storage: Storage, userKey: string, agentId: number, draft: AgentRunDraft) {
   storage.setItem(storageKey(userKey, agentId), JSON.stringify({
-    triggerSource: normalizeText(draft.triggerSource) || 'workbench.manual',
     inputPayloadText: draft.inputPayloadText
   }))
 }

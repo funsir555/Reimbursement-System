@@ -35,7 +35,7 @@ public class LocalModelProvider implements ChatModelProvider {
 
     private final ModelRoutingConfig routingConfig;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();

@@ -1,15 +1,11 @@
 package com.finex.auth.agent.workflow;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.finex.auth.entity.ProcessDocumentInstance;
-import com.finex.auth.entity.ProcessDocumentTask;
-import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
-import com.finex.auth.mapper.ProcessDocumentTaskMapper;
+import com.finex.auth.agent.context.TenantContext;
+import com.finex.auth.service.port.ExpenseAgentQueryPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -42,8 +38,7 @@ public class ExpenseDocumentControlledQueryTool implements ControlledTool {
             "PAYMENT_EXCEPTION"
     );
 
-    private final ProcessDocumentInstanceMapper documentMapper;
-    private final ProcessDocumentTaskMapper taskMapper;
+    private final ExpenseAgentQueryPort expenseQueryPort;
 
     @Override
     public String toolCode() {
@@ -58,13 +53,12 @@ public class ExpenseDocumentControlledQueryTool implements ControlledTool {
 
     @Override
     public ControlledToolResult execute(ToolExecutionRequest request) {
-        if (request.getUserId() == null) {
-            return ControlledToolResult.builder()
-                    .success(false)
-                    .errorMessage("无法获取当前用户")
-                    .records(List.of())
-                    .evidenceRefs(List.of())
-                    .build();
+        if (request == null || request.getUserId() == null || request.getAuthorization() == null) {
+            return failed("系统查询到您没有相关权限，请换一个问题");
+        }
+        Long authenticatedUserId = TenantContext.getUserId();
+        if (authenticatedUserId != null && !authenticatedUserId.equals(request.getUserId())) {
+            return failed("当前用户与 Agent 上下文不一致");
         }
 
         QueryTemplateVariables variables = request.getVariables();
@@ -77,67 +71,36 @@ public class ExpenseDocumentControlledQueryTool implements ControlledTool {
             return failed("不支持的报销单状态: " + status);
         }
 
-        LambdaQueryWrapper<ProcessDocumentInstance> wrapper = new LambdaQueryWrapper<>();
-        if (QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME.equals(scope)) {
-            List<String> assignedDocumentCodes = taskMapper.selectList(
-                    new LambdaQueryWrapper<ProcessDocumentTask>()
-                            .eq(ProcessDocumentTask::getAssigneeUserId, request.getUserId())
-                            .eq(ProcessDocumentTask::getStatus, "PENDING")
-                            .orderByAsc(ProcessDocumentTask::getCreatedAt, ProcessDocumentTask::getId)
-            ).stream()
-                    .map(ProcessDocumentTask::getDocumentCode)
-                    .filter(code -> code != null && !code.isBlank())
-                    .distinct()
-                    .toList();
-            if (assignedDocumentCodes.isEmpty()) {
-                return emptyResult();
-            }
-            wrapper.in(ProcessDocumentInstance::getDocumentCode, assignedDocumentCodes);
-        } else {
-            wrapper.eq(ProcessDocumentInstance::getSubmitterUserId, request.getUserId());
-        }
-        wrapper.eq(ProcessDocumentInstance::getTemplateType, "report");
-        wrapper.and(inner -> inner.isNull(ProcessDocumentInstance::getDeleted)
-                .or()
-                .eq(ProcessDocumentInstance::getDeleted, Boolean.FALSE));
+        int limit = variables == null || variables.getLimit() == null
+                ? 10
+                : Math.min(Math.max(variables.getLimit(), 1), 50);
+        ExpenseAgentQueryPort.Query query = new ExpenseAgentQueryPort.Query(
+                        request.getUserId(),
+                        null,
+                        QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME.equals(scope)
+                                ? ExpenseAgentQueryPort.Scope.ASSIGNED_TO_USER
+                                : QueryTemplateVariables.SCOPE_VISIBLE.equals(scope)
+                                ? ExpenseAgentQueryPort.Scope.VISIBLE
+                                : ExpenseAgentQueryPort.Scope.SUBMITTED_BY_USER,
+                        "report",
+                        true,
+                        variables == null ? null : variables.getStartDate(),
+                        variables == null ? null : variables.getEndDate(),
+                        status,
+                        variables == null ? null : toBigDecimal(variables.getMinAmount()),
+                        variables == null ? null : toBigDecimal(variables.getMaxAmount()),
+                        variables == null ? null : variables.getNormalizedKeyword(),
+                        limit
+                );
+        ExpenseAgentQueryPort.Aggregate aggregate = expenseQueryPort.aggregateAuthorizedDocuments(
+                query, request.getAuthorization());
+        long total = aggregate.count();
+        List<ExpenseAgentQueryPort.DocumentView> documents = expenseQueryPort.queryAuthorizedDocuments(
+                query, request.getAuthorization());
 
-        if (status != null) {
-            wrapper.eq(ProcessDocumentInstance::getStatus, status);
-        }
-        if (variables != null && variables.getStartDate() != null) {
-            LocalDateTime start = LocalDateTime.ofInstant(variables.getStartDate(), ZoneId.systemDefault());
-            wrapper.ge(ProcessDocumentInstance::getCreatedAt, start);
-        }
-        if (variables != null && variables.getEndDate() != null) {
-            LocalDateTime end = LocalDateTime.ofInstant(variables.getEndDate(), ZoneId.systemDefault());
-            wrapper.le(ProcessDocumentInstance::getCreatedAt, end);
-        }
-        if (variables != null && variables.getMinAmount() != null) {
-            wrapper.ge(ProcessDocumentInstance::getTotalAmount, variables.getMinAmount());
-        }
-        if (variables != null && variables.getMaxAmount() != null) {
-            wrapper.le(ProcessDocumentInstance::getTotalAmount, variables.getMaxAmount());
-        }
-        if (variables != null && variables.getNormalizedKeyword() != null) {
-            String keyword = variables.getNormalizedKeyword();
-            wrapper.and(inner -> inner
-                    .like(ProcessDocumentInstance::getDocumentCode, keyword)
-                    .or()
-                    .like(ProcessDocumentInstance::getDocumentTitle, keyword)
-                    .or()
-                    .like(ProcessDocumentInstance::getDocumentReason, keyword)
-                    .or()
-                    .like(ProcessDocumentInstance::getTemplateName, keyword));
-        }
-
-        int limit = variables == null || variables.getLimit() == null ? 10 : Math.min(Math.max(variables.getLimit(), 1), 50);
-        wrapper.orderByDesc(ProcessDocumentInstance::getCreatedAt);
-        wrapper.last("LIMIT " + limit);
-
-        List<ProcessDocumentInstance> documents = documentMapper.selectList(wrapper);
         List<Map<String, Object>> records = new ArrayList<>();
         List<String> evidenceRefs = new ArrayList<>();
-        for (ProcessDocumentInstance document : documents) {
+        for (ExpenseAgentQueryPort.DocumentView document : documents) {
             Map<String, Object> record = toRecord(document);
             records.add(record);
             evidenceRefs.add(String.valueOf(record.get("evidenceRef")));
@@ -145,9 +108,13 @@ public class ExpenseDocumentControlledQueryTool implements ControlledTool {
 
         return ControlledToolResult.builder()
                 .success(true)
-                .summary("查询到 " + records.size() + " 条报销单")
+                .summary("符合条件共 " + total + " 条报销单，展示 " + records.size() + " 条")
                 .records(records)
                 .evidenceRefs(evidenceRefs)
+                .totalCount(total)
+                .totalAmount(aggregate.totalAmount())
+                .queryDescriptor(query)
+                .sourceDigest(expenseQueryPort.fingerprintAuthorizedDocuments(query, request.getAuthorization()))
                 .build();
     }
 
@@ -157,22 +124,14 @@ public class ExpenseDocumentControlledQueryTool implements ControlledTool {
         }
         String scope = variables == null ? null : normalizeText(variables.getScope());
         if (scope == null) {
-            return QueryTemplateVariables.SCOPE_SUBMITTED_BY_ME;
+            return QueryTemplateVariables.SCOPE_VISIBLE;
         }
         if (QueryTemplateVariables.SCOPE_SUBMITTED_BY_ME.equals(scope)
-                || QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME.equals(scope)) {
+                || QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME.equals(scope)
+                || QueryTemplateVariables.SCOPE_VISIBLE.equals(scope)) {
             return scope;
         }
         return null;
-    }
-
-    private ControlledToolResult emptyResult() {
-        return ControlledToolResult.builder()
-                .success(true)
-                .summary("查询到 0 条报销单")
-                .records(List.of())
-                .evidenceRefs(List.of())
-                .build();
     }
 
     private ControlledToolResult failed(String message) {
@@ -191,20 +150,24 @@ public class ExpenseDocumentControlledQueryTool implements ControlledTool {
         return value.trim().toUpperCase();
     }
 
-    private Map<String, Object> toRecord(ProcessDocumentInstance document) {
+    private BigDecimal toBigDecimal(Double value) {
+        return value == null ? null : BigDecimal.valueOf(value);
+    }
+
+    private Map<String, Object> toRecord(ExpenseAgentQueryPort.DocumentView document) {
         Map<String, Object> record = new LinkedHashMap<>();
-        String evidenceRef = "EXPENSE_DOCUMENT:" + document.getId();
+        String evidenceRef = "EXPENSE_DOCUMENT:" + document.id();
         record.put("evidenceRef", evidenceRef);
         record.put("entityRef", evidenceRef);
-        record.put("documentId", document.getId());
-        record.put("documentCode", document.getDocumentCode());
-        record.put("title", document.getDocumentTitle());
-        record.put("reason", document.getDocumentReason());
-        record.put("amount", document.getTotalAmount());
-        record.put("status", document.getStatus());
-        record.put("statusLabel", translateStatus(document.getStatus()));
-        record.put("templateName", document.getTemplateName());
-        record.put("createdAt", document.getCreatedAt() == null ? null : DATE_FORMATTER.format(document.getCreatedAt()));
+        record.put("documentId", document.id());
+        record.put("documentCode", document.documentCode());
+        record.put("title", document.title());
+        record.put("reason", document.reason());
+        record.put("amount", document.amount());
+        record.put("status", document.status());
+        record.put("statusLabel", translateStatus(document.status()));
+        record.put("templateName", document.templateName());
+        record.put("createdAt", document.createdAt() == null ? null : DATE_FORMATTER.format(document.createdAt()));
         return record;
     }
 

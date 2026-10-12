@@ -1764,8 +1764,8 @@ public abstract class AbstractFinanceVoucherSupport {
     protected BigDecimal sumAmount(List<GlAccvouch> rows, boolean debit) {
         return rows.stream()
                 .map(item -> debit
-                        ? FinanceVoucherAmountSupport.effectiveDebit(item.getMd(), item.getMc())
-                        : FinanceVoucherAmountSupport.effectiveCredit(item.getMd(), item.getMc()))
+                        ? FinanceVoucherAmountSupport.zeroIfNull(item.getMd())
+                        : FinanceVoucherAmountSupport.zeroIfNull(item.getMc()))
                 .reduce(ZERO, BigDecimal::add);
     }
 
@@ -1775,8 +1775,8 @@ public abstract class AbstractFinanceVoucherSupport {
     protected BigDecimal sumEntryAmount(List<FinanceVoucherEntryDTO> rows, boolean debit) {
         return rows.stream()
                 .map(item -> debit
-                        ? FinanceVoucherAmountSupport.effectiveDebit(item.getMd(), item.getMc())
-                        : FinanceVoucherAmountSupport.effectiveCredit(item.getMd(), item.getMc()))
+                        ? FinanceVoucherAmountSupport.zeroIfNull(item.getMd())
+                        : FinanceVoucherAmountSupport.zeroIfNull(item.getMc()))
                 .reduce(ZERO, BigDecimal::add);
     }
 
@@ -2042,13 +2042,7 @@ public abstract class AbstractFinanceVoucherSupport {
 
             BigDecimal qtyDebit = normalizeNullableQuantity(entry.getNdS());
             BigDecimal qtyCredit = normalizeNullableQuantity(entry.getNcS());
-            if (qtyDebit != null && qtyDebit.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6570\u91cf\u501f\u65b9\u4e0d\u80fd\u4e3a\u8d1f\u6570");
-            }
-            if (qtyCredit != null && qtyCredit.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6570\u91cf\u8d37\u65b9\u4e0d\u80fd\u4e3a\u8d1f\u6570");
-            }
-            if (qtyDebit != null && qtyCredit != null && qtyDebit.compareTo(BigDecimal.ZERO) > 0 && qtyCredit.compareTo(BigDecimal.ZERO) > 0) {
+            if (qtyDebit != null && qtyCredit != null) {
                 throw new IllegalArgumentException("\u7b2c " + rowNo + " \u884c\u6570\u91cf\u501f\u8d37\u4e0d\u80fd\u540c\u65f6\u586b\u5199");
             }
 
@@ -2265,13 +2259,13 @@ public abstract class AbstractFinanceVoucherSupport {
         row.setCcodeName(trimToNull(sourceRow.getCcodeName()));
         row.setCexchName(trimToNull(sourceRow.getCexchName()));
         row.setCurrencyCode(trimToNull(sourceRow.getCurrencyCode()));
-        row.setMd(normalizeAmount(sourceRow.getMc()));
-        row.setMc(normalizeAmount(sourceRow.getMd()));
-        row.setMdF(normalizeAmount(sourceRow.getMcF()));
-        row.setMcF(normalizeAmount(sourceRow.getMdF()));
+        row.setMd(normalizeAmount(sourceRow.getMd()).negate());
+        row.setMc(normalizeAmount(sourceRow.getMc()).negate());
+        row.setMdF(normalizeAmount(sourceRow.getMdF()).negate());
+        row.setMcF(normalizeAmount(sourceRow.getMcF()).negate());
         row.setNfrat(defaultDecimal(sourceRow.getNfrat(), DEFAULT_RATE));
-        row.setNdS(normalizeNullableQuantity(sourceRow.getNcS()));
-        row.setNcS(normalizeNullableQuantity(sourceRow.getNdS()));
+        row.setNdS(negateNullableQuantity(sourceRow.getNdS()));
+        row.setNcS(negateNullableQuantity(sourceRow.getNcS()));
         row.setCdeptId(trimToNull(sourceRow.getCdeptId()));
         row.setCpersonId(trimToNull(sourceRow.getCpersonId()));
         row.setCcusId(trimToNull(sourceRow.getCcusId()));
@@ -2540,6 +2534,11 @@ public abstract class AbstractFinanceVoucherSupport {
             return null;
         }
         return value.setScale(6, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal negateNullableQuantity(BigDecimal value) {
+        BigDecimal normalized = normalizeNullableQuantity(value);
+        return normalized == null ? null : normalized.negate();
     }
 
     /**

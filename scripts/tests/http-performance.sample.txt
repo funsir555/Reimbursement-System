@@ -1,0 +1,3 @@
+INFO http_request_completed method=GET path=/auth/expense/42 status=200 outcome=success duration_ms=10 trace_id=test0001
+INFO http_request_completed method=GET path=/auth/expense/43 status=200 outcome=success duration_ms=30 trace_id=test0002
+INFO http_request_completed method=GET path=/auth/expense/44 status=500 outcome=failure duration_ms=90 trace_id=test0003

@@ -8,7 +8,7 @@ import {
   getRouteMenuPermissionCodes
 } from './route-meta'
 
-export type NavigationIconKey = 'House' | 'Wallet' | 'Coin' | 'FolderOpened' | 'Agent' | 'Setting'
+export type NavigationIconKey = 'House' | 'Wallet' | 'Coin' | 'Cpu' | 'FolderOpened' | 'Setting'
 
 export interface NavigationMenuNode {
   key: string
@@ -201,7 +201,7 @@ export const MAIN_NAVIGATION_MENU: NavigationMenuNode[] = [
       createRouteMenuNode('agent-knowledge-base'),
       createRouteMenuNode('agent-desensitization')
     ],
-    'Agent'
+    'Cpu'
   ),
   {
     key: 'settings',

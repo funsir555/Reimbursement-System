@@ -11,6 +11,7 @@ import com.finex.auth.dto.NotificationItemVO;
 import com.finex.auth.dto.NotificationSummaryVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.AsyncTaskService;
+import com.finex.auth.service.ExpenseExportAccess;
 import com.finex.auth.support.AsyncTaskSupport;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,6 +48,7 @@ public class AsyncTaskController {
 
     private final AsyncTaskService asyncTaskService;
     private final AccessControlService accessControlService;
+    private final ExpenseExportAccess expenseExportSnapshots;
 
     // 处理 exportInvoices 请求。
     @PostMapping("/exports/invoices")
@@ -80,6 +82,7 @@ public class AsyncTaskController {
                     accessControlService.requirePermission(userId, DASHBOARD_VIEW);
             default -> throw new IllegalArgumentException("不支持的导出场景");
         }
+        expenseExportSnapshots.requireScene(userId, dto);
         return Result.success(
                 "导出任务已提交，请到下载中心查看进度",
                 asyncTaskService.submitExpenseExport(userId, dto)

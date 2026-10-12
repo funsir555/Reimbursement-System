@@ -114,6 +114,7 @@ const overview = {
 
 function validBankForm() {
   return {
+    accountId: 1,
     accountName: '张三',
     accountNo: '6222020202020202',
     accountType: '对私账户',
@@ -240,6 +241,7 @@ describe('PersonalCenterView', () => {
     const dialogVm = dialog.vm as any
 
     Object.assign(dialogVm.bankForm, {
+      accountId: 1,
       accountName: '张三',
       accountNo: '6222020202020202',
       bankCode: 'BOC',

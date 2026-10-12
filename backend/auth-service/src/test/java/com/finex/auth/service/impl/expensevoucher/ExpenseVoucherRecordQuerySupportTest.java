@@ -10,7 +10,6 @@ import com.finex.auth.mapper.ExpVoucherPushDocumentMapper;
 import com.finex.auth.mapper.ExpVoucherPushEntryMapper;
 import com.finex.auth.mapper.ExpVoucherSubjectMappingMapper;
 import com.finex.auth.mapper.ExpVoucherTemplatePolicyMapper;
-import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
@@ -18,6 +17,7 @@ import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceVoucherService;
+import com.finex.auth.service.port.FinanceReferenceQueryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,7 +48,7 @@ class ExpenseVoucherRecordQuerySupportTest {
     @Mock private ProcessExpenseTypeMapper expenseTypeMapper;
     @Mock private SystemCompanyMapper systemCompanyMapper;
     @Mock private UserMapper userMapper;
-    @Mock private GlAccvouchMapper glAccvouchMapper;
+    @Mock private FinanceReferenceQueryPort financeReferenceQueryPort;
     @Mock private FinanceVoucherService financeVoucherService;
 
     private ExpenseVoucherRecordQuerySupport support;
@@ -67,7 +67,7 @@ class ExpenseVoucherRecordQuerySupportTest {
                 expenseTypeMapper,
                 systemCompanyMapper,
                 userMapper,
-                glAccvouchMapper,
+                financeReferenceQueryPort,
                 financeVoucherService,
                 new ObjectMapper()
         ));

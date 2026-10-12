@@ -65,7 +65,7 @@ public class ArchiveAgentScheduleDomainSupport extends AbstractArchiveAgentSuppo
                     version,
                     ArchiveAgentSupport.TRIGGER_TYPE_SCHEDULE,
                     "system-scheduler",
-                    "瀹氭椂瑙﹀彂宸叉彁浜?",
+                    "定时触发已提交",
                     schedule.getNextFireAt(),
                     Map.of(
                             "scheduleTriggerId", schedule.getTriggerId(),

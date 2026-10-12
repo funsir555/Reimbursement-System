@@ -39,10 +39,7 @@ public final class FinanceBalanceRowSupport {
         row.setMcF(money(mcF));
         row.setNdS(qty(ndS));
         row.setNcS(qty(ncS));
-        row.setMe(row.getMb().add(row.getMd()).subtract(row.getMc()));
-        row.setMeF(row.getMbF().add(row.getMdF()).subtract(row.getMcF()));
-        row.setNeS(row.getNbS().add(row.getNdS()).subtract(row.getNcS()));
-        applyDirection(subject, row.getMb(), row.getMe(), row::setCbegindC, row::setCbegindCEngl, row::setCenddC, row::setCenddCEngl);
+        refreshCalculatedFields(row);
     }
 
     public static void fillBalanceRow(
@@ -69,10 +66,21 @@ public final class FinanceBalanceRowSupport {
         row.setMcF(money(mcF));
         row.setNdS(qty(ndS));
         row.setNcS(qty(ncS));
-        row.setMe(row.getMb().add(row.getMd()).subtract(row.getMc()));
-        row.setMeF(row.getMbF().add(row.getMdF()).subtract(row.getMcF()));
-        row.setNeS(row.getNbS().add(row.getNdS()).subtract(row.getNcS()));
-        applyDirection(subject, row.getMb(), row.getMe(), row::setCbegindC, row::setCbegindCEngl, row::setCenddC, row::setCenddCEngl);
+        refreshCalculatedFields(row);
+    }
+
+    public static void refreshCalculatedFields(GlAccsum row) {
+        row.setMe(FinanceBalanceDirectionSupport.ending(row.getMb(), row.getMd(), row.getMc()));
+        row.setMeF(FinanceBalanceDirectionSupport.ending(row.getMbF(), row.getMdF(), row.getMcF()));
+        row.setNeS(qty(row.getNbS()).add(qty(row.getNdS())).subtract(qty(row.getNcS())));
+        applyDirection(row.getMb(), row.getMe(), row::setCbegindC, row::setCbegindCEngl, row::setCenddC, row::setCenddCEngl);
+    }
+
+    public static void refreshCalculatedFields(GlAccass row) {
+        row.setMe(FinanceBalanceDirectionSupport.ending(row.getMb(), row.getMd(), row.getMc()));
+        row.setMeF(FinanceBalanceDirectionSupport.ending(row.getMbF(), row.getMdF(), row.getMcF()));
+        row.setNeS(qty(row.getNbS()).add(qty(row.getNdS())).subtract(qty(row.getNcS())));
+        applyDirection(row.getMb(), row.getMe(), row::setCbegindC, row::setCbegindCEngl, row::setCenddC, row::setCenddCEngl);
     }
 
     public static BigDecimal money(BigDecimal value) {
@@ -97,7 +105,6 @@ public final class FinanceBalanceRowSupport {
     }
 
     private static void applyDirection(
-            FinanceAccountSubject subject,
             BigDecimal beginAmount,
             BigDecimal endAmount,
             java.util.function.Consumer<String> beginLabelSetter,
@@ -105,11 +112,10 @@ public final class FinanceBalanceRowSupport {
             java.util.function.Consumer<String> endLabelSetter,
             java.util.function.Consumer<String> endCodeSetter
     ) {
-        String defaultDirection = subject == null ? null : subject.getBalanceDirection();
-        beginLabelSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(defaultDirection, beginAmount));
-        beginCodeSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionCode(defaultDirection, beginAmount));
-        endLabelSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(defaultDirection, endAmount));
-        endCodeSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionCode(defaultDirection, endAmount));
+        beginLabelSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(beginAmount));
+        beginCodeSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionCode(beginAmount));
+        endLabelSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(endAmount));
+        endCodeSetter.accept(FinanceBalanceDirectionSupport.resolveActualDirectionCode(endAmount));
     }
 
     private static String trimToNull(String value) {

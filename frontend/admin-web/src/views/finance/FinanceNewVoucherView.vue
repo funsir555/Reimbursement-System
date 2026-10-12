@@ -473,26 +473,8 @@ import {
   ref,
   watch
 } from 'vue'
-import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  CircleClose,
-  Coin,
-  Delete,
-  DocumentCopy,
-  Download,
-  Edit,
-  Plus,
-  Printer,
-  RefreshLeft,
-  Search,
-  Select,
-  Tickets,
-  Top,
-  TrendCharts,
-  Tools
-} from '@element-plus/icons-vue'
 import {
   financeApi,
   type FinanceVoucherDetail,
@@ -513,6 +495,10 @@ import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { useFinanceWorkspaceStore } from '@/stores/financeWorkspace'
 import { useFinanceNewVoucherAssistCashflowOwner } from './composables/useFinanceNewVoucherAssistCashflowOwner'
+import {
+  buildFinanceNewVoucherToolbarGroups,
+  type FinanceNewVoucherToolbarAction
+} from './composables/buildFinanceNewVoucherToolbarGroups'
 import {
   useFinanceNewVoucherBootstrap,
   type FinanceNewVoucherCreateRouteState
@@ -548,14 +534,7 @@ type ToolbarActionKey = FinanceNewVoucherToolbarActionKey
 type VoucherFormState = Omit<FinanceVoucherForm, 'entries'> & { entries: VoucherEntryRow[] }
 type VoucherPageMode = 'create' | 'detail' | 'review'
 
-interface ToolbarAction {
-  key: ToolbarActionKey
-  label: string
-  icon: Component
-  shortcut?: string
-  emphasis?: 'primary' | 'secondary'
-  disabled?: boolean
-}
+type ToolbarAction = FinanceNewVoucherToolbarAction
 
 type GridFocusableInstance = {
   focus?: () => void
@@ -738,95 +717,23 @@ const pageTitle = computed(() => {
   if (!isDetailRoute.value) return isCreateEditingLast.value ? '修改凭证' : '新建凭证'
   return editingExisting.value ? '修改凭证' : '凭证详情'
 })
-const toolbarGroups = computed<Array<{ key: string; actions: ToolbarAction[] }>>(() => {
-  if (isReviewMode.value) {
-    return [
-      {
-        key: 'review-primary',
-        actions: [
-          { key: 'review', label: '审核', icon: Select, emphasis: 'secondary', disabled: !canReviewVoucher.value }
-        ]
-      },
-      {
-        key: 'review-actions',
-        actions: [
-          { key: 'export', label: '导出', icon: Download },
-          { key: 'find', label: '查找', icon: Search },
-          { key: 'unreview', label: '反审核', icon: RefreshLeft, disabled: !canUnreviewVoucher.value },
-          {
-            key: 'markError',
-            label: voucherDetail.value?.status === 'ERROR' ? '取消错误' : '标记错误',
-            icon: CircleClose,
-            disabled: !canMarkVoucherError.value
-          },
-          ...(isVoidedVoucher.value
-            ? [{ key: 'restore', label: '恢复', icon: RefreshLeft, disabled: !canEditExisting.value || !currentVoucherNo.value } as ToolbarAction]
-            : [
-                { key: 'reverse', label: '冲销', icon: RefreshLeft, disabled: !canEditExisting.value || !currentVoucherNo.value } as ToolbarAction,
-                { key: 'void', label: '作废', icon: CircleClose, disabled: !canEditExisting.value || !currentVoucherNo.value } as ToolbarAction
-              ]),
-          { key: 'deleteVoucher', label: '删除凭证', icon: Delete, disabled: !canEditExisting.value || !currentVoucherNo.value }
-        ]
-      }
-    ]
-  }
-
-  const primaryActions: ToolbarAction[] = [{ key: 'new', label: '新增', icon: Plus, emphasis: 'secondary', shortcut: 'F5' }]
-  if (
-    ((isDetailRoute.value && !editingExisting.value) || isCreateLockedLast.value)
-    && voucherDetail.value?.editable
-    && canEditExisting.value
-  ) {
-    primaryActions.push({ key: 'modify', label: '修改', icon: Edit, emphasis: 'primary' })
-  }
-
-  const editActions: ToolbarAction[] = [
-    { key: 'print', label: '打印', icon: Printer, shortcut: 'Ctrl+P' },
-    { key: 'export', label: '导出', icon: Download },
-    { key: 'copy', label: '复制', icon: DocumentCopy, shortcut: 'Ctrl+F' }
-  ]
-  if (currentVoucherNo.value) {
-    if (isVoidedVoucher.value) {
-      editActions.push(
-        { key: 'restore', label: '恢复', icon: RefreshLeft, disabled: !canEditExisting.value },
-        { key: 'deleteVoucher', label: '删除凭证', icon: Delete, disabled: !canEditExisting.value }
-      )
-    } else {
-      editActions.push(
-        { key: 'reverse', label: '冲销', icon: RefreshLeft, disabled: !canEditExisting.value },
-        { key: 'void', label: '作废', icon: CircleClose, disabled: !canEditExisting.value },
-        { key: 'deleteVoucher', label: '删除凭证', icon: Delete, disabled: !canEditExisting.value }
-      )
-    }
-  }
-  if (!isReadonlyMode.value || isCurrentPeriodClosed.value) {
-    editActions.push({ key: 'insert', label: '插入行', icon: Top })
-    editActions.push({ key: 'delete', label: '删行', icon: Delete, shortcut: 'Ctrl+D' })
-  }
-
-  const actionGroup: ToolbarAction[] = [
-    { key: 'searchReplace', label: '查找替换', icon: Search },
-    { key: 'cashFlow', label: '现金流量', icon: TrendCharts }
-  ]
-  if (!isReadonlyMode.value || isCurrentPeriodClosed.value) {
-    actionGroup.push({ key: 'save', label: '保存', icon: Select, emphasis: 'primary', shortcut: 'F6' })
-  }
-
-  return [
-    { key: 'primary', actions: primaryActions },
-    { key: 'edit', actions: editActions },
-    { key: 'actions', actions: actionGroup },
-    {
-      key: 'tools',
-      actions: [
-        { key: 'assist', label: '辅助核算', icon: Tickets },
-        { key: 'balance', label: '平衡', icon: Coin },
-        { key: 'calculator', label: '计算器', icon: Tools, shortcut: 'F9' },
-        ...(isCreateEditingNew.value ? [{ key: 'clear', label: '清空', icon: CircleClose } as ToolbarAction] : [])
-      ]
-    }
-  ]
-})
+const toolbarGroups = computed(() => buildFinanceNewVoucherToolbarGroups({
+  reviewMode: isReviewMode.value,
+  detailRoute: isDetailRoute.value,
+  editingExisting: editingExisting.value,
+  createLockedLast: isCreateLockedLast.value,
+  createEditingNew: isCreateEditingNew.value,
+  detailEditable: voucherDetail.value?.editable,
+  canReviewVoucher: canReviewVoucher.value,
+  canUnreviewVoucher: canUnreviewVoucher.value,
+  canMarkVoucherError: canMarkVoucherError.value,
+  canEditExisting: canEditExisting.value,
+  isVoidedVoucher: isVoidedVoucher.value,
+  currentVoucherNo: currentVoucherNo.value,
+  readonlyMode: isReadonlyMode.value,
+  currentPeriodClosed: isCurrentPeriodClosed.value,
+  voucherStatus: voucherDetail.value?.status
+}))
 
 const selectedRow = computed(() => form.entries[Math.min(selectedRowIndex.value, Math.max(form.entries.length - 1, 0))] as VoucherEntryRow)
 const hasUnsavedChanges = computed(() => Boolean(voucherMeta.value) && buildSnapshot() !== lastCommittedSnapshot.value)

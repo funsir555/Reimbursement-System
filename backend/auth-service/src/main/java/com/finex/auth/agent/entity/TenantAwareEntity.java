@@ -29,7 +29,7 @@ public abstract class TenantAwareEntity implements Serializable {
      * 公司ID
      */
     @TableField(fill = FieldFill.INSERT)
-    private Long companyId;
+    private String companyId;
 
     /**
      * 创建人

@@ -159,8 +159,8 @@ class FinanceCloseLedgerServiceImplTest {
         FinanceAccountSubject subject = subject("4103", "本年利润", "CREDIT");
         GlAccsum currentSum = currentSumRow("4103", "-88.50");
         GlAccass currentAssist = currentAssistRow("4103", "-56.00", "D-01");
-        GlAccsum nextSum = carryForwardSumRow("4103", "-88.50", 2027, 1, "借", "DEBIT");
-        GlAccass nextAssist = carryForwardAssistRow("4103", "-56.00", "D-01", 2027, 1, "借", "DEBIT");
+        GlAccsum nextSum = carryForwardSumRow("4103", "-88.50", 2027, 1, "贷", "CREDIT");
+        GlAccass nextAssist = carryForwardAssistRow("4103", "-56.00", "D-01", 2027, 1, "贷", "CREDIT");
 
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(subject));
         when(glAccsumMapper.selectList(any())).thenReturn(
@@ -239,10 +239,10 @@ class FinanceCloseLedgerServiceImplTest {
         assertEquals("-88.50", nextSum.getMe().toPlainString());
         assertEquals("0.00", nextSum.getMd().toPlainString());
         assertEquals("0.00", nextSum.getMc().toPlainString());
-        assertEquals("借", nextSum.getCbegindC());
-        assertEquals("DEBIT", nextSum.getCbegindCEngl());
-        assertEquals("借", nextSum.getCenddC());
-        assertEquals("DEBIT", nextSum.getCenddCEngl());
+        assertEquals("贷", nextSum.getCbegindC());
+        assertEquals("CREDIT", nextSum.getCbegindCEngl());
+        assertEquals("贷", nextSum.getCenddC());
+        assertEquals("CREDIT", nextSum.getCenddCEngl());
 
         GlAccass nextAssist = assistCaptor.getValue();
         assertEquals(2027, nextAssist.getIyear());
@@ -250,8 +250,8 @@ class FinanceCloseLedgerServiceImplTest {
         assertEquals("D-01", nextAssist.getCdeptId());
         assertEquals("-56.00", nextAssist.getMb().toPlainString());
         assertEquals("-56.00", nextAssist.getMe().toPlainString());
-        assertEquals("借", nextAssist.getCbegindC());
-        assertEquals("DEBIT", nextAssist.getCbegindCEngl());
+        assertEquals("贷", nextAssist.getCbegindC());
+        assertEquals("CREDIT", nextAssist.getCbegindCEngl());
     }
 
     @Test
@@ -279,7 +279,7 @@ class FinanceCloseLedgerServiceImplTest {
     }
 
     @Test
-    void reconcileUsesAncestorRollupAndEffectiveDebitCredit() {
+    void reconcileUsesAncestorRollupAndSignedDebitCredit() {
         FinanceAccountSubject parent = subject("6401", "制造费用", "DEBIT");
         parent.setParentSubjectCode(null);
         parent.setBdept(0);
@@ -302,14 +302,14 @@ class FinanceCloseLedgerServiceImplTest {
                 postedVoucherRow("660302", "0.00", "-15.97", null)
         ));
         when(glAccsumMapper.selectList(any())).thenReturn(List.of(
-                sumMovementRow("64010801", "0.00", "2273513.79"),
-                sumMovementRow("640108", "0.00", "2273513.79"),
-                sumMovementRow("6401", "0.00", "2273513.79"),
-                sumMovementRow("660302", "15.97", "0.00"),
-                sumMovementRow("6603", "15.97", "0.00")
+                sumMovementRow("64010801", "-2273513.79", "0.00"),
+                sumMovementRow("640108", "-2273513.79", "0.00"),
+                sumMovementRow("6401", "-2273513.79", "0.00"),
+                sumMovementRow("660302", "0.00", "-15.97"),
+                sumMovementRow("6603", "0.00", "-15.97")
         ));
         when(glAccassMapper.selectList(any())).thenReturn(List.of(
-                assistMovementRow("64010801", "0.00", "2273513.79", "76")
+                assistMovementRow("64010801", "-2273513.79", "0.00", "76")
         ));
 
         FinanceCloseLedgerReconcileResultVO result = service.reconcile(1L, "alice", request(2026, 11));

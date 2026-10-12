@@ -99,4 +99,21 @@ describe('useAgentChatSession', () => {
       model: 'deepseek-chat'
     })
   })
+
+  it('keeps grouped clarification choices in the conversation', async () => {
+    mocks.agentChatApi.sendMessage.mockResolvedValueOnce({ data: {
+      sessionId: 'session-1', kind: 'CLARIFY', content: '请补充查询条件',
+      clarifications: [{ key: 'voucherStatus', question: '请选择凭证范围', options: [
+        { id: 'POSTED_ONLY', label: '仅已记账凭证' }
+      ] }]
+    } })
+    const session = useAgentChatSession()
+    await session.initSession()
+    await session.sendMessage('查询供应商往来明细')
+    expect(session.messages.value.at(-1)?.clarifications?.[0]?.key).toBe('voucherStatus')
+
+    await session.sendMessage('仅已记账凭证', undefined, { voucherStatus: 'POSTED_ONLY' })
+    expect(mocks.agentChatApi.sendMessage).toHaveBeenLastCalledWith('session-1',
+      expect.objectContaining({ selectedAnswers: { voucherStatus: 'POSTED_ONLY' } }))
+  })
 })

@@ -12,6 +12,7 @@ import com.finex.auth.dto.ArchiveAgentRunDTO;
 import com.finex.auth.dto.ArchiveAgentRunDetailVO;
 import com.finex.auth.dto.ArchiveAgentRunVO;
 import com.finex.auth.dto.ArchiveAgentSaveDTO;
+import com.finex.auth.dto.ArchiveAgentToolsSaveDTO;
 import com.finex.auth.dto.ArchiveAgentSummaryVO;
 import com.finex.auth.mapper.ArchiveAgentDefinitionMapper;
 import com.finex.auth.mapper.ArchiveAgentRunArtifactMapper;
@@ -136,6 +137,12 @@ public class ArchiveAgentServiceImpl implements ArchiveAgentService {
     @Transactional(rollbackFor = Exception.class)
     public ArchiveAgentDetailVO updateAgent(Long ownerUserId, Long id, String operatorName, ArchiveAgentSaveDTO dto) {
         return archiveAgentDefinitionDomainSupport.updateAgent(ownerUserId, id, operatorName, dto);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ArchiveAgentDetailVO updateTools(Long ownerUserId, Long id, String operatorName, ArchiveAgentToolsSaveDTO dto) {
+        return archiveAgentDefinitionDomainSupport.updateTools(ownerUserId, id, operatorName, dto);
     }
 
     /**

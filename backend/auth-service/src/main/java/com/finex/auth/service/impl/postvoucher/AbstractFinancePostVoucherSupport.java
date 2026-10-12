@@ -26,7 +26,7 @@ import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.AsyncTaskSupport;
-import com.finex.auth.support.FinanceBalanceDirectionSupport;
+import com.finex.auth.support.FinanceBalanceRowSupport;
 import com.finex.auth.support.FinanceModuleEnableSupport;
 import com.finex.auth.support.FinanceVoucherAmountSupport;
 import java.math.BigDecimal;
@@ -438,25 +438,25 @@ abstract class AbstractFinancePostVoucherSupport {
 
     protected void applyToAccsum(GlAccvouch voucherRow, FinanceAccountSubject subject) {
         GlAccsum row = loadOrCreateAccsumRow(voucherRow, subject);
-        row.setMd(money(row.getMd()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMd(), voucherRow.getMc())));
-        row.setMc(money(row.getMc()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMd(), voucherRow.getMc())));
-        row.setMdF(money(row.getMdF()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMdF(), voucherRow.getMcF())));
-        row.setMcF(money(row.getMcF()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMdF(), voucherRow.getMcF())));
+        row.setMd(money(row.getMd()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMd())));
+        row.setMc(money(row.getMc()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMc())));
+        row.setMdF(money(row.getMdF()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMdF())));
+        row.setMcF(money(row.getMcF()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMcF())));
         row.setNdS(qty(row.getNdS()).add(qty(voucherRow.getNdS())));
         row.setNcS(qty(row.getNcS()).add(qty(voucherRow.getNcS())));
-        fillEndingAmounts(row, subject);
+        FinanceBalanceRowSupport.refreshCalculatedFields(row);
         glAccsumMapper.updateById(row);
     }
 
     protected void applyToAccass(GlAccvouch voucherRow, FinanceAccountSubject subject) {
         GlAccass row = loadOrCreateAccassRow(voucherRow, subject);
-        row.setMd(money(row.getMd()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMd(), voucherRow.getMc())));
-        row.setMc(money(row.getMc()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMd(), voucherRow.getMc())));
-        row.setMdF(money(row.getMdF()).add(FinanceVoucherAmountSupport.effectiveDebit(voucherRow.getMdF(), voucherRow.getMcF())));
-        row.setMcF(money(row.getMcF()).add(FinanceVoucherAmountSupport.effectiveCredit(voucherRow.getMdF(), voucherRow.getMcF())));
+        row.setMd(money(row.getMd()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMd())));
+        row.setMc(money(row.getMc()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMc())));
+        row.setMdF(money(row.getMdF()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMdF())));
+        row.setMcF(money(row.getMcF()).add(FinanceVoucherAmountSupport.zeroIfNull(voucherRow.getMcF())));
         row.setNdS(qty(row.getNdS()).add(qty(voucherRow.getNdS())));
         row.setNcS(qty(row.getNcS()).add(qty(voucherRow.getNcS())));
-        fillEndingAmounts(row, subject);
+        FinanceBalanceRowSupport.refreshCalculatedFields(row);
         glAccassMapper.updateById(row);
     }
 
@@ -497,7 +497,7 @@ abstract class AbstractFinancePostVoucherSupport {
         created.setMcF(ZERO);
         created.setNdS(ZERO_QTY);
         created.setNcS(ZERO_QTY);
-        fillEndingAmounts(created, subject);
+        FinanceBalanceRowSupport.refreshCalculatedFields(created);
         glAccsumMapper.insert(created);
         return created;
     }
@@ -551,7 +551,7 @@ abstract class AbstractFinancePostVoucherSupport {
         created.setMcF(ZERO);
         created.setNdS(ZERO_QTY);
         created.setNcS(ZERO_QTY);
-        fillEndingAmounts(created, subject);
+        FinanceBalanceRowSupport.refreshCalculatedFields(created);
         glAccassMapper.insert(created);
         return created;
     }
@@ -659,7 +659,7 @@ abstract class AbstractFinancePostVoucherSupport {
             current.setMcF(ZERO);
             current.setNdS(ZERO_QTY);
             current.setNcS(ZERO_QTY);
-            fillEndingAmounts(current, subject);
+            FinanceBalanceRowSupport.refreshCalculatedFields(current);
             glAccsumMapper.insert(current);
         }
         BigDecimal totalMd = ZERO;
@@ -691,7 +691,7 @@ abstract class AbstractFinancePostVoucherSupport {
         current.setMcF(totalMcF);
         current.setNdS(totalNdS);
         current.setNcS(totalNcS);
-        fillEndingAmounts(current, subject);
+        FinanceBalanceRowSupport.refreshCalculatedFields(current);
         glAccsumMapper.updateById(current);
     }
 
@@ -873,42 +873,6 @@ abstract class AbstractFinancePostVoucherSupport {
         }
         normalizedName = trimToNull(subjectCurrencyName);
         return normalizedName == null ? "人民币" : normalizedName;
-    }
-
-    protected void fillEndingAmounts(GlAccsum row, FinanceAccountSubject subject) {
-        row.setCbegindC(resolveBeginDirection(row.getMb(), subject));
-        row.setCbegindCEngl(resolveBeginDirectionEn(row.getMb(), subject));
-        row.setMe(money(row.getMb()).add(money(row.getMd())).subtract(money(row.getMc())));
-        row.setMeF(money(row.getMbF()).add(money(row.getMdF())).subtract(money(row.getMcF())));
-        row.setNeS(qty(row.getNbS()).add(qty(row.getNdS())).subtract(qty(row.getNcS())));
-        row.setCenddC(resolveEndDirection(row.getMe(), subject));
-        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject == null ? null : subject.getBalanceDirection(), row.getMe()));
-    }
-
-    protected void fillEndingAmounts(GlAccass row, FinanceAccountSubject subject) {
-        row.setCbegindC(resolveBeginDirection(row.getMb(), subject));
-        row.setCbegindCEngl(resolveBeginDirectionEn(row.getMb(), subject));
-        row.setMe(money(row.getMb()).add(money(row.getMd())).subtract(money(row.getMc())));
-        row.setMeF(money(row.getMbF()).add(money(row.getMdF())).subtract(money(row.getMcF())));
-        row.setNeS(qty(row.getNbS()).add(qty(row.getNdS())).subtract(qty(row.getNcS())));
-        row.setCenddC(resolveEndDirection(row.getMe(), subject));
-        row.setCenddCEngl(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject == null ? null : subject.getBalanceDirection(), row.getMe()));
-    }
-
-    protected String resolveBeginDirection(BigDecimal beginningAmount, FinanceAccountSubject subject) {
-        return FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject == null ? null : subject.getBalanceDirection(), beginningAmount);
-    }
-
-    protected String resolveBeginDirectionEn(BigDecimal beginningAmount, FinanceAccountSubject subject) {
-        return FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject == null ? null : subject.getBalanceDirection(), beginningAmount);
-    }
-
-    protected String resolveEndDirection(BigDecimal endingAmount, FinanceAccountSubject subject) {
-        return FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject == null ? null : subject.getBalanceDirection(), endingAmount);
-    }
-
-    protected boolean isDebitDirection(String balanceDirection) {
-        return FinanceBalanceDirectionSupport.isDebitDirection(balanceDirection);
     }
 
     protected int resolveYear(String businessKey) {

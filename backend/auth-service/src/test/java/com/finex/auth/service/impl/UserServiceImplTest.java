@@ -13,6 +13,7 @@ import com.finex.auth.mapper.SystemRoleMapper;
 import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,7 +50,8 @@ class UserServiceImplTest {
                 systemUserRoleMapper,
                 systemRoleMapper,
                 systemRolePermissionMapper,
-                systemPermissionMapper
+                systemPermissionMapper,
+                new PasswordHashService()
         );
     }
 
@@ -82,6 +84,7 @@ class UserServiceImplTest {
         permission.setSortOrder(1);
 
         when(userMapper.selectOne(any())).thenReturn(user);
+        when(userMapper.update(any(), any())).thenReturn(1);
         when(systemUserRoleMapper.selectList(any())).thenReturn(List.of(userRole));
         when(systemRoleMapper.selectList(any())).thenReturn(List.of(role));
         when(systemRolePermissionMapper.selectList(any())).thenReturn(List.of(rolePermission));

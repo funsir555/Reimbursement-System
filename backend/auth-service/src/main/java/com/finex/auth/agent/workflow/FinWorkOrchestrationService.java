@@ -1,0 +1,287 @@
+package com.finex.auth.agent.workflow;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/** Conversation-level coordination. Individual workflow runtime remains the executor. */
+@Service
+@RequiredArgsConstructor
+public class FinWorkOrchestrationService {
+    private final FinWorkQueryPlanner planner;
+    private final FinWorkParameterService parameters;
+    private final WorkflowSelectorService selector;
+    private final AgentWorkflowRuntimeService runtime;
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper json;
+
+    public Outcome respond(String sessionId, Long userId, String message,
+                           Long employeeId, Long bindingId, List<String> selectedOptions) {
+        return respond(sessionId, userId, message, employeeId, bindingId, selectedOptions, Map.of());
+    }
+
+    public Outcome respond(String sessionId, Long userId, String message,
+                           Long employeeId, Long bindingId, List<String> selectedOptions,
+                           Map<String, String> selectedAnswers) {
+        Pending pending = loadPending(sessionId, userId);
+        if (pending != null && !pendingStillAuthorized(userId, pending)) {
+            clearPending(sessionId, userId);
+            throw new IllegalArgumentException("澄清状态已失效，请重新提问");
+        }
+        Map<String, String> confirmed = checkedAnswers(pending, selectedAnswers);
+        String conversationQuestion = pending == null ? message : pending.originalQuestion() + "\n补充说明：" + message;
+        if (conversationQuestion == null || conversationQuestion.length() > 3000)
+            throw new IllegalArgumentException("澄清内容过长，请重新提问");
+        String fullQuestion = conversationQuestion;
+        if (!confirmed.isEmpty()) fullQuestion += "\n用户已确认参数：" + confirmed;
+        Set<Long> chosen = selectedBindings(selectedOptions, pending);
+        if (!chosen.isEmpty()) fullQuestion += "\n用户明确选择的工作流绑定 ID：" + chosen;
+        Long selectedBinding = pending != null && pending.bindingIds().size() == 1
+                ? pending.bindingIds().get(0) : bindingId;
+        FinWorkQueryPlanner.Decision decision = planner.plan(userId, fullQuestion,
+                employeeId, selectedBinding, sessionId);
+        return switch (decision.mode()) {
+            case CHAT -> {
+                clearPending(sessionId, userId);
+                yield new Outcome("CHAT", "", List.of(), List.of(), List.of());
+            }
+            case NO_CAPABILITY -> {
+                clearPending(sessionId, userId);
+                yield new Outcome("NO_CAPABILITY", "当前分配的数字员工没有能够完成这项任务的工作流。",
+                        List.of(), List.of(), List.of());
+            }
+            case CLARIFY -> {
+                List<Option> options = decision.candidates().stream()
+                        .map(item -> new Option("binding:" + item.getWorkflowBindingId(),
+                                item.getDigitalEmployeeName() + " · " + item.getAgentName()))
+                        .toList();
+                List<Option> displayed = new ArrayList<>(options);
+                if (options.size() > 1 && options.size() <= 4) {
+                    displayed.add(new Option("all", "同时执行以上工作流"));
+                }
+                savePending(sessionId, userId, new Pending(
+                        conversationQuestion,
+                        decision.candidates().stream().map(SelectedWorkflow::getWorkflowBindingId).toList(),
+                        confirmed, versionIds(decision.candidates()),
+                        parameters.authorizationSignatures(userId, decision.candidates()), List.of()));
+                yield new Outcome("CLARIFY", decision.question(), displayed, List.of(), List.of());
+            }
+            case EXECUTE -> {
+                if (!chosen.isEmpty() && !decision.steps().stream()
+                        .map(step -> step.workflow().getWorkflowBindingId()).collect(java.util.stream.Collectors.toSet())
+                        .equals(chosen)) {
+                    throw new IllegalStateException("澄清选择与任务计划不一致，请重新说明需求");
+                }
+                if (pending != null && !pending.versionIds().isEmpty()) {
+                    for (FinWorkQueryPlanner.PlannedStep step : decision.steps()) {
+                        Long expected = pending.versionIds().get(step.workflow().getWorkflowBindingId());
+                        if (expected == null || !expected.equals(step.workflow().getAgentVersionId()))
+                            throw new IllegalStateException("工作流版本或授权已变化，请重新提问");
+                    }
+                }
+                FinWorkParameterService.Preparation prepared = parameters.prepare(
+                        userId, fullQuestion, decision.steps(), confirmed);
+                if (!prepared.groups().isEmpty()) {
+                    List<SelectedWorkflow> workflows = decision.steps().stream()
+                            .map(FinWorkQueryPlanner.PlannedStep::workflow).toList();
+                    savePending(sessionId, userId, new Pending(
+                            conversationQuestion,
+                            workflows.stream().map(SelectedWorkflow::getWorkflowBindingId).toList(),
+                            confirmed, versionIds(workflows),
+                            parameters.authorizationSignatures(userId, workflows), prepared.groups()));
+                    yield new Outcome("CLARIFY", "请补充查询条件后继续。", List.of(),
+                            prepared.groups(), List.of());
+                }
+                clearPending(sessionId, userId);
+                List<Execution> executions = new ArrayList<>();
+                StringBuilder answer = new StringBuilder();
+                BigDecimal expenseTotal = BigDecimal.ZERO;
+                int expenseWorkflowCount = 0;
+                boolean expenseTotalComplete = true;
+                for (FinWorkQueryPlanner.PlannedStep step : prepared.steps()) {
+                    WorkflowExecutionResult result = runtime.executePlannedWorkflow(
+                            sessionId, userId, step.workflow(), step.queryText(), step.parameters());
+                    if (!result.isSuccess()) {
+                        throw new SecurityException(result.getContent() == null
+                                ? "系统查询到您没有相关权限，请换一个问题" : result.getContent());
+                    }
+                    executions.add(new Execution(result, step.queryText(), step.workflow().getWorkflowBindingId()));
+                    if (!answer.isEmpty()) answer.append("\n\n");
+                    answer.append(result.getContent());
+                    if ((step.workflow().getToolCodes() != null
+                            && step.workflow().getToolCodes().contains(ExpenseDocumentControlledQueryTool.TOOL_CODE)
+                            || ExpenseDocumentControlledQueryTool.TOOL_CODE.equals(step.workflow().getToolCode()))) {
+                        expenseWorkflowCount++;
+                        if (result.getTotalAmount() == null) expenseTotalComplete = false;
+                        else expenseTotal = expenseTotal.add(result.getTotalAmount());
+                    }
+                }
+                if (expenseWorkflowCount == 1 && expenseTotalComplete
+                        && asksForTotal(fullQuestion, decision.analysisGoal())) {
+                    answer.append("\n\n上述授权报销单的总金额：")
+                            .append(expenseTotal.stripTrailingZeros().toPlainString())
+                            .append("。该金额基于全部符合条件的单据，不限于展示条数。");
+                } else if (expenseWorkflowCount > 1 && asksForTotal(fullQuestion, decision.analysisGoal())) {
+                    answer.append("\n\n多个工作流的结果可能包含同一单据，未将各结果金额直接相加。请指定需要合计的工作流或查询范围。");
+                } else if (expenseWorkflowCount == 1 && !expenseTotalComplete
+                        && asksForTotal(fullQuestion, decision.analysisGoal())) {
+                    answer.append("\n\n该工作流未提供可复核的完整金额合计，请明确报销单查询范围后重试。");
+                }
+                yield new Outcome("ANSWER", answer.toString(), List.of(), List.of(), List.copyOf(executions));
+            }
+        };
+    }
+
+    public List<Option> pendingOptions(String sessionId, Long userId) {
+        Pending pending = loadPending(sessionId, userId);
+        if (pending == null) return List.of();
+        if (!pendingStillAuthorized(userId, pending)) return List.of();
+        if (!pending.groups().isEmpty()) return List.of();
+        List<Option> options = new ArrayList<>();
+        for (Long id : pending.bindingIds()) options.add(new Option("binding:" + id, "工作流 #" + id));
+        if (options.size() > 1 && options.size() <= 4) options.add(new Option("all", "同时执行以上工作流"));
+        return options;
+    }
+
+    public List<FinWorkParameterService.Group> pendingGroups(String sessionId, Long userId) {
+        Pending pending = loadPending(sessionId, userId);
+        if (pending == null || pending.groups().isEmpty()) return List.of();
+        if (!pendingStillAuthorized(userId, pending)) {
+            clearPending(sessionId, userId);
+            return List.of();
+        }
+        return pending.groups();
+    }
+
+    private Map<String, String> checkedAnswers(Pending pending, Map<String, String> selected) {
+        Map<String, String> confirmed = new java.util.LinkedHashMap<>(pending == null ? Map.of() : pending.answers());
+        if (selected == null || selected.isEmpty()) return Map.copyOf(confirmed);
+        if (pending == null) throw new IllegalArgumentException("澄清选项已失效，请重新提问");
+        for (Map.Entry<String, String> answer : selected.entrySet()) {
+            FinWorkParameterService.Group group = pending.groups().stream()
+                    .filter(item -> item.key().equals(answer.getKey())).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("澄清选项无效"));
+            String value = answer.getValue() == null ? "" : answer.getValue().trim();
+            if (value.isBlank() || value.length() > 200 || (!group.options().isEmpty()
+                    && !group.options().stream().anyMatch(item -> item.id().equals(value))))
+                throw new IllegalArgumentException("澄清选项无效");
+            confirmed.put(group.key(), value);
+        }
+        return Map.copyOf(confirmed);
+    }
+
+    private Map<Long, Long> versionIds(List<SelectedWorkflow> workflows) {
+        Map<Long, Long> result = new java.util.LinkedHashMap<>();
+        workflows.forEach(item -> result.put(item.getWorkflowBindingId(), item.getAgentVersionId()));
+        return Map.copyOf(result);
+    }
+
+    private boolean pendingStillAuthorized(Long userId, Pending pending) {
+        if (pending.versionIds().isEmpty()) return true;
+        List<SelectedWorkflow> active = selector.authorizedCandidates(userId, null, null).stream()
+                .filter(item -> pending.versionIds().containsKey(item.getWorkflowBindingId())).toList();
+        Map<Long, Long> versions = versionIds(active);
+        if (!pending.versionIds().equals(versions)) return false;
+        return pending.signatures().isEmpty() || pending.signatures().equals(
+                parameters.authorizationSignatures(userId, active));
+    }
+
+    private boolean asksForTotal(String question, String goal) {
+        String combined = (question == null ? "" : question) + (goal == null ? "" : goal);
+        return combined.contains("总金额") || combined.contains("金额合计")
+                || combined.contains("合计金额") || combined.contains("总额");
+    }
+
+    private Set<Long> selectedBindings(List<String> selections, Pending pending) {
+        if (selections == null || selections.isEmpty()) return Set.of();
+        if (pending == null) throw new IllegalArgumentException("澄清选项已失效，请重新提问");
+        if (selections.size() == 1 && "all".equals(selections.get(0))) {
+            return Set.copyOf(pending.bindingIds());
+        }
+        Set<Long> result = new LinkedHashSet<>();
+        for (String item : selections) {
+            if (item == null || !item.startsWith("binding:")) {
+                throw new IllegalArgumentException("澄清选项无效");
+            }
+            long bindingId;
+            try { bindingId = Long.parseLong(item.substring(8)); }
+            catch (NumberFormatException exception) { throw new IllegalArgumentException("澄清选项无效"); }
+            if (!pending.bindingIds().contains(bindingId)) throw new IllegalArgumentException("澄清选项已失效");
+            result.add(bindingId);
+        }
+        if (result.size() > 4) throw new IllegalArgumentException("最多选择四个工作流");
+        return Set.copyOf(result);
+    }
+
+    private Pending loadPending(String sessionId, Long userId) {
+        List<String> rows = jdbc.queryForList("""
+                SELECT pending_json FROM ea_agent_chat_pending_plan
+                WHERE session_id=? AND user_id=? AND expires_at>NOW()
+                """, String.class, sessionId, userId);
+        if (rows.isEmpty()) return null;
+        try {
+            Map<String, Object> source = json.readValue(rows.get(0), new TypeReference<>() { });
+            String original = String.valueOf(source.get("originalQuestion"));
+            List<Long> ids = ((List<?>) source.get("bindingIds")).stream()
+                    .map(item -> ((Number) item).longValue()).toList();
+            Map<String, String> answers = new java.util.LinkedHashMap<>();
+            if (source.get("answers") instanceof Map<?, ?> map)
+                map.forEach((key, value) -> answers.put(String.valueOf(key), String.valueOf(value)));
+            Map<Long, Long> versions = new java.util.LinkedHashMap<>();
+            if (source.get("versionIds") instanceof Map<?, ?> map)
+                map.forEach((key, value) -> versions.put(Long.parseLong(String.valueOf(key)),
+                        ((Number) value).longValue()));
+            Map<Long, String> signatures = new java.util.LinkedHashMap<>();
+            if (source.get("signatures") instanceof Map<?, ?> map)
+                map.forEach((key, value) -> signatures.put(Long.parseLong(String.valueOf(key)),
+                        String.valueOf(value)));
+            List<FinWorkParameterService.Group> groups = source.get("groups") == null ? List.of()
+                    : json.convertValue(source.get("groups"), new TypeReference<>() { });
+            return new Pending(original, ids, Map.copyOf(answers), Map.copyOf(versions),
+                    Map.copyOf(signatures), groups);
+        } catch (Exception exception) {
+            clearPending(sessionId, userId);
+            return null;
+        }
+    }
+
+    private void savePending(String sessionId, Long userId, Pending pending) {
+        try {
+            String payload = json.writeValueAsString(Map.of(
+                    "originalQuestion", pending.originalQuestion(), "bindingIds", pending.bindingIds(),
+                    "answers", pending.answers(), "versionIds", pending.versionIds(),
+                    "signatures", pending.signatures(), "groups", pending.groups()));
+            if (payload.length() > 12000) throw new IllegalArgumentException("澄清状态过大，请缩小查询范围");
+            jdbc.update("""
+                    INSERT INTO ea_agent_chat_pending_plan (session_id,user_id,pending_json,expires_at)
+                    VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),
+                    pending_json=VALUES(pending_json),expires_at=VALUES(expires_at)
+                    """, sessionId, userId, payload, LocalDateTime.now().plusMinutes(15));
+        } catch (Exception exception) {
+            throw new IllegalStateException("无法保存澄清状态", exception);
+        }
+    }
+
+    private void clearPending(String sessionId, Long userId) {
+        jdbc.update("DELETE FROM ea_agent_chat_pending_plan WHERE session_id=? AND user_id=?", sessionId, userId);
+    }
+
+    private record Pending(String originalQuestion, List<Long> bindingIds, Map<String, String> answers,
+                           Map<Long, Long> versionIds, Map<Long, String> signatures,
+                           List<FinWorkParameterService.Group> groups) { }
+    public record Option(String id, String label) { }
+    public record Execution(WorkflowExecutionResult result, String queryText, Long bindingId) { }
+    public record Outcome(String kind, String content, List<Option> options,
+                          List<FinWorkParameterService.Group> clarifications,
+                          List<Execution> executions) { }
+}

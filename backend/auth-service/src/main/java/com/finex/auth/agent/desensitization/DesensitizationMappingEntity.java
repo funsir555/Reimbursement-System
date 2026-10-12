@@ -3,7 +3,7 @@ package com.finex.auth.agent.desensitization;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -58,7 +58,7 @@ public class DesensitizationMappingEntity implements Serializable {
     /**
      * 转换为映射表对象
      */
-    public MappingTable toMappingTable() {
+    public MappingTable toMappingTable(ObjectMapper objectMapper) {
         MappingTable table = new MappingTable();
         table.setId(this.mappingId);
         table.setSessionId(this.sessionId);
@@ -68,9 +68,8 @@ public class DesensitizationMappingEntity implements Serializable {
         // 解析 JSON 映射
         if (this.mappings != null) {
             try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 @SuppressWarnings("unchecked")
-                Map<String, String> mappingMap = mapper.readValue(this.mappings, Map.class);
+                Map<String, String> mappingMap = objectMapper.readValue(this.mappings, Map.class);
                 for (Map.Entry<String, String> entry : mappingMap.entrySet()) {
                     table.addMapping(entry.getKey(), entry.getValue());
                 }
@@ -85,7 +84,7 @@ public class DesensitizationMappingEntity implements Serializable {
     /**
      * 从映射表对象创建
      */
-    public static DesensitizationMappingEntity fromMappingTable(MappingTable table, String tenantId) {
+    public static DesensitizationMappingEntity fromMappingTable(MappingTable table, String tenantId, ObjectMapper objectMapper) {
         DesensitizationMappingEntity entity = new DesensitizationMappingEntity();
         entity.setTenantId(tenantId);
         entity.setSessionId(table.getSessionId());
@@ -95,8 +94,7 @@ public class DesensitizationMappingEntity implements Serializable {
 
         // 序列化映射为 JSON
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            entity.setMappings(mapper.writeValueAsString(table.getPlaceholderToOriginal()));
+            entity.setMappings(objectMapper.writeValueAsString(table.getPlaceholderToOriginal()));
         } catch (Exception e) {
             // Log error
         }

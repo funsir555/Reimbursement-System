@@ -9,6 +9,7 @@ import com.finex.auth.dto.ExpenseAttachmentVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ExpenseAttachmentOcrService;
 import com.finex.auth.service.ExpenseAttachmentService;
+import com.finex.auth.service.ExpenseAttachmentPreviewService;
 import com.finex.common.JwtUtil;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
@@ -51,6 +52,7 @@ public class ExpenseAttachmentController {
     private final ExpenseAttachmentService expenseAttachmentService;
     private final ExpenseAttachmentOcrService expenseAttachmentOcrService;
     private final AccessControlService accessControlService;
+    private final ExpenseAttachmentPreviewService previewAccess;
 
     // 处理 uploadAttachment 请求。
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -66,7 +68,7 @@ public class ExpenseAttachmentController {
                 EXPENSE_APPROVAL_VIEW,
                 EXPENSE_APPROVAL_APPROVE
         );
-        return Result.success("附件上传成功", expenseAttachmentService.uploadAttachment(file));
+        return Result.success("附件上传成功", expenseAttachmentService.uploadAttachment(file, getCurrentUserId(request)));
     }
 
     @PostMapping("/{attachmentId}/ocr")
@@ -107,7 +109,8 @@ public class ExpenseAttachmentController {
                 EXPENSE_DOCUMENTS_VIEW
         );
 
-        ExpenseAttachmentService.StoredExpenseAttachment attachment = expenseAttachmentService.loadAttachment(attachmentId);
+        ExpenseAttachmentService.StoredExpenseAttachment attachment = previewAccess.load(
+                JwtUtil.getUserId(token), attachmentId);
         Resource resource = attachment.resource();
         MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
         try {

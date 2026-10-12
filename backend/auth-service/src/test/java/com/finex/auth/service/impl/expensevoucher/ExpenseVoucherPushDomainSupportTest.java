@@ -5,6 +5,9 @@ import com.finex.auth.dto.ExpenseVoucherPageVO;
 import com.finex.auth.dto.ExpenseVoucherPushBatchResultVO;
 import com.finex.auth.dto.ExpenseVoucherPushDTO;
 import com.finex.auth.dto.ExpenseVoucherPushDocumentVO;
+import com.finex.auth.dto.FinanceVoucherSaveResultVO;
+import com.finex.auth.entity.ExpVoucherPushBatch;
+import com.finex.auth.entity.ExpVoucherPushDocument;
 import com.finex.auth.entity.ExpVoucherSubjectMapping;
 import com.finex.auth.entity.ExpVoucherTemplatePolicy;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
@@ -16,7 +19,6 @@ import com.finex.auth.mapper.ExpVoucherPushDocumentMapper;
 import com.finex.auth.mapper.ExpVoucherPushEntryMapper;
 import com.finex.auth.mapper.ExpVoucherSubjectMappingMapper;
 import com.finex.auth.mapper.ExpVoucherTemplatePolicyMapper;
-import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
@@ -24,20 +26,27 @@ import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceVoucherService;
+import com.finex.auth.service.port.FinanceReferenceQueryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class ExpenseVoucherPushDomainSupportTest {
@@ -53,13 +62,16 @@ class ExpenseVoucherPushDomainSupportTest {
     @Mock private ProcessExpenseTypeMapper expenseTypeMapper;
     @Mock private SystemCompanyMapper systemCompanyMapper;
     @Mock private UserMapper userMapper;
-    @Mock private GlAccvouchMapper glAccvouchMapper;
+    @Mock private FinanceReferenceQueryPort financeReferenceQueryPort;
     @Mock private FinanceVoucherService financeVoucherService;
 
     private ExpenseVoucherPushDomainSupport support;
 
     @BeforeEach
     void setUp() {
+        ExpenseVoucherTransactionRunner transactionRunner = mock(ExpenseVoucherTransactionRunner.class);
+        org.mockito.Mockito.lenient().when(transactionRunner.execute(any()))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(0)).get());
         support = new ExpenseVoucherPushDomainSupport(AbstractExpenseVoucherGenerationSupport.dependencies(
                 templatePolicyMapper,
                 subjectMappingMapper,
@@ -72,10 +84,10 @@ class ExpenseVoucherPushDomainSupportTest {
                 expenseTypeMapper,
                 systemCompanyMapper,
                 userMapper,
-                glAccvouchMapper,
+                financeReferenceQueryPort,
                 financeVoucherService,
                 new ObjectMapper()
-        ));
+        ), transactionRunner);
     }
 
     @Test
@@ -106,10 +118,12 @@ class ExpenseVoucherPushDomainSupportTest {
         document.setSubmitterUserId(1L);
         document.setSubmitterName("alice");
         document.setDocumentTitle("Travel request");
-        document.setStatus("COMPLETED");
+        document.setStatus("PAYMENT_COMPLETED");
         document.setTotalAmount(new BigDecimal("88.00"));
         document.setFinishedAt(LocalDateTime.of(2026, 4, 11, 9, 0));
-        document.setFormDataJson("{\"payment-company-1\":\"COMPANY_A\"}");
+        // A historical or non-payment form must use the saved company snapshot.
+        document.setFormDataJson("{}");
+        document.setCompanyId("COMPANY_A");
         document.setFormSchemaSnapshotJson("{}");
 
         ProcessDocumentExpenseDetail detail = new ProcessDocumentExpenseDetail();
@@ -160,5 +174,103 @@ class ExpenseVoucherPushDomainSupportTest {
         assertEquals(1, result.getFailureCount());
         assertEquals(1, result.getResults().size());
         assertEquals("FAILED", result.getResults().get(0).getPushStatus());
+    }
+
+    @Test
+    void pushDocumentsKeepsSuccessfulVoucherWhenAnotherDocumentFails() {
+        ProcessDocumentInstance success = new ProcessDocumentInstance();
+        success.setDocumentCode("DOC-OK");
+        success.setTemplateCode("TMP001");
+        success.setStatus("PAYMENT_COMPLETED");
+        success.setFormDataJson("{\"payment-company-1\":\"COMPANY_A\"}");
+        success.setCompanyId("COMPANY_A");
+        success.setFormSchemaSnapshotJson("{}");
+        success.setTotalAmount(new BigDecimal("88.00"));
+        success.setFinishedAt(LocalDateTime.of(2026, 4, 11, 9, 0));
+
+        ProcessDocumentInstance failed = new ProcessDocumentInstance();
+        failed.setDocumentCode("DOC-FAIL");
+        failed.setTemplateCode("TMP001");
+        failed.setStatus("DRAFT");
+        failed.setFormDataJson("{\"payment-company-1\":\"COMPANY_A\"}");
+        failed.setCompanyId("COMPANY_A");
+        failed.setFormSchemaSnapshotJson("{}");
+        failed.setFinishedAt(LocalDateTime.of(2026, 4, 11, 9, 0));
+
+        ExpVoucherTemplatePolicy policy = new ExpVoucherTemplatePolicy();
+        policy.setCreditAccountCode("2202");
+        ExpVoucherSubjectMapping mapping = new ExpVoucherSubjectMapping();
+        mapping.setExpenseTypeCode("TRAVEL");
+        mapping.setDebitAccountCode("6601");
+        ProcessDocumentExpenseDetail detail = new ProcessDocumentExpenseDetail();
+        detail.setExpenseTypeCode("TRAVEL");
+        detail.setActualPaymentAmount(new BigDecimal("88.00"));
+        FinanceVoucherSaveResultVO voucher = new FinanceVoucherSaveResultVO();
+        voucher.setVoucherNo("记-001");
+        voucher.setCsign("记");
+        voucher.setInoId(1);
+        voucher.setIperiod(4);
+
+        when(documentInstanceMapper.selectList(any())).thenReturn(List.of(success, failed));
+        when(templatePolicyMapper.selectOne(any())).thenReturn(policy);
+        when(expenseDetailMapper.selectList(any())).thenReturn(List.of(detail));
+        when(expenseTypeMapper.selectList(any())).thenReturn(List.of());
+        when(subjectMappingMapper.selectList(any())).thenReturn(List.of(mapping));
+        when(financeVoucherService.saveVoucher(any(), any(), any())).thenReturn(voucher);
+        when(pushBatchMapper.insert(any())).thenAnswer(invocation -> {
+            ((ExpVoucherPushBatch) invocation.getArgument(0)).setId(1L);
+            return 1;
+        });
+        when(pushDocumentMapper.insert(any())).thenAnswer(invocation -> {
+            ((ExpVoucherPushDocument) invocation.getArgument(0)).setId(2L);
+            return 1;
+        });
+
+        ExpenseVoucherPushDTO dto = new ExpenseVoucherPushDTO();
+        dto.setDocumentCodes(List.of("DOC-OK", "DOC-FAIL"));
+        ExpenseVoucherPushBatchResultVO result = support.pushDocuments(dto, 1L, "tester");
+
+        assertEquals(1, result.getSuccessCount());
+        assertEquals(1, result.getFailureCount());
+        assertEquals("SUCCESS", result.getResults().get(0).getPushStatus());
+        assertEquals("FAILED", result.getResults().get(1).getPushStatus());
+        verify(financeVoucherService, times(1)).saveVoucher(any(), any(), any());
+        ArgumentCaptor<ExpVoucherPushBatch> batchCaptor = ArgumentCaptor.forClass(ExpVoucherPushBatch.class);
+        verify(pushBatchMapper).updateById(batchCaptor.capture());
+        assertEquals("PARTIAL", batchCaptor.getValue().getStatus());
+        assertEquals(1, batchCaptor.getValue().getSuccessCount());
+        assertEquals(1, batchCaptor.getValue().getFailureCount());
+    }
+
+    @Test
+    void failedRetryDoesNotOverwritePreviouslySuccessfulVoucher() {
+        ProcessDocumentInstance document = new ProcessDocumentInstance();
+        document.setDocumentCode("DOC-RETRY");
+        document.setTemplateCode("TMP001");
+        document.setStatus("PAYMENT_COMPLETED");
+        document.setFormDataJson("{\"payment-company-1\":\"COMPANY_A\"}");
+        document.setCompanyId("COMPANY_A");
+        document.setFormSchemaSnapshotJson("{}");
+        ExpVoucherPushDocument existing = new ExpVoucherPushDocument();
+        existing.setId(9L);
+        existing.setPushStatus("SUCCESS");
+        existing.setVoucherNo("记-009");
+        when(documentInstanceMapper.selectList(any())).thenReturn(List.of(document));
+        when(pushDocumentMapper.selectOne(any())).thenReturn(existing);
+        when(pushBatchMapper.insert(any())).thenAnswer(invocation -> {
+            ((ExpVoucherPushBatch) invocation.getArgument(0)).setId(1L);
+            return 1;
+        });
+
+        ExpenseVoucherPushDTO dto = new ExpenseVoucherPushDTO();
+        dto.setDocumentCodes(List.of("DOC-RETRY"));
+        ExpenseVoucherPushBatchResultVO result = support.pushDocuments(dto, 1L, "tester");
+
+        assertEquals(1, result.getFailureCount());
+        assertEquals("该报销单已生成凭证，请勿重复推送", result.getResults().get(0).getErrorMessage());
+        assertEquals("记-009", existing.getVoucherNo());
+        verify(financeVoucherService, never()).saveVoucher(any(), any(), any());
+        verify(pushDocumentMapper, never()).updateById(any());
+        verify(pushDocumentMapper, never()).insert(any());
     }
 }

@@ -26,16 +26,27 @@ public final class FinanceBalanceDirectionSupport {
         return normalizeAmount(amount).abs();
     }
 
-    public static String resolveActualDirectionLabel(String defaultBalanceDirection, BigDecimal amount) {
-        boolean debitDirection = isDebitDirection(defaultBalanceDirection);
-        BigDecimal normalizedAmount = normalizeAmount(amount);
-        if (normalizedAmount.compareTo(BigDecimal.ZERO) >= 0) {
-            return debitDirection ? "借" : "贷";
-        }
-        return debitDirection ? "贷" : "借";
+    /** Converts the opening balance entered relative to a subject's usual direction. */
+    public static BigDecimal signedFromNatural(String balanceDirection, BigDecimal amount) {
+        BigDecimal normalized = normalizeAmount(amount);
+        return isDebitDirection(balanceDirection) ? normalized : normalized.negate();
     }
 
-    public static String resolveActualDirectionCode(String defaultBalanceDirection, BigDecimal amount) {
-        return "借".equals(resolveActualDirectionLabel(defaultBalanceDirection, amount)) ? "DEBIT" : "CREDIT";
+    /** Keeps the existing opening-balance API's input and output convention. */
+    public static BigDecimal naturalFromSigned(String balanceDirection, BigDecimal amount) {
+        return signedFromNatural(balanceDirection, amount);
+    }
+
+    public static BigDecimal ending(BigDecimal opening, BigDecimal debit, BigDecimal credit) {
+        return normalizeAmount(opening).add(normalizeAmount(debit)).subtract(normalizeAmount(credit));
+    }
+
+    public static String resolveActualDirectionLabel(BigDecimal amount) {
+        BigDecimal normalizedAmount = normalizeAmount(amount);
+        return normalizedAmount.compareTo(BigDecimal.ZERO) < 0 ? "贷" : "借";
+    }
+
+    public static String resolveActualDirectionCode(BigDecimal amount) {
+        return "借".equals(resolveActualDirectionLabel(amount)) ? "DEBIT" : "CREDIT";
     }
 }

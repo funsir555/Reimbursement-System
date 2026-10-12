@@ -7,6 +7,7 @@ import com.finex.auth.dto.OpeningBalanceRowSaveDTO;
 import com.finex.auth.dto.OpeningBalanceRowVO;
 import com.finex.auth.dto.OpeningBalanceTrialResultVO;
 import com.finex.auth.entity.FinanceAccountSubject;
+import com.finex.auth.entity.FinanceAccountSetModuleEnable;
 import com.finex.auth.entity.FinanceOpeningBalanceState;
 import com.finex.auth.entity.GlAccass;
 import com.finex.auth.entity.GlAccsum;
@@ -101,6 +102,11 @@ class FinanceOpeningBalanceServiceImplTest {
         );
 
         when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        FinanceAccountSetModuleEnable generalLedger = new FinanceAccountSetModuleEnable();
+        generalLedger.setCompanyId("COMP-001");
+        generalLedger.setModuleCode("GENERAL_LEDGER");
+        generalLedger.setEnabled(1);
+        when(financeAccountSetModuleEnableMapper.selectOne(any())).thenReturn(generalLedger);
         lenient().when(financeOpeningBalanceStateMapper.selectOne(any())).thenReturn(openedState());
         lenient().when(financeCustomerMapper.selectList(any())).thenReturn(List.of());
         lenient().when(financeVendorMapper.selectList(any())).thenReturn(List.of());
@@ -119,7 +125,7 @@ class FinanceOpeningBalanceServiceImplTest {
         ));
         when(glAccsumMapper.selectList(any())).thenReturn(List.of(
                 periodSumRow("1001", "100.00"),
-                periodSumRow("2202", "100.00")
+                periodSumRow("2202", "-100.00")
         ));
 
         OpeningBalanceTrialResultVO result = service.trialBalance("COMP-001", 2026, 4, "alice");
@@ -139,7 +145,7 @@ class FinanceOpeningBalanceServiceImplTest {
         ));
         when(glAccsumMapper.selectList(any())).thenReturn(List.of(
                 periodSumRow("1001", "-100.00"),
-                periodSumRow("2202", "-100.00")
+                periodSumRow("2202", "100.00")
         ));
 
         OpeningBalanceTrialResultVO result = service.trialBalance("COMP-001", 2026, 4, "alice");
@@ -244,7 +250,7 @@ class FinanceOpeningBalanceServiceImplTest {
 
         when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(subject));
         when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);
-        when(glAccsumMapper.selectList(any())).thenReturn(List.of(periodSumRow("4103", "-120.00")));
+        when(glAccsumMapper.selectList(any())).thenReturn(List.of(periodSumRow("4103", "120.00")));
 
         List<OpeningBalanceRowVO> rows = service.listRows("COMP-001", 2026, 4);
 
@@ -297,6 +303,33 @@ class FinanceOpeningBalanceServiceImplTest {
     }
 
     @Test
+    void creditOpeningInputKeepsPositiveApiAmountButStoresDebitSignedBalance() {
+        FinanceAccountSubject subject = subject("2241", "其他应付款", "CREDIT", 1, 0);
+        subject.setSubjectLevel(1);
+        OpeningBalanceRowSaveDTO row = new OpeningBalanceRowSaveDTO();
+        row.setSubjectCode("2241");
+        row.setMb(new BigDecimal("1100000.00"));
+        OpeningBalanceCommitDTO dto = new OpeningBalanceCommitDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIyear(2026);
+        dto.setIperiod(4);
+        dto.setRows(new ArrayList<>(List.of(row)));
+        ArgumentCaptor<GlAccsum> saved = ArgumentCaptor.forClass(GlAccsum.class);
+        when(financeAccountSubjectMapper.selectList(any())).thenReturn(List.of(subject));
+        when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);
+        when(glAccsumMapper.selectOne(any())).thenReturn(null);
+        when(glAccsumMapper.selectList(any())).thenReturn(List.of(periodSumRow("2241", "-1100000.00")));
+        doAnswer(invocation -> 1).when(glAccsumMapper).insert(any(GlAccsum.class));
+
+        List<OpeningBalanceRowVO> rows = service.commit(dto, "alice");
+
+        verify(glAccsumMapper).insert(saved.capture());
+        assertEquals(new BigDecimal("-1100000.00"), saved.getValue().getMb());
+        assertEquals(new BigDecimal("1100000.00"), rows.get(0).getMb());
+        assertEquals("贷", rows.get(0).getActualBalanceDirectionLabel());
+    }
+
+    @Test
     void assistBalancesExposeOppositeDirectionAndDisplayAmount() {
         FinanceAccountSubject assistSubject = subject("410301", "本年利润-部门", "CREDIT", 1, 1);
         assistSubject.setBdept(1);
@@ -309,7 +342,7 @@ class FinanceOpeningBalanceServiceImplTest {
         line.setIperiod(4);
         line.setCcode("410301");
         line.setCdeptId("10");
-        line.setMb(new BigDecimal("-56.00"));
+        line.setMb(new BigDecimal("56.00"));
 
         when(financeAccountSubjectMapper.selectOne(any())).thenReturn(assistSubject);
         when(financeAccountSubjectMapper.selectCount(any())).thenReturn(0L);

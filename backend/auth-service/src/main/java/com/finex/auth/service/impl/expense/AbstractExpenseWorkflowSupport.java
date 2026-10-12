@@ -17,7 +17,6 @@ import com.finex.auth.dto.ExpenseDetailInstanceDTO;
 
 import com.finex.auth.dto.ProcessFlowConditionDTO;
 
-import com.finex.auth.dto.ProcessFlowConditionGroupDTO;
 
 import com.finex.auth.dto.ProcessFlowNodeDTO;
 
@@ -100,6 +99,15 @@ import java.util.Objects;
 import java.util.Set;
 
 import java.util.stream.Collectors;
+
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.DOCUMENT_STATUS_PENDING_PAYMENT;
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.DOCUMENT_STATUS_PAYING;
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.DOCUMENT_STATUS_PAYMENT_COMPLETED;
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.DOCUMENT_STATUS_PAYMENT_EXCEPTION;
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.LOG_PAYMENT_PENDING;
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.LOG_PAYMENT_START;
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.LOG_PAYMENT_COMPLETE;
+import static com.finex.auth.service.impl.expense.ExpensePaymentStatusPolicy.LOG_PAYMENT_EXCEPTION;
 
 
 
@@ -209,15 +217,7 @@ class AbstractExpenseWorkflowSupport {
 
     private static final String DOCUMENT_STATUS_EXCEPTION = "EXCEPTION";
 
-    private static final String DOCUMENT_STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
-
-    private static final String DOCUMENT_STATUS_PAYING = "PAYING";
-
-    private static final String DOCUMENT_STATUS_PAYMENT_COMPLETED = "PAYMENT_COMPLETED";
-
     private static final String DOCUMENT_STATUS_PAYMENT_FINISHED = "PAYMENT_FINISHED";
-
-    private static final String DOCUMENT_STATUS_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
 
 
 
@@ -261,13 +261,6 @@ class AbstractExpenseWorkflowSupport {
 
     private static final String LOG_PAYMENT_REACHED = "PAYMENT_REACHED";
 
-    private static final String LOG_PAYMENT_PENDING = "PAYMENT_PENDING";
-
-    private static final String LOG_PAYMENT_START = "PAYMENT_START";
-
-    private static final String LOG_PAYMENT_COMPLETE = "PAYMENT_COMPLETE";
-
-    private static final String LOG_PAYMENT_EXCEPTION = "PAYMENT_EXCEPTION";
 
     private static final String LOG_FINISH = "FINISH";
 
@@ -393,7 +386,7 @@ public Map<String, Object> buildRuntimeFlowContext(
         List<String> undertakeDeptIds = resolveUndertakeDeptIds(formDesign, formData, expenseDetailDesign, expenseDetails);
 
         putUndertakeDepartmentConditionContext(context, undertakeDeptIds);
-        putSharedArchiveConditionContext(
+        ExpenseSharedArchiveConditionResolver.putForDesign(
                 context,
                 formDesign == null ? null : readSchema(formDesign.getSchemaJson()),
                 formData == null ? Collections.emptyMap() : formData,
@@ -491,11 +484,12 @@ public Map<String, Object> buildRuntimeContextForInstance(ProcessDocumentInstanc
         );
 
         putUndertakeDepartmentConditionContext(context, undertakeDeptIds);
-        putSharedArchiveConditionContextForSnapshots(
+        ExpenseSharedArchiveConditionResolver.putForSnapshots(
                 context,
                 readMap(instance.getFormSchemaSnapshotJson()),
                 formData,
-                expenseDetails
+                expenseDetails,
+                this::readMap
         );
 
         return context;
@@ -1356,7 +1350,7 @@ public void markPaymentException(
 
     ) {
 
-        String targetStatus = normalizePaymentRevertTargetStatus(returnedTo);
+        String targetStatus = ExpensePaymentStatusPolicy.normalizeRevertTargetStatus(returnedTo);
 
         LocalDateTime now = LocalDateTime.now();
 
@@ -1391,36 +1385,8 @@ public void markPaymentException(
     }
 
     public String resolvePaymentVoidTargetStatus(ProcessDocumentInstance instance) {
-        String currentStatus = trimToNull(instance == null ? null : instance.getStatus());
-        if (DOCUMENT_STATUS_PAYING.equals(currentStatus)) {
-            return DOCUMENT_STATUS_PENDING_PAYMENT;
-        }
-        if (!DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(currentStatus)
-                && !DOCUMENT_STATUS_PAYMENT_EXCEPTION.equals(currentStatus)) {
-            return DOCUMENT_STATUS_PENDING_PAYMENT;
-        }
-        String anchorAction = DOCUMENT_STATUS_PAYMENT_COMPLETED.equals(currentStatus)
-                ? LOG_PAYMENT_COMPLETE
-                : LOG_PAYMENT_EXCEPTION;
-        List<ProcessDocumentActionLog> logs = loadActionLogs(instance.getDocumentCode());
-        int anchorIndex = findLastPaymentActionIndex(logs, anchorAction);
-        if (anchorIndex < 0) {
-            return DOCUMENT_STATUS_PENDING_PAYMENT;
-        }
-        for (int index = anchorIndex - 1; index >= 0; index--) {
-            String actionType = trimToNull(logs.get(index).getActionType());
-            if (LOG_PAYMENT_START.equals(actionType)) {
-                return DOCUMENT_STATUS_PAYING;
-            }
-            if (LOG_PAYMENT_PENDING.equals(actionType)
-                    || LOG_PAYMENT_COMPLETE.equals(actionType)
-                    || LOG_PAYMENT_EXCEPTION.equals(actionType)) {
-                return DOCUMENT_STATUS_PENDING_PAYMENT;
-            }
-        }
-        return DOCUMENT_STATUS_PENDING_PAYMENT;
+        return ExpensePaymentStatusPolicy.resolveVoidTargetStatus(instance, this::loadActionLogs);
     }
-
 
 
             /**
@@ -2653,100 +2619,8 @@ private void pauseForManualAssigneeSelection(ProcessDocumentInstance instance, P
 
 
     private ProcessFlowRouteDTO matchRoute(List<ProcessFlowRouteDTO> routes, Map<String, Object> context) {
-
-        if (routes == null || routes.isEmpty()) {
-
-            return null;
-
-        }
-        List<ProcessFlowRouteDTO> orderedRoutes = routes.stream()
-                .sorted(Comparator.comparing(item -> item.getPriority() == null ? Integer.MAX_VALUE : item.getPriority()))
-                .toList();
-
-        ProcessFlowRouteDTO matchedRoute = orderedRoutes.stream()
-                .filter(route -> !Boolean.TRUE.equals(route.getDefaultRoute()))
-                .filter(route -> routeMatches(route, context))
-                .findFirst()
-                .orElse(null);
-        if (matchedRoute != null) {
-            return matchedRoute;
-        }
-
-        return orderedRoutes.stream()
-                .filter(route -> Boolean.TRUE.equals(route.getDefaultRoute()))
-                .findFirst()
-                .orElseGet(() -> orderedRoutes.stream()
-                        .filter(route -> routeMatches(route, context))
-                        .findFirst()
-                        .orElse(null));
-
+        return ExpenseFlowRouteMatcher.match(routes, condition -> resolveConditionActualValue(condition, context));
     }
-
-
-
-    private boolean routeMatches(ProcessFlowRouteDTO route, Map<String, Object> context) {
-
-        if (route.getConditionGroups() == null || route.getConditionGroups().isEmpty()) {
-
-            return true;
-
-        }
-
-        return route.getConditionGroups().stream().anyMatch(group -> groupMatches(group, context));
-
-    }
-
-
-
-    private boolean groupMatches(ProcessFlowConditionGroupDTO group, Map<String, Object> context) {
-
-        if (group.getConditions() == null || group.getConditions().isEmpty()) {
-
-            return true;
-
-        }
-
-        return group.getConditions().stream().allMatch(condition -> conditionMatches(condition, context));
-
-    }
-
-
-
-    private boolean conditionMatches(ProcessFlowConditionDTO condition, Map<String, Object> context) {
-
-        Object actual = resolveConditionActualValue(condition, context);
-
-        Object compare = condition.getCompareValue();
-
-        String operator = defaultText(condition.getOperator(), "EQ");
-
-        return switch (operator) {
-
-            case "NE" -> !valuesEqual(actual, compare);
-
-            case "IN" -> anyIn(actual, compare, false);
-
-            case "NOT_IN" -> !anyIn(actual, compare, false);
-
-            case "GT" -> compareNumbers(actual, compare) > 0;
-
-            case "GE" -> compareNumbers(actual, compare) >= 0;
-
-            case "LT" -> compareNumbers(actual, compare) < 0;
-
-            case "LE" -> compareNumbers(actual, compare) <= 0;
-
-            case "BETWEEN" -> between(actual, compare);
-
-            case "CONTAINS" -> containsValue(actual, compare);
-
-            default -> valuesEqual(actual, compare);
-
-        };
-
-    }
-
-
 
     private Object resolveConditionActualValue(ProcessFlowConditionDTO condition, Map<String, Object> context) {
 
@@ -3848,44 +3722,6 @@ private List<ProcessDocumentActionLog> loadActionLogs(String documentCode) {
 
     }
 
-    private int findLastPaymentActionIndex(List<ProcessDocumentActionLog> logs, String actionType) {
-
-        if (logs == null || logs.isEmpty() || trimToNull(actionType) == null) {
-
-            return -1;
-
-        }
-
-        for (int index = logs.size() - 1; index >= 0; index--) {
-
-            if (Objects.equals(trimToNull(logs.get(index).getActionType()), actionType)) {
-
-                return index;
-
-            }
-
-        }
-
-        return -1;
-
-    }
-
-    private String normalizePaymentRevertTargetStatus(String status) {
-
-        String normalized = trimToNull(status);
-
-        if (DOCUMENT_STATUS_PAYING.equals(normalized)) {
-
-            return DOCUMENT_STATUS_PAYING;
-
-        }
-
-        return DOCUMENT_STATUS_PENDING_PAYMENT;
-
-    }
-
-
-
     private void cancelOpenTasks(List<ProcessDocumentTask> tasks, Long keepTaskId, LocalDateTime handledAt) {
 
         for (ProcessDocumentTask task : tasks) {
@@ -4106,118 +3942,6 @@ private List<String> resolveUndertakeDeptIdsFromSnapshots(
         }
     }
 
-    private void putSharedArchiveConditionContext(
-            Map<String, Object> context,
-            Map<String, Object> mainSchema,
-            Map<String, Object> mainFormData,
-            Map<String, Object> detailSchema,
-            List<ExpenseDetailInstanceDTO> expenseDetails
-    ) {
-
-        Set<String> archiveCodes = new LinkedHashSet<>();
-
-        collectSharedArchiveCodes(archiveCodes, mainSchema);
-        collectSharedArchiveCodes(archiveCodes, detailSchema);
-
-        if (archiveCodes.isEmpty()) {
-
-            return;
-
-        }
-
-        for (String archiveCode : archiveCodes) {
-
-            LinkedHashSet<String> values = new LinkedHashSet<>();
-
-            collectArchiveValues(values, mainSchema, mainFormData, archiveCode);
-
-            if (detailSchema != null && expenseDetails != null) {
-
-                for (ExpenseDetailInstanceDTO expenseDetail : expenseDetails) {
-
-                    collectArchiveValues(
-
-                            values,
-
-                            detailSchema,
-
-                            expenseDetail == null || expenseDetail.getFormData() == null ? Collections.emptyMap() : expenseDetail.getFormData(),
-
-                            archiveCode
-
-                    );
-
-                }
-
-            }
-
-            context.put(archiveCode, new ArrayList<>(values));
-
-        }
-
-    }
-
-    private void putSharedArchiveConditionContextForSnapshots(
-            Map<String, Object> context,
-            Map<String, Object> mainSchema,
-            Map<String, Object> mainFormData,
-            List<ProcessDocumentExpenseDetail> expenseDetails
-    ) {
-
-        Set<String> archiveCodes = new LinkedHashSet<>();
-
-        collectSharedArchiveCodes(archiveCodes, mainSchema);
-
-        if (expenseDetails != null) {
-
-            for (ProcessDocumentExpenseDetail expenseDetail : expenseDetails) {
-
-                collectSharedArchiveCodes(archiveCodes, readMap(expenseDetail.getSchemaSnapshotJson()));
-
-            }
-
-        }
-
-        if (archiveCodes.isEmpty()) {
-
-            return;
-
-        }
-
-        for (String archiveCode : archiveCodes) {
-
-            LinkedHashSet<String> values = new LinkedHashSet<>();
-
-            collectArchiveValues(values, mainSchema, mainFormData, archiveCode);
-
-            if (expenseDetails != null) {
-
-                for (ProcessDocumentExpenseDetail expenseDetail : expenseDetails) {
-
-                    collectArchiveValues(
-
-                            values,
-
-                            readMap(expenseDetail.getSchemaSnapshotJson()),
-
-                            readMap(expenseDetail.getFormDataJson()),
-
-                            archiveCode
-
-                    );
-
-                }
-
-            }
-
-            context.put(archiveCode, new ArrayList<>(values));
-
-        }
-
-    }
-
-
-
     private String resolvePaymentCompanyId(Map<String, Object> schema, Map<String, Object> formData) {
 
         if (schema == null || formData == null || formData.isEmpty()) {
@@ -4284,109 +4008,6 @@ private List<String> resolveUndertakeDeptIdsFromSnapshots(
 
     }
 
-    private void collectSharedArchiveCodes(Set<String> result, Map<String, Object> schema) {
-
-        if (result == null || schema == null) {
-
-            return;
-
-        }
-
-        Object rawBlocks = schema.get("blocks");
-
-        if (!(rawBlocks instanceof List<?> blocks)) {
-
-            return;
-
-        }
-
-        for (Object rawBlock : blocks) {
-
-            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
-
-                continue;
-
-            }
-
-            if (!Objects.equals(String.valueOf(blockMap.get("kind")), "SHARED_FIELD")) {
-
-                continue;
-
-            }
-
-            Object rawProps = blockMap.get("props");
-
-            if (!(rawProps instanceof Map<?, ?> props)) {
-
-                continue;
-
-            }
-
-            String archiveCode = trimToNull(String.valueOf(props.get("archiveCode")));
-
-            if (archiveCode != null) {
-
-                result.add(archiveCode);
-
-            }
-
-        }
-
-    }
-
-    private void collectArchiveValues(Set<String> result, Map<String, Object> schema, Map<String, Object> formData, String archiveCode) {
-
-        if (result == null || schema == null || formData == null || formData.isEmpty() || trimToNull(archiveCode) == null) {
-
-            return;
-
-        }
-
-        Object rawBlocks = schema.get("blocks");
-
-        if (!(rawBlocks instanceof List<?> blocks)) {
-
-            return;
-
-        }
-
-        for (Object rawBlock : blocks) {
-
-            if (!(rawBlock instanceof Map<?, ?> blockMap)) {
-
-                continue;
-
-            }
-
-            Object rawProps = blockMap.get("props");
-
-            if (!(rawProps instanceof Map<?, ?> props)) {
-
-                continue;
-
-            }
-
-            if (!Objects.equals(archiveCode, trimToNull(String.valueOf(props.get("archiveCode"))))) {
-
-                continue;
-
-            }
-
-            String fieldKey = trimToNull(String.valueOf(blockMap.get("fieldKey")));
-
-            if (fieldKey == null) {
-
-                continue;
-
-            }
-
-            collectStringValues(result, formData.get(fieldKey));
-
-        }
-
-    }
-
-
             /**
      * 合并主表单与费用明细运行态数据。
      */
@@ -4449,44 +4070,6 @@ private Map<String, Object> mergeRuntimeFormData(Map<String, Object> formData, L
         }
 
     }
-
-    private void collectStringValues(Set<String> result, Object value) {
-
-        if (result == null || value == null) {
-
-            return;
-
-        }
-
-        if (value instanceof Collection<?> items) {
-
-            for (Object item : items) {
-
-                String normalized = trimToNull(String.valueOf(item));
-
-                if (normalized != null) {
-
-                    result.add(normalized);
-
-                }
-
-            }
-
-            return;
-
-        }
-
-        String normalized = trimToNull(String.valueOf(value));
-
-        if (normalized != null) {
-
-            result.add(normalized);
-
-        }
-
-    }
-
-
 
     private Map<String, Object> readSchema(String schemaJson) {
 
@@ -4559,181 +4142,7 @@ private Map<String, Object> mergeRuntimeFormData(Map<String, Object> formData, L
 
 
 
-    private BigDecimal toBigDecimal(Object value) {
 
-        if (value == null) {
-
-            return null;
-
-        }
-
-        if (value instanceof BigDecimal decimal) {
-
-            return decimal;
-
-        }
-
-        if (value instanceof Number number) {
-
-            return new BigDecimal(String.valueOf(number));
-
-        }
-
-        try {
-
-            String normalized = trimToNull(String.valueOf(value));
-
-            return normalized == null ? null : new BigDecimal(normalized);
-
-        } catch (Exception ex) {
-
-            return null;
-
-        }
-
-    }
-
-
-
-    private int compareNumbers(Object actual, Object compare) {
-
-        BigDecimal left = toBigDecimal(actual);
-
-        BigDecimal right = toBigDecimal(compare);
-
-        if (left == null || right == null) {
-
-            return 0;
-
-        }
-
-        return left.compareTo(right);
-
-    }
-
-
-
-    private boolean between(Object actual, Object compare) {
-
-        BigDecimal current = toBigDecimal(actual);
-
-        if (current == null) {
-
-            return false;
-
-        }
-
-        List<Object> range = toObjectList(compare);
-
-        if (range.size() < 2) {
-
-            return false;
-
-        }
-
-        BigDecimal start = toBigDecimal(range.get(0));
-
-        BigDecimal end = toBigDecimal(range.get(1));
-
-        if (start == null || end == null) {
-
-            return false;
-
-        }
-
-        return current.compareTo(start) >= 0 && current.compareTo(end) <= 0;
-
-    }
-
-
-
-    private boolean containsValue(Object actual, Object compare) {
-
-        if (actual instanceof Collection<?> collection) {
-
-            return collection.stream().anyMatch(item -> valuesEqual(item, compare));
-
-        }
-
-        String actualText = trimToNull(String.valueOf(actual));
-
-        String compareText = trimToNull(String.valueOf(compare));
-
-        return actualText != null && compareText != null && actualText.contains(compareText);
-
-    }
-
-
-
-    private boolean anyIn(Object actual, Object compare, boolean defaultResult) {
-
-        List<Object> compareList = toObjectList(compare);
-
-        if (compareList.isEmpty()) {
-
-            return defaultResult;
-
-        }
-
-        if (actual instanceof Collection<?> collection) {
-
-            return collection.stream().anyMatch(item -> compareList.stream().anyMatch(candidate -> valuesEqual(item, candidate)));
-
-        }
-
-        return compareList.stream().anyMatch(candidate -> valuesEqual(actual, candidate));
-
-    }
-
-
-
-    private boolean valuesEqual(Object actual, Object compare) {
-
-        BigDecimal leftNumber = toBigDecimal(actual);
-
-        BigDecimal rightNumber = toBigDecimal(compare);
-
-        if (leftNumber != null && rightNumber != null) {
-
-            return leftNumber.compareTo(rightNumber) == 0;
-
-        }
-
-        if (actual instanceof Collection<?> collection) {
-
-            return collection.stream().anyMatch(item -> valuesEqual(item, compare));
-
-        }
-
-        return Objects.equals(defaultText(asText(actual), ""), defaultText(asText(compare), ""));
-
-    }
-
-
-
-    private List<Object> toObjectList(Object value) {
-
-        if (value instanceof Collection<?> collection) {
-
-            return new ArrayList<>(collection);
-
-        }
-
-        if (value == null) {
-
-            return new ArrayList<>();
-
-        }
-
-        return List.of(value);
-
-    }
-
-
-
-            /**
-     * 生成任务批次号。
-     */
 private String buildTaskBatchNo(String documentCode, String nodeKey) {
 
         return documentCode + "-" + nodeKey + "-" + System.currentTimeMillis();

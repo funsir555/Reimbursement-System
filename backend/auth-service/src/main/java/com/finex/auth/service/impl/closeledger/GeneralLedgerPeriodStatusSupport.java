@@ -1,6 +1,5 @@
 package com.finex.auth.service.impl.closeledger;
 
-import cn.hutool.crypto.digest.DigestUtil;
 import com.finex.auth.dto.FinanceGeneralLedgerPeriodActionResultVO;
 import com.finex.auth.dto.FinanceGeneralLedgerPeriodStatusOverviewVO;
 import com.finex.auth.dto.FinanceGeneralLedgerPeriodStatusRowVO;
@@ -10,6 +9,7 @@ import com.finex.auth.entity.FinancePostVoucherState;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
 import com.finex.auth.service.FinancePeriodTransferService;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.impl.closeledger.AbstractFinanceCloseLedgerSupport.FinanceGeneralLedgerRollbackSnapshot;
 import com.finex.auth.service.impl.closeledger.AbstractFinanceCloseLedgerSupport.VoucherCounts;
 import java.time.LocalDateTime;
@@ -49,15 +49,18 @@ public class GeneralLedgerPeriodStatusSupport {
     private final SharedCloseLedgerSupport support;
     private final UserMapperBridge userMapperBridge;
     private final FinancePeriodTransferService financePeriodTransferService;
+    private final PasswordHashService passwordHashService;
 
     public GeneralLedgerPeriodStatusSupport(
             SharedCloseLedgerSupport support,
             UserMapperBridge userMapperBridge,
-            FinancePeriodTransferService financePeriodTransferService
+            FinancePeriodTransferService financePeriodTransferService,
+            PasswordHashService passwordHashService
     ) {
         this.support = support;
         this.userMapperBridge = userMapperBridge;
         this.financePeriodTransferService = financePeriodTransferService;
+        this.passwordHashService = passwordHashService;
     }
 
     public FinanceGeneralLedgerPeriodStatusOverviewVO getOverview(
@@ -403,7 +406,7 @@ public class GeneralLedgerPeriodStatusSupport {
 
     private void verifyCurrentPassword(Long currentUserId, String password) {
         User user = userMapperBridge.requireUser(currentUserId);
-        if (support.trimToNull(password) == null || !Objects.equals(DigestUtil.md5Hex(password), user.getPassword())) {
+        if (support.trimToNull(password) == null || !passwordHashService.matches(password, user.getPassword())) {
             throw new IllegalArgumentException("登录密码不正确");
         }
     }

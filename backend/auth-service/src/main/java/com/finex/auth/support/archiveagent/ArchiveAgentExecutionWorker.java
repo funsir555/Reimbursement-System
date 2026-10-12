@@ -3,6 +3,7 @@ package com.finex.auth.support.archiveagent;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.finex.auth.agent.context.AgentExecutionContext;
 import com.finex.auth.agent.workflow.AgentWorkflowRuntimeService;
 import com.finex.auth.agent.workflow.WorkflowGraphPlan;
 import com.finex.auth.entity.ArchiveAgentDefinition;
@@ -42,13 +43,34 @@ public class ArchiveAgentExecutionWorker {
     private final List<ToolExecutor> toolExecutors;
     private final AgentWorkflowRuntimeService agentWorkflowRuntimeService;
     private final ArchiveAgentModelRuntime archiveAgentModelRuntime;
+    private final ArchiveAgentExecutionContextResolver executionContextResolver;
 
     public void process(Long runId) {
+        process(runId, AgentExecutionContext.capture());
+    }
+
+    public void process(Long runId, AgentExecutionContext capturedContext) {
         ArchiveAgentRun run = archiveAgentRunMapper.selectById(runId);
         if (run == null) {
+            AgentExecutionContext.clear();
             return;
         }
 
+        try {
+            AgentExecutionContext executionContext = executionContextResolver.resolve(run, capturedContext);
+            executionContext.restore();
+            processWithResolvedContext(run);
+        } catch (Exception ex) {
+            log.warn("Archive agent run identity resolution failed, runNo={}, message={}",
+                    run.getRunNo(), ex.getMessage(), ex);
+            markRunFailed(run, ex.getMessage());
+        } finally {
+            AgentExecutionContext.clear();
+        }
+    }
+
+    private void processWithResolvedContext(ArchiveAgentRun run) {
+        Long runId = run.getId();
         ArchiveAgentDefinition definition = archiveAgentDefinitionMapper.selectById(run.getAgentId());
         ArchiveAgentVersion version = archiveAgentVersionMapper.selectById(run.getAgentVersionId());
         if (definition == null || version == null) {

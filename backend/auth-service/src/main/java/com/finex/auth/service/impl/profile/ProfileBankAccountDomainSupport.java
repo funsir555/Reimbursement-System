@@ -9,7 +9,6 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.BankAccountVO;
 import com.finex.auth.dto.UserBankAccountSaveDTO;
 import com.finex.auth.entity.DownloadRecord;
-import com.finex.auth.entity.User;
 import com.finex.auth.entity.UserBankAccount;
 import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
@@ -197,15 +196,6 @@ public final class ProfileBankAccountDomainSupport extends AbstractProfileDomain
         account.setCnapsCode(resolveWeakCnapsCode(previousCnapsCode, trimToNull(dto.getCnapsCode()), branchSelectionChanged));
         account.setStatus(normalizeStatus(dto.getStatus()));
         account.setDefaultAccount(Integer.valueOf(1).equals(account.getStatus()) && normalizeFlag(dto.getDefaultAccount()) == 1 ? 1 : 0);
-    }
-
-    private Long resolveAccountOwnerId(String accountName) {
-        User owner = userService().getOne(
-                Wrappers.<User>lambdaQuery()
-                        .eq(User::getName, accountName)
-                        .last("limit 1")
-        );
-        return owner == null ? null : owner.getId();
     }
 
     private String resolveWeakCnapsCode(String previousCnapsCode, String submittedCnapsCode, boolean branchSelectionChanged) {

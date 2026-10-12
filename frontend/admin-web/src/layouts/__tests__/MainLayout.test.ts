@@ -129,6 +129,7 @@ vi.mock('@element-plus/icons-vue', async () => {
     ArrowDown: { template: '<span />' },
     Bell: { template: '<span />' },
     Coin: { template: '<span />' },
+    Cpu: { template: '<span data-testid="agent-cpu-icon" />' },
     Download: { template: '<span />' },
     FolderOpened: { template: '<span />' },
     House: { template: '<span />' },
@@ -145,6 +146,10 @@ vi.mock('@element-plus/icons-vue', async () => {
 
 const MenuStub = defineComponent({
   template: '<div><slot /></div>'
+})
+
+const IconStub = defineComponent({
+  template: '<span data-testid="el-icon"><slot /></span>'
 })
 
 const SubMenuStub = defineComponent({
@@ -246,7 +251,7 @@ async function mountView(permissionCodes: string[]) {
         'el-dropdown': MenuStub,
         'el-dropdown-item': MenuItemStub,
         'el-dropdown-menu': MenuStub,
-        'el-icon': true,
+        'el-icon': IconStub,
         'el-input': true,
         'el-menu': MenuStub,
         'el-menu-item': MenuItemStub,
@@ -372,6 +377,8 @@ describe('MainLayout', () => {
   it('shows the agent workbench entry when the user has the new workbench permission', async () => {
     const wrapper = await mountView(['agent:workbench:view'])
 
+    expect(wrapper.find('[data-submenu="/agent"]').exists()).toBe(true)
+    expect(wrapper.find('[data-submenu="/agent"] [data-testid="agent-cpu-icon"]').exists()).toBe(true)
     expect(wrapper.find('[data-index="/agent/workbench"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Agent')
   })
@@ -379,6 +386,7 @@ describe('MainLayout', () => {
   it('keeps the agent workbench visible for legacy agent permissions', async () => {
     const wrapper = await mountView(['agents:view'])
 
+    expect(wrapper.find('[data-submenu="/agent"]').exists()).toBe(true)
     expect(wrapper.find('[data-index="/agent/workbench"]').exists()).toBe(true)
   })
 

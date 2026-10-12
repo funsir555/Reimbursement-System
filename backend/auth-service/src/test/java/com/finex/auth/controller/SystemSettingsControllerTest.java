@@ -11,6 +11,7 @@ import com.finex.auth.dto.SyncJobVO;
 import com.finex.auth.dto.SystemSettingsBootstrapVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.SystemSettingsService;
+import com.finex.auth.service.queryauth.RoleQueryScopeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +48,9 @@ class SystemSettingsControllerTest {
     @Mock
     private AccessControlService accessControlService;
 
+    @Mock
+    private RoleQueryScopeService roleQueryScopeService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -55,7 +59,7 @@ class SystemSettingsControllerTest {
         validator.afterPropertiesSet();
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new SystemSettingsController(systemSettingsService, accessControlService))
+                .standaloneSetup(new SystemSettingsController(systemSettingsService, accessControlService, roleQueryScopeService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();

@@ -155,7 +155,7 @@ watch(
 
 function createEmptyBankForm() {
   return {
-    accountId: undefined,
+    accountId: 0,
     accountName: '',
     accountNo: '',
     accountType: '对私账户',

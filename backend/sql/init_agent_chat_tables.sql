@@ -15,17 +15,30 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- 说明：存储用户与 AI 助手的会话信息
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ea_agent_conversation` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户ID',
+  `company_id` VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   `session_id` VARCHAR(64) NOT NULL COMMENT '会话ID，UUID格式',
   `user_id` BIGINT NOT NULL COMMENT '用户ID',
+  `context_json` TEXT NULL COMMENT '上下文数据（JSON）',
+  `summary_text` TEXT NULL COMMENT '会话摘要',
   `message_count` INT NOT NULL DEFAULT 0 COMMENT '消息数量',
   `last_message_at` TIMESTAMP NULL DEFAULT NULL COMMENT '最后一条消息时间',
+  `expires_at` TIMESTAMP NULL DEFAULT NULL COMMENT '过期时间',
+  `created_by` BIGINT NULL COMMENT '创建人',
+  `updated_by` BIGINT NULL COMMENT '更新人',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标记：0-未删除，1-已删除',
-  PRIMARY KEY (`session_id`),
-  KEY `idx_user_id` (`user_id`) COMMENT '用户ID索引，用于查询用户的会话列表',
-  KEY `idx_created_at` (`created_at`) COMMENT '创建时间索引，用于按时间排序',
-  KEY `idx_deleted` (`deleted`) COMMENT '删除标记索引，用于过滤已删除数据'
+  `deleted_at` TIMESTAMP NULL DEFAULT NULL COMMENT '删除时间',
+  `deleted_by` BIGINT NULL COMMENT '删除人',
+  `trace_id` VARCHAR(64) NULL COMMENT '追踪ID',
+  `version_no` INT NOT NULL DEFAULT 0 COMMENT '版本号（乐观锁）',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_session_id` (`session_id`),
+  KEY `idx_tenant_company_session` (`tenant_id`, `company_id`, `session_id`),
+  KEY `idx_tenant_company_user` (`tenant_id`, `company_id`, `user_id`, `last_message_at`),
+  KEY `idx_deleted` (`deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 会话表';
 
 -- ----------------------------------------------------------------------------
@@ -34,33 +47,32 @@ CREATE TABLE IF NOT EXISTS `ea_agent_conversation` (
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `ea_agent_message` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '消息ID，自增主键',
+  `tenant_id` VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '租户ID',
+  `company_id` VARCHAR(64) NOT NULL COMMENT '业务公司主体编码',
   `session_id` VARCHAR(64) NOT NULL COMMENT '会话ID，关联 ea_agent_conversation.session_id',
   `role` VARCHAR(20) NOT NULL COMMENT '角色：user-用户，assistant-助手，system-系统',
   `content` TEXT NOT NULL COMMENT '消息内容',
+  `masked_content` TEXT NULL COMMENT '脱敏后内容',
   `intent` VARCHAR(50) NULL DEFAULT NULL COMMENT '意图识别结果：chat-普通聊天，query_expense-查询报销单',
+  `tokens` INT NULL COMMENT 'Token 数量',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `trace_id` VARCHAR(64) NULL COMMENT '追踪ID',
   PRIMARY KEY (`id`),
-  KEY `idx_session_id` (`session_id`) COMMENT '会话ID索引，用于查询会话的消息列表',
-  KEY `idx_created_at` (`created_at`) COMMENT '创建时间索引，用于按时间排序',
-  KEY `idx_role` (`role`) COMMENT '角色索引，用于按角色过滤消息'
+  KEY `idx_tenant_company_session` (`tenant_id`, `company_id`, `session_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Agent 消息表';
 
 -- ----------------------------------------------------------------------------
 -- 索引优化说明
 -- ----------------------------------------------------------------------------
 -- 1. ea_agent_conversation
---    - idx_user_id: 支持 "查询用户的会话列表" 场景
---    - idx_created_at: 支持 "按创建时间排序" 场景
+--    - idx_tenant_company_session: 支持隔离后的会话精确查询
+--    - idx_tenant_company_user: 支持隔离后的用户会话列表及时间排序
 --    - idx_deleted: 支持 "过滤已删除会话" 场景
 --
 -- 2. ea_agent_message
---    - idx_session_id: 支持 "查询会话的所有消息" 场景（最常用）
---    - idx_created_at: 支持 "按时间排序消息" 场景
---    - idx_role: 支持 "按角色过滤消息" 场景（较少用）
+--    - idx_tenant_company_session: 支持隔离后的会话消息时间序查询
 --
--- 复合索引考虑：
---    - (session_id, created_at): 如果经常需要按会话+时间查询，可以考虑添加
---    - (user_id, deleted, created_at): 如果经常查询用户的未删除会话列表，可以考虑添加
+-- 公司编码必须来自真实用户上下文，不允许写入默认值 1。
 
 -- ----------------------------------------------------------------------------
 -- 数据验证查询

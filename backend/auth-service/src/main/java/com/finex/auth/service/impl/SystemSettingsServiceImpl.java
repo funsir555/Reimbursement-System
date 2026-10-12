@@ -38,6 +38,7 @@ import com.finex.auth.mapper.SystemSyncJobDetailMapper;
 import com.finex.auth.mapper.SystemSyncJobMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.SystemSettingsService;
 import com.finex.auth.service.UserService;
@@ -91,7 +92,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
             SystemSyncJobDetailMapper systemSyncJobDetailMapper,
             ObjectMapper objectMapper,
             List<OrganizationSyncAdapter> syncAdapters,
-            SettingsApiInterfaceDomainSupport settingsApiInterfaceDomainSupport
+            SettingsApiInterfaceDomainSupport settingsApiInterfaceDomainSupport,
+            PasswordHashService passwordHashService
     ) {
         this.settingsBootstrapSupport = new SettingsBootstrapSupport(
                 userService,
@@ -108,7 +110,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 systemSyncJobMapper,
                 systemSyncJobDetailMapper,
                 objectMapper,
-                syncAdapters
+                syncAdapters,
+                passwordHashService
         );
         this.settingsOrganizationDomainSupport = new SettingsOrganizationDomainSupport(
                 userService,
@@ -125,7 +128,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 systemSyncJobMapper,
                 systemSyncJobDetailMapper,
                 objectMapper,
-                syncAdapters
+                syncAdapters,
+                passwordHashService
         );
         this.settingsRoleDomainSupport = new SettingsRoleDomainSupport(
                 userService,
@@ -142,7 +146,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 systemSyncJobMapper,
                 systemSyncJobDetailMapper,
                 objectMapper,
-                syncAdapters
+                syncAdapters,
+                passwordHashService
         );
         this.settingsCompanyDomainSupport = new SettingsCompanyDomainSupport(
                 userService,
@@ -159,7 +164,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 systemSyncJobMapper,
                 systemSyncJobDetailMapper,
                 objectMapper,
-                syncAdapters
+                syncAdapters,
+                passwordHashService
         );
         this.settingsSyncDomainSupport = new SettingsSyncDomainSupport(
                 userService,
@@ -176,7 +182,8 @@ public class SystemSettingsServiceImpl implements SystemSettingsService {
                 systemSyncJobMapper,
                 systemSyncJobDetailMapper,
                 objectMapper,
-                syncAdapters
+                syncAdapters,
+                passwordHashService
         );
         this.settingsApiInterfaceDomainSupport = settingsApiInterfaceDomainSupport;
     }

@@ -6,13 +6,13 @@
 package com.finex.auth.service.impl.profile;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.finex.auth.dto.ChangePasswordDTO;
 import com.finex.auth.dto.PersonalCenterVO;
 import com.finex.auth.dto.UserProfileVO;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.DownloadStorageService;
 
@@ -24,6 +24,7 @@ import com.finex.auth.service.impl.DownloadStorageService;
 public final class ProfileCenterDomainSupport extends AbstractProfileDomainSupport {
 
     private final ProfileBankAccountDomainSupport profileBankAccountDomainSupport;
+    private final PasswordHashService passwordHashService;
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -33,10 +34,12 @@ public final class ProfileCenterDomainSupport extends AbstractProfileDomainSuppo
             UserBankAccountMapper userBankAccountMapper,
             DownloadRecordMapper downloadRecordMapper,
             DownloadStorageService downloadStorageService,
-            ProfileBankAccountDomainSupport profileBankAccountDomainSupport
+            ProfileBankAccountDomainSupport profileBankAccountDomainSupport,
+            PasswordHashService passwordHashService
     ) {
         super(userService, userBankAccountMapper, downloadRecordMapper, downloadStorageService);
         this.profileBankAccountDomainSupport = profileBankAccountDomainSupport;
+        this.passwordHashService = passwordHashService;
     }
 
     /**
@@ -56,8 +59,7 @@ public final class ProfileCenterDomainSupport extends AbstractProfileDomainSuppo
      */
     public void changePassword(Long userId, ChangePasswordDTO dto) {
         User user = requireUser(userId);
-        String currentPassword = DigestUtil.md5Hex(dto.getCurrentPassword());
-        if (!currentPassword.equals(user.getPassword())) {
+        if (!passwordHashService.matches(dto.getCurrentPassword(), user.getPassword())) {
             throw new IllegalArgumentException("当前密码不正确");
         }
         if (!StrUtil.equals(dto.getNewPassword(), dto.getConfirmPassword())) {
@@ -67,7 +69,7 @@ public final class ProfileCenterDomainSupport extends AbstractProfileDomainSuppo
             throw new IllegalArgumentException("新密码长度不能少于 6 位");
         }
 
-        user.setPassword(DigestUtil.md5Hex(dto.getNewPassword()));
+        user.setPassword(passwordHashService.encode(dto.getNewPassword()));
         userService().updateById(user);
     }
 

@@ -8,9 +8,11 @@ package com.finex.auth.service.impl.archiveagent;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.ArchiveAgentDetailVO;
 import com.finex.auth.dto.ArchiveAgentSaveDTO;
+import com.finex.auth.dto.ArchiveAgentToolsSaveDTO;
 import com.finex.auth.dto.ArchiveAgentSummaryVO;
 import com.finex.auth.dto.ArchiveAgentVersionVO;
 import com.finex.auth.agent.workflow.WorkflowGraphPlan;
+import com.finex.auth.agent.workflow.ControlledQueryCatalog;
 import com.finex.auth.entity.ArchiveAgentDefinition;
 import com.finex.auth.entity.ArchiveAgentRun;
 import com.finex.auth.entity.ArchiveAgentRunArtifact;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +39,10 @@ import java.util.stream.Collectors;
  * 改这里时，要特别关注 档案归集效果、执行漏掉和后续追溯是否会被一起带坏。
  */
 public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSupport {
+
+    private static final Set<String> CONFIGURABLE_TOOLS = ControlledQueryCatalog.TOOLS.stream()
+            .map(ControlledQueryCatalog.Definition::code)
+            .collect(Collectors.toUnmodifiableSet());
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -146,6 +153,71 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
 
         createVersion(definition, nextVersionNo, operatorName, dto, false);
         syncBindings(definition.getId(), dto);
+        return buildDetail(requireOwnedAgent(ownerUserId, id));
+    }
+
+    /** Updates only current catalog bindings; retired bindings and every other config remain intact. */
+    public ArchiveAgentDetailVO updateTools(Long ownerUserId, Long id, String operatorName,
+                                            ArchiveAgentToolsSaveDTO dto) {
+        ArchiveAgentDefinition definition = requireOwnedAgent(ownerUserId, id);
+        if (dto == null || dto.getExpectedVersionNo() == null || dto.getToolCodes() == null
+                || dto.getToolCodes().stream().anyMatch(code -> code == null || !CONFIGURABLE_TOOLS.contains(code))
+                || dto.getToolCodes().size() != Set.copyOf(dto.getToolCodes()).size()) {
+            throw new IllegalArgumentException("工具配置无效");
+        }
+        int current = definition.getLatestVersionNo() == null ? 0 : definition.getLatestVersionNo();
+        if (current != dto.getExpectedVersionNo()) {
+            throw new IllegalStateException("Agent 配置已变化，请刷新后重试");
+        }
+        Map<String, Object> config = new LinkedHashMap<>(readMap(requireLatestVersion(id).getConfigJson()));
+        List<Map<String, Object>> tools = new ArrayList<>();
+        Map<String, Map<String, Object>> currentBindings = new LinkedHashMap<>();
+        for (Map<String, Object> tool : readList(config.get("tools"))) {
+            String code = String.valueOf(tool.get("toolCode"));
+            if (!CONFIGURABLE_TOOLS.contains(code)) {
+                tools.add(new LinkedHashMap<>(tool));
+            } else {
+                currentBindings.put(code, new LinkedHashMap<>(tool));
+            }
+        }
+        for (String code : dto.getToolCodes()) {
+            Map<String, Object> binding = new LinkedHashMap<>(currentBindings.getOrDefault(code, Map.of()));
+            binding.put("toolCode", code);
+            binding.put("label", ControlledQueryCatalog.require(code).label());
+            binding.put("category", "BUSINESS");
+            binding.put("enabled", true);
+            tools.add(binding);
+        }
+        int updated = archiveAgentDefinitionMapper.update(null,
+                Wrappers.<ArchiveAgentDefinition>lambdaUpdate()
+                        .eq(ArchiveAgentDefinition::getId, id)
+                        .eq(ArchiveAgentDefinition::getLatestVersionNo, current)
+                        .set(ArchiveAgentDefinition::getLatestVersionNo, current + 1));
+        if (updated != 1) throw new IllegalStateException("Agent 配置已变化，请刷新后重试");
+        config.put("tools", tools);
+        ArchiveAgentVersion version = new ArchiveAgentVersion();
+        version.setAgentId(id);
+        version.setVersionNo(current + 1);
+        version.setVersionLabel("v" + (current + 1) + " draft");
+        version.setConfigJson(writeJson(config));
+        version.setPublished(0);
+        version.setCreatedByUserId(ownerUserId);
+        version.setCreatedByName(operatorName);
+        archiveAgentVersionMapper.insert(version);
+
+        archiveAgentToolBindingMapper.delete(Wrappers.<ArchiveAgentToolBinding>lambdaQuery()
+                .eq(ArchiveAgentToolBinding::getAgentId, id)
+                .in(ArchiveAgentToolBinding::getToolCode, CONFIGURABLE_TOOLS));
+        for (Map<String, Object> tool : tools) {
+            String code = String.valueOf(tool.get("toolCode"));
+            if (!CONFIGURABLE_TOOLS.contains(code)) continue;
+            ArchiveAgentToolBinding binding = new ArchiveAgentToolBinding();
+            binding.setAgentId(id);
+            binding.setToolCode(code);
+            binding.setEnabled(1);
+            binding.setConfigJson(writeJson(tool));
+            archiveAgentToolBindingMapper.insert(binding);
+        }
         return buildDetail(requireOwnedAgent(ownerUserId, id));
     }
 
@@ -407,8 +479,14 @@ public class ArchiveAgentDefinitionDomainSupport extends AbstractArchiveAgentSup
         if (dto.getWorkflow() == null) {
             throw new IllegalArgumentException("工作流配置不能为空");
         }
-        WorkflowGraphPlan.from(dto.getWorkflow());
+        WorkflowGraphPlan graph = WorkflowGraphPlan.from(dto.getWorkflow());
         List<Map<String, Object>> nodes = readList(dto.getWorkflow().get("nodes"));
+        if (nodes.stream().filter(node -> "tool".equalsIgnoreCase(String.valueOf(node.get("nodeType"))))
+                .map(WorkflowGraphPlan::nodeConfig)
+                .map(config -> String.valueOf(config.getOrDefault("toolCode", "")))
+                .anyMatch(ControlledQueryCatalog::isRegistered)) {
+            graph.requireControlledQueryPlan();
+        }
         List<Map<String, Object>> edges = readList(dto.getWorkflow().get("edges"));
         boolean hasStart = nodes.stream().anyMatch(node -> "start".equalsIgnoreCase(String.valueOf(node.get("nodeType"))));
         boolean hasEnd = nodes.stream().anyMatch(node -> "end".equalsIgnoreCase(String.valueOf(node.get("nodeType"))));

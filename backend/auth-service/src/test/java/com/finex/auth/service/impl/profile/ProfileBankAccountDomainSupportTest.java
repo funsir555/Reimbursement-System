@@ -110,6 +110,7 @@ class ProfileBankAccountDomainSupportTest {
         when(userBankAccountMapper.selectOne(any())).thenReturn(insertedAccount);
 
         UserBankAccountSaveDTO dto = new UserBankAccountSaveDTO();
+        dto.setAccountId(3L);
         dto.setAccountName("New User");
         dto.setAccountNo("6222020202020202");
         dto.setBankCode("CMB");
@@ -131,15 +132,10 @@ class ProfileBankAccountDomainSupportTest {
     }
 
     @Test
-    void createBankAccountResolvesAccountOwnerByAccountName() {
+    void createBankAccountUsesExplicitAccountOwner() {
         User maintainer = new User();
         maintainer.setId(3L);
         when(userService.getById(3L)).thenReturn(maintainer);
-
-        User owner = new User();
-        owner.setId(8L);
-        owner.setName("New User");
-        when(userService.getOne(any())).thenReturn(owner);
         when(userBankAccountMapper.insert(any())).thenAnswer(invocation -> {
             UserBankAccount inserted = invocation.getArgument(0);
             inserted.setId(31L);
@@ -154,6 +150,7 @@ class ProfileBankAccountDomainSupportTest {
         when(userBankAccountMapper.selectOne(any())).thenReturn(persisted);
 
         UserBankAccountSaveDTO dto = new UserBankAccountSaveDTO();
+        dto.setAccountId(8L);
         dto.setAccountName("New User");
         dto.setAccountNo("6222020202020202");
         dto.setBankCode("CMB");

@@ -75,10 +75,10 @@ class AbstractFinancePostVoucherSupportTest {
 
         verify(glAccsumMapper).insert(insertCaptor.capture());
         assertEquals("-25.00", insertCaptor.getValue().getMb().toPlainString());
-        assertEquals("借", insertCaptor.getValue().getCbegindC());
-        assertEquals("DEBIT", insertCaptor.getValue().getCbegindCEngl());
-        assertEquals("借", insertCaptor.getValue().getCenddC());
-        assertEquals("DEBIT", insertCaptor.getValue().getCenddCEngl());
+        assertEquals("贷", insertCaptor.getValue().getCbegindC());
+        assertEquals("CREDIT", insertCaptor.getValue().getCbegindCEngl());
+        assertEquals("贷", insertCaptor.getValue().getCenddC());
+        assertEquals("CREDIT", insertCaptor.getValue().getCenddCEngl());
     }
 
     @Test
@@ -98,10 +98,10 @@ class AbstractFinancePostVoucherSupportTest {
 
         verify(glAccassMapper).insert(insertCaptor.capture());
         assertEquals("-12.00", insertCaptor.getValue().getMb().toPlainString());
-        assertEquals("借", insertCaptor.getValue().getCbegindC());
-        assertEquals("DEBIT", insertCaptor.getValue().getCbegindCEngl());
-        assertEquals("借", insertCaptor.getValue().getCenddC());
-        assertEquals("DEBIT", insertCaptor.getValue().getCenddCEngl());
+        assertEquals("贷", insertCaptor.getValue().getCbegindC());
+        assertEquals("CREDIT", insertCaptor.getValue().getCbegindCEngl());
+        assertEquals("贷", insertCaptor.getValue().getCenddC());
+        assertEquals("CREDIT", insertCaptor.getValue().getCenddCEngl());
     }
 
     private FinanceAccountSubject creditSubject(String subjectCode) {

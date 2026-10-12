@@ -30,9 +30,11 @@ class ToolRuntimeServiceTest {
         ToolRuntimeService runtime = new ToolRuntimeService(List.of(tool));
 
         ControlledToolResult rejected = runtime.execute("test.query", ToolExecutionRequest.builder()
+                .companyId("GROUP_HQ")
                 .queryTemplateCode("untrusted.v1")
                 .build());
         ControlledToolResult accepted = runtime.execute("test.query", ToolExecutionRequest.builder()
+                .companyId("GROUP_HQ")
                 .queryTemplateCode("test.v1")
                 .build());
 

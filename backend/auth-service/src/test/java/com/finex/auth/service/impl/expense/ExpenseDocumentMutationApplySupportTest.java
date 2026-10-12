@@ -35,6 +35,7 @@ class ExpenseDocumentMutationApplySupportTest {
     @Mock private ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     @Mock private ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     @Mock private ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
+    @Mock private ExpenseDocumentCompanyResolver companyResolver;
 
     @Test
     void buildMutationContextMergesManualSelectionsAndRejectMetadata() {
@@ -44,7 +45,7 @@ class ExpenseDocumentMutationApplySupportTest {
                 expenseDocumentTaskRuntimeSupport,
                 processDocumentInstanceMapper,
                 processDocumentExpenseDetailMapper,
-                expenseWorkflowRuntimeSupport
+                expenseWorkflowRuntimeSupport, companyResolver
         );
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setTemplateCode("TPL-1");
@@ -100,7 +101,7 @@ class ExpenseDocumentMutationApplySupportTest {
                 expenseDocumentTaskRuntimeSupport,
                 processDocumentInstanceMapper,
                 processDocumentExpenseDetailMapper,
-                expenseWorkflowRuntimeSupport
+                expenseWorkflowRuntimeSupport, companyResolver
         );
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-1");
@@ -130,10 +131,12 @@ class ExpenseDocumentMutationApplySupportTest {
         when(support.toTemplateSnapshot(template)).thenReturn(Map.of("templateCode", "TPL-1"));
         when(support.writeJson(any())).thenAnswer(invocation -> String.valueOf((Object) invocation.getArgument(0)));
         when(expenseDocumentTaskRuntimeSupport.loadOpenTasks("DOC-1")).thenReturn(List.of());
+        when(companyResolver.resolve(any(), any(), any())).thenReturn("COMPANY-A");
 
         applySupport.applyDocumentMutation(instance, context, true);
 
         verify(processDocumentInstanceMapper).updateById(instance);
+        assertEquals("COMPANY-A", instance.getCompanyId());
         verify(expenseDocumentTaskRuntimeSupport).cancelOpenTasks(List.of(), null, instance.getUpdatedAt());
         verify(support).persistDocumentRuntimeState(any(), any(), any(), any(), any(), any(), any());
         verify(processDocumentExpenseDetailMapper).delete(any());

@@ -3,7 +3,7 @@
 // 如果改错，最容易影响页面的加载、保存或提交流程。
 
 import request, { buildQueryString } from './core'
-import type { ArchiveAgentDetail, ArchiveAgentMeta, ArchiveAgentRunDetail, ArchiveAgentRunRecord, ArchiveAgentSavePayload, ArchiveAgentSummary, ArchiveAgentTestRunPayload } from './archive-agent-types'
+import type { ArchiveAgentDetail, ArchiveAgentMeta, ArchiveAgentRunDetail, ArchiveAgentRunPreflight, ArchiveAgentRunRecord, ArchiveAgentSavePayload, ArchiveAgentSummary, ArchiveAgentTestRunPayload, ArchiveAgentToolTestResult } from './archive-agent-types'
 
 const AGENT_WORKBENCH_API_PREFIX = '/auth/agent/workbench'
 
@@ -25,6 +25,16 @@ export const archiveAgentApi = {
       method: 'PUT',
       body: JSON.stringify(payload)
     }),
+  updateTools: (id: number, payload: { expectedVersionNo: number; toolCodes: string[] }) =>
+    request<ArchiveAgentDetail>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/tools`, {
+      method: 'PUT', body: JSON.stringify(payload)
+    }),
+  testTool: (id: number, toolCode: string, payload: { queryTemplateCode?: string; parameters: Record<string, unknown> }) =>
+    request<ArchiveAgentToolTestResult>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/tools/${encodeURIComponent(toolCode)}/test`, {
+      method: 'POST', body: JSON.stringify(payload)
+    }),
+  searchToolSuppliers: (id: number, companyId: string, keyword: string) =>
+    request<Array<{ code: string; name: string }>>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/tools/finance.query_supplier_detail_ledger/suppliers${buildQueryString({ companyId, keyword })}`),
   publish: (id: number) =>
     request<ArchiveAgentDetail>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/publish`, {
       method: 'POST'
@@ -37,6 +47,10 @@ export const archiveAgentApi = {
     request<ArchiveAgentRunRecord>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/run`, {
       method: 'POST',
       body: JSON.stringify(payload)
+    }),
+  prepareRun: (id: number, payload: ArchiveAgentTestRunPayload) =>
+    request<ArchiveAgentRunPreflight>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/run/prepare`, {
+      method: 'POST', body: JSON.stringify(payload)
     }),
   listRuns: (id: number) =>
     request<ArchiveAgentRunRecord[]>(`${AGENT_WORKBENCH_API_PREFIX}/${id}/runs`),

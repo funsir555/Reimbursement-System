@@ -15,6 +15,7 @@ import com.finex.auth.entity.DownloadRecord;
 import com.finex.auth.mapper.AsyncTaskRecordMapper;
 import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.service.ExpenseDocumentService;
+import com.finex.auth.service.impl.expense.ExpenseExportSnapshotService;
 import com.finex.auth.service.NotificationService;
 import com.finex.auth.support.AsyncTaskSupport;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,7 @@ public class AsyncTaskWorker {
     private final ExpenseDocumentService expenseDocumentService;
     private final ObjectMapper objectMapper;
     private final DownloadStorageService downloadStorageService;
+    private final ExpenseExportSnapshotService expenseExportSnapshots;
 
     /**
      * 执行Export任务。
@@ -110,23 +112,33 @@ public class AsyncTaskWorker {
             markRunning(task, "正在准备导出数据", 15);
             updateDownload(downloadRecordId, 10, AsyncTaskSupport.DOWNLOAD_STATUS_DOWNLOADING, "生成中", null);
 
+            expenseExportSnapshots.requireScene(task.getUserId(), payload);
             byte[] workbookBytes;
+            List<String> exportedCodes;
             if (AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PENDING_APPROVAL.equals(payload.getScene())) {
                 updateTask(task, 45, "正在汇总审批任务");
                 List<ExpenseApprovalPendingItemVO> rows = loadPendingApprovalRows(task.getUserId(), payload);
+                exportedCodes = rows.stream().map(ExpenseApprovalPendingItemVO::getDocumentCode).toList();
                 workbookBytes = buildPendingApprovalWorkbook(resolveSheetName(payload), rows);
             } else if (AsyncTaskSupport.EXPENSE_EXPORT_SCENE_PAYMENT_PENDING.equals(payload.getScene())) {
                 updateTask(task, 45, "\u6b63\u5728\u6c47\u603b\u4ed8\u6b3e\u5355\u6570\u636e");
                 List<ExpensePaymentOrderVO> rows = loadPaymentPendingRows(task.getUserId(), payload);
+                exportedCodes = rows.stream().map(ExpensePaymentOrderVO::getDocumentCode).toList();
                 workbookBytes = buildPaymentPendingWorkbook(resolveSheetName(payload), rows);
             } else {
                 updateTask(task, 45, "正在汇总单据数据");
                 List<ExpenseSummaryVO> rows = loadExpenseSummaryRows(task.getUserId(), payload);
+                exportedCodes = rows.stream()
+                        .map(item -> firstNonBlank(item.getDocumentCode(), item.getNo())).toList();
                 workbookBytes = buildExpenseSummaryWorkbook(resolveSheetName(payload), rows);
             }
 
+            ExpenseExportSnapshotService.Snapshot snapshot = expenseExportSnapshots.snapshot(
+                    task.getUserId(), payload, exportedCodes);
+
             updateTask(task, 80, "正在写入 Excel 文件");
             Path path = downloadStorageService.writeWorkbook(downloadRecordId, workbookBytes);
+            expenseExportSnapshots.record(downloadRecordId, snapshot);
             String fileSize = formatFileSize(Files.size(path));
             updateDownload(downloadRecordId, 90, AsyncTaskSupport.DOWNLOAD_STATUS_DOWNLOADING, fileSize, null);
 

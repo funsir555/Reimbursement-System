@@ -6,7 +6,7 @@
 package com.finex.auth.service.impl.auth;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.crypto.digest.DigestUtil;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.finex.auth.dto.LoginDTO;
 import com.finex.auth.dto.LoginVO;
 import com.finex.auth.entity.User;
@@ -15,6 +15,7 @@ import com.finex.auth.mapper.SystemRoleMapper;
 import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.common.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 public class AuthLoginDomainSupport extends AbstractAuthDomainSupport {
 
     private final AuthAuthorizationDomainSupport authAuthorizationDomainSupport;
+    private final PasswordHashService passwordHashService;
 
     /**
      * 初始化这个类所需的依赖组件。
@@ -37,10 +39,12 @@ public class AuthLoginDomainSupport extends AbstractAuthDomainSupport {
             SystemRoleMapper systemRoleMapper,
             SystemRolePermissionMapper systemRolePermissionMapper,
             SystemPermissionMapper systemPermissionMapper,
-            AuthAuthorizationDomainSupport authAuthorizationDomainSupport
+            AuthAuthorizationDomainSupport authAuthorizationDomainSupport,
+            PasswordHashService passwordHashService
     ) {
         super(userMapper, systemUserRoleMapper, systemRoleMapper, systemRolePermissionMapper, systemPermissionMapper);
         this.authAuthorizationDomainSupport = authAuthorizationDomainSupport;
+        this.passwordHashService = passwordHashService;
     }
 
     /**
@@ -52,14 +56,16 @@ public class AuthLoginDomainSupport extends AbstractAuthDomainSupport {
             throw new RuntimeException("User does not exist");
         }
 
-        String encryptedPassword = DigestUtil.md5Hex(loginDTO.getPassword());
-        if (!encryptedPassword.equals(user.getPassword())) {
+        String storedPassword = user.getPassword();
+        if (!passwordHashService.matches(loginDTO.getPassword(), storedPassword)) {
             throw new RuntimeException("Password is incorrect");
         }
 
         if (user.getStatus() == null || user.getStatus() != 1) {
             throw new RuntimeException("User is disabled");
         }
+
+        upgradeLegacyPassword(user, loginDTO.getPassword(), storedPassword);
 
         String token = JwtUtil.generateToken(user.getId(), user.getUsername());
 
@@ -80,5 +86,28 @@ public class AuthLoginDomainSupport extends AbstractAuthDomainSupport {
      */
     public User getByUsername(String username) {
         return loadByUsername(username);
+    }
+
+    private void upgradeLegacyPassword(User user, String rawPassword, String storedPassword) {
+        if (!passwordHashService.isLegacyMd5(storedPassword)) {
+            return;
+        }
+        String bcryptHash = passwordHashService.encode(rawPassword);
+        int updated = userMapper().update(
+                null,
+                Wrappers.<User>update()
+                        .eq("id", user.getId())
+                        .eq("password", storedPassword)
+                        .set("password", bcryptHash)
+        );
+        if (updated > 0) {
+            user.setPassword(bcryptHash);
+            return;
+        }
+        User latest = loadByUsername(user.getUsername());
+        if (latest == null || !passwordHashService.matches(rawPassword, latest.getPassword())) {
+            throw new RuntimeException("Password is incorrect");
+        }
+        log.warn("Password hash upgrade raced with another update for userId={}", user.getId());
     }
 }

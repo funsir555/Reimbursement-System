@@ -47,7 +47,8 @@ class ProfileDownloadDomainSupportTest {
                 userService,
                 userBankAccountMapper,
                 downloadRecordMapper,
-                downloadStorageService
+                downloadStorageService,
+                org.mockito.Mockito.mock(com.finex.auth.service.impl.expense.ExpenseExportSnapshotService.class)
         );
     }
 

@@ -23,6 +23,9 @@ export function useAgentChatSession() {
   })
   const selectedProviderCode = ref('')
   const selectedModel = ref('')
+  const selectedEmployeeId = ref<number>()
+  const selectedWorkflowBindingId = ref<number>()
+  const availableEmployees = ref<Awaited<ReturnType<typeof agentChatApi.availableEmployees>>['data']>([])
 
   const modelProviders = computed(() => chatMeta.value.modelProviders || [])
   const currentModelOptions = computed(() => {
@@ -36,7 +39,7 @@ export function useAgentChatSession() {
    * @param urlSessionId 从 URL 参数传入的 sessionId
    */
   async function initSession(urlSessionId?: string) {
-    await loadMeta()
+    await Promise.all([loadMeta(), loadAvailableEmployees()])
 
     if (urlSessionId) {
       // URL 指定了会话 ID，加载该会话
@@ -68,7 +71,8 @@ export function useAgentChatSession() {
   /**
    * 发送消息（使用 clientMessageId 追踪）
    */
-  async function sendMessage(content: string): Promise<boolean> {
+  async function sendMessage(content: string, selectedOptions?: string[],
+    selectedAnswers?: Record<string, string>): Promise<boolean> {
     if (!content.trim() || !sessionId.value || sending.value) {
       return false
     }
@@ -92,7 +96,11 @@ export function useAgentChatSession() {
       const { data } = await agentChatApi.sendMessage(sessionId.value, {
         message: messageText,
         providerCode: selectedProviderCode.value,
-        model: selectedModel.value
+        model: selectedModel.value,
+        digitalEmployeeId: selectedEmployeeId.value,
+        workflowBindingId: selectedWorkflowBindingId.value,
+        selectedOptions,
+        selectedAnswers
       })
 
       // 3. 标记用户消息为成功
@@ -103,6 +111,10 @@ export function useAgentChatSession() {
         clientMessageId: generateClientMessageId(),
         role: 'assistant',
         content: data.content,
+        kind: data.kind === 'CHAT' ? undefined : data.kind,
+        options: data.options || [],
+        clarifications: data.clarifications || [],
+        sources: data.sources || [],
         status: 'success',
         createdAt: data.timestamp || new Date()
       })
@@ -170,6 +182,11 @@ export function useAgentChatSession() {
     } finally {
       metaLoading.value = false
     }
+  }
+
+  async function loadAvailableEmployees() {
+    try { availableEmployees.value = (await agentChatApi.availableEmployees()).data || [] }
+    catch { availableEmployees.value = [] }
   }
 
   /**
@@ -325,6 +342,10 @@ export function useAgentChatSession() {
     currentModelOptions,
     selectedProviderCode,
     selectedModel,
+    selectedEmployeeId,
+    selectedWorkflowBindingId,
+    availableEmployees,
+    loadAvailableEmployees,
 
     // 方法
     initSession,

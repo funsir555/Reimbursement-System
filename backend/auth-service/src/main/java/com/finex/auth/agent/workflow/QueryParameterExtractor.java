@@ -19,10 +19,11 @@ public class QueryParameterExtractor {
     private static final List<String> STOP_WORDS = List.of(
             "需要我处理的", "待我处理的", "待我审批的", "帮我总结", "帮我查询", "我当前", "查一下", "这个月",
             "查询", "查看", "显示", "总结", "最近", "待处理", "待我处理", "待我审批", "我的",
-            "报销事项", "报销单", "报销", "费用", "单据", "事项", "本月", "上个月",
+            "报销事项", "报销单", "报销", "费用", "单据", "事项", "本月", "上个月", "部门", "公司", "全部",
             "待审批", "未审批", "审批中", "待付款", "待支付", "已审批", "已驳回", "被驳回",
             "已支付", "已完成", "流程异常", "支付异常", "草稿", "超过", "大于", "高于",
-            "不少于", "低于", "小于", "少于", "不超过", "有哪些", "有几个", "的"
+            "不少于", "低于", "小于", "少于", "不超过", "有哪些", "有几个",
+            "总金额", "金额合计", "合计金额", "多少钱", "是多少", "的"
     );
 
     public QueryTemplateVariables extract(String message) {
@@ -100,6 +101,9 @@ public class QueryParameterExtractor {
     }
 
     private String resolveScope(String message) {
+        if (message.contains("部门") || message.contains("公司") || message.contains("全部")) {
+            return QueryTemplateVariables.SCOPE_VISIBLE;
+        }
         if (message.contains("待处理")
                 || message.contains("待我处理")
                 || message.contains("需要我处理")

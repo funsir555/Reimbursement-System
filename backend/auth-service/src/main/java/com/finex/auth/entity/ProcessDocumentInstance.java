@@ -23,6 +23,7 @@ public class ProcessDocumentInstance {
     private String approvalFlowCode;
     private String flowName;
     private Long submitterUserId;
+    private String companyId;
     private String submitterName;
     private String documentTitle;
     private String documentReason;

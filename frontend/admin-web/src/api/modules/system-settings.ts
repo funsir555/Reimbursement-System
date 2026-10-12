@@ -5,6 +5,14 @@
 import request from './core'
 import type { CompanyBankAccountRecord, CompanyBankAccountSavePayload, CompanyRecord, CompanySavePayload, DepartmentSavePayload, DepartmentTreeNode, EmployeeQueryPayload, EmployeeRecord, EmployeeSavePayload, OcrProviderConfig, OcrProviderSavePayload, PermissionTreeNode, RoleRecord, RoleSavePayload, SyncConnectorConfig, SyncConnectorSavePayload, SyncJobRecord, SystemSettingsBootstrapData } from './system-settings-types'
 
+export interface RoleQueryScope {
+  permissionCode: string
+  capabilityName: string
+  supportedScopes: string[]
+  scopeType: string | null
+  companyIds: string[]
+}
+
 // 这一组方法供对应页面统一调用。
 export const systemSettingsApi = {
   getBootstrap: () => request<SystemSettingsBootstrapData>('/auth/system-settings/bootstrap'),
@@ -61,6 +69,13 @@ export const systemSettingsApi = {
     request<boolean>(`/auth/system-settings/roles/${id}/permissions`, {
       method: 'POST',
       body: JSON.stringify({ permissionCodes })
+    }),
+  getRoleDataScopes: (id: number) =>
+    request<RoleQueryScope[]>(`/auth/system-settings/roles/${id}/data-scopes`),
+  saveRoleDataScopes: (id: number, scopes: Array<Pick<RoleQueryScope, 'permissionCode' | 'scopeType' | 'companyIds'>>) =>
+    request<RoleQueryScope[]>(`/auth/system-settings/roles/${id}/data-scopes`, {
+      method: 'PUT',
+      body: JSON.stringify({ scopes })
     }),
   assignUserRoles: (id: number, roleIds: number[]) =>
     request<boolean>(`/auth/system-settings/users/${id}/roles`, {

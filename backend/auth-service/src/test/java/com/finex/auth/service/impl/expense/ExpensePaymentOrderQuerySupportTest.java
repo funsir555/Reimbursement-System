@@ -51,7 +51,8 @@ class ExpensePaymentOrderQuerySupportTest {
 
     @Test
     void listPaymentOrdersResolvesVendorReceiverAndAmount() {
-        ExpensePaymentOrderQuerySupport support = new ExpensePaymentOrderQuerySupport(newContext());
+        ExpensePaymentOrderQuerySupport support = new ExpensePaymentOrderQuerySupport(newContext(),
+                org.mockito.Mockito.mock(ExpenseDocumentReadAuthorization.class));
 
         ProcessDocumentTask task = new ProcessDocumentTask();
         task.setId(1L);

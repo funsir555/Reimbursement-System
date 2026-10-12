@@ -1,5 +1,6 @@
 package com.finex.auth.support.archiveagent;
 
+import com.finex.auth.agent.context.AgentExecutionContext;
 import com.finex.auth.entity.ArchiveAgentRun;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -17,6 +18,9 @@ public class ArchiveAgentTriggerDispatcher implements TriggerDispatcher {
 
     @Override
     public void dispatch(ArchiveAgentRun run) {
-        finexAsyncExecutor.execute(() -> archiveAgentExecutionWorker.process(run.getId()));
+        AgentExecutionContext capturedContext = AgentExecutionContext.capture();
+        capturedContext.setAgentRunId(run.getId());
+        capturedContext.setTriggerSource(run.getTriggerSource());
+        finexAsyncExecutor.execute(() -> archiveAgentExecutionWorker.process(run.getId(), capturedContext));
     }
 }

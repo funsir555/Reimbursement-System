@@ -19,12 +19,15 @@ public interface ExpenseAttachmentService {
     /**
      * 上传附件。
      */
-    ExpenseAttachmentVO uploadAttachment(MultipartFile file);
+    ExpenseAttachmentVO uploadAttachment(MultipartFile file, Long uploaderUserId);
 
     /**
      * 加载附件。
      */
     StoredExpenseAttachment loadAttachment(String attachmentId);
+
+    /** Generic preview is limited to the authenticated uploader; document readers use the document-scoped route. */
+    StoredExpenseAttachment loadUploadedAttachment(String attachmentId, Long uploaderUserId);
 
     /**
      * 保存Generated附件。

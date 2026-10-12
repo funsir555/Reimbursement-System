@@ -24,7 +24,7 @@ public class AgentMetaObjectHandler implements MetaObjectHandler {
         this.strictInsertFill(metaObject, "tenantId", String.class, TenantContext.getEffectiveTenantId());
 
         // 公司ID
-        this.strictInsertFill(metaObject, "companyId", Long.class, TenantContext.getEffectiveCompanyId());
+        this.strictInsertFill(metaObject, "companyId", String.class, TenantContext.getEffectiveCompanyId());
 
         // 创建人
         Long currentUserId = SecurityUtils.getCurrentUserId();

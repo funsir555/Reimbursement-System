@@ -3,10 +3,10 @@ finex:
   agent:
     # 安全配置
     security:
-      mode: demo  # demo | enterprise
+      mode: ${FINEX_AGENT_SECURITY_MODE:enterprise}  # demo | enterprise
       demo:
         defaultTenantId: "default"
-        defaultCompanyId: 1
+        defaultCompanyId: ${FINEX_AGENT_DEMO_COMPANY_ID:}
         warnOnFallback: true
 
     # 本地模型配置开关

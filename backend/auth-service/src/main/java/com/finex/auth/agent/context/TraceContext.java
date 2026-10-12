@@ -29,6 +29,10 @@ public class TraceContext {
         return traceId;
     }
 
+    public static String currentOrNull() {
+        return TRACE_ID.get();
+    }
+
     /**
      * 生成新的追踪ID
      */

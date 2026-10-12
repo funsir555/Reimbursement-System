@@ -27,9 +27,9 @@ public class EntityTypeConfigRepository {
      */
     public void save(DesensitizationDTO.SaveEntityTypeRequest request) {
         String tenantId = TenantContext.getEffectiveTenantId();
-        Long companyId = TenantContext.getEffectiveCompanyId();
+        String companyId = TenantContext.getEffectiveCompanyId();
 
-        EntityTypeConfigEntity entity = mapper.findByCode(request.getCode(), tenantId);
+        EntityTypeConfigEntity entity = mapper.findByCode(request.getCode(), tenantId, companyId);
 
         if (entity == null) {
             // 新增
@@ -66,7 +66,8 @@ public class EntityTypeConfigRepository {
      */
     public void updateEnabled(String code, Boolean enabled) {
         String tenantId = TenantContext.getEffectiveTenantId();
-        mapper.updateEnabled(code, tenantId, enabled);
+        String companyId = TenantContext.getEffectiveCompanyId();
+        mapper.updateEnabled(code, tenantId, companyId, enabled);
     }
 
     /**
@@ -74,7 +75,8 @@ public class EntityTypeConfigRepository {
      */
     public void deleteByCode(String code) {
         String tenantId = TenantContext.getEffectiveTenantId();
-        mapper.deleteByCode(code, tenantId);
+        String companyId = TenantContext.getEffectiveCompanyId();
+        mapper.deleteByCode(code, tenantId, companyId);
     }
 
     /**
@@ -82,7 +84,8 @@ public class EntityTypeConfigRepository {
      */
     public List<EntityTypeConfigEntity> findAllEnabled() {
         String tenantId = TenantContext.getEffectiveTenantId();
-        return mapper.findAllEnabled(tenantId);
+        String companyId = TenantContext.getEffectiveCompanyId();
+        return mapper.findAllEnabled(tenantId, companyId);
     }
 
     /**
@@ -90,7 +93,7 @@ public class EntityTypeConfigRepository {
      */
     public List<EntityTypeConfigEntity> findAll() {
         String tenantId = TenantContext.getEffectiveTenantId();
-        Long companyId = TenantContext.getEffectiveCompanyId();
+        String companyId = TenantContext.getEffectiveCompanyId();
         return mapper.findAll(tenantId, companyId);
     }
 

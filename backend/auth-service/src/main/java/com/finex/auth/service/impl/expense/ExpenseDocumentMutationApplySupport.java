@@ -33,6 +33,7 @@ class ExpenseDocumentMutationApplySupport {
     private final ProcessDocumentInstanceMapper processDocumentInstanceMapper;
     private final ProcessDocumentExpenseDetailMapper processDocumentExpenseDetailMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
+    private final ExpenseDocumentCompanyResolver companyResolver;
 
     AbstractExpenseDocumentSupport.DocumentMutationContext buildMutationContext(
             ProcessDocumentInstance instance,
@@ -123,6 +124,11 @@ class ExpenseDocumentMutationApplySupport {
         instance.setDocumentTitle(context.documentTitle());
         instance.setDocumentReason(context.documentReason());
         instance.setTotalAmount(context.totalAmount());
+        User submitter = support.loadActiveUser(instance.getSubmitterUserId());
+        Map<String, Object> companySchema = resetRuntime
+                ? context.formDesign() == null ? support.defaultSchema() : support.readSchema(context.formDesign().getSchemaJson())
+                : support.readSchema(instance.getFormSchemaSnapshotJson());
+        instance.setCompanyId(companyResolver.resolve(companySchema, context.formData(), submitter));
         instance.setFormDataJson(support.writeJson(context.formData()));
         instance.setUpdatedAt(now);
         processDocumentInstanceMapper.updateById(instance);

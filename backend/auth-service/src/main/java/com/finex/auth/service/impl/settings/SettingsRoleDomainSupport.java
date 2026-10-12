@@ -22,6 +22,7 @@ import com.finex.auth.mapper.SystemSyncJobDetailMapper;
 import com.finex.auth.mapper.SystemSyncJobMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.support.systemsettings.OrganizationSyncAdapter;
@@ -53,9 +54,10 @@ public final class SettingsRoleDomainSupport extends AbstractSystemSettingsDomai
             SystemSyncJobMapper systemSyncJobMapper,
             SystemSyncJobDetailMapper systemSyncJobDetailMapper,
             ObjectMapper objectMapper,
-            List<OrganizationSyncAdapter> syncAdapters
+            List<OrganizationSyncAdapter> syncAdapters,
+            PasswordHashService passwordHashService
     ) {
-        super(userService, accessControlService, userMapper, systemDepartmentMapper, systemCompanyBankAccountMapper, systemCompanyMapper, systemRoleMapper, systemPermissionMapper, systemRolePermissionMapper, systemUserRoleMapper, systemSyncConnectorMapper, systemSyncJobMapper, systemSyncJobDetailMapper, objectMapper, syncAdapters);
+        super(userService, accessControlService, userMapper, systemDepartmentMapper, systemCompanyBankAccountMapper, systemCompanyMapper, systemRoleMapper, systemPermissionMapper, systemRolePermissionMapper, systemUserRoleMapper, systemSyncConnectorMapper, systemSyncJobMapper, systemSyncJobDetailMapper, objectMapper, syncAdapters, passwordHashService);
     }
 
     /**

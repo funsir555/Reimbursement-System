@@ -6,6 +6,7 @@ import com.finex.auth.dto.ExpenseAttachmentVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ExpenseAttachmentOcrService;
 import com.finex.auth.service.ExpenseAttachmentService;
+import com.finex.auth.service.impl.expense.ExpenseAttachmentPreviewAccess;
 import com.finex.common.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,13 +42,16 @@ class ExpenseAttachmentControllerTest {
 
     @Mock
     private AccessControlService accessControlService;
+    @Mock
+    private ExpenseAttachmentPreviewAccess previewAccess;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ExpenseAttachmentController(expenseAttachmentService, expenseAttachmentOcrService, accessControlService))
+                .standaloneSetup(new ExpenseAttachmentController(expenseAttachmentService,
+                        expenseAttachmentOcrService, accessControlService, previewAccess))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -76,7 +80,7 @@ class ExpenseAttachmentControllerTest {
                 any(),
                 any()
         );
-        when(expenseAttachmentService.uploadAttachment(any())).thenReturn(attachment);
+        when(expenseAttachmentService.uploadAttachment(any(), eq(1L))).thenReturn(attachment);
 
         mockMvc.perform(multipart("/auth/expenses/attachments")
                         .file(file)
@@ -86,7 +90,7 @@ class ExpenseAttachmentControllerTest {
                 .andExpect(jsonPath("$.data.attachmentId").value("abc123def456ghi7"))
                 .andExpect(jsonPath("$.data.previewUrl").value("/api/auth/expenses/attachments/abc123def456ghi7/content"));
 
-        verify(expenseAttachmentService).uploadAttachment(any());
+        verify(expenseAttachmentService).uploadAttachment(any(), eq(1L));
     }
 
     @Test
@@ -106,7 +110,7 @@ class ExpenseAttachmentControllerTest {
                 any(),
                 any()
         );
-        when(expenseAttachmentService.uploadAttachment(any()))
+        when(expenseAttachmentService.uploadAttachment(any(), eq(1L)))
                 .thenThrow(new IllegalArgumentException("文件大小超出 50MB"));
 
         mockMvc.perform(multipart("/auth/expenses/attachments")
@@ -116,7 +120,7 @@ class ExpenseAttachmentControllerTest {
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("文件大小超出 50MB"));
 
-        verify(expenseAttachmentService).uploadAttachment(any());
+        verify(expenseAttachmentService).uploadAttachment(any(), eq(1L));
     }
 
     @Test
@@ -163,7 +167,7 @@ class ExpenseAttachmentControllerTest {
                 any(),
                 any()
         );
-        when(expenseAttachmentService.loadAttachment("abc123def456ghi7"))
+        when(previewAccess.load(2L, "abc123def456ghi7"))
                 .thenReturn(new ExpenseAttachmentService.StoredExpenseAttachment(
                         resource,
                         "invoice.png",
@@ -178,7 +182,7 @@ class ExpenseAttachmentControllerTest {
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(content().bytes("image-bytes".getBytes()));
 
-        verify(expenseAttachmentService).loadAttachment("abc123def456ghi7");
+        verify(previewAccess).load(2L, "abc123def456ghi7");
     }
 
     @Test
@@ -188,6 +192,6 @@ class ExpenseAttachmentControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
 
-        verify(expenseAttachmentService, never()).loadAttachment(any());
+        verify(previewAccess, never()).load(any(), any());
     }
 }

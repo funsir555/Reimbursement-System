@@ -269,6 +269,7 @@ import EmployeeTreeSelect from '@/components/inputs/EmployeeTreeSelect.vue'
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { formatMoney, normalizeMoneyValue } from '@/utils/money'
+import { recalculateTreeBalances } from './composables/recalculateOpeningBalanceTree'
 
 
 type OpeningBalanceTableRow = Omit<OpeningBalanceRow, 'children'> & {
@@ -1068,23 +1069,6 @@ function handleExpandChange(
     expandedRowKeys.value = expandedRowKeys.value.filter((item) => item !== row.subjectCode)
   }
   persistExpandedRowKeys()
-}
-
-function recalculateTreeBalances(source: OpeningBalanceTableRow[]): void {
-  for (const row of source) {
-    recalculateNodeBalance(row)
-  }
-}
-
-function recalculateNodeBalance(row: OpeningBalanceTableRow): number {
-  if (!row.children?.length) {
-    row.mb = normalizeOpeningBalanceMoney(row.mb ?? row.draftBalance)
-    return toCents(row.mb)
-  }
-  const total: number = row.children.reduce((sum, child) => sum + recalculateNodeBalance(child), 0)
-  row.mb = centsToMoney(total)
-  row.draftBalance = row.mb
-  return total
 }
 
 function flatRowsFrom(source: OpeningBalanceTableRow[]): OpeningBalanceTableRow[] {

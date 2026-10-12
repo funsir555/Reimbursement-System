@@ -3,7 +3,6 @@ import { readAgentRunDraft, removeAgentRunDraft, writeAgentRunDraft } from '../a
 
 describe('agentRunDraft', () => {
   const fallback = {
-    triggerSource: 'workbench.manual',
     inputPayloadText: '{"query":"default"}'
   }
 
@@ -13,7 +12,6 @@ describe('agentRunDraft', () => {
 
   it('restores an edited draft for the same user and agent', () => {
     writeAgentRunDraft(sessionStorage, 'user-1', 5, {
-      triggerSource: 'workbench.manual',
       inputPayloadText: '{"query":"edited"}'
     })
 
@@ -23,7 +21,6 @@ describe('agentRunDraft', () => {
 
   it('isolates drafts by user and agent', () => {
     writeAgentRunDraft(sessionStorage, 'user-1', 5, {
-      triggerSource: 'workbench.manual',
       inputPayloadText: '{"query":"edited"}'
     })
 
@@ -31,9 +28,18 @@ describe('agentRunDraft', () => {
     expect(readAgentRunDraft(sessionStorage, 'user-1', 6, fallback)).toEqual(fallback)
   })
 
+  it('ignores a legacy client controlled trigger source', () => {
+    sessionStorage.setItem('agent-workbench:run-draft:user-1:5', JSON.stringify({
+      triggerSource: 'FINWORK',
+      inputPayloadText: '{"query":"edited"}'
+    }))
+
+    expect(readAgentRunDraft(sessionStorage, 'user-1', 5, fallback))
+      .toEqual({ inputPayloadText: '{"query":"edited"}' })
+  })
+
   it('removes a draft when its agent is deleted', () => {
     writeAgentRunDraft(sessionStorage, 'user-1', 5, {
-      triggerSource: 'workbench.manual',
       inputPayloadText: '{"query":"edited"}'
     })
     removeAgentRunDraft(sessionStorage, 'user-1', 5)

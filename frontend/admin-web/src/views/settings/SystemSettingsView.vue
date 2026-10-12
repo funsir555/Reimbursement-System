@@ -124,6 +124,7 @@
               canEdit: can('settings:roles:edit'),
               canDelete: can('settings:roles:delete'),
               canAssignPermissions: can('settings:roles:assign_permissions'),
+              canAssignDataScope: can('settings:roles:assign_data_scope'),
               canAssignUsers: can('settings:roles:assign_users')
             }"
             :state="{
@@ -136,6 +137,7 @@
               permissions,
               selectedRoleUserIds,
               employees,
+              companies,
               isSuperAdminRole,
               roleDialogVisible,
               roleForm

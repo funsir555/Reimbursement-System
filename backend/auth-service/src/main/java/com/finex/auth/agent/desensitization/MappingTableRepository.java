@@ -1,5 +1,6 @@
 package com.finex.auth.agent.desensitization;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.agent.context.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,13 +19,14 @@ import java.util.stream.Collectors;
 public class MappingTableRepository {
 
     private final DesensitizationMappingMapper mapper;
+    private final ObjectMapper objectMapper;
 
     /**
      * 保存映射表
      */
     public void save(MappingTable mappingTable) {
         String tenantId = TenantContext.getEffectiveTenantId();
-        DesensitizationMappingEntity entity = DesensitizationMappingEntity.fromMappingTable(mappingTable, tenantId);
+        DesensitizationMappingEntity entity = DesensitizationMappingEntity.fromMappingTable(mappingTable, tenantId, objectMapper);
         mapper.insert(entity);
         log.debug("保存映射表: mappingId={}, sessionId={}", mappingTable.getId(), mappingTable.getSessionId());
     }
@@ -37,7 +39,7 @@ public class MappingTableRepository {
         if (entity == null) {
             return null;
         }
-        return entity.toMappingTable();
+        return entity.toMappingTable(objectMapper);
     }
 
     /**
@@ -46,7 +48,7 @@ public class MappingTableRepository {
     public List<MappingTable> findBySessionId(String sessionId) {
         List<DesensitizationMappingEntity> entities = mapper.findBySessionId(sessionId);
         return entities.stream()
-                .map(DesensitizationMappingEntity::toMappingTable)
+                .map(entity -> entity.toMappingTable(objectMapper))
                 .collect(Collectors.toList());
     }
 
@@ -61,7 +63,7 @@ public class MappingTableRepository {
 
         List<DesensitizationMappingEntity> entities = mapper.findPage(tenantId, sessionId, offset, safePageSize);
         return entities.stream()
-                .map(DesensitizationMappingEntity::toMappingTable)
+                .map(entity -> entity.toMappingTable(objectMapper))
                 .collect(Collectors.toList());
     }
 

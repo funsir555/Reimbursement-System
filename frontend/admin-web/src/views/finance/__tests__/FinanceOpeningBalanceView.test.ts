@@ -295,6 +295,32 @@ describe('FinanceOpeningBalanceView', () => {
     expect(mocks.openingBalanceApi.commit).toHaveBeenCalled()
   })
 
+  it('nets mixed child directions before showing a credit parent balance', async () => {
+    const parent = structuredClone(buildRows()[0]) as any
+    parent.subjectCode = '22'
+    parent.balanceDirection = 'CREDIT'
+    parent.balanceDirectionLabel = '贷'
+    parent.mb = '80.00'
+    const creditChild = parent.children[0]
+    creditChild.subjectCode = '2241'
+    creditChild.balanceDirection = 'CREDIT'
+    creditChild.balanceDirectionLabel = '贷'
+    creditChild.assistRequired = false
+    creditChild.mb = '100.00'
+    const debitChild = { ...creditChild, subjectCode: '2299', balanceDirection: 'DEBIT', balanceDirectionLabel: '借', mb: '20.00' }
+    parent.children = [creditChild, debitChild]
+    mocks.openingBalanceApi.listRows.mockResolvedValue({ data: [parent] })
+    const wrapper = await mountView()
+    const vm = wrapper.vm as unknown as {
+      rows: Array<{ mb: string; children: Array<{ subjectCode: string; draftBalance: string; mb: string }> }>
+      handleRowDraftChange: (row: { subjectCode: string; draftBalance: string; mb: string }, value: string) => void
+    }
+
+    vm.handleRowDraftChange(vm.rows[0].children[0], '120.00')
+
+    expect(vm.rows[0].mb).toBe('100.00')
+  })
+
   it('allows negative balances for editable opening balance rows', async () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as unknown as {

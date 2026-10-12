@@ -45,7 +45,8 @@ public class ExpensePaymentDomainSupport {
             FinanceVendorMapper financeVendorMapper,
             UserBankAccountMapper userBankAccountMapper,
             ExpenseAttachmentService expenseAttachmentService,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            ExpenseDocumentReadAuthorization readAuthorization
     ) {
         ExpensePaymentSupportContext context = new ExpensePaymentSupportContext(
                 expenseDocumentReadSupport,
@@ -65,7 +66,7 @@ public class ExpensePaymentDomainSupport {
                 objectMapper
         );
         ExpensePaymentRecordSupport recordSupport = new ExpensePaymentRecordSupport(context);
-        this.orderQuerySupport = new ExpensePaymentOrderQuerySupport(context);
+        this.orderQuerySupport = new ExpensePaymentOrderQuerySupport(context, readAuthorization);
         this.bankLinkDomainSupport = new ExpenseBankLinkDomainSupport(context, recordSupport);
         this.executionSupport = new ExpensePaymentExecutionSupport(context, recordSupport);
         this.receiptSupport = new ExpensePaymentReceiptSupport(context, recordSupport, this.executionSupport);

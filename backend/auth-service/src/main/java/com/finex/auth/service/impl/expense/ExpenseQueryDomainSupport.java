@@ -85,15 +85,18 @@ public class ExpenseQueryDomainSupport {
     private final ProcessDocumentWriteOffMapper processDocumentWriteOffMapper;
     private final PmBankPaymentRecordMapper pmBankPaymentRecordMapper;
     private final NotificationService notificationService;
+    private final ExpenseDocumentReadAuthorization readAuthorization;
 
     /**
      * 鏌ヨ鎶ラ攢鍗昐ummaries鍒楄〃銆?
      */
     public List<ExpenseSummaryVO> listExpenseSummaries(Long userId) {
+        var authorization = readAuthorization.requireScope(userId, ExpenseDocumentReadAuthorization.MY_DOCUMENTS);
+        LambdaQueryWrapper<ProcessDocumentInstance> query = activeDocumentQuery()
+                .eq(ProcessDocumentInstance::getSubmitterUserId, userId);
+        readAuthorization.applyScope(query, authorization, false);
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                activeDocumentQuery()
-                        .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
-                        .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
+                query.orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
         );
         return sortSummaries(expenseSummaryAssembler.toExpenseSummaries(instances));
     }
@@ -102,9 +105,13 @@ public class ExpenseQueryDomainSupport {
      * 鏌ヨ鏌ヨ鍗曟嵁Summaries鍒楄〃銆?
      */
     public List<ExpenseSummaryVO> listQueryDocumentSummaries(Long userId) {
+        var authorization = readAuthorization.requireScope(userId, ExpenseDocumentReadAuthorization.DOCUMENT_SEARCH);
+        LambdaQueryWrapper<ProcessDocumentInstance> query = activeDocumentQuery()
+                .and(scope -> scope.ne(ProcessDocumentInstance::getStatus, DOCUMENT_STATUS_DRAFT)
+                        .or().eq(ProcessDocumentInstance::getSubmitterUserId, userId));
+        readAuthorization.applyScope(query, authorization, true);
         List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                activeDocumentQuery()
-                        .orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
+                query.orderByDesc(ProcessDocumentInstance::getCreatedAt, ProcessDocumentInstance::getId)
         );
         return sortSummaries(expenseSummaryAssembler.toExpenseSummaries(instances));
     }
@@ -113,10 +120,10 @@ public class ExpenseQueryDomainSupport {
      * 鏌ヨOutstanding鍗曟嵁鍒楄〃銆?
      */
     public List<ExpenseSummaryVO> listOutstandingDocuments(Long userId, String kind) {
+        var authorization = readAuthorization.requireScope(userId, "dashboard:view");
         String normalizedKind = normalizeOutstandingKind(kind);
         String templateType = Objects.equals(normalizedKind, OUTSTANDING_KIND_LOAN) ? "loan" : "report";
-        List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(
-                activeDocumentQuery()
+        LambdaQueryWrapper<ProcessDocumentInstance> query = activeDocumentQuery()
                         .eq(ProcessDocumentInstance::getSubmitterUserId, userId)
                         .in(ProcessDocumentInstance::getStatus, List.of(
                                 DOCUMENT_STATUS_APPROVED,
@@ -126,8 +133,9 @@ public class ExpenseQueryDomainSupport {
                                 DOCUMENT_STATUS_PAYMENT_FINISHED
                         ))
                         .eq(ProcessDocumentInstance::getTemplateType, templateType)
-                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId)
-        );
+                        .orderByDesc(ProcessDocumentInstance::getFinishedAt, ProcessDocumentInstance::getUpdatedAt, ProcessDocumentInstance::getId);
+        readAuthorization.applyScope(query, authorization, false);
+        List<ProcessDocumentInstance> instances = processDocumentInstanceMapper.selectList(query);
         if (instances.isEmpty()) {
             return List.of();
         }

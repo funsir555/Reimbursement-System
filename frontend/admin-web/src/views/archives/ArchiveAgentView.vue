@@ -22,6 +22,9 @@
           <el-button type="primary" :icon="Plus" :disabled="!canCreate" @click="startCreateAgent">新建 Agent</el-button>
           <el-button :icon="RefreshRight" @click="loadAgents(false)">刷新</el-button>
         </div>
+        <el-button v-if="canCreate" link type="primary" class="mt-xs" @click="startCreateSupplierLedgerAgent">
+          从供应商明细账模板新建
+        </el-button>
         <div class="stack gap-sm mt-md">
           <el-input v-model="filters.keyword" clearable placeholder="搜索 Agent" @keyup.enter="loadAgents()">
             <template #append><el-button :icon="Search" @click="loadAgents()" /></template>
@@ -93,6 +96,7 @@
             <el-button :icon="FolderDelete" :disabled="!editableAgent.id || !canDelete" @click="archiveAgent">归档</el-button>
             <el-button type="primary" :loading="saveLoading" :disabled="!canSave" @click="saveAgent">保存配置</el-button>
             <el-button type="warning" :loading="publishLoading" :disabled="!editableAgent.id || !canPublish" @click="publishAgent">发布版本</el-button>
+            <AgentShareSubmitButton :agent-id="editableAgent.id" :versions="editableAgent.versions" :latest-version-no="editableAgent.latestVersionNo" :published-version-no="editableAgent.publishedVersionNo" />
             <el-button type="danger" plain :icon="Delete" :loading="deleteLoading" :disabled="!editableAgent.id || !canDelete" @click="deleteAgent">删除</el-button>
           </div>
         </div>
@@ -159,26 +163,16 @@
           <el-form-item label="超时（秒）"><el-input-number v-model="editableAgent.modelConfig.timeoutSeconds" :min="5" :max="300" :step="5" /></el-form-item>
         </div>
       </section>
-      <section class="section">
+      <section class="section workflow-entry-card" role="button" tabindex="0"
+        @click="openToolConfig" @keydown.enter.prevent="openToolConfig">
         <div class="section-head">
           <div><div class="eyebrow">Tools</div><h3>工具配置</h3></div>
-          <el-tag type="success" effect="plain">业务工具 + 通用工具</el-tag>
+          <el-button type="primary" :icon="Tools" :disabled="!editableAgent.id" @click.stop="openToolConfig">进入配置</el-button>
         </div>
-        <div class="tool-grid">
-          <article v-for="tool in toolCards" :key="tool.toolCode" class="mini-card" :class="{ active: tool.enabled }">
-            <div class="row between start gap-sm">
-              <div>
-                <strong>{{ tool.label }}</strong>
-                <div class="muted xs mt-xs">{{ tool.categoryLabel }} · {{ tool.toolCode }}</div>
-              </div>
-              <el-switch :model-value="tool.enabled" :disabled="!tool.available" @change="toggleTool(tool.toolCode, Boolean($event))" />
-            </div>
-            <div v-if="tool.enabled && tool.binding" class="stack gap-sm mt-sm">
-              <el-input v-model="tool.binding.credentialRefCode" placeholder="凭据编码（可选）" />
-              <el-input v-if="tool.toolCode === 'http.mock_request'" v-model="tool.binding.url" placeholder="模拟 HTTP 地址" />
-              <el-input v-if="tool.toolCode === 'notify.send_message'" v-model="tool.binding.title" placeholder="通知标题" />
-            </div>
-          </article>
+        <div class="workflow-entry-copy">
+          <strong>管理受控工具与单工具测试</strong>
+          <p>查看工具用途、内部入口和所需权限；绑定保存后可填写参数测试运行。</p>
+          <el-tag size="small" effect="plain">已绑定 {{ enabledToolOptions.length }} 项受控工具</el-tag>
         </div>
       </section>
 
@@ -258,8 +252,26 @@
     <aside class="panel runtime">
       <section class="panel-section accent">
         <div class="section-head"><div><div class="eyebrow">Debug</div><h3>测试运行</h3></div><el-tag type="warning">手动试跑</el-tag></div>
-        <el-form-item label="触发来源"><el-input v-model="runForm.triggerSource" placeholder="workbench.manual" /></el-form-item>
+        <el-form-item label="触发来源"><el-tag type="warning" effect="plain">工作台测试运行</el-tag></el-form-item>
         <el-form-item label="测试入参 JSON"><el-input v-model="runForm.inputPayloadText" class="monospace" type="textarea" :rows="8" placeholder='{"query":"帮我整理待报销事项"}' /></el-form-item>
+        <div v-if="runPreflight" class="run-clarification">
+          <el-alert :title="runPreflight.message" :type="runPreflight.mode === 'NO_CAPABILITY' ? 'warning' : 'info'" :closable="false" show-icon />
+          <template v-if="runPreflight.mode === 'CLARIFY'">
+            <el-select v-if="runPreflight.companyOptions.length" v-model="selectedRunCompanyId" class="mt-sm" filterable placeholder="选择有权使用的账套">
+              <el-option v-for="company in runPreflight.companyOptions" :key="company.companyId" :label="`${company.companyName}（${company.companyId}）`" :value="company.companyId" />
+            </el-select>
+            <el-select v-else-if="runPreflight.workflowOptions.length" v-model="selectedRunVersionId" class="mt-sm" placeholder="选择工作流">
+              <el-option v-for="workflow in runPreflight.workflowOptions" :key="workflow.versionId" :label="workflow.name" :value="workflow.versionId" />
+            </el-select>
+            <el-select v-else-if="runPreflight.supplierOptions?.length" v-model="selectedRunSupplierCode" class="mt-sm"
+              filterable placeholder="选择供应商">
+              <el-option v-for="supplier in runPreflight.supplierOptions" :key="supplier.code"
+                :label="`${supplier.name}（${supplier.code}）`" :value="supplier.code" />
+            </el-select>
+            <el-input v-else v-model="runClarificationAnswer" class="mt-sm" placeholder="补充查询条件后继续" />
+            <el-button class="mt-sm" type="primary" :loading="runLoading" @click="runAgentNow">继续分析并执行</el-button>
+          </template>
+        </div>
         <div class="row between wrap gap-sm mt-sm">
           <el-button :icon="RefreshRight" @click="resetRunInput">重置入参</el-button>
           <el-button type="primary" :icon="VideoPlay" :loading="runLoading" :disabled="!editableAgent.id || !canRun" @click="runAgentNow">立即执行</el-button>
@@ -292,25 +304,7 @@
           <el-tag size="small" effect="plain">{{ currentRunDetail?.steps.length || 0 }} steps</el-tag>
         </div>
       </template>
-      <div class="run-detail-drawer">
-        <div v-if="runDetailLoading" class="empty-state small"><p>正在加载运行详情...</p></div>
-        <template v-else-if="currentRunDetail">
-          <div class="log-summary">
-            <div><span>Agent 版本</span><strong>v{{ currentRunDetail.agentVersionNo || '-' }}</strong></div>
-            <div><span>运行结果</span><strong>{{ currentRunDetail.summary || currentRunDetail.status }}</strong></div>
-            <div><span>输出摘要</span><strong>{{ stringifyInline(currentRunDetail.outputPayload) }}</strong></div>
-          </div>
-          <div class="stack gap-sm mt-sm">
-            <article v-for="step in currentRunDetail.steps" :key="`${step.stepNo}-${step.nodeKey}`" class="mini-card">
-              <div class="row between gap-sm"><div><div class="muted xs">STEP {{ step.stepNo }}</div><strong>{{ step.nodeLabel || step.nodeKey }}</strong></div><el-tag size="small" :type="runStatusType(step.status)" effect="plain">{{ step.status }}</el-tag></div>
-              <div class="row wrap gap-sm muted xs mt-xs"><span>{{ step.nodeType }}</span><span>{{ step.durationMs ? `${step.durationMs}ms` : '执行中' }}</span></div>
-              <div class="payload-grid mt-sm"><div><label>输入</label><pre>{{ prettyJson(step.inputPayload) }}</pre></div><div><label>输出</label><pre>{{ prettyJson(step.outputPayload) }}</pre></div></div>
-              <p v-if="step.errorMessage" class="error mt-sm">{{ step.errorMessage }}</p>
-            </article>
-          </div>
-        </template>
-        <div v-else class="empty-state small"><p>运行详情暂不可用。</p></div>
-      </div>
+      <AgentRunDetailPanel :detail="currentRunDetail" :loading="runDetailLoading" />
     </el-drawer>
   </div>
 </template>
@@ -318,43 +312,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRouter } from 'vue-router'
-import { Bell, Clock, Connection, Delete, DocumentCopy, FolderDelete, Plus, RefreshRight, Search, SwitchButton, VideoPlay } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Bell, Clock, Connection, Delete, DocumentCopy, FolderDelete, Plus, RefreshRight, Search, SwitchButton, Tools, VideoPlay } from '@element-plus/icons-vue'
 import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
-import { archiveAgentApi, type ArchiveAgentDetail, type ArchiveAgentMeta, type ArchiveAgentRunDetail, type ArchiveAgentRunRecord, type ArchiveAgentSavePayload, type ArchiveAgentSummary, type ArchiveAgentVersionRecord, type ArchiveAgentWorkflowEdge, type ArchiveAgentWorkflowNode } from '@/api'
+import { archiveAgentApi, type ArchiveAgentMeta, type ArchiveAgentRunDetail, type ArchiveAgentRunPreflight, type ArchiveAgentRunRecord, type ArchiveAgentSavePayload, type ArchiveAgentSummary } from '@/api'
+import AgentShareSubmitButton from './components/AgentShareSubmitButton.vue'
+import AgentRunDetailPanel from './components/AgentRunDetailPanel.vue'
 import { hasAnyPermission, readStoredUser } from '@/utils/permissions'
 import { globalFilterableSelectProps } from '@/utils/filterableSelect'
 import { readAgentRunDraft, removeAgentRunDraft, writeAgentRunDraft, type AgentRunDraft } from './agentRunDraft'
+import { buildEditorSavePayload, createDefaultAgent, detailToEditable, supplierLedgerAgentTemplate, type EditableAgent, type NodeModel, type TriggerModel } from './archiveAgentEditor'
 
-
-type PromptConfig = { systemPrompt: string; rolePrompt: string; outputSchema: string; guardrails: string }
-type ModelConfig = { provider: string; model: string; temperature: number; maxTokens: number; timeoutSeconds: number; credentialCode: string }
-type ToolBinding = { toolCode: string; label?: string; category?: string; credentialRefCode?: string; url?: string; title?: string }
-type TriggerModel = { triggerType: 'MANUAL' | 'SCHEDULE' | 'EVENT'; enabled: boolean; scheduleMode?: 'CRON' | 'INTERVAL'; cronExpression?: string; intervalMinutes?: number; eventCode?: string }
-type NodeModel = ArchiveAgentWorkflowNode & { config: Record<string, any> }
 type ModelOption = { provider: string; model: string; label: string; available?: boolean }
-type EditableAgent = {
-  id?: number
-  agentCode?: string
-  agentName: string
-  agentDescription: string
-  iconKey: string
-  themeKey: string
-  coverColor: string
-  tags: string[]
-  status: 'DRAFT' | 'READY' | 'DISABLED' | 'ARCHIVED'
-  latestVersionNo?: number
-  publishedVersionNo?: number
-  promptConfig: PromptConfig
-  modelConfig: ModelConfig
-  tools: ToolBinding[]
-  workflow: { nodes: NodeModel[]; edges: ArchiveAgentWorkflowEdge[] }
-  triggers: TriggerModel[]
-  versions: ArchiveAgentVersionRecord[]
-}
 type OptionItem = { code: string; label: string; available?: boolean; category?: string }
-
 const router = useRouter()
+const route = useRoute()
 const filters = ref({ keyword: '', status: '', tag: '' })
 const meta = ref<ArchiveAgentMeta | null>(null)
 const listLoading = ref(false)
@@ -372,9 +344,16 @@ const currentRunDetail = ref<ArchiveAgentRunDetail | null>(null)
 const runDetailDrawerVisible = ref(false)
 const runPermissionMessage = ref('')
 const inputSchemaText = ref('')
+const savedEditorSnapshot = ref('')
 const storedUser = readStoredUser()
 const runDraftUserKey = String(storedUser?.userId ?? storedUser?.username ?? 'anonymous')
 const runForm = ref<AgentRunDraft>(defaultRunDraft())
+const runPreflight = ref<ArchiveAgentRunPreflight | null>(null)
+const selectedRunCompanyId = ref('')
+const selectedRunVersionId = ref<number>()
+const selectedRunSupplierCode = ref('')
+const selectedRunSupplierCodes = ref<Record<string, string>>({})
+const runClarificationAnswer = ref('')
 const permissionCodes = ref(storedUser?.permissionCodes || [])
 const canCreate = computed(() => hasAnyPermission(['agent:workbench:create', 'agents:create'], permissionCodes.value))
 const canEdit = computed(() => hasAnyPermission(['agent:workbench:edit', 'agents:edit'], permissionCodes.value))
@@ -405,11 +384,9 @@ const currentModelOptions = computed<ModelOption[]>(() => {
 const iconOptions = computed(() => toOptions(meta.value?.iconOptions, 'code', 'label'))
 const themeOptions = computed(() => toOptions(meta.value?.themeOptions, 'code', 'label'))
 const nodeTypeOptions = computed(() => toOptions(meta.value?.nodeTypes, 'code', 'label'))
-const toolCards = computed(() => {
-  const selected = new Map(editableAgent.value.tools.map((item) => [item.toolCode, item]))
-  return toOptions(meta.value?.tools, 'toolCode', 'label').map((item) => ({ ...item, toolCode: item.code, categoryLabel: item.category === 'BUSINESS' ? '业务工具' : '通用工具', enabled: selected.has(item.code), binding: selected.get(item.code) }))
-})
-const enabledToolOptions = computed(() => toolCards.value.filter((item) => item.enabled).map((item) => ({ toolCode: item.toolCode, label: item.label })))
+const enabledToolOptions = computed(() => editableAgent.value.tools
+  .filter((item) => item.enabled !== false && (meta.value?.tools || []).some((tool) => tool.toolCode === item.toolCode))
+  .map((item) => ({ toolCode: item.toolCode, label: item.label || item.toolCode })))
 
 onMounted(async () => {
   await loadMeta()
@@ -417,6 +394,18 @@ onMounted(async () => {
 })
 
 watch(runForm, () => persistCurrentRunDraft(), { deep: true })
+watch(() => runForm.value.inputPayloadText, () => {
+  runPreflight.value = null
+  selectedRunCompanyId.value = ''
+  selectedRunVersionId.value = undefined
+  selectedRunSupplierCode.value = ''
+  selectedRunSupplierCodes.value = {}
+  runClarificationAnswer.value = ''
+})
+watch(selectedRunCompanyId, () => {
+  selectedRunSupplierCode.value = ''
+  selectedRunSupplierCodes.value = {}
+})
 
 async function loadMeta() {
   try {
@@ -437,7 +426,9 @@ async function loadAgents(keepSelection = true) {
       startCreateAgent()
       return
     }
-    const targetId = keepSelection && selectedAgentId.value && agentList.value.some((item) => item.id === selectedAgentId.value) ? selectedAgentId.value : agentList.value[0]?.id
+    const returnId = Number(route.query.agentId)
+    const targetId = keepSelection && selectedAgentId.value && agentList.value.some((item) => item.id === selectedAgentId.value)
+      ? selectedAgentId.value : agentList.value.find((item) => item.id === returnId)?.id || agentList.value[0]?.id
     if (targetId) await selectAgent(targetId)
   } catch (error: any) {
     ElMessage.error(error?.message || 'Agent 列表加载失败')
@@ -448,11 +439,18 @@ async function loadAgents(keepSelection = true) {
 
 async function selectAgent(id: number) {
   persistCurrentRunDraft()
+  runPreflight.value = null
+  selectedRunCompanyId.value = ''
+  selectedRunVersionId.value = undefined
+  selectedRunSupplierCode.value = ''
+  selectedRunSupplierCodes.value = {}
+  runClarificationAnswer.value = ''
   selectedAgentId.value = id
   try {
     const res = await archiveAgentApi.getDetail(id)
-    editableAgent.value = detailToEditable(res.data)
+    editableAgent.value = detailToEditable(res.data, meta.value, defaultNodeConfig)
     inputSchemaText.value = prettyJson(res.data.inputSchema)
+    savedEditorSnapshot.value = editorSnapshot()
     runForm.value = readAgentRunDraft(sessionStorage, runDraftUserKey, id, defaultRunDraft())
     currentRunDetail.value = null
     runDetailDrawerVisible.value = false
@@ -469,9 +467,19 @@ function startCreateAgent() {
   runDetailDrawerVisible.value = false
   editableAgent.value = createDefaultAgent(meta.value)
   inputSchemaText.value = prettyJson(defaultInputSchema())
+  savedEditorSnapshot.value = editorSnapshot()
   runForm.value = defaultRunDraft()
   runRecords.value = []
   runPermissionMessage.value = canViewLogs.value ? '' : '当前账号没有查看运行日志的权限。'
+}
+
+function startCreateSupplierLedgerAgent() {
+  startCreateAgent()
+  editableAgent.value = supplierLedgerAgentTemplate(editableAgent.value, meta.value)
+  inputSchemaText.value = prettyJson({ type: 'object', properties: {
+    query: { type: 'string', description: '供应商往来明细查询问题' }
+  } })
+  savedEditorSnapshot.value = editorSnapshot()
 }
 
 async function saveAgent() {
@@ -482,9 +490,10 @@ async function saveAgent() {
   try {
     const isUpdate = Boolean(editableAgent.value.id)
     const res = isUpdate ? await archiveAgentApi.update(editableAgent.value.id!, payload) : await archiveAgentApi.create(payload)
-    editableAgent.value = detailToEditable(res.data)
+    editableAgent.value = detailToEditable(res.data, meta.value, defaultNodeConfig)
     selectedAgentId.value = res.data.id
     inputSchemaText.value = prettyJson(res.data.inputSchema)
+    savedEditorSnapshot.value = editorSnapshot()
     writeAgentRunDraft(sessionStorage, runDraftUserKey, res.data.id, runDraft)
     await loadAgents(true)
     ElMessage.success(isUpdate ? 'Agent 配置已保存' : 'Agent 已创建')
@@ -500,7 +509,7 @@ async function publishAgent() {
   publishLoading.value = true
   try {
     const res = await archiveAgentApi.publish(editableAgent.value.id)
-    editableAgent.value = detailToEditable(res.data)
+    editableAgent.value = detailToEditable(res.data, meta.value, defaultNodeConfig)
     inputSchemaText.value = prettyJson(res.data.inputSchema)
     await loadAgents(true)
     ElMessage.success('Agent 已发布为最新版本')
@@ -523,7 +532,7 @@ async function duplicateAgent() {
     const payload = buildSavePayload(`${editableAgent.value.agentName} 副本`)
     if (!payload) return
     const res = await archiveAgentApi.create(payload)
-    editableAgent.value = detailToEditable(res.data)
+    editableAgent.value = detailToEditable(res.data, meta.value, defaultNodeConfig)
     selectedAgentId.value = res.data.id
     inputSchemaText.value = prettyJson(res.data.inputSchema)
     await loadAgents(true)
@@ -539,7 +548,7 @@ async function toggleAgentStatus(status: EditableAgent['status']) {
   if (!editableAgent.value.id) return ElMessage.warning('请先保存 Agent')
   try {
     const res = await archiveAgentApi.toggleStatus(editableAgent.value.id, status)
-    editableAgent.value = detailToEditable(res.data)
+    editableAgent.value = detailToEditable(res.data, meta.value, defaultNodeConfig)
     inputSchemaText.value = prettyJson(res.data.inputSchema)
     await loadAgents(true)
     ElMessage.success(status === 'DISABLED' ? 'Agent 已停用' : 'Agent 已启用')
@@ -557,7 +566,7 @@ async function archiveAgent() {
   }
   try {
     const res = await archiveAgentApi.toggleStatus(editableAgent.value.id, 'ARCHIVED')
-    editableAgent.value = detailToEditable(res.data)
+    editableAgent.value = detailToEditable(res.data, meta.value, defaultNodeConfig)
     inputSchemaText.value = prettyJson(res.data.inputSchema)
     await loadAgents(true)
     ElMessage.success('Agent 已归档')
@@ -598,13 +607,58 @@ async function runAgentNow() {
   if (!editableAgent.value.id) return ElMessage.warning('请先保存 Agent 再试跑')
   const inputPayload = parseJson(runForm.value.inputPayloadText, '测试入参 JSON 不合法')
   if (!inputPayload) return
+  if (runPreflight.value?.mode === 'CLARIFY') {
+    if (runPreflight.value.companyOptions.length && !selectedRunCompanyId.value) return ElMessage.warning('请选择账套')
+    if (runPreflight.value.workflowOptions.length && !selectedRunVersionId.value) return ElMessage.warning('请选择工作流')
+    if (runPreflight.value.supplierOptions?.length && !selectedRunSupplierCode.value) return ElMessage.warning('请选择供应商')
+    if (!runPreflight.value.companyOptions.length && !runPreflight.value.workflowOptions.length
+      && !runPreflight.value.supplierOptions?.length && !runClarificationAnswer.value.trim())
+      return ElMessage.warning('请补充查询条件')
+  }
+  const chosenSuppliers = { ...selectedRunSupplierCodes.value }
+  if (runPreflight.value?.supplierNodeKey && selectedRunSupplierCode.value)
+    chosenSuppliers[runPreflight.value.supplierNodeKey] = selectedRunSupplierCode.value
   runLoading.value = true
   try {
-    const res = await archiveAgentApi.run(editableAgent.value.id, { triggerSource: normalizeText(runForm.value.triggerSource) || 'workbench.manual', inputPayload })
+    const prepared = await archiveAgentApi.prepareRun(editableAgent.value.id, { inputPayload: {
+      ...inputPayload,
+      ...(selectedRunCompanyId.value ? { selectedCompanyId: selectedRunCompanyId.value } : {}),
+      ...(selectedRunVersionId.value ? { selectedVersionId: selectedRunVersionId.value } : {}),
+      ...(Object.keys(chosenSuppliers).length ? { selectedSupplierCodes: chosenSuppliers } : {}),
+      ...(runClarificationAnswer.value.trim() ? { clarificationAnswer: runClarificationAnswer.value.trim() } : {})
+    } })
+    const plan = prepared.data
+    if (plan.mode !== 'READY') {
+      runPreflight.value = plan
+      selectedRunSupplierCodes.value = chosenSuppliers
+      selectedRunSupplierCode.value = plan.supplierNodeKey ? chosenSuppliers[plan.supplierNodeKey] || '' : ''
+      if (plan.supplierNodeKey && plan.versionId) selectedRunVersionId.value = plan.versionId
+      if (plan.mode === 'NO_CAPABILITY') ElMessage.warning(plan.message)
+      return
+    }
+    if (!plan.agentId || !plan.versionId) throw new Error('工作台任务分析结果缺少工作流版本')
+    const targetAgentId = plan.agentId
+    const switched = targetAgentId !== editableAgent.value.id
+    const res = await archiveAgentApi.run(targetAgentId, {
+      expectedVersionId: plan.versionId,
+      usePublishedVersion: plan.usePublishedVersion,
+      inputPayload: { ...inputPayload, parameters: plan.parameters,
+        ...(runClarificationAnswer.value.trim() ? { context: `${String(inputPayload.context || '')}\n${runClarificationAnswer.value.trim()}` } : {}) }
+    })
+    runPreflight.value = null
+    selectedRunCompanyId.value = ''
+    selectedRunVersionId.value = undefined
+    selectedRunSupplierCode.value = ''
+    selectedRunSupplierCodes.value = {}
+    runClarificationAnswer.value = ''
+    if (switched) {
+      ElMessage.info(`已改用 ${plan.agentName} 的已发布版本执行`)
+      await selectAgent(targetAgentId)
+    }
     ElMessage.success(`运行请求已提交：${res.data.runNo}`)
-    await loadRuns(editableAgent.value.id)
+    await loadRuns(targetAgentId)
     await waitForRunCompletion(res.data.id)
-    await loadRuns(editableAgent.value.id)
+    await loadRuns(targetAgentId)
     await loadAgents(true)
   } catch (error: any) {
     ElMessage.error(error?.message || 'Agent 试跑失败')
@@ -660,21 +714,6 @@ async function waitForRunCompletion(runId: number) {
   ElMessage.warning('流程仍在后台运行，可稍后从运行记录中刷新查看')
 }
 
-function toggleTool(toolCode: string, enabled: boolean) {
-  const current = editableAgent.value.tools.find((item) => item.toolCode === toolCode)
-  if (enabled && !current) {
-    const metaTool = toolCards.value.find((item) => item.toolCode === toolCode)
-    editableAgent.value.tools.push({ toolCode, label: metaTool?.label, category: metaTool?.category })
-    return
-  }
-  if (!enabled) {
-    editableAgent.value.tools = editableAgent.value.tools.filter((item) => item.toolCode !== toolCode)
-    editableAgent.value.workflow.nodes.forEach((node) => {
-      if (node.nodeType === 'tool' && node.config.toolCode === toolCode) node.config.toolCode = ''
-    })
-  }
-}
-
 function handleProviderChange() {
   const provider = editableAgent.value.modelConfig.provider
   const providerMeta = (meta.value?.modelProviders || []).find((item) => stringFrom(item.code) === provider)
@@ -701,7 +740,7 @@ function handleNodeTypeChange(node: NodeModel) { node.config = defaultNodeConfig
 function addTrigger(triggerType: TriggerModel['triggerType']) { editableAgent.value.triggers.push(buildTrigger(triggerType)) }
 function removeTrigger(index: number) { editableAgent.value.triggers.splice(index, 1) }
 function resetInputSchema() { inputSchemaText.value = prettyJson(defaultInputSchema()) }
-function resetRunInput() { runForm.value = defaultRunDraft() }
+function resetRunInput() { runForm.value = defaultRunDraft(); runPreflight.value = null; selectedRunCompanyId.value = ''; selectedRunVersionId.value = undefined; selectedRunSupplierCode.value = ''; selectedRunSupplierCodes.value = {}; runClarificationAnswer.value = '' }
 function openWorkflowCanvas() {
   if (!editableAgent.value.id) {
     ElMessage.warning('请先保存 Agent，再进入流程编排画布')
@@ -709,78 +748,32 @@ function openWorkflowCanvas() {
   }
   router.push({ name: 'agent-workflow-canvas', params: { id: editableAgent.value.id } })
 }
+async function openToolConfig() {
+  if (!editableAgent.value.id) return ElMessage.warning('请先保存 Agent，再进入工具配置')
+  if (savedEditorSnapshot.value !== editorSnapshot()) {
+    try {
+      await ElMessageBox.confirm('当前页面有未保存的修改。请先保存，或放弃修改后进入工具配置。',
+        '未保存的修改', { confirmButtonText: '放弃修改并进入', cancelButtonText: '返回保存', type: 'warning' })
+    } catch { return }
+  }
+  router.push({ name: 'agent-tool-config', params: { id: editableAgent.value.id } })
+}
+function editorSnapshot() { return JSON.stringify({ agent: editableAgent.value, inputSchema: inputSchemaText.value }) }
 
 function buildSavePayload(nameOverride?: string): ArchiveAgentSavePayload | null {
   const inputSchema = parseJson(inputSchemaText.value, '输入 Schema JSON 不合法')
-  const agentName = normalizeText(nameOverride || editableAgent.value.agentName)
-  if (!inputSchema || !agentName) {
-    if (!agentName) ElMessage.warning('Agent 名称不能为空')
-    return null
-  }
-  return {
-    agentName,
-    agentDescription: normalizeText(editableAgent.value.agentDescription),
-    iconKey: normalizeText(editableAgent.value.iconKey),
-    themeKey: normalizeText(editableAgent.value.themeKey),
-    coverColor: normalizeText(editableAgent.value.coverColor),
-    tags: editableAgent.value.tags.filter((item) => normalizeText(item)).map((item) => item.trim()),
-    promptConfig: { ...editableAgent.value.promptConfig },
-    modelConfig: { ...editableAgent.value.modelConfig, credentialCode: normalizeText(editableAgent.value.modelConfig.credentialCode) },
-    tools: editableAgent.value.tools.map((item) => ({ toolCode: item.toolCode, label: item.label, category: item.category, enabled: true, credentialRefCode: normalizeText(item.credentialRefCode), url: normalizeText(item.url), title: normalizeText(item.title) })),
-    workflow: { nodes: editableAgent.value.workflow.nodes.map((item) => ({ nodeKey: item.nodeKey, nodeType: item.nodeType, label: item.label, config: pruneEmpty(item.config) })), edges: editableAgent.value.workflow.edges.map((item) => ({ source: item.source, target: item.target })) },
-    triggers: editableAgent.value.triggers.map((item) => ({ triggerType: item.triggerType, enabled: item.enabled, scheduleMode: item.scheduleMode, cronExpression: normalizeText(item.cronExpression), intervalMinutes: item.intervalMinutes, eventCode: normalizeText(item.eventCode) })),
-    inputSchema
-  }
+  if (!inputSchema) return null
+  const payload = buildEditorSavePayload(editableAgent.value, inputSchema, nameOverride)
+  if (!payload) ElMessage.warning('Agent 名称不能为空')
+  return payload
 }
-
-function detailToEditable(detail: ArchiveAgentDetail): EditableAgent {
-  const fallbackWorkflow = defaultWorkflow()
-  return {
-    id: detail.id,
-    agentCode: detail.agentCode,
-    agentName: detail.agentName || '',
-    agentDescription: detail.agentDescription || '',
-    iconKey: stringFrom(detail.iconKey, 'pixel-duck'),
-    themeKey: stringFrom(detail.themeKey, 'duck-sunrise'),
-    coverColor: stringFrom(detail.coverColor, '#d97706'),
-    tags: detail.tags || [],
-    status: (detail.status as EditableAgent['status']) || 'DRAFT',
-    latestVersionNo: detail.latestVersionNo,
-    publishedVersionNo: detail.publishedVersionNo,
-    promptConfig: { systemPrompt: stringFrom(detail.promptConfig?.systemPrompt, meta.value?.defaultSystemPrompt || ''), rolePrompt: stringFrom(detail.promptConfig?.rolePrompt), outputSchema: stringFrom(detail.promptConfig?.outputSchema), guardrails: stringFrom(detail.promptConfig?.guardrails) },
-    modelConfig: { provider: stringFrom(detail.modelConfig?.provider, 'MOCK'), model: stringFrom(detail.modelConfig?.model, 'duck-agent-v1'), temperature: numberFrom(detail.modelConfig?.temperature, 0.3), maxTokens: numberFrom(detail.modelConfig?.maxTokens, 1200), timeoutSeconds: numberFrom(detail.modelConfig?.timeoutSeconds, 30), credentialCode: stringFrom(detail.modelConfig?.credentialCode) },
-    tools: (detail.tools || []).map((item) => ({ toolCode: stringFrom(item.toolCode), label: stringFrom(item.label), category: stringFrom(item.category), credentialRefCode: stringFrom(item.credentialRefCode), url: stringFrom(item.url), title: stringFrom(item.title) })),
-    workflow: { nodes: Array.isArray(detail.workflow?.nodes) ? detail.workflow.nodes.map((item) => ({ nodeKey: item.nodeKey, nodeType: item.nodeType, label: item.label, config: item.config ? clone(item.config) : defaultNodeConfig(item.nodeType) })) : fallbackWorkflow.nodes, edges: Array.isArray(detail.workflow?.edges) ? detail.workflow.edges.map((item) => ({ source: item.source, target: item.target })) : fallbackWorkflow.edges },
-    triggers: Array.isArray(detail.triggers) && detail.triggers.length ? detail.triggers.map((item) => ({ triggerType: stringFrom(item.triggerType, 'MANUAL') as TriggerModel['triggerType'], enabled: item.enabled !== false, scheduleMode: stringFrom(item.scheduleMode, 'INTERVAL') as TriggerModel['scheduleMode'], cronExpression: stringFrom(item.cronExpression), intervalMinutes: numberFrom(item.intervalMinutes, 60), eventCode: stringFrom(item.eventCode) })) : [buildTrigger('MANUAL'), buildTrigger('SCHEDULE')],
-    versions: detail.versions || []
-  }
-}
-function createDefaultAgent(sourceMeta?: ArchiveAgentMeta | null): EditableAgent {
-  return {
-    agentName: '我的自动化鸭子',
-    agentDescription: '个人自动化 Agent，适合先从手动试跑和定时任务开始。',
-    iconKey: 'pixel-duck',
-    themeKey: 'duck-sunrise',
-    coverColor: '#d97706',
-    tags: ['个人', '自动化'],
-    status: 'DRAFT',
-    latestVersionNo: 1,
-    promptConfig: { systemPrompt: sourceMeta?.defaultSystemPrompt || '你是一个个人自动化 Agent。优先输出结构化结论，并在需要时调用工具补充事实。', rolePrompt: '你只服务当前登录用户，不能越权查看其他人的数据。', outputSchema: '{"summary":"","actions":[]}', guardrails: '不泄露敏感信息；调用工具前先确认是否必要。' },
-    modelConfig: { provider: 'MOCK', model: 'duck-agent-v1', temperature: 0.3, maxTokens: 1200, timeoutSeconds: 30, credentialCode: '' },
-    tools: [{ toolCode: 'expense.query_my_expenses', label: '查询我的报销单', category: 'BUSINESS' }, { toolCode: 'notify.send_message', label: '发送站内通知', category: 'BUSINESS', title: 'Agent 执行通知' }],
-    workflow: defaultWorkflow(),
-    triggers: [buildTrigger('MANUAL'), buildTrigger('SCHEDULE')],
-    versions: []
-  }
-}
-function defaultWorkflow() { return { nodes: [buildNode('start', 'start_1', '开始'), buildNode('llm', 'llm_1', '意图分析'), buildNode('end', 'end_1', '结束')], edges: [{ source: 'start_1', target: 'llm_1' }, { source: 'llm_1', target: 'end_1' }] } }
 function buildNode(nodeType: NodeModel['nodeType'], nodeKey?: string, label?: string): NodeModel { return { nodeKey: nodeKey || `${nodeType}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, nodeType, label: label || defaultNodeLabel(nodeType), config: defaultNodeConfig(nodeType) } }
 function buildTrigger(triggerType: TriggerModel['triggerType']): TriggerModel { if (triggerType === 'SCHEDULE') return { triggerType, enabled: false, scheduleMode: 'INTERVAL', intervalMinutes: 60 }; if (triggerType === 'EVENT') return { triggerType, enabled: false, eventCode: '' }; return { triggerType, enabled: true } }
 function defaultNodeLabel(nodeType: NodeModel['nodeType']) { return ({ start: '开始', llm: 'LLM 节点', condition: '条件判断', tool: '工具调用', transform: '变量转换', notify: '发送通知', end: '结束' } as Record<string, string>)[nodeType] || '新节点' }
 function defaultNodeConfig(nodeType: NodeModel['nodeType']) { if (nodeType === 'llm') return { promptTemplate: '' }; if (nodeType === 'condition') return { expression: '' }; if (nodeType === 'tool') return { toolCode: enabledToolOptions.value[0]?.toolCode || '', queryTemplateCode: 'expense.accessible_expenses.v2', variableMapping: '{"scope":"{{input.scope}}","keyword":"{{input.keyword}}","status":"{{input.status}}","startDate":"{{input.startDate}}","endDate":"{{input.endDate}}","minAmount":"{{input.minAmount}}","maxAmount":"{{input.maxAmount}}","limit":"{{input.limit}}"}' }; if (nodeType === 'transform') return { template: '' }; if (nodeType === 'notify') return { message: '' }; return {} }
 function defaultInputSchema() { return { type: 'object', properties: { query: { type: 'string', description: '本次想让 Agent 处理的问题', default: '总结我当前待处理的报销事项' }, context: { type: 'string', description: '补充上下文', default: '优先关注待审批和待付款单据' }, scope: { type: 'string', enum: ['ASSIGNED_TO_ME', 'SUBMITTED_BY_ME'], default: 'ASSIGNED_TO_ME' }, keyword: { type: ['string', 'null'], default: null }, status: { type: ['string', 'null'], default: null }, startDate: { type: ['string', 'null'], default: null }, endDate: { type: ['string', 'null'], default: null }, minAmount: { type: ['number', 'null'], default: null }, maxAmount: { type: ['number', 'null'], default: null }, limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 } } } }
-function defaultRunDraft(): AgentRunDraft { return { triggerSource: 'workbench.manual', inputPayloadText: defaultRunInputText() } }
-function defaultRunInputText() { return prettyJson({ query: '总结我当前待处理的报销事项', context: '优先关注待审批和待付款单据', scope: 'ASSIGNED_TO_ME', keyword: null, status: null, startDate: null, endDate: null, minAmount: null, maxAmount: null, limit: 10 }) }
+function defaultRunDraft(): AgentRunDraft { return { inputPayloadText: defaultRunInputText() } }
+function defaultRunInputText() { return prettyJson({ query: '' }) }
 function persistCurrentRunDraft() { if (selectedAgentId.value) writeAgentRunDraft(sessionStorage, runDraftUserKey, selectedAgentId.value, runForm.value) }
 function triggerLabel(triggerType: string) { return ({ MANUAL: '手动触发', SCHEDULE: '定时触发', EVENT: '事件触发' } as Record<string, string>)[triggerType] || triggerType }
 function runtimeStatusLabel(status?: string) { return ({ READY: '待命', RUNNING: '运行中', FAILED: '异常', DISABLED: '已停用', ARCHIVED: '已归档', DRAFT: '草稿' } as Record<string, string>)[status || 'DRAFT'] || '草稿' }
@@ -788,14 +781,10 @@ function summaryStatusType(status?: string) { return ({ READY: 'success', RUNNIN
 function runStatusType(status?: string) { return ({ SUCCESS: 'success', COMPLETED: 'success', RUNNING: 'warning', PENDING: 'warning', FAILED: 'danger' } as Record<string, string>)[status || ''] || 'info' }
 function isProtectedNode(nodeType: string) { return nodeType === 'start' || nodeType === 'end' }
 function prettyJson(value: unknown) { try { return JSON.stringify(value ?? {}, null, 2) } catch { return '{}' } }
-function stringifyInline(value: unknown) { try { const text = JSON.stringify(value ?? {}); return text.length > 72 ? `${text.slice(0, 72)}...` : text } catch { return '{}' } }
 function parseJson(text: string, message: string) { try { return JSON.parse(text || '{}') as Record<string, unknown> } catch { ElMessage.warning(message); return null } }
-function pruneEmpty(source: Record<string, any>) { return Object.fromEntries(Object.entries(source || {}).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')) }
 function toOptions(list: Array<Record<string, unknown>> | undefined, codeKey: string, labelKey: string): OptionItem[] { return (list || []).map((item) => ({ code: stringFrom(item[codeKey]), label: stringFrom(item[labelKey]), available: Boolean(item.available ?? true), category: stringFrom(item.category) })) }
-function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T }
 function normalizeText(value?: string | null) { const text = String(value || '').trim(); return text || undefined }
 function stringFrom(value: unknown, fallback = '') { return typeof value === 'string' ? value : fallback }
-function numberFrom(value: unknown, fallback = 0) { return typeof value === 'number' && !Number.isNaN(value) ? value : fallback }
 function delay(milliseconds: number) { return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds)) }
 </script>
 
@@ -850,7 +839,6 @@ function delay(milliseconds: number) { return new Promise<void>((resolve) => win
 .run-card:hover, .run-card:focus-visible { transform: translateY(-2px); border-color: rgba(31,159,159,.42); background: linear-gradient(180deg, #f0fdfa 0%, #fff7e8 100%); box-shadow: 0 12px 26px rgba(15,118,110,.14); outline: none; }
 .drawer-heading { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 12px; }
 .drawer-heading h3 { margin: 4px 0 0; color: var(--ink); font-size: 20px; }
-.run-detail-drawer { padding: 0 4px 18px; }
 .payload-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; } .payload-grid label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: rgba(39,48,71,.58); } .payload-grid pre, .monospace :deep(textarea) { font-family: 'Consolas', 'SFMono-Regular', monospace; } .payload-grid pre { min-height: 108px; margin: 0; padding: 10px; border-radius: 16px; background: #f8fafc; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: rgba(39,48,71,.72); }
 .muted { color: rgba(39,48,71,.6); } .muted.sm { font-size: 13px; } .muted.xs { font-size: 12px; } .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .block { display: block; } .error { color: #dc2626; }
 @media (max-width: 1500px) { .agent-workbench { grid-template-columns: minmax(260px,300px) minmax(0,1fr); } .runtime { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); align-items: start; } }

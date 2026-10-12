@@ -5,6 +5,8 @@ import com.finex.auth.dto.FinanceGeneralLedgerPeriodActionResultVO;
 import com.finex.auth.dto.FinanceGeneralLedgerPeriodStatusOverviewVO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.FinanceGeneralLedgerPeriodStatusService;
+import com.finex.auth.service.queryauth.QueryAuthorization;
+import com.finex.auth.service.queryauth.QueryAuthorizationService;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -28,6 +30,7 @@ public class FinanceGeneralLedgerPeriodStatusController {
 
     private final FinanceGeneralLedgerPeriodStatusService financeGeneralLedgerPeriodStatusService;
     private final AccessControlService accessControlService;
+    private final QueryAuthorizationService queryAuthorizationService;
 
     @GetMapping("/overview")
     public Result<FinanceGeneralLedgerPeriodStatusOverviewVO> overview(
@@ -39,9 +42,21 @@ public class FinanceGeneralLedgerPeriodStatusController {
     ) {
         Long currentUserId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(currentUserId, POST_VIEW_PERMISSION, CLOSE_VIEW_PERMISSION);
+        QueryAuthorization authorization = queryAuthorizationService.resolveForSelf(
+                currentUserId, QueryAuthorizationService.FINANCE_CLOSE_QUERY);
+        String effectiveCompanyId = companyId;
+        if (effectiveCompanyId == null || effectiveCompanyId.isBlank()) {
+            if (authorization.companyIds().size() != 1) {
+                throw new IllegalArgumentException("请选择有权查看的公司");
+            }
+            effectiveCompanyId = authorization.companyIds().iterator().next();
+        }
+        if (!authorization.allows(effectiveCompanyId, null)) {
+            throw new SecurityException(QueryAuthorizationService.NO_PERMISSION);
+        }
         return Result.success(financeGeneralLedgerPeriodStatusService.getOverview(
                 currentUserId,
-                companyId,
+                effectiveCompanyId,
                 iyear,
                 currentIyear,
                 currentIperiod
@@ -55,6 +70,7 @@ public class FinanceGeneralLedgerPeriodStatusController {
     ) {
         Long currentUserId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(currentUserId, POST_RUN_PERMISSION, CLOSE_RUN_PERMISSION);
+        requireFinanceCompany(currentUserId, dto.getCompanyId());
         return Result.success(
                 "反结账成功",
                 financeGeneralLedgerPeriodStatusService.reopenPeriod(currentUserId, getCurrentUsername(request), dto)
@@ -68,6 +84,7 @@ public class FinanceGeneralLedgerPeriodStatusController {
     ) {
         Long currentUserId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(currentUserId, POST_RUN_PERMISSION, CLOSE_RUN_PERMISSION);
+        requireFinanceCompany(currentUserId, dto.getCompanyId());
         return Result.success(
                 "反记账成功",
                 financeGeneralLedgerPeriodStatusService.unpostPeriod(currentUserId, getCurrentUsername(request), dto)
@@ -83,6 +100,13 @@ public class FinanceGeneralLedgerPeriodStatusController {
             return value.longValue();
         }
         throw new IllegalStateException("无法获取当前登录用户");
+    }
+
+    private void requireFinanceCompany(Long userId, String companyId) {
+        if (!queryAuthorizationService.resolveForSelf(userId,
+                QueryAuthorizationService.FINANCE_CLOSE_QUERY).allows(companyId, null)) {
+            throw new SecurityException(QueryAuthorizationService.NO_PERMISSION);
+        }
     }
 
     private String getCurrentUsername(HttpServletRequest request) {

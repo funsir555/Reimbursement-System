@@ -132,16 +132,16 @@ export function hasVoucherEffectiveCredit(row?: VoucherAmountLike | null) {
   return !isZeroMoney(resolveVoucherEffectiveCredit(row))
 }
 
-export function sumVoucherEffectiveDebit(rows: VoucherAmountLike[]) {
-  return rows.reduce((total, row) => addMoney(total, resolveVoucherEffectiveDebit(row)), '0.00')
+export function sumVoucherSignedDebit(rows: VoucherAmountLike[]) {
+  return rows.reduce((total, row) => addMoney(total, normalizeSignedVoucherMoney(row.md) || '0.00'), '0.00')
 }
 
-export function sumVoucherEffectiveCredit(rows: VoucherAmountLike[]) {
-  return rows.reduce((total, row) => addMoney(total, resolveVoucherEffectiveCredit(row)), '0.00')
+export function sumVoucherSignedCredit(rows: VoucherAmountLike[]) {
+  return rows.reduce((total, row) => addMoney(total, normalizeSignedVoucherMoney(row.mc) || '0.00'), '0.00')
 }
 
 export function resolveVoucherBalanceGap(rows: VoucherAmountLike[]) {
-  return addMoney(sumVoucherEffectiveDebit(rows), negateVoucherMoney(sumVoucherEffectiveCredit(rows)))
+  return addMoney(sumVoucherSignedDebit(rows), negateVoucherMoney(sumVoucherSignedCredit(rows)))
 }
 
 export function resolveVoucherCashFlowAmount(row?: VoucherAmountLike | null) {

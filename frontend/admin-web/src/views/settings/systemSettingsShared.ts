@@ -293,7 +293,7 @@ export function sanitizeEditableRoleIds(
 }
 
 export function isSuperAdminRole(role?: Pick<RoleRecord, 'roleCode'>) {
-  return role?.roleCode === SUPER_ADMIN_ROLE_CODE
+  return role?.roleCode?.toUpperCase() === SUPER_ADMIN_ROLE_CODE
 }
 
 export function isManualDepartment(item: DepartmentTreeNode) {

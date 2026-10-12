@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finex.auth.dto.ProcessFlowConditionDTO;
 import com.finex.auth.dto.ProcessFlowConditionGroupDTO;
 import com.finex.auth.entity.ProcessDocumentActionLog;
+import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.ProcessDocumentTemplate;
@@ -36,6 +37,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -147,6 +149,57 @@ class ExpenseWorkflowRuntimeSupportTest {
 
         assertEquals(20L, actual.get("submitterUserId"));
         assertEquals(15L, actual.get("submitterDeptId"));
+    }
+
+    @Test
+    void buildRuntimeFlowContextCollectsSharedArchiveValuesInFirstSeenOrder() throws Exception {
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessFormDesign formDesign = new ProcessFormDesign();
+        formDesign.setSchemaJson(sharedFieldSchema("mainCost", "COST_CENTER"));
+        ProcessExpenseDetailDesign detailDesign = new ProcessExpenseDetailDesign();
+        detailDesign.setSchemaJson(sharedFieldSchema("detailCost", "COST_CENTER"));
+
+        com.finex.auth.dto.ExpenseDetailInstanceDTO first = new com.finex.auth.dto.ExpenseDetailInstanceDTO();
+        first.setFormData(Map.of("detailCost", List.of("B", "C")));
+        com.finex.auth.dto.ExpenseDetailInstanceDTO second = new com.finex.auth.dto.ExpenseDetailInstanceDTO();
+        second.setFormData(Map.of("detailCost", "D"));
+
+        Map<String, Object> context = support.buildRuntimeFlowContext(
+                null, null, formDesign, Map.of("mainCost", List.of("A", "B")),
+                detailDesign, List.of(first, second));
+
+        assertEquals(List.of("A", "B", "C", "D"), context.get("COST_CENTER"));
+    }
+
+    @Test
+    void buildRuntimeContextForInstanceCollectsSharedArchiveValuesFromEachSnapshot() throws Exception {
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ObjectMapper mapper = new ObjectMapper();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-SHARED");
+        instance.setFormSchemaSnapshotJson(sharedFieldSchema("mainCost", "COST_CENTER"));
+        instance.setFormDataJson(mapper.writeValueAsString(Map.of("mainCost", "A")));
+
+        ProcessDocumentExpenseDetail first = new ProcessDocumentExpenseDetail();
+        first.setSchemaSnapshotJson(sharedFieldSchema("detailCost", "COST_CENTER"));
+        first.setFormDataJson(mapper.writeValueAsString(Map.of("detailCost", List.of("A", "B"))));
+        ProcessDocumentExpenseDetail second = new ProcessDocumentExpenseDetail();
+        second.setSchemaSnapshotJson(sharedFieldSchema("otherCost", "OTHER_CODE"));
+        second.setFormDataJson(mapper.writeValueAsString(Map.of("otherCost", "X")));
+        when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of(first, second));
+
+        Map<String, Object> context = support.buildRuntimeContextForInstance(instance);
+
+        assertEquals(List.of("A", "B"), context.get("COST_CENTER"));
+        assertEquals(List.of("X"), context.get("OTHER_CODE"));
+    }
+
+    private String sharedFieldSchema(String fieldKey, String archiveCode) throws Exception {
+        return new ObjectMapper().writeValueAsString(Map.of("blocks", List.of(Map.of(
+                "kind", "SHARED_FIELD",
+                "fieldKey", fieldKey,
+                "props", Map.of("archiveCode", archiveCode)
+        ))));
     }
 
     @Test
@@ -525,10 +578,102 @@ class ExpenseWorkflowRuntimeSupportTest {
         support.markPaymentStarted(instance, task, 1L, "tester", false, null, null, null);
 
         assertEquals("PAYING", instance.getStatus());
+        assertEquals("payment-node", instance.getCurrentNodeKey());
+        assertEquals("PAYMENT", instance.getCurrentTaskType());
+        assertNull(instance.getFinishedAt());
         assertEquals(1, insertedLogs.size());
+        assertEquals("PAYMENT_START", insertedLogs.get(0).getActionType());
         assertNotNull(insertedLogs.get(0).getPayloadJson());
         assertTrue(insertedLogs.get(0).getPayloadJson().contains("\"taskId\":99"));
         assertFalse(insertedLogs.get(0).getPayloadJson().contains("companyBankAccountId"));
+    }
+
+    @Test
+    void paymentExceptionAndRevertPreserveNodeAndAuditTargetStatus() {
+        List<ProcessDocumentActionLog> logs = new ArrayList<>();
+        doAnswer(invocation -> {
+            logs.add(invocation.getArgument(0));
+            return 1;
+        }).when(processDocumentActionLogMapper).insert(any(ProcessDocumentActionLog.class));
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setId(1L);
+        instance.setDocumentCode("DOC-PAYMENT");
+        ProcessDocumentTask task = paymentTask("DOC-PAYMENT", "payment-1");
+
+        support.markPaymentException(instance, task, 7L, "tester", "bank failed", true);
+
+        assertEquals("PAYMENT_EXCEPTION", instance.getStatus());
+        assertEquals("payment-1", instance.getCurrentNodeKey());
+        assertEquals("PAYMENT", instance.getCurrentTaskType());
+        assertEquals("PAYMENT_EXCEPTION", logs.get(0).getActionType());
+        assertTrue(logs.get(0).getPayloadJson().contains("\"allowRetry\":true"));
+
+        support.revertPaymentToStatus(instance, task, 7L, "tester", "voided", "PAYMENT_EXCEPTION", "PAYING");
+        assertEquals("PAYING", instance.getStatus());
+        assertEquals("PAYMENT_PENDING", logs.get(1).getActionType());
+        assertTrue(logs.get(1).getPayloadJson().contains("\"returnedTo\":\"PAYING\""));
+
+        support.revertPaymentToStatus(instance, task, 7L, "tester", null, null, "UNKNOWN");
+        assertEquals("PENDING_PAYMENT", instance.getStatus());
+        assertTrue(logs.get(2).getPayloadJson().contains("\"returnedFrom\":\"PAYING\""));
+        assertTrue(logs.get(2).getPayloadJson().contains("\"returnedTo\":\"PENDING_PAYMENT\""));
+    }
+
+    @Test
+    void paymentVoidTargetUsesLastCompletionOrExceptionAnchor() {
+        ExpenseWorkflowRuntimeSupport support = newSupport();
+        ProcessDocumentInstance instance = new ProcessDocumentInstance();
+        instance.setDocumentCode("DOC-PAYMENT");
+
+        instance.setStatus("PAYING");
+        assertEquals("PENDING_PAYMENT", support.resolvePaymentVoidTargetStatus(instance));
+
+        instance.setStatus("PAYMENT_COMPLETED");
+        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
+                actionLog("PAYMENT_PENDING", "payment-1", 7L),
+                actionLog("PAYMENT_START", "payment-1", 7L),
+                actionLog("PAYMENT_COMPLETE", "payment-1", 7L)));
+        assertEquals("PAYING", support.resolvePaymentVoidTargetStatus(instance));
+
+        when(processDocumentActionLogMapper.selectList(any())).thenReturn(List.of(
+                actionLog("PAYMENT_START", "payment-1", 7L),
+                actionLog("PAYMENT_PENDING", "payment-1", 7L),
+                actionLog("PAYMENT_COMPLETE", "payment-1", 7L)));
+        assertEquals("PENDING_PAYMENT", support.resolvePaymentVoidTargetStatus(instance));
+
+        instance.setStatus("PAYMENT_EXCEPTION");
+        assertEquals("PENDING_PAYMENT", support.resolvePaymentVoidTargetStatus(instance));
+    }
+
+    @Test
+    void completingPaymentClosesTaskAndFinishesFlowWithPaymentStatus() throws Exception {
+        List<ProcessDocumentActionLog> logs = new ArrayList<>();
+        doAnswer(invocation -> {
+            logs.add(invocation.getArgument(0));
+            return 1;
+        }).when(processDocumentActionLogMapper).insert(any(ProcessDocumentActionLog.class));
+        ProcessDocumentTask task = paymentTask("DOC-PAYMENT", "payment-1");
+        when(processDocumentTaskMapper.selectList(any())).thenReturn(List.of(task));
+        when(processDocumentExpenseDetailMapper.selectList(any())).thenReturn(List.of());
+        ProcessDocumentInstance instance = createRuntimeInstance(buildSubmitterPaymentSnapshot());
+        instance.setId(1L);
+        instance.setDocumentCode("DOC-PAYMENT");
+        instance.setFormDataJson("{}");
+
+        newSupport().completePaymentRuntime(
+                instance, task, 7L, "tester", "paid", true, java.time.LocalDateTime.of(2026, 9, 28, 9, 30));
+
+        assertEquals("APPROVED", task.getStatus());
+        assertEquals("paid", task.getActionComment());
+        assertNotNull(task.getHandledAt());
+        assertEquals("PAYMENT_COMPLETED", instance.getStatus());
+        assertNull(instance.getCurrentNodeKey());
+        assertNotNull(instance.getFinishedAt());
+        assertEquals(List.of("PAYMENT_COMPLETE", "FINISH"), logs.stream()
+                .map(ProcessDocumentActionLog::getActionType).toList());
+        assertTrue(logs.get(0).getPayloadJson().contains("\"manualPaid\":true"));
+        assertTrue(logs.get(0).getPayloadJson().contains("2026-09-28 09:30"));
     }
 
     @Test
@@ -752,6 +897,16 @@ class ExpenseWorkflowRuntimeSupportTest {
         instance.setStatus("PENDING_APPROVAL");
         instance.setTemplateType("report");
         return instance;
+    }
+
+    private ProcessDocumentTask paymentTask(String documentCode, String nodeKey) {
+        ProcessDocumentTask task = new ProcessDocumentTask();
+        task.setId(99L);
+        task.setDocumentCode(documentCode);
+        task.setNodeKey(nodeKey);
+        task.setNodeName("payment-node");
+        task.setStatus("PENDING");
+        return task;
     }
 
     private User createActiveUser(Long id, String name) {

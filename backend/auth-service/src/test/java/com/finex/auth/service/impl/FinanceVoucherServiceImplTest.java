@@ -178,8 +178,8 @@ class FinanceVoucherServiceImplTest {
         dto.setPageSize(20);
 
         FinanceVoucherSummaryVO summary = service.queryVouchers(dto).getItems().get(0);
-        assertEquals("80.00", summary.getTotalDebit().toPlainString());
-        assertEquals("80.00", summary.getTotalCredit().toPlainString());
+        assertEquals("0.00", summary.getTotalDebit().toPlainString());
+        assertEquals("0.00", summary.getTotalCredit().toPlainString());
     }
 
     @Test
@@ -289,7 +289,7 @@ class FinanceVoucherServiceImplTest {
     }
 
     @Test
-    void saveVoucherAllowsSignedAmountsAndReturnsEffectiveTotals() {
+    void saveVoucherAllowsSignedAmountsAndReturnsSameSideTotals() {
         List<GlAccvouch> insertedRows = new ArrayList<>();
         doAnswer(invocation -> {
             insertedRows.add(invocation.getArgument(0, GlAccvouch.class));
@@ -313,13 +313,39 @@ class FinanceVoucherServiceImplTest {
                 buildSaveEntry("Office Expense", "560101", "100.00", null),
                 buildSaveEntry("Reverse Credit", "100201", "-100.00", null)
         ));
+        dto.getEntries().get(0).setNdS(new BigDecimal("1.000000"));
+        dto.getEntries().get(1).setNdS(new BigDecimal("-1.000000"));
 
         FinanceVoucherSaveResultVO result = service.saveVoucher(dto, 1L, "alice");
 
-        assertEquals("100.00", result.getTotalDebit().toPlainString());
-        assertEquals("100.00", result.getTotalCredit().toPlainString());
+        assertEquals("0.00", result.getTotalDebit().toPlainString());
+        assertEquals("0.00", result.getTotalCredit().toPlainString());
         assertEquals(new BigDecimal("-100.00"), insertedRows.get(1).getMd());
         assertEquals(BigDecimal.ZERO.setScale(2), insertedRows.get(1).getMc());
+        assertEquals(new BigDecimal("-1.000000"), insertedRows.get(1).getNdS());
+        assertNull(insertedRows.get(1).getNcS());
+    }
+
+    @Test
+    void saveVoucherRejectsBothQuantityColumnsEvenWhenOneIsNegative() {
+        when(userMapper.selectById(1L)).thenReturn(buildUser(1L, "alice", "Finance Tester", "COMP-001"));
+        when(systemCompanyMapper.selectCount(any())).thenReturn(1L);
+        FinanceVoucherSaveDTO dto = new FinanceVoucherSaveDTO();
+        dto.setCompanyId("COMP-001");
+        dto.setIperiod(4);
+        dto.setCsign("记");
+        dto.setDbillDate("2026-04-09");
+        dto.setEntries(List.of(
+                buildSaveEntry("Office Expense", "560101", "100.00", null),
+                buildSaveEntry("Pay Office Expense", "100201", null, "100.00")
+        ));
+        dto.getEntries().get(0).setNdS(new BigDecimal("-1.000000"));
+        dto.getEntries().get(0).setNcS(new BigDecimal("1.000000"));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> service.saveVoucher(dto, 1L, "alice"));
+
+        assertEquals("第 1 行数量借贷不能同时填写", exception.getMessage());
     }
 
     @Test

@@ -7,6 +7,10 @@ package com.finex.auth.controller;
 import com.finex.auth.dto.ArchiveAgentRunDTO;
 import com.finex.auth.dto.ArchiveAgentToggleStatusDTO;
 import com.finex.auth.dto.ArchiveAgentSaveDTO;
+import com.finex.auth.dto.ArchiveAgentToolsSaveDTO;
+import com.finex.auth.dto.ArchiveAgentToolTestDTO;
+import com.finex.auth.agent.workflow.AgentWorkbenchToolTestService;
+import com.finex.auth.agent.workflow.AgentWorkbenchRunPreflightService;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.ArchiveAgentService;
 import com.finex.auth.support.archiveagent.ArchiveAgentSupport;
@@ -51,6 +55,8 @@ public class ArchiveAgentController {
 
     private final ArchiveAgentService archiveAgentService;
     private final AccessControlService accessControlService;
+    private final AgentWorkbenchToolTestService toolTestService;
+    private final AgentWorkbenchRunPreflightService runPreflightService;
 
     // 处理 listAgents 请求。
     @GetMapping
@@ -91,6 +97,28 @@ public class ArchiveAgentController {
         return Result.success("Agent 更新成功", archiveAgentService.updateAgent(getCurrentUserId(request), id, getCurrentUsername(request), dto));
     }
 
+    @PutMapping("/{id}/tools")
+    public Result<?> updateTools(@PathVariable Long id, @Valid @RequestBody ArchiveAgentToolsSaveDTO dto,
+                                 HttpServletRequest request) {
+        requireAnyPermission(getCurrentUserId(request), AGENT_EDIT, LEGACY_AGENT_EDIT);
+        return Result.success(archiveAgentService.updateTools(getCurrentUserId(request), id,
+                getCurrentUsername(request), dto));
+    }
+
+    @PostMapping("/{id}/tools/{toolCode}/test")
+    public Result<?> testTool(@PathVariable Long id, @PathVariable String toolCode,
+                              @RequestBody ArchiveAgentToolTestDTO dto, HttpServletRequest request) {
+        requireAnyPermission(getCurrentUserId(request), AGENT_RUN, LEGACY_AGENT_RUN);
+        return Result.success(toolTestService.test(getCurrentUserId(request), id, toolCode, dto));
+    }
+
+    @GetMapping("/{id}/tools/finance.query_supplier_detail_ledger/suppliers")
+    public Result<?> searchToolSuppliers(@PathVariable Long id, @RequestParam String companyId,
+                                         @RequestParam String keyword, HttpServletRequest request) {
+        requireAnyPermission(getCurrentUserId(request), AGENT_RUN, LEGACY_AGENT_RUN);
+        return Result.success(toolTestService.searchSuppliers(getCurrentUserId(request), id, companyId, keyword));
+    }
+
     // 处理 publish 请求。
     @PostMapping("/{id}/publish")
     public Result<?> publish(@PathVariable Long id, HttpServletRequest request) {
@@ -99,10 +127,20 @@ public class ArchiveAgentController {
     }
 
     // 处理 run 请求。
+    @PostMapping("/{id}/run/prepare")
+    public Result<?> prepareRun(@PathVariable Long id, @RequestBody(required = false) ArchiveAgentRunDTO dto,
+                                HttpServletRequest request) {
+        requireAnyPermission(getCurrentUserId(request), AGENT_RUN, LEGACY_AGENT_RUN);
+        return Result.success(runPreflightService.prepare(getCurrentUserId(request), id,
+                dto == null ? null : dto.getInputPayload()));
+    }
+
     @PostMapping("/{id}/run")
     public Result<?> run(@PathVariable Long id, @RequestBody(required = false) ArchiveAgentRunDTO dto, HttpServletRequest request) {
         requireAnyPermission(getCurrentUserId(request), AGENT_RUN, LEGACY_AGENT_RUN);
-        return Result.success("Agent 运行请求已提交", archiveAgentService.runAgent(getCurrentUserId(request), id, dto == null ? new ArchiveAgentRunDTO() : dto));
+        ArchiveAgentRunDTO requestDto = dto == null ? new ArchiveAgentRunDTO() : dto;
+        runPreflightService.validateSubmission(getCurrentUserId(request), id, requestDto);
+        return Result.success("Agent 运行请求已提交", archiveAgentService.runAgent(getCurrentUserId(request), id, requestDto));
     }
 
     // 处理 runs 请求。

@@ -1,9 +1,9 @@
 package com.finex.auth.service.impl.voucher;
 
 import com.finex.auth.dto.FinanceBalanceSheetRowVO;
-import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,29 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class LedgerReportDomainSupportTest {
 
     @Test
-    void balanceCategoryTotalsOnlyIncludeTopLevelSubjectRows() throws Exception {
-        LedgerReportDomainSupport support = new LedgerReportDomainSupport(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
-        Method method = LedgerReportDomainSupport.class.getDeclaredMethod(
-                "buildBalanceCategoryTotals",
-                List.class
-        );
-        method.setAccessible(true);
+    void balanceCategoryTotalsOnlyIncludeTopLevelSubjectRows() {
 
         FinanceBalanceSheetRowVO assetLevelOne = row("SUBJECT", 1, "ASSET", "1001", 100);
         FinanceBalanceSheetRowVO assetLevelTwo = row("SUBJECT", 2, "ASSET", "100101", 200);
@@ -41,16 +19,19 @@ class LedgerReportDomainSupportTest {
         FinanceBalanceSheetRowVO assistRow = row("ASSIST", null, "ASSET", "1001", 400);
         FinanceBalanceSheetRowVO liabilityLevelOne = row("SUBJECT", 1, "LIABILITY", "2001", 500);
 
-        @SuppressWarnings("unchecked")
-        List<FinanceBalanceSheetRowVO> totals =
-                (List<FinanceBalanceSheetRowVO>) method.invoke(
-                        support,
+        List<FinanceBalanceSheetRowVO> totals = BalanceCategoryTotalSupport.build(
                         List.of(
                                 assetLevelOne,
                                 assetLevelTwo,
                                 assetLevelThree,
                                 assistRow,
                                 liabilityLevelOne
+                        ),
+                        Map.of(
+                                "1001", subject("1001", null),
+                                "100101", subject("100101", "1001"),
+                                "10010101", subject("10010101", "100101"),
+                                "2001", subject("2001", null)
                         )
                 );
 
@@ -65,6 +46,21 @@ class LedgerReportDomainSupportTest {
 
         assertEquals(new BigDecimal("500.00"), liabilityTotal.getBeginDebit());
         assertEquals(new BigDecimal("0.00"), equityTotal.getBeginDebit());
+
+        List<FinanceBalanceSheetRowVO> filteredTotals = BalanceCategoryTotalSupport.build(
+                List.of(assetLevelTwo, liabilityLevelOne),
+                Map.of("100101", subject("100101", "1001"), "1001", subject("1001", null),
+                        "2001", subject("2001", null))
+        );
+        assertEquals(new BigDecimal("200.00"), filteredTotals.get(0).getBeginDebit());
+        assertEquals(new BigDecimal("500.00"), filteredTotals.get(1).getBeginDebit());
+    }
+
+    private com.finex.auth.entity.FinanceAccountSubject subject(String code, String parentCode) {
+        com.finex.auth.entity.FinanceAccountSubject subject = new com.finex.auth.entity.FinanceAccountSubject();
+        subject.setSubjectCode(code);
+        subject.setParentSubjectCode(parentCode);
+        return subject;
     }
 
     private FinanceBalanceSheetRowVO row(

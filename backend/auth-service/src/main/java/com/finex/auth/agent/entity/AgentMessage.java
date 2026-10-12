@@ -29,6 +29,11 @@ public class AgentMessage implements Serializable {
     private String tenantId;
 
     /**
+     * 业务公司主体编码。
+     */
+    private String companyId;
+
+    /**
      * 会话ID
      */
     private String sessionId;

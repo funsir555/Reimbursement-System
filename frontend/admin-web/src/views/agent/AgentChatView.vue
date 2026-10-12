@@ -10,6 +10,11 @@
         </div>
       </div>
       <div class="chat-header-actions">
+        <el-select v-model="selectedWorkflowBindingId" clearable filterable class="employee-select" placeholder="选择数字员工服务">
+          <el-option v-for="service in availableEmployees" :key="service.binding_id" :value="service.binding_id"
+            :label="`${service.name} · ${service.agent_name}`" />
+        </el-select>
+        <el-button @click="inboxVisible = true">定时收件箱</el-button>
         <el-select
           v-model="selectedProviderCode"
           class="provider-select"
@@ -60,6 +65,8 @@
         :loading="loading"
         :get-message-key="getMessageKey"
         @retry="handleRetry"
+        @choose="handleClarificationChoice"
+        @clarify="handleGroupedClarification"
       />
 
       <!-- 空状态 -->
@@ -71,12 +78,13 @@
           <el-tag @click="handleExampleClick('我的报销单有哪些？')">
             我的报销单有哪些？
           </el-tag>
-          <el-tag @click="handleExampleClick('本月的报销总额是多少？')">
-            本月的报销总额是多少？
+          <el-tag @click="handleExampleClick('查询本月我的报销单')">
+            查询本月我的报销单
           </el-tag>
           <el-tag @click="handleExampleClick('待审批的报销单有几个？')">
             待审批的报销单有几个？
           </el-tag>
+          <el-tag @click="handleExampleClick('2026年9月有多少公司未结账？')">2026年9月有多少公司未结账？</el-tag>
         </div>
       </div>
     </div>
@@ -88,6 +96,7 @@
       :disabled="!sessionId"
       @send="handleSendMessage"
     />
+    <FinWorkInboxDrawer v-model="inboxVisible" />
   </div>
 </template>
 
@@ -99,10 +108,12 @@ import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import ChatMessageList from '@/components/agent/ChatMessageList.vue'
 import ChatInputBox from '@/components/agent/ChatInputBox.vue'
 import { useAgentChatSession } from '@/composables/useAgentChatSession'
+import FinWorkInboxDrawer from './components/FinWorkInboxDrawer.vue'
 
 const route = useRoute()
 const messageListRef = ref<HTMLElement>()
 const userInput = ref('')
+const inboxVisible = ref(false)
 
 // 使用 Composable 管理会话状态
 const {
@@ -115,6 +126,9 @@ const {
   currentModelOptions,
   selectedProviderCode,
   selectedModel,
+  selectedEmployeeId,
+  selectedWorkflowBindingId,
+  availableEmployees,
   initSession,
   sendMessage,
   selectProvider,
@@ -123,6 +137,10 @@ const {
   retryMessage,
   getMessageKey
 } = useAgentChatSession()
+
+watch(selectedWorkflowBindingId, bindingId => {
+  selectedEmployeeId.value = availableEmployees.value.find(item => item.binding_id === bindingId)?.id
+})
 
 onMounted(async () => {
   const urlSessionId = route.query.sessionId as string
@@ -163,6 +181,14 @@ function handleExampleClick(query: string) {
 
 function handleRetry(messageId: string) {
   retryMessage(messageId)
+}
+
+async function handleClarificationChoice(optionId: string, label: string) {
+  await sendMessage(label, [optionId])
+}
+
+async function handleGroupedClarification(answers: Record<string, string>, labels: string[]) {
+  await sendMessage(labels.join('；'), undefined, answers)
 }
 
 function scrollToBottom() {
@@ -235,6 +261,7 @@ function scrollToBottom() {
 .model-select {
   width: 220px;
 }
+.employee-select { width: 230px; }
 
 .option-meta {
   float: right;

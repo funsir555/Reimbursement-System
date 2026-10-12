@@ -40,6 +40,38 @@
           </div>
         </div>
 
+        <div v-if="isActiveClarification(msg) && msg.options?.length" class="message-options">
+          <el-button
+            v-for="option in msg.options"
+            :key="option.id"
+            size="small"
+            plain
+            @click="$emit('choose', option.id, option.label)"
+          >{{ option.label }}</el-button>
+        </div>
+
+        <div v-if="isActiveClarification(msg) && msg.clarifications?.length" class="clarification-groups">
+          <div v-for="group in msg.clarifications" :key="group.key" class="clarification-group">
+            <div class="clarification-question">{{ group.question }}</div>
+            <el-select v-if="group.options.length" v-model="answersFor(msg)[group.key]"
+              :placeholder="'请选择' + group.question" class="clarification-select">
+              <el-option v-for="option in group.options" :key="option.id"
+                :value="option.id" :label="option.label" />
+            </el-select>
+            <el-input v-else v-model="answersFor(msg)[group.key]" maxlength="200"
+              :placeholder="'请输入' + group.question" class="clarification-select" />
+          </div>
+          <el-button type="primary" size="small"
+            :disabled="!msg.clarifications.every(group => answersFor(msg)[group.key])"
+            @click="submitClarification(msg)">确认选择</el-button>
+        </div>
+
+        <div v-if="msg.sources?.length" class="message-sources">
+          <span v-for="source in msg.sources" :key="source.workflowBindingId">
+            工作流版本 #{{ source.agentVersionId }}
+          </span>
+        </div>
+
         <div class="message-time">
           {{ formatTime(msg.createdAt) }}
         </div>
@@ -63,19 +95,43 @@
 </template>
 
 <script setup lang="ts">
+import { reactive } from 'vue'
 import { User, Warning } from '@element-plus/icons-vue'
 import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import type { MessageVO } from '@/api/modules/agent-chat-types'
 
-defineProps<{
+const props = defineProps<{
   messages: MessageVO[]
   loading?: boolean
   getMessageKey: (msg: MessageVO) => string
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   retry: [messageId: string]
+  choose: [optionId: string, label: string]
+  clarify: [answers: Record<string, string>, labels: string[]]
 }>()
+
+const selectedAnswers = reactive<Record<string, Record<string, string>>>({})
+
+function isActiveClarification(message: MessageVO): boolean {
+  if (props.loading || message.kind !== 'CLARIFY') return false
+  const latest = [...props.messages].reverse().find(item => item.role === 'assistant')
+  return latest?.kind === 'CLARIFY' && props.getMessageKey(latest) === props.getMessageKey(message)
+}
+
+function answersFor(message: MessageVO): Record<string, string> {
+  const key = props.getMessageKey(message)
+  return selectedAnswers[key] ?? (selectedAnswers[key] = {})
+}
+
+function submitClarification(message: MessageVO) {
+  const groups = message.clarifications || []
+  const answers = answersFor(message)
+  if (!groups.length || groups.some(group => !answers[group.key])) return
+  emit('clarify', { ...answers }, groups.map(group =>
+    group.options.find(option => option.id === answers[group.key])?.label || '').filter(Boolean))
+}
 
 function formatTime(timestamp?: Date | string) {
   if (!timestamp) return ''
@@ -175,6 +231,13 @@ function formatTime(timestamp?: Date | string) {
   color: rgba(39, 48, 71, 0.5);
   padding: 0 4px;
 }
+
+.message-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.clarification-groups { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--chat-border); border-radius: 12px; background: white; }
+.clarification-group { display: flex; flex-direction: column; gap: 4px; }
+.clarification-question { font-size: 13px; color: var(--ink); }
+.clarification-select { width: min(320px, 100%); }
+.message-sources { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: rgba(39, 48, 71, 0.65); }
 
 .message-user .message-time {
   text-align: right;

@@ -50,6 +50,7 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinancePeriodTransferService;
 import com.finex.auth.service.FinanceVoucherService;
+import com.finex.auth.support.FinanceBalanceDirectionSupport;
 import com.finex.auth.support.FinanceModuleEnableSupport;
 import com.finex.auth.support.FinanceVoucherAmountSupport;
 import java.math.BigDecimal;
@@ -274,12 +275,21 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         if (!Objects.equals(rule.getUpdatedAt(), run.getRuleUpdatedAt())) {
             throw new IllegalStateException("规则已发生变化，请重新预览后再生成");
         }
-        handleRegeneration(companyId, year, period, rule.getRuleType());
         List<FinancePeriodTransferRunDetail> details = runDetailMapper.selectList(
                 Wrappers.<FinancePeriodTransferRunDetail>lambdaQuery()
                         .eq(FinancePeriodTransferRunDetail::getRunId, run.getId())
                         .orderByAsc(FinancePeriodTransferRunDetail::getLineNo, FinancePeriodTransferRunDetail::getId)
         );
+        List<FinancePeriodTransferRuleLine> lines = loadRuleLines(List.of(rule.getId())).getOrDefault(rule.getId(), List.of());
+        PreviewBundle current = buildPreviewBundle(rule, lines, buildCalculationContext(companyId, year, period, isEnabled(rule.getIncludeUnposted())));
+        List<FinancePeriodTransferRunDetail> recalculated = new ArrayList<>();
+        for (int i = 0; i < current.rows().size(); i++) {
+            recalculated.add(toRunDetail(run, current.rows().get(i), i + 1));
+        }
+        if (!FinancePeriodTransferPreviewConsistency.matches(run, current.totalAmount(), details, recalculated)) {
+            throw new IllegalStateException("结转预览与当前发生额不一致，请重新预览后再生成");
+        }
+        handleRegeneration(companyId, year, period, rule.getRuleType());
         Map<String, FinanceAccountSubject> subjectMap = loadSubjectMap(companyId);
         List<FinanceVoucherEntryDTO> voucherEntries = buildVoucherEntriesForRun(details, rule, subjectMap);
         if (voucherEntries.isEmpty()) {
@@ -560,7 +570,7 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         int skippedCount = rows.size() - generatedCount;
         BigDecimal totalAmount = rows.stream()
                 .filter(item -> item.skipReason == null)
-                .map(item -> item.amount)
+                .map(item -> item.amount.abs())
                 .reduce(ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
         String message;
@@ -601,11 +611,12 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         for (FinancePeriodTransferRuleLine line : lines) {
             FinanceAccountSubject sourceSubject = context.subjectMap.get(trimToNull(line.getSourceSubjectCode()));
             FinanceAccountSubject targetSubject = context.subjectMap.get(trimToNull(line.getTargetSubjectCode()));
-            List<AssistSnapshot> assists = collectAssistSnapshots(context, sourceSubject.getSubjectCode());
+            List<AssistSnapshot> assists = collectAssistSnapshots(context, sourceSubject.getSubjectCode(), line.getMetricType());
             if (!assists.isEmpty()) {
                 for (AssistSnapshot assist : assists) {
-                    BigDecimal amount = resolveMetricAmount(assist, line.getMetricType()).multiply(defaultRatio(line.getRatio())).setScale(2, RoundingMode.HALF_UP);
-                    rows.add(buildTransferRowFromLine(rule, line, sourceSubject, targetSubject, assist, amount, assist.direction(), line.getMetricType(), assist.key()));
+                    FinancePeriodTransferAmountPolicy.Movement movement = resolveMetricMovement(assist, line.getMetricType());
+                    BigDecimal amount = movement.amount().multiply(defaultRatio(line.getRatio())).setScale(2, RoundingMode.HALF_UP);
+                    rows.add(buildTransferRowFromLine(rule, line, sourceSubject, targetSubject, assist, amount, movement.direction(), line.getMetricType(), assist.key()));
                 }
                 continue;
             }
@@ -614,8 +625,9 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
                 rows.add(buildSkipRow(rule, targetSubject, "转出科目【" + sourceSubject.getSubjectCode() + "】不存在可结转余额", line, sourceSubject));
                 continue;
             }
-            BigDecimal amount = resolveMetricAmount(snapshot.asAssistSnapshot(), line.getMetricType()).multiply(defaultRatio(line.getRatio())).setScale(2, RoundingMode.HALF_UP);
-            rows.add(buildTransferRowFromLine(rule, line, sourceSubject, targetSubject, snapshot.asAssistSnapshot(), amount, snapshot.direction(), line.getMetricType(), snapshot.subjectCode()));
+            FinancePeriodTransferAmountPolicy.Movement movement = resolveMetricMovement(snapshot.asAssistSnapshot(), line.getMetricType());
+            BigDecimal amount = movement.amount().multiply(defaultRatio(line.getRatio())).setScale(2, RoundingMode.HALF_UP);
+            rows.add(buildTransferRowFromLine(rule, line, sourceSubject, targetSubject, snapshot.asAssistSnapshot(), amount, movement.direction(), line.getMetricType(), snapshot.subjectCode()));
         }
         return rows;
     }
@@ -702,7 +714,7 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         }
         return accumulatorMap.values().stream()
                 .map(ProfitAccumulator::toSnapshot)
-                .filter(item -> item != null && item.amount().compareTo(ZERO) > 0)
+                .filter(item -> item != null && item.amount().compareTo(ZERO) != 0)
                 .toList();
     }
 
@@ -739,8 +751,8 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         row.targetSubjectName = line != null && trimToNull(line.getTargetSubjectName()) != null ? line.getTargetSubjectName() : rule.getTargetSubjectName();
         row.metricType = defaultString(metricType, METRIC_ENDING_BALANCE);
         row.sourceTraceKey = sourceTraceKey;
-        BigDecimal normalizedAmount = amount == null ? ZERO : amount.abs().setScale(2, RoundingMode.HALF_UP);
-        if (normalizedAmount.compareTo(ZERO) <= 0) {
+        BigDecimal normalizedAmount = amount == null ? ZERO : amount.setScale(2, RoundingMode.HALF_UP);
+        if (normalizedAmount.compareTo(ZERO) == 0) {
             row.skipReason = "不满足结转条件";
             row.amount = ZERO;
             row.direction = reverseDirection(sourceDirection);
@@ -1038,7 +1050,7 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
             sourceEntry.setCdigest(buildVoucherDigest(rule, detail));
             sourceEntry.setCcode(detail.getSourceSubjectCode());
             applyAssistDimensions(sourceEntry, decodeAssistKey(detail.getSourceAssistKey()));
-            applyDirectionAmount(sourceEntry, reverseDirection(detail.getDirection()), defaultMoney(detail.getAmount()));
+            applyDirectionAmount(sourceEntry, detail.getDirection(), defaultMoney(detail.getAmount()));
             entries.add(sourceEntry);
 
             FinanceVoucherEntryDTO targetEntry = new FinanceVoucherEntryDTO();
@@ -1050,7 +1062,7 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
             targetEntry.setCsupId(detail.getTargetCsupId());
             targetEntry.setCitemClass(detail.getTargetCitemClass());
             targetEntry.setCitemId(detail.getTargetCitemId());
-            applyDirectionAmount(targetEntry, detail.getDirection(), defaultMoney(detail.getAmount()));
+            applyDirectionAmount(targetEntry, reverseDirection(detail.getDirection()), defaultMoney(detail.getAmount()));
             entries.add(targetEntry);
         }
         for (FinanceVoucherEntryDTO entry : entries) {
@@ -1183,10 +1195,11 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         return new CalculationContext(companyId, iyear, iperiod, subjectMap, subjectSnapshots, assistSnapshots);
     }
 
-    private List<AssistSnapshot> collectAssistSnapshots(CalculationContext context, String subjectCode) {
+    private List<AssistSnapshot> collectAssistSnapshots(CalculationContext context, String subjectCode, String metricType) {
         return context.assistSnapshots.values().stream()
                 .filter(item -> Objects.equals(item.subjectCode, trimToNull(subjectCode)))
-                .filter(item -> item.amount().compareTo(ZERO) != 0)
+                .filter(item -> item.amount().signum() != 0 || (!METRIC_ENDING_BALANCE.equals(defaultString(metricType, METRIC_ENDING_BALANCE))
+                        && resolveMetricMovement(item, metricType).amount().signum() != 0))
                 .sorted(Comparator.comparing(AssistSnapshot::key))
                 .toList();
     }
@@ -1234,12 +1247,12 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         return result;
     }
 
-    private BigDecimal resolveMetricAmount(AssistSnapshot snapshot, String metricType) {
+    private FinancePeriodTransferAmountPolicy.Movement resolveMetricMovement(AssistSnapshot snapshot, String metricType) {
         return switch (defaultString(metricType, METRIC_ENDING_BALANCE)) {
-            case METRIC_CURRENT_DEBIT -> defaultMoney(snapshot.currentDebit);
-            case METRIC_CURRENT_CREDIT -> defaultMoney(snapshot.currentCredit);
-            case METRIC_CURRENT_NET -> defaultMoney(snapshot.currentDebit).subtract(defaultMoney(snapshot.currentCredit)).abs().setScale(2, RoundingMode.HALF_UP);
-            default -> snapshot.amount();
+            case METRIC_CURRENT_DEBIT -> new FinancePeriodTransferAmountPolicy.Movement("DEBIT", defaultMoney(snapshot.currentDebit));
+            case METRIC_CURRENT_CREDIT -> new FinancePeriodTransferAmountPolicy.Movement("CREDIT", defaultMoney(snapshot.currentCredit));
+            case METRIC_CURRENT_NET -> FinancePeriodTransferAmountPolicy.net(snapshot.currentDebit, snapshot.currentCredit);
+            default -> new FinancePeriodTransferAmountPolicy.Movement(snapshot.direction(), snapshot.amount());
         };
     }
 
@@ -1761,37 +1774,18 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         return trimToNull(assist == null ? null : assist.subjectCode);
     }
 
-    private record ProfitSnapshot(
-            String subjectCode,
-            AssistSnapshot assist,
-            BigDecimal amount,
-            String direction,
-            String metricType,
-            String traceKey
-    ) {
-    }
+    private record ProfitSnapshot(String subjectCode, AssistSnapshot assist, BigDecimal amount,
+                                  String direction, String metricType, String traceKey) {}
 
-    private record VoucherNoParts(String companyId, int iyear, int iperiod, String csign, int inoId) {
-    }
+    private record VoucherNoParts(String companyId, int iyear, int iperiod, String csign, int inoId) {}
 
-    private record PreviewBundle(
-            List<PreviewRow> rows,
-            int generatedCount,
-            int skippedCount,
-            BigDecimal totalAmount,
-            String message
-    ) {
-    }
+    private record PreviewBundle(List<PreviewRow> rows, int generatedCount, int skippedCount,
+                                 BigDecimal totalAmount, String message) {}
 
-    private record CalculationContext(
-            String companyId,
-            int iyear,
-            int iperiod,
-            Map<String, FinanceAccountSubject> subjectMap,
-            Map<String, SubjectSnapshot> subjectSnapshots,
-            Map<String, AssistSnapshot> assistSnapshots
-    ) {
-    }
+    private record CalculationContext(String companyId, int iyear, int iperiod,
+                                      Map<String, FinanceAccountSubject> subjectMap,
+                                      Map<String, SubjectSnapshot> subjectSnapshots,
+                                      Map<String, AssistSnapshot> assistSnapshots) {}
 
     private static final class PreviewRow {
         private Long persistedId;
@@ -1871,19 +1865,19 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         }
 
         private void apply(GlAccvouch row) {
-            BigDecimal debit = FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc());
-            BigDecimal credit = FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc());
+            BigDecimal debit = FinanceVoucherAmountSupport.zeroIfNull(row.getMd());
+            BigDecimal credit = FinanceVoucherAmountSupport.zeroIfNull(row.getMc());
             this.currentDebit = money(this.currentDebit.add(debit));
             this.currentCredit = money(this.currentCredit.add(credit));
         }
 
         private ProfitSnapshot toSnapshot() {
-            BigDecimal net = money(currentDebit.subtract(currentCredit));
-            if (net.compareTo(ZERO) == 0) {
+            FinancePeriodTransferAmountPolicy.Movement movement = FinancePeriodTransferAmountPolicy.net(currentDebit, currentCredit);
+            if (movement.amount().compareTo(ZERO) == 0) {
                 return null;
             }
-            String direction = net.compareTo(ZERO) >= 0 ? "DEBIT" : "CREDIT";
-            BigDecimal amount = money(net.abs());
+            String direction = movement.direction();
+            BigDecimal amount = movement.amount();
             AssistSnapshot assist = AssistSnapshot.synthetic(
                     subjectCode,
                     subjectName,
@@ -1935,8 +1929,7 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         }
 
         private static SubjectSnapshot fromPosted(GlAccsum row, FinanceAccountSubject subject) {
-            BigDecimal ending = signedEnding(row.getMe(), row.getCenddC(), subject);
-            return new SubjectSnapshot(subject, money(row.getMd()), money(row.getMc()), ending);
+            return new SubjectSnapshot(subject, money(row.getMd()), money(row.getMc()), money(row.getMe()));
         }
 
         private static SubjectSnapshot empty(FinanceAccountSubject subject) {
@@ -1944,11 +1937,11 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         }
 
         private void applyVoucher(GlAccvouch row) {
-            BigDecimal debit = FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc());
-            BigDecimal credit = FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc());
+            BigDecimal debit = FinanceVoucherAmountSupport.zeroIfNull(row.getMd());
+            BigDecimal credit = FinanceVoucherAmountSupport.zeroIfNull(row.getMc());
             this.currentDebit = money(this.currentDebit.add(debit));
             this.currentCredit = money(this.currentCredit.add(credit));
-            this.endingSigned = money(this.endingSigned.add(debit.subtract(credit)));
+            this.endingSigned = FinanceBalanceDirectionSupport.ending(this.endingSigned, debit, credit);
         }
 
         private void merge(SubjectSnapshot other) {
@@ -2020,7 +2013,7 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         }
 
         private static AssistSnapshot fromPosted(GlAccass row, FinanceAccountSubject subject) {
-            BigDecimal ending = signedEnding(row.getMe(), row.getCenddC(), subject);
+            BigDecimal ending = money(row.getMe());
             return new AssistSnapshot(
                     subject.getSubjectCode(),
                     subject.getSubjectName(),
@@ -2075,11 +2068,11 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         }
 
         private void applyVoucher(GlAccvouch row) {
-            BigDecimal debit = FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc());
-            BigDecimal credit = FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc());
+            BigDecimal debit = FinanceVoucherAmountSupport.zeroIfNull(row.getMd());
+            BigDecimal credit = FinanceVoucherAmountSupport.zeroIfNull(row.getMc());
             this.currentDebit = money(this.currentDebit.add(debit));
             this.currentCredit = money(this.currentCredit.add(credit));
-            this.endingSigned = money(this.endingSigned.add(debit.subtract(credit)));
+            this.endingSigned = FinanceBalanceDirectionSupport.ending(this.endingSigned, debit, credit);
             this.amount = money(this.endingSigned.abs());
             this.direction = this.endingSigned.compareTo(ZERO) >= 0 ? "DEBIT" : "CREDIT";
         }
@@ -2115,30 +2108,6 @@ public class FinancePeriodTransferServiceImpl implements FinancePeriodTransferSe
         private static String defaultPart(String value) {
             return value == null ? "" : value;
         }
-    }
-
-    private static BigDecimal signedEnding(BigDecimal ending, String endDirection, FinanceAccountSubject subject) {
-        BigDecimal amount = money(ending);
-        if (amount.compareTo(ZERO) == 0) {
-            return ZERO;
-        }
-        String direction = trim(endDirection);
-        if (direction == null) {
-            direction = resolveSubjectBalanceDirection(subject);
-        }
-        if (isCreditDirection(direction)) {
-            return amount.negate();
-        }
-        return amount;
-    }
-
-    private static String resolveSubjectBalanceDirection(FinanceAccountSubject subject) {
-        return trim(subject == null ? null : subject.getBalanceDirection());
-    }
-
-    private static boolean isCreditDirection(String direction) {
-        String normalized = trim(direction);
-        return Objects.equals(normalized, "贷") || Objects.equals(normalized, "CREDIT");
     }
 
     private static BigDecimal money(BigDecimal value) {

@@ -1,7 +1,6 @@
 package com.finex.auth.service.impl.expensevoucher;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.finex.auth.dto.FinanceVoucherOptionVO;
 import com.finex.auth.dto.ExpenseVoucherGenerationMetaVO;
 import com.finex.auth.entity.ExpVoucherPushBatch;
 import com.finex.auth.entity.ExpVoucherPushDocument;
@@ -15,7 +14,6 @@ import com.finex.auth.mapper.ExpVoucherPushDocumentMapper;
 import com.finex.auth.mapper.ExpVoucherPushEntryMapper;
 import com.finex.auth.mapper.ExpVoucherSubjectMappingMapper;
 import com.finex.auth.mapper.ExpVoucherTemplatePolicyMapper;
-import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.ProcessDocumentTemplateMapper;
@@ -23,6 +21,7 @@ import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceVoucherService;
+import com.finex.auth.service.port.FinanceReferenceQueryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +35,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class ExpenseVoucherMetaSupportTest {
@@ -51,7 +52,7 @@ class ExpenseVoucherMetaSupportTest {
     @Mock private ProcessExpenseTypeMapper expenseTypeMapper;
     @Mock private SystemCompanyMapper systemCompanyMapper;
     @Mock private UserMapper userMapper;
-    @Mock private GlAccvouchMapper glAccvouchMapper;
+    @Mock private FinanceReferenceQueryPort financeReferenceQueryPort;
     @Mock private FinanceVoucherService financeVoucherService;
 
     private ExpenseVoucherMetaSupport support;
@@ -70,15 +71,10 @@ class ExpenseVoucherMetaSupportTest {
                 expenseTypeMapper,
                 systemCompanyMapper,
                 userMapper,
-                glAccvouchMapper,
+                financeReferenceQueryPort,
                 financeVoucherService,
                 new ObjectMapper()
-        )) {
-            @Override
-            protected java.util.List<FinanceVoucherOptionVO> loadAccountOptions() {
-                return java.util.List.of();
-            }
-        };
+        ));
     }
 
     @Test
@@ -138,6 +134,8 @@ class ExpenseVoucherMetaSupportTest {
         when(pushDocumentMapper.selectList(any())).thenReturn(List.of(success, failed));
         when(pushBatchMapper.selectOne(any())).thenReturn(batch);
         when(userMapper.selectById(1L)).thenReturn(currentUser);
+        when(financeReferenceQueryPort.listDistinctAccountCodes(200))
+                .thenReturn(List.of("A_ONLY", "B_ONLY"));
         ExpenseVoucherGenerationMetaVO meta = support.getMeta(1L);
 
         assertEquals("COMPANY_B", meta.getDefaultCompanyId());
@@ -149,5 +147,7 @@ class ExpenseVoucherMetaSupportTest {
         assertEquals(2, meta.getCompanyOptions().size());
         assertEquals(1, meta.getTemplateOptions().size());
         assertEquals(1, meta.getExpenseTypeOptions().size());
+        assertThat(meta.getAccountOptions()).extracting("value").contains("A_ONLY", "B_ONLY");
+        verify(financeReferenceQueryPort).listDistinctAccountCodes(200);
     }
 }

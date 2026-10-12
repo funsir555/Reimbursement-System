@@ -9,6 +9,8 @@ import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTask;
 import com.finex.auth.entity.SystemBankBranchCatalog;
 import com.finex.auth.entity.UserBankAccount;
+import com.finex.auth.service.queryauth.QueryAuthorization;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -22,22 +24,28 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 class ExpensePaymentOrderQuerySupport extends AbstractExpensePaymentSupport {
+    private final ExpenseDocumentReadAuthorization readAuthorization;
 
-    ExpensePaymentOrderQuerySupport(ExpensePaymentSupportContext context) {
+    ExpensePaymentOrderQuerySupport(ExpensePaymentSupportContext context,
+                                   ExpenseDocumentReadAuthorization readAuthorization) {
         super(context);
+        this.readAuthorization = readAuthorization;
     }
 
     List<ExpensePaymentOrderVO> listPaymentOrders(Long userId, String status) {
+        QueryAuthorization scope = readAuthorization.requireScope(
+                userId, ExpenseDocumentReadAuthorization.PAYMENT_ORDER);
         String normalizedStatus = normalizePaymentOrderStatus(status);
         List<ProcessDocumentTask> tasks = loadVisiblePaymentTasks(userId, normalizedStatus);
         if (tasks.isEmpty()) {
             return Collections.emptyList();
         }
         List<String> documentCodes = tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList();
+        LambdaQueryWrapper<ProcessDocumentInstance> documentQuery = Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                .in(ProcessDocumentInstance::getDocumentCode, documentCodes);
+        readAuthorization.applyScope(documentQuery, scope, true);
         Map<String, ProcessDocumentInstance> instanceMap = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getDocumentCode, documentCodes)
-        ).stream().collect(Collectors.toMap(
+                documentQuery).stream().collect(Collectors.toMap(
                 ProcessDocumentInstance::getDocumentCode,
                 item -> item,
                 (left, right) -> left,

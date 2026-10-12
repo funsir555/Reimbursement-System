@@ -448,6 +448,12 @@ export const routeCatalog: AppRouteDefinition[] = [
         metaKey: 'agent-workflow-canvas'
       },
       {
+        path: 'agent/workbench/:id/tools',
+        name: 'agent-tool-config',
+        component: () => import('../views/agent/AgentToolConfigView.vue'),
+        metaKey: 'agent-tool-config'
+      },
+      {
         path: 'archives/agents',
         name: 'archives-agents',
         component: () => import('../views/archives/ArchiveAgentView.vue'),

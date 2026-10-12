@@ -9,6 +9,7 @@ import com.finex.auth.mapper.SystemRoleMapper;
 import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +21,10 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,9 +42,11 @@ class AuthLoginDomainSupportTest {
     private SystemPermissionMapper systemPermissionMapper;
 
     private AuthLoginDomainSupport support;
+    private PasswordHashService passwordHashService;
 
     @BeforeEach
     void setUp() {
+        passwordHashService = new PasswordHashService();
         AuthAuthorizationDomainSupport authorizationSupport = new AuthAuthorizationDomainSupport(
                 userMapper,
                 systemUserRoleMapper,
@@ -54,7 +60,8 @@ class AuthLoginDomainSupportTest {
                 systemRoleMapper,
                 systemRolePermissionMapper,
                 systemPermissionMapper,
-                authorizationSupport
+                authorizationSupport,
+                passwordHashService
         );
     }
 
@@ -68,6 +75,7 @@ class AuthLoginDomainSupportTest {
         user.setStatus(1);
 
         when(userMapper.selectOne(any())).thenReturn(user);
+        when(userMapper.update(any(), any())).thenReturn(1);
         when(systemUserRoleMapper.selectList(any())).thenReturn(List.of());
 
         LoginDTO dto = new LoginDTO();
@@ -83,6 +91,34 @@ class AuthLoginDomainSupportTest {
         assertEquals(List.of(), result.getPermissionCodes());
         assertEquals(AbstractAuthDomainSupport.TOKEN_EXPIRE_SECONDS, result.getExpireIn());
         assertNotNull(result.getToken());
+        assertTrue(passwordHashService.isBcrypt(user.getPassword()));
+        verify(userMapper).update(any(), any());
+    }
+
+    @Test
+    void bcryptLoginDoesNotRewritePassword() {
+        User user = activeUser(passwordHashService.encode("secret"));
+        when(userMapper.selectOne(any())).thenReturn(user);
+        when(systemUserRoleMapper.selectList(any())).thenReturn(List.of());
+
+        support.login(login("secret"));
+
+        verify(userMapper, never()).update(any(), any());
+    }
+
+    @Test
+    void conditionalUpgradeRaceRechecksLatestHashWithoutOverwritingIt() {
+        User legacy = activeUser(DigestUtil.md5Hex("secret"));
+        User concurrentlyUpgraded = activeUser(passwordHashService.encode("secret"));
+        when(userMapper.selectOne(any())).thenReturn(legacy, concurrentlyUpgraded);
+        when(userMapper.update(any(), any())).thenReturn(0);
+        when(systemUserRoleMapper.selectList(any())).thenReturn(List.of());
+
+        LoginVO result = support.login(login("secret"));
+
+        assertEquals(5L, result.getUserId());
+        assertTrue(passwordHashService.isBcrypt(concurrentlyUpgraded.getPassword()));
+        verify(userMapper).update(any(), any());
     }
 
     @Test
@@ -102,5 +138,22 @@ class AuthLoginDomainSupportTest {
         RuntimeException error = assertThrows(RuntimeException.class, () -> support.login(dto));
 
         assertEquals("User is disabled", error.getMessage());
+    }
+
+    private User activeUser(String password) {
+        User user = new User();
+        user.setId(5L);
+        user.setUsername("alice");
+        user.setName("Alice");
+        user.setPassword(password);
+        user.setStatus(1);
+        return user;
+    }
+
+    private LoginDTO login(String password) {
+        LoginDTO dto = new LoginDTO();
+        dto.setUsername("alice");
+        dto.setPassword(password);
+        return dto;
     }
 }

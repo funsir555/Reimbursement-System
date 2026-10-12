@@ -41,14 +41,14 @@ public class TenantContext {
     /**
      * 设置公司ID
      */
-    public static void setCompanyId(Long companyId) {
+    public static void setCompanyId(String companyId) {
         getContextHolder().setCompanyId(companyId);
     }
 
     /**
      * 获取公司ID
      */
-    public static Long getCompanyId() {
+    public static String getCompanyId() {
         return getContextHolder().getCompanyId();
     }
 
@@ -95,15 +95,19 @@ public class TenantContext {
     /**
      * 获取有效的公司ID（带回落逻辑）
      */
-    public static Long getEffectiveCompanyId() {
-        Long companyId = getCompanyId();
+    public static String getEffectiveCompanyId() {
+        String companyId = getCompanyId();
 
         if (companyId != null) {
             return companyId;
         }
 
         if (securityConfig != null && securityConfig.getMode() == AgentSecurityConfig.SecurityMode.DEMO) {
-            return securityConfig.getDemo().getDefaultCompanyId();
+            String defaultCompanyId = securityConfig.getDemo().getDefaultCompanyId();
+            if (defaultCompanyId != null && !defaultCompanyId.isBlank()) {
+                return defaultCompanyId.trim();
+            }
+            throw new TenantContextMissingException("Demo 公司上下文未显式配置，请求被拒绝");
         } else {
             throw new TenantContextMissingException("公司上下文缺失，请求被拒绝");
         }
@@ -134,7 +138,7 @@ public class TenantContext {
     @Data
     static class TenantContextHolder {
         private String tenantId;
-        private Long companyId;
+        private String companyId;
         private Long userId;
     }
 }

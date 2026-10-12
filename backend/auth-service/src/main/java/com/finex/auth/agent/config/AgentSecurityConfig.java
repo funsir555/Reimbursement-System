@@ -16,7 +16,7 @@ public class AgentSecurityConfig {
     /**
      * 安全模式
      */
-    private SecurityMode mode = SecurityMode.DEMO;
+    private SecurityMode mode = SecurityMode.ENTERPRISE;
 
     /**
      * Demo 模式配置
@@ -33,7 +33,7 @@ public class AgentSecurityConfig {
         /**
          * 默认公司ID
          */
-        private Long defaultCompanyId = 1L;
+        private String defaultCompanyId;
 
         /**
          * 回落时是否警告

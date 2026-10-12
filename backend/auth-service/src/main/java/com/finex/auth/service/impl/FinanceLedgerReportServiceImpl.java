@@ -24,15 +24,21 @@ import com.finex.auth.mapper.SystemDepartmentMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceLedgerReportService;
 import com.finex.auth.service.UserService;
+import com.finex.auth.service.queryauth.FinanceLedgerReportPermissionCodes;
+import com.finex.auth.service.queryauth.QueryAuthorizationService;
 import com.finex.auth.service.impl.voucher.LedgerReportDomainSupport;
 import com.finex.auth.service.impl.voucher.VoucherContextSupport;
 import com.finex.auth.support.FinanceModuleEnableSupport;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Service
 public class FinanceLedgerReportServiceImpl implements FinanceLedgerReportService {
 
     private final LedgerReportDomainSupport ledgerReportDomainSupport;
+    private final QueryAuthorizationService queryAuthorizationService;
 
     public FinanceLedgerReportServiceImpl(
             GlAccvouchMapper glAccvouchMapper,
@@ -50,8 +56,10 @@ public class FinanceLedgerReportServiceImpl implements FinanceLedgerReportServic
             FinancePeriodCloseMapper financePeriodCloseMapper,
             FinanceAccountSetMapper financeAccountSetMapper,
             FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper,
-            UserService userService
+            UserService userService,
+            QueryAuthorizationService queryAuthorizationService
     ) {
+        this.queryAuthorizationService = queryAuthorizationService;
         FinanceModuleEnableSupport financeModuleEnableSupport =
                 new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
         VoucherContextSupport voucherContextSupport = new VoucherContextSupport(
@@ -82,46 +90,88 @@ public class FinanceLedgerReportServiceImpl implements FinanceLedgerReportServic
 
     @Override
     public FinanceLedgerReportMetaVO getMeta(Long currentUserId, String companyId, Integer iyear, Integer iperiod) {
-        return ledgerReportDomainSupport.getMeta(currentUserId, companyId, iyear, iperiod);
+        Set<String> visibleCompanies = new HashSet<>();
+        for (String permissionCode : FinanceLedgerReportPermissionCodes.ALL_VIEWS) {
+            try {
+                visibleCompanies.addAll(queryAuthorizationService
+                        .resolveForSelf(currentUserId, permissionCode).companyIds());
+            } catch (SecurityException ignored) {
+                // A missing report permission never contributes companies to the metadata list.
+            }
+        }
+        if (visibleCompanies.isEmpty()) {
+            throw new SecurityException(QueryAuthorizationService.NO_PERMISSION);
+        }
+        String effectiveCompanyId = companyId == null ? "" : companyId.trim();
+        if (effectiveCompanyId.isEmpty()) {
+            if (visibleCompanies.size() != 1) {
+                throw new IllegalArgumentException("请选择有权查看的公司");
+            }
+            effectiveCompanyId = visibleCompanies.iterator().next();
+        }
+        if (!visibleCompanies.contains(effectiveCompanyId)) {
+            throw new SecurityException(QueryAuthorizationService.NO_PERMISSION);
+        }
+        FinanceLedgerReportMetaVO meta = ledgerReportDomainSupport.getMeta(
+                currentUserId, effectiveCompanyId, iyear, iperiod);
+        meta.setCompanyOptions(meta.getCompanyOptions().stream()
+                .filter(option -> visibleCompanies.contains(option.getCompanyId())).toList());
+        return meta;
     }
 
     @Override
     public FinanceLedgerReportPageVO<FinanceBalanceSheetRowVO> queryBalanceSheet(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.BALANCE, dto);
         return ledgerReportDomainSupport.queryBalanceSheet(dto);
     }
 
     @Override
     public FinanceLedgerReportPageVO<FinanceGeneralLedgerSectionVO> queryGeneralLedger(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.GENERAL, dto);
         return ledgerReportDomainSupport.queryGeneralLedger(dto);
     }
 
     @Override
     public FinanceLedgerReportPageVO<FinanceDetailLedgerRowVO> queryDetailLedger(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.detailView(dto == null ? null : dto.getLedgerKind()), dto);
         return ledgerReportDomainSupport.queryDetailLedger(dto);
     }
 
     @Override
     public FinanceLedgerReportPageVO<FinanceSequenceLedgerRowVO> querySequenceLedger(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.SEQUENCE, dto);
         return ledgerReportDomainSupport.querySequenceLedger(dto);
     }
 
     @Override
     public byte[] exportBalanceSheet(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.BALANCE, dto);
         return ledgerReportDomainSupport.exportBalanceSheet(dto);
     }
 
     @Override
     public byte[] exportGeneralLedger(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.GENERAL, dto);
         return ledgerReportDomainSupport.exportGeneralLedger(dto);
     }
 
     @Override
     public byte[] exportDetailLedger(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.detailView(dto == null ? null : dto.getLedgerKind()), dto);
         return ledgerReportDomainSupport.exportDetailLedger(dto);
     }
 
     @Override
     public byte[] exportSequenceLedger(Long currentUserId, FinanceLedgerReportQueryDTO dto) {
+        requireCompany(currentUserId, FinanceLedgerReportPermissionCodes.SEQUENCE, dto);
         return ledgerReportDomainSupport.exportSequenceLedger(dto);
+    }
+
+    private void requireCompany(Long userId, String permissionCode, FinanceLedgerReportQueryDTO dto) {
+        if (dto == null || dto.getCompanyId() == null
+                || !queryAuthorizationService.resolveForSelf(userId, permissionCode)
+                        .allows(dto.getCompanyId().trim(), null)) {
+            throw new SecurityException(QueryAuthorizationService.NO_PERMISSION);
+        }
     }
 }

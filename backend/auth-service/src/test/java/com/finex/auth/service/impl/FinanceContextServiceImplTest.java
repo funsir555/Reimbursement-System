@@ -6,6 +6,7 @@ import com.finex.auth.entity.FinancePeriodClose;
 import com.finex.auth.entity.SystemCompany;
 import com.finex.auth.entity.User;
 import com.finex.auth.mapper.FinanceAccountSetMapper;
+import com.finex.auth.mapper.FinanceAccountSetModuleEnableMapper;
 import com.finex.auth.mapper.FinancePeriodCloseMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.service.UserService;
@@ -34,6 +35,9 @@ class FinanceContextServiceImplTest {
 
     @Mock
     private FinancePeriodCloseMapper financePeriodCloseMapper;
+
+    @Mock
+    private FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper;
 
     @Mock
     private UserService userService;

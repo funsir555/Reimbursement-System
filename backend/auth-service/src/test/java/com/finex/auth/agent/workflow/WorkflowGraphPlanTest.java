@@ -26,7 +26,7 @@ class WorkflowGraphPlanTest {
                 )
         );
 
-        List<String> orderedKeys = WorkflowGraphPlan.from(workflow).requireLinearNodes().stream()
+        List<String> orderedKeys = WorkflowGraphPlan.from(workflow).requireControlledQueryPlan().orderedNodes().stream()
                 .map(node -> String.valueOf(node.get("nodeKey")))
                 .toList();
 
@@ -51,6 +51,75 @@ class WorkflowGraphPlanTest {
         );
 
         assertThrows(IllegalArgumentException.class, () -> WorkflowGraphPlan.from(workflow));
+    }
+
+    @Test
+    void acceptsOneFanOutAndKeepsCanvasOrder() {
+        Map<String, Object> workflow = Map.of(
+                "nodes", List.of(node("start", "start"), node("prefix", "tool"),
+                        node("third", "tool"), node("first", "tool"),
+                        Map.of("nodeKey", "second", "nodeType", "tool", "config",
+                                Map.of("variableMapping", "{\"companyId\":\"{{steps.prefix.record.id}}\"}")),
+                        node("llm", "llm"), node("end", "end")),
+                "edges", List.of(edge("start", "prefix"), edge("prefix", "first"),
+                        edge("prefix", "second"), edge("prefix", "third"),
+                        edge("first", "llm"), edge("second", "llm"), edge("third", "llm"),
+                        edge("llm", "end")));
+        WorkflowGraphPlan.ControlledQueryPlan plan = WorkflowGraphPlan.from(workflow).requireControlledQueryPlan();
+        assertEquals(List.of("prefix"), plan.sequential().stream().map(node -> node.get("nodeKey")).toList());
+        assertEquals(List.of("third", "first", "second"),
+                plan.parallel().stream().map(node -> node.get("nodeKey")).toList());
+    }
+
+    @Test
+    void acceptsPublishedThreeBranchAndNewerLinearCanvas() {
+        List<Map<String, Object>> nodes = List.of(node("start", "start"), node("end", "end"),
+                node("first", "tool"), node("second", "tool"), node("third", "tool"), node("llm", "llm"));
+        Map<String, Object> published = Map.of("nodes", nodes, "edges", List.of(
+                edge("start", "first"), edge("start", "second"), edge("start", "third"),
+                edge("first", "llm"), edge("second", "llm"), edge("third", "llm"), edge("llm", "end")));
+        Map<String, Object> newerDraft = Map.of("nodes", nodes, "edges", List.of(
+                edge("start", "first"), edge("first", "second"), edge("second", "third"),
+                edge("third", "llm"), edge("llm", "end")));
+
+        assertEquals(3, WorkflowGraphPlan.from(published).requireControlledQueryPlan().parallel().size());
+        assertEquals(3, WorkflowGraphPlan.from(newerDraft).requireControlledQueryPlan().sequential().size());
+    }
+
+    @Test
+    void rejectsSiblingReferenceAndFifthBranch() {
+        Map<String, Object> sibling = Map.of("nodes", List.of(node("start", "start"),
+                node("a", "tool"), Map.of("nodeKey", "b", "nodeType", "tool",
+                        "config", Map.of("variableMapping", "{\"id\":\"{{steps.a.record.id}}\"}")),
+                node("llm", "llm"), node("end", "end")),
+                "edges", List.of(edge("start", "a"), edge("start", "b"),
+                        edge("a", "llm"), edge("b", "llm"), edge("llm", "end")));
+        assertThrows(IllegalArgumentException.class,
+                () -> WorkflowGraphPlan.from(sibling).requireControlledQueryPlan());
+        List<Map<String, Object>> nodes = new java.util.ArrayList<>();
+        List<Map<String, Object>> edges = new java.util.ArrayList<>();
+        nodes.add(node("start", "start"));
+        for (int i = 0; i < 5; i++) {
+            nodes.add(node("branch" + i, "tool"));
+            edges.add(edge("start", "branch" + i));
+            edges.add(edge("branch" + i, "llm"));
+        }
+        nodes.add(node("llm", "llm"));
+        nodes.add(node("end", "end"));
+        edges.add(edge("llm", "end"));
+        assertThrows(IllegalArgumentException.class,
+                () -> WorkflowGraphPlan.from(Map.of("nodes", nodes, "edges", edges)).requireControlledQueryPlan());
+    }
+
+    @Test
+    void rejectsChainedParallelBranch() {
+        Map<String, Object> workflow = Map.of("nodes", List.of(node("start", "start"),
+                node("a", "tool"), node("a2", "tool"), node("b", "tool"),
+                node("llm", "llm"), node("end", "end")),
+                "edges", List.of(edge("start", "a"), edge("start", "b"),
+                        edge("a", "a2"), edge("a2", "llm"), edge("b", "llm"), edge("llm", "end")));
+        assertThrows(IllegalArgumentException.class,
+                () -> WorkflowGraphPlan.from(workflow).requireControlledQueryPlan());
     }
 
     private Map<String, Object> node(String key, String type) {

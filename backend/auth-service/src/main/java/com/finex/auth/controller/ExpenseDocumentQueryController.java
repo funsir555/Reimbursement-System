@@ -22,6 +22,7 @@ import com.finex.auth.service.ExpenseDocumentService;
 import com.finex.common.JwtUtil;
 import com.finex.auth.service.impl.expense.ExpenseDocumentPrintOrientation;
 import com.finex.auth.service.impl.expense.ExpenseDocumentPrintService;
+import com.finex.auth.service.ExpenseDocumentReadAccess;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -70,6 +71,7 @@ public class ExpenseDocumentQueryController {
     private final ExpenseDocumentService expenseDocumentService;
     private final ExpenseDocumentPrintService expenseDocumentPrintService;
     private final AccessControlService accessControlService;
+    private final ExpenseDocumentReadAccess readAuthorization;
 
     // 澶勭悊 queryDocuments 璇锋眰銆?
     @GetMapping("/query-documents")
@@ -85,6 +87,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW);
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        readAuthorization.requireDocument(userId, documentCode, permissionCodes);
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
         return Result.success(expenseDocumentService.getDocumentDetail(userId, documentCode, allowCrossView));
     }
@@ -97,6 +100,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW);
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        readAuthorization.requireDocument(userId, documentCode, permissionCodes);
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
         ExpenseDocumentPrintService.ExpensePrintPdfResult result = expenseDocumentPrintService.generateSinglePdf(
                 userId,
@@ -116,6 +120,9 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW, EXPENSE_PAYMENT_ORDER_VIEW);
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        for (String code : normalizeDocumentCodes(documentCodes)) {
+            readAuthorization.requireDocument(userId, code, permissionCodes);
+        }
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW)
                 || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW)
                 || permissionCodes.contains(EXPENSE_PAYMENT_ORDER_VIEW);
@@ -139,6 +146,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW);
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        readAuthorization.requireDocument(userId, documentCode, permissionCodes);
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
         return Result.success(expenseDocumentService.getExpenseDetail(userId, documentCode, detailNo, allowCrossView));
     }
@@ -165,6 +173,7 @@ public class ExpenseDocumentQueryController {
                 EXPENSE_DOCUMENTS_VIEW
         );
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        readAuthorization.requireDocument(userId, documentCode, permissionCodes);
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
 
         ExpenseAttachmentService.StoredExpenseAttachment attachment = expenseDocumentService.loadDocumentAttachment(
@@ -234,6 +243,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW);
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        readAuthorization.requireDocument(userId, documentCode, permissionCodes);
         boolean allowCrossView = permissionCodes.contains(EXPENSE_APPROVAL_VIEW) || permissionCodes.contains(EXPENSE_DOCUMENTS_VIEW);
         return Result.success(
                 "评论已发布",
@@ -282,6 +292,7 @@ public class ExpenseDocumentQueryController {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW);
         List<String> permissionCodes = accessControlService.getPermissionCodes(userId);
+        readAuthorization.requireDocument(userId, documentCode, permissionCodes);
         boolean approvalViewer = permissionCodes.contains(EXPENSE_APPROVAL_VIEW);
         return Result.success(expenseDocumentService.getDocumentNavigation(userId, documentCode, approvalViewer));
     }
@@ -291,6 +302,7 @@ public class ExpenseDocumentQueryController {
     public Result<ExpenseDocumentEditContextVO> editContext(@PathVariable String documentCode, HttpServletRequest request) {
         Long userId = getCurrentUserId(request);
         accessControlService.requireAnyPermission(userId, EXPENSE_LIST_VIEW, EXPENSE_APPROVAL_VIEW, EXPENSE_DOCUMENTS_VIEW);
+        readAuthorization.requireDocument(userId, documentCode, accessControlService.getPermissionCodes(userId));
         return Result.success(expenseDocumentService.getDocumentEditContext(userId, documentCode));
     }
 

@@ -91,11 +91,13 @@ public class ExpenseApprovalDomainSupport {
     private final UserMapper userMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final ObjectMapper objectMapper;
+    private final ExpenseDocumentReadAuthorization readAuthorization;
 
     /**
      * 查询待处理审批列表。
      */
     public List<ExpenseApprovalPendingItemVO> listPendingApprovals(Long userId) {
+        var authorization = readAuthorization.requireScope(userId, ExpenseDocumentReadAuthorization.APPROVAL);
         List<ProcessDocumentTask> tasks = processDocumentTaskMapper.selectList(
                 Wrappers.<ProcessDocumentTask>lambdaQuery()
                         .eq(ProcessDocumentTask::getAssigneeUserId, userId)
@@ -106,16 +108,20 @@ public class ExpenseApprovalDomainSupport {
         if (tasks.isEmpty()) {
             return List.of();
         }
+        var documentQuery = Wrappers.<ProcessDocumentInstance>lambdaQuery()
+                .in(ProcessDocumentInstance::getDocumentCode,
+                        tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList());
+        readAuthorization.applyScope(documentQuery, authorization, true);
         Map<String, ProcessDocumentInstance> instanceMap = processDocumentInstanceMapper.selectList(
-                Wrappers.<ProcessDocumentInstance>lambdaQuery()
-                        .in(ProcessDocumentInstance::getDocumentCode, tasks.stream().map(ProcessDocumentTask::getDocumentCode).toList())
+                documentQuery
         ).stream().collect(Collectors.toMap(
                 ProcessDocumentInstance::getDocumentCode,
                 item -> item,
                 (left, right) -> left,
                 LinkedHashMap::new
         ));
-        return expenseSummaryAssembler.toPendingItems(tasks, instanceMap);
+        return expenseSummaryAssembler.toPendingItems(tasks.stream()
+                .filter(task -> instanceMap.containsKey(task.getDocumentCode())).toList(), instanceMap);
     }
 
             /**

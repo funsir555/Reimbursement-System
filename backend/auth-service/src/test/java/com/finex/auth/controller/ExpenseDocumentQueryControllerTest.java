@@ -60,7 +60,9 @@ class ExpenseDocumentQueryControllerTest {
         validator.afterPropertiesSet();
 
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ExpenseDocumentQueryController(expenseDocumentService, expenseDocumentPrintService, accessControlService))
+                .standaloneSetup(new ExpenseDocumentQueryController(expenseDocumentService, expenseDocumentPrintService,
+                        accessControlService, org.mockito.Mockito.mock(
+                                com.finex.auth.service.impl.expense.ExpenseDocumentReadAuthorization.class)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();

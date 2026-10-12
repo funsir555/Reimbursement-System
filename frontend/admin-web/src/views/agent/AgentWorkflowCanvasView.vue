@@ -52,7 +52,7 @@
         </section>
       </aside>
 
-      <main ref="canvasRef" class="canvas-board" @mousemove="handleCanvasMouseMove" @mouseup="cancelTempEdge">
+      <main ref="canvasRef" class="canvas-board">
         <div class="canvas-grid" :style="{ width: `${canvasSize.width}px`, height: `${canvasSize.height}px` }">
           <svg class="edge-layer" :width="canvasSize.width" :height="canvasSize.height">
             <defs>
@@ -66,7 +66,7 @@
               class="edge-path"
               :class="{ selected: selectedEdgeId === edge.id }"
               :d="edge.path"
-              marker-end="url(#arrow)"
+              v-show="!isReconnecting(edge.id)"
               @click.stop="selectEdge(edge.id)"
               @contextmenu.prevent.stop="openEdgeMenu(edge.id, $event)"
             />
@@ -76,6 +76,7 @@
           <article
             v-for="node in nodes"
             :key="node.nodeKey"
+            :data-node-key="node.nodeKey"
             class="canvas-node"
             :class="[node.nodeType, { selected: selectedNodeKey === node.nodeKey }]"
             :style="{ transform: `translate(${nodePosition(node).x}px, ${nodePosition(node).y}px)` }"
@@ -90,7 +91,6 @@
               class="handle input"
               type="button"
               title="拖入连线"
-              @mouseup.stop="finishTempEdge(node.nodeKey)"
             />
             <div class="node-head">
               <span class="node-icon">{{ nodeIcon(node.nodeType) }}</span>
@@ -105,9 +105,24 @@
               class="handle output"
               type="button"
               title="拖出连线"
-              @mousedown.stop.prevent="startTempEdge(node.nodeKey, $event)"
+              @mousedown.left.stop.prevent="startTempEdge(node.nodeKey, $event)"
             />
           </article>
+
+          <button
+            v-for="edge in edgePaths"
+            v-show="!isReconnecting(edge.id)"
+            :key="`arrow-${edge.id}`"
+            type="button"
+            class="edge-arrow-handle"
+            :class="{ selected: selectedEdgeId === edge.id }"
+            :style="{ left: `${edge.targetPoint.x - 31}px`, top: `${edge.targetPoint.y - 12}px` }"
+            :aria-label="`拖动改接 ${edge.source} 到 ${edge.target} 的连线`"
+            title="拖动箭头改接目标节点"
+            @mousedown.left.stop.prevent="startReconnectEdge(edge, $event)"
+            @click.stop="selectEdge(edge.id)"
+            @contextmenu.prevent.stop="openEdgeMenu(edge.id, $event)"
+          />
 
           <div
             v-if="edgeMenu.visible"
@@ -140,8 +155,8 @@
           </el-form-item>
           <template v-if="selectedNode.nodeType === 'tool'">
             <el-form-item label="工具编码">
-              <el-select v-model="selectedNode.config.toolCode" filterable>
-                <el-option v-for="tool in toolOptions" :key="tool.toolCode" :label="tool.label" :value="tool.toolCode" />
+              <el-select v-model="selectedNode.config.toolCode" filterable @change="selectToolTemplate">
+                <el-option v-for="tool in toolOptions" :key="tool.toolCode" :label="tool.label" :value="tool.toolCode" :disabled="tool.deprecated" />
               </el-select>
             </el-form-item>
             <el-form-item label="查询模板编码"><el-input v-model="selectedNode.config.queryTemplateCode" /></el-form-item>
@@ -161,17 +176,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Aim, ArrowLeft, DocumentChecked, RefreshRight } from '@element-plus/icons-vue'
 import { archiveAgentApi, type ArchiveAgentDetail, type ArchiveAgentSavePayload, type ArchiveAgentWorkflowEdge, type ArchiveAgentWorkflowNode } from '@/api'
+import { edgePoint, validateCanvasGraph } from './workflowCanvasGraph'
 
 type NodeType = ArchiveAgentWorkflowNode['nodeType']
 type CanvasNode = ArchiveAgentWorkflowNode & { config: Record<string, any> }
 type PaletteNode = { type: NodeType; label: string; short: string; description: string }
 type PaletteTreeNode = { id: string; label: string; type?: NodeType; short?: string; description?: string; children?: PaletteTreeNode[] }
 type Point = { x: number; y: number }
+type EdgeDrag = { source: string; point: Point; start: Point; originalTarget?: string; moved: boolean }
 
 const route = useRoute()
 const router = useRouter()
@@ -185,7 +202,7 @@ const selectedNodeKey = ref('')
 const selectedEdgeId = ref('')
 const nodeDrawerVisible = ref(false)
 const dragState = ref<{ nodeKey: string; start: Point; origin: Point } | null>(null)
-const tempEdge = ref<{ source: string; point: Point } | null>(null)
+const tempEdge = ref<EdgeDrag | null>(null)
 const edgeMenu = ref({ visible: false, x: 0, y: 0, edgeId: '' })
 const canvasSize = { width: 1800, height: 1100 }
 
@@ -232,21 +249,32 @@ const paletteTree: PaletteTreeNode[] = [
   }
 ]
 
+const toolCatalog = ref<Array<{ toolCode: string; queryTemplateCode: string }>>([])
+const currentToolCodes = computed(() => new Set(toolCatalog.value.map(tool => tool.toolCode)))
 const toolOptions = computed(() => (agentDetail.value?.tools || []).map((tool) => ({
   toolCode: tool.toolCode,
-  label: tool.label || tool.toolCode
+  label: tool.label || tool.toolCode,
+  deprecated: !currentToolCodes.value.has(tool.toolCode)
 })))
 const selectedNode = computed(() => nodes.value.find((node) => node.nodeKey === selectedNodeKey.value))
-const selectedEdge = computed(() => edges.value.find((edge) => edgeId(edge) === selectedEdgeId.value))
-const edgePaths = computed(() => edges.value.map((edge) => ({ id: edgeId(edge), path: buildEdgePath(edge.source, edge.target) })))
+const edgePaths = computed(() => edges.value.map((edge) => ({
+  ...edge,
+  id: edgeId(edge),
+  path: buildEdgePath(edge.source, edge.target),
+  targetPoint: inputPoint(edge.target, edge.source)
+})))
 const tempEdgePath = computed(() => {
-  if (!tempEdge.value) return ''
+  if (!tempEdge.value || (tempEdge.value.originalTarget && !tempEdge.value.moved)) return ''
   const source = outputPoint(tempEdge.value.source)
   return bezierPath(source, tempEdge.value.point)
 })
 const validationMessages = computed(() => validateWorkflow())
 
 onMounted(loadDetail)
+onBeforeUnmount(() => {
+  cancelTempEdge()
+  stopDragNode()
+})
 
 async function loadDetail() {
   const id = Number(route.params.id)
@@ -257,8 +285,11 @@ async function loadDetail() {
   }
   loading.value = true
   try {
-    const res = await archiveAgentApi.getDetail(id)
+    const [res, meta] = await Promise.all([archiveAgentApi.getDetail(id), archiveAgentApi.getMeta()])
     agentDetail.value = res.data
+    toolCatalog.value = (meta.data.tools || []).map(item => ({
+      toolCode: String(item.toolCode), queryTemplateCode: String(item.queryTemplateCode || '')
+    }))
     nodes.value = normalizeNodes(res.data.workflow?.nodes || [])
     edges.value = Array.isArray(res.data.workflow?.edges) ? res.data.workflow.edges.map((item) => ({ source: item.source, target: item.target })) : []
     if (!selectedNodeKey.value) selectedNodeKey.value = nodes.value[0]?.nodeKey || ''
@@ -374,27 +405,82 @@ function dragNode(event: MouseEvent) {
 function stopDragNode() {
   dragState.value = null
   window.removeEventListener('mousemove', dragNode)
+  window.removeEventListener('mouseup', stopDragNode)
 }
 
 function startTempEdge(source: string, event: MouseEvent) {
-  tempEdge.value = { source, point: canvasPoint(event) }
+  startEdgeDrag(source, event)
+}
+
+function startReconnectEdge(edge: ArchiveAgentWorkflowEdge, event: MouseEvent) {
+  selectEdge(edgeId(edge))
+  startEdgeDrag(edge.source, event, edge.target)
+}
+
+function startEdgeDrag(source: string, event: MouseEvent, originalTarget?: string) {
+  cancelTempEdge()
+  tempEdge.value = {
+    source,
+    point: canvasPoint(event),
+    start: { x: event.clientX, y: event.clientY },
+    originalTarget,
+    moved: false
+  }
+  window.addEventListener('mousemove', handleCanvasMouseMove)
+  window.addEventListener('mouseup', finishTempEdge, { once: true })
+  window.addEventListener('keydown', handleEdgeKeydown)
+  window.addEventListener('blur', cancelTempEdge)
 }
 
 function handleCanvasMouseMove(event: MouseEvent) {
   if (!tempEdge.value) return
+  if (Math.hypot(event.clientX - tempEdge.value.start.x, event.clientY - tempEdge.value.start.y) >= 5) {
+    tempEdge.value.moved = true
+  }
   tempEdge.value.point = canvasPoint(event)
 }
 
-function finishTempEdge(target?: string) {
-  if (!tempEdge.value) return
-  if (target && target !== tempEdge.value.source && !edges.value.some((edge) => edge.source === tempEdge.value?.source && edge.target === target)) {
-    edges.value.push({ source: tempEdge.value.source, target })
+function finishTempEdge(event: MouseEvent) {
+  const drag = tempEdge.value
+  if (!drag) return
+  const moved = drag.moved || Math.hypot(event.clientX - drag.start.x, event.clientY - drag.start.y) >= 5
+  const targetKey = document.elementFromPoint(event.clientX, event.clientY)
+    ?.closest<HTMLElement>('.canvas-node')?.dataset.nodeKey
+  const targetNode = nodes.value.find((node) => node.nodeKey === targetKey)
+  const oldIndex = drag.originalTarget
+    ? edges.value.findIndex((edge) => edge.source === drag.source && edge.target === drag.originalTarget)
+    : -1
+  if (targetNode && targetNode.nodeType !== 'start' && targetKey !== drag.source
+    && (!drag.originalTarget || moved)
+    && !edges.value.some((edge, index) => index !== oldIndex && edge.source === drag.source && edge.target === targetKey)) {
+    if (drag.originalTarget && oldIndex >= 0 && targetKey !== drag.originalTarget) {
+      edges.value.splice(oldIndex, 1, { source: drag.source, target: targetNode.nodeKey })
+      selectedEdgeId.value = edgeId({ source: drag.source, target: targetNode.nodeKey })
+    } else if (!drag.originalTarget) {
+      edges.value.push({ source: drag.source, target: targetNode.nodeKey })
+    }
   }
-  tempEdge.value = null
+  cancelTempEdge()
 }
 
 function cancelTempEdge() {
   tempEdge.value = null
+  window.removeEventListener('mousemove', handleCanvasMouseMove)
+  window.removeEventListener('mouseup', finishTempEdge)
+  window.removeEventListener('keydown', handleEdgeKeydown)
+  window.removeEventListener('blur', cancelTempEdge)
+}
+
+function handleEdgeKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  cancelTempEdge()
+}
+
+function isReconnecting(id: string) {
+  const drag = tempEdge.value
+  return !!drag?.originalTarget && drag.moved && id === `${drag.source}->${drag.originalTarget}`
 }
 
 function focusNode(nodeKey: string) {
@@ -435,12 +521,6 @@ function removeSelectedNode() {
   edges.value = edges.value.filter((edge) => edge.source !== nodeKey && edge.target !== nodeKey)
   selectedNodeKey.value = nodes.value[0]?.nodeKey || ''
   nodeDrawerVisible.value = false
-}
-
-function removeSelectedEdge() {
-  if (!selectedEdgeId.value) return
-  edges.value = edges.value.filter((edge) => edgeId(edge) !== selectedEdgeId.value)
-  selectedEdgeId.value = ''
 }
 
 function openEdgeMenu(id: string, event: MouseEvent) {
@@ -493,70 +573,13 @@ function fitView() {
 }
 
 function validateWorkflow() {
-  const messages: string[] = []
-  if (nodes.value.filter((node) => node.nodeType === 'start').length !== 1) messages.push('流程必须有且只有一个开始节点')
-  if (!nodes.value.some((node) => node.nodeType === 'end')) messages.push('流程至少需要一个结束节点')
-  const incoming = new Map(nodes.value.map((node) => [node.nodeKey, 0]))
-  const outgoing = new Map(nodes.value.map((node) => [node.nodeKey, [] as string[]]))
-  edges.value.forEach((edge) => {
-    if (!nodes.value.some((node) => node.nodeKey === edge.source) || !nodes.value.some((node) => node.nodeKey === edge.target)) {
-      messages.push(`连线 ${edge.source} → ${edge.target} 引用了不存在的节点`)
-      return
-    }
-    incoming.set(edge.target, (incoming.get(edge.target) || 0) + 1)
-    outgoing.get(edge.source)?.push(edge.target)
-  })
-  nodes.value.filter((node) => node.nodeType === 'tool').forEach((node) => {
-    if (!node.config.toolCode) messages.push(`${node.label} 未选择工具编码`)
-    if (!node.config.queryTemplateCode) messages.push(`${node.label} 未配置查询模板编码`)
-    if (node.config.variableMapping) {
-      try { JSON.parse(node.config.variableMapping) } catch { messages.push(`${node.label} 的变量映射不是合法 JSON`) }
-    }
-  })
-  const startNode = nodes.value.find((node) => node.nodeType === 'start')
-  if (startNode) {
-    const visited = new Set<string>()
-    const queue = [startNode.nodeKey]
-    while (queue.length) {
-      const current = queue.shift()!
-      if (visited.has(current)) continue
-      visited.add(current)
-      queue.push(...(outgoing.get(current) || []))
-    }
-    if (visited.size !== nodes.value.length) messages.push('存在未从开始节点连通的节点')
-  }
-  const controlledTools = nodes.value.filter((node) => node.nodeType === 'tool' && node.config.toolCode === 'expense.query_my_expenses')
-  if (controlledTools.length) {
-    const llmNodes = nodes.value.filter((node) => node.nodeType === 'llm')
-    if (controlledTools.length !== 1 || llmNodes.length !== 1) {
-      messages.push('受控查询流程必须包含且只能包含一个查询工具节点和一个 LLM 节点')
-    }
-    if (nodes.value.some((node) => !['start', 'tool', 'llm', 'end'].includes(node.nodeType))) {
-      messages.push('受控查询流程当前仅支持开始、工具、LLM 和结束节点')
-    }
-    if (nodes.value.filter((node) => node.nodeType === 'end').length !== 1) messages.push('受控查询流程必须有且只有一个结束节点')
-    nodes.value.forEach((node) => {
-      const inCount = incoming.get(node.nodeKey) || 0
-      const outCount = outgoing.get(node.nodeKey)?.length || 0
-      if (node.nodeType === 'start' && outCount !== 1) messages.push('受控查询的开始节点必须连接一个后续节点')
-      else if (node.nodeType === 'end' && (inCount !== 1 || outCount !== 0)) messages.push('受控查询的结束节点必须只有一条入线且不能有出线')
-      else if (!['start', 'end'].includes(node.nodeType) && (inCount !== 1 || outCount !== 1)) messages.push(`${node.label} 必须各有一条入线和出线`)
-    })
-    const controlledTool = controlledTools[0]
-    const llmNode = llmNodes[0]
-    if (startNode && controlledTool && llmNode) {
-      const path: string[] = []
-      let current: string | undefined = startNode.nodeKey
-      while (current && !path.includes(current)) {
-        path.push(current)
-        current = outgoing.get(current)?.[0]
-      }
-      if (path.indexOf(controlledTool.nodeKey) > path.indexOf(llmNode.nodeKey)) {
-        messages.push('受控查询流程必须先执行查询工具，再执行 LLM 节点')
-      }
-    }
-  }
-  return Array.from(new Set(messages))
+  return validateCanvasGraph(nodes.value, edges.value, currentToolCodes.value)
+}
+
+function selectToolTemplate(toolCode: string) {
+  if (!selectedNode.value || selectedNode.value.nodeType !== 'tool') return
+  selectedNode.value.config.queryTemplateCode = toolCatalog.value.find(item => item.toolCode === toolCode)?.queryTemplateCode || ''
+  if (toolCode !== 'expense.query_my_expenses') selectedNode.value.config.variableMapping = '{}'
 }
 
 function nodePosition(node: CanvasNode): Point {
@@ -567,20 +590,16 @@ function setNodePosition(node: CanvasNode, point: Point) {
   node.config.canvasPosition = { x: point.x, y: point.y }
 }
 
-function inputPoint(nodeKey: string): Point {
-  const node = nodes.value.find((item) => item.nodeKey === nodeKey)
-  const position = node ? nodePosition(node) : { x: 0, y: 0 }
-  return { x: position.x, y: position.y + 48 }
+function inputPoint(nodeKey: string, sourceKey: string): Point {
+  return edgePoint(nodeKey, sourceKey, 'input', nodes.value, edges.value)
 }
 
 function outputPoint(nodeKey: string): Point {
-  const node = nodes.value.find((item) => item.nodeKey === nodeKey)
-  const position = node ? nodePosition(node) : { x: 0, y: 0 }
-  return { x: position.x + 210, y: position.y + 48 }
+  return edgePoint(nodeKey, null, 'output', nodes.value, edges.value)
 }
 
 function buildEdgePath(source: string, target: string) {
-  return bezierPath(outputPoint(source), inputPoint(target))
+  return bezierPath(edgePoint(source, target, 'output', nodes.value, edges.value), inputPoint(target, source))
 }
 
 function bezierPath(source: Point, target: Point) {
@@ -603,7 +622,14 @@ function defaultNodeLabel(type: NodeType) {
 }
 
 function defaultNodeConfig(type: NodeType) {
-  if (type === 'tool') return { toolCode: toolOptions.value[0]?.toolCode || '', queryTemplateCode: 'expense.accessible_expenses.v2', variableMapping: '{"scope":"{{input.scope}}","keyword":"{{input.keyword}}","status":"{{input.status}}","startDate":"{{input.startDate}}","endDate":"{{input.endDate}}","minAmount":"{{input.minAmount}}","maxAmount":"{{input.maxAmount}}","limit":"{{input.limit}}"}' }
+  if (type === 'tool') {
+    const code = toolOptions.value.find((item) => !item.deprecated)?.toolCode || ''
+    return {
+      toolCode: code,
+      queryTemplateCode: toolCatalog.value.find(item => item.toolCode === code)?.queryTemplateCode || '',
+      variableMapping: code === 'expense.query_my_expenses' ? '{"scope":"{{input.scope}}","keyword":"{{input.keyword}}","status":"{{input.status}}","startDate":"{{input.startDate}}","endDate":"{{input.endDate}}","minAmount":"{{input.minAmount}}","maxAmount":"{{input.maxAmount}}","limit":"{{input.limit}}"}' : '{}'
+    }
+  }
   if (type === 'llm') return { promptTemplate: '基于脱敏后的 JSON 输出 answer 和 evidenceRefs。' }
   if (type === 'condition') return { expression: '' }
   if (type === 'transform') return { template: type === 'transform' ? 'extract_query_variables' : '' }
@@ -667,6 +693,12 @@ function goBack() {
 .edge-path { fill: none; stroke: #0f766e; stroke-width: 2.5; pointer-events: stroke; cursor: pointer; }
 .edge-path.selected { stroke: #d97706; stroke-width: 3.5; }
 .edge-path.temp { stroke-dasharray: 8 6; opacity: .7; }
+.edge-arrow-handle { position: absolute; z-index: 2; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; cursor: grab; }
+.edge-arrow-handle::before { content: ''; position: absolute; left: 10px; top: 6px; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 12px solid #0f766e; }
+.edge-arrow-handle.selected { z-index: 3; }
+.edge-arrow-handle.selected::before { border-left-color: #d97706; }
+.edge-arrow-handle:active { cursor: grabbing; }
+.edge-arrow-handle:focus-visible { outline: 2px solid #d97706; outline-offset: 2px; }
 .canvas-node { position: absolute; width: 210px; min-height: 96px; padding: 14px; border: 1px solid rgba(39,48,71,.1); border-radius: 16px; background: #fff; box-shadow: 0 16px 32px rgba(39,48,71,.12); cursor: grab; user-select: none; transition: border-color .16s ease, box-shadow .16s ease; }
 .canvas-node:focus-visible { outline: 2px solid rgba(31,159,159,.5); outline-offset: 3px; }
 .canvas-node.selected { border-color: rgba(217,119,6,.55); box-shadow: 0 18px 34px rgba(217,119,6,.16); }

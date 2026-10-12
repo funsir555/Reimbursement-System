@@ -11,6 +11,7 @@ import com.finex.auth.dto.ArchiveAgentRunDTO;
 import com.finex.auth.dto.ArchiveAgentRunDetailVO;
 import com.finex.auth.dto.ArchiveAgentRunVO;
 import com.finex.auth.dto.ArchiveAgentSaveDTO;
+import com.finex.auth.dto.ArchiveAgentToolsSaveDTO;
 import com.finex.auth.dto.ArchiveAgentSummaryVO;
 
 import java.util.List;
@@ -46,6 +47,8 @@ public interface ArchiveAgentService {
      * 更新代理。
      */
     ArchiveAgentDetailVO updateAgent(Long ownerUserId, Long id, String operatorName, ArchiveAgentSaveDTO dto);
+
+    ArchiveAgentDetailVO updateTools(Long ownerUserId, Long id, String operatorName, ArchiveAgentToolsSaveDTO dto);
 
     /**
      * 发布代理。

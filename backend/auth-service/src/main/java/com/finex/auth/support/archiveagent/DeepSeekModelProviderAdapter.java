@@ -27,10 +27,14 @@ public class DeepSeekModelProviderAdapter implements ModelProviderAdapter {
     @Value("${DEEPSEEK_ENDPOINT:https://api.deepseek.com/v1/chat/completions}")
     private String endpoint;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
+
+    public DeepSeekModelProviderAdapter(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public String getProviderCode() {

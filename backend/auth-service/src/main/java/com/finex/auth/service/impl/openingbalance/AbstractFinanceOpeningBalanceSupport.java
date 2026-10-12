@@ -197,7 +197,10 @@ abstract class AbstractFinanceOpeningBalanceSupport {
             if (hasAssist(subject)) {
                 throw new IllegalArgumentException("科目【" + subject.getSubjectCode() + " " + subject.getSubjectName() + "】启用了辅助核算，请改用辅助核算窗口录入");
             }
-            saveSubjectOpeningSum(subject, effectiveCompanyId, effectiveYear, effectivePeriod, sanitizeAmount(row.getMb()), sanitizeAmount(row.getMbF()), sanitizeQty(row.getNbS()));
+            saveSubjectOpeningSum(subject, effectiveCompanyId, effectiveYear, effectivePeriod,
+                    FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), row.getMb()),
+                    FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), row.getMbF()),
+                    sanitizeQty(row.getNbS()));
         }
         recalculateAncestorRows(effectiveCompanyId, effectiveYear, effectivePeriod);
         return buildRows(effectiveCompanyId, effectiveYear, effectivePeriod);
@@ -226,8 +229,8 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         BigDecimal totalNbS = ZERO_QTY;
         for (OpeningAssistBalanceLineDTO line : lines) {
             validateAssistLine(subject, effectiveCompanyId, line);
-            BigDecimal lineMb = sanitizeAmount(line.getMb());
-            BigDecimal lineMbF = sanitizeAmount(line.getMbF());
+            BigDecimal lineMb = FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), line.getMb());
+            BigDecimal lineMbF = FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), line.getMbF());
             BigDecimal lineNbS = sanitizeQty(line.getNbS());
             if (isAllZero(lineMb, lineMbF, lineNbS)) {
                 continue;
@@ -287,8 +290,8 @@ abstract class AbstractFinanceOpeningBalanceSupport {
                         effectiveCompanyId,
                         effectiveYear,
                         effectivePeriod,
-                        sanitizeAmount(row.getMb()),
-                        sanitizeAmount(row.getMbF()),
+                        FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), row.getMb()),
+                        FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), row.getMbF()),
                         sanitizeQty(row.getNbS())
                 );
             }
@@ -345,7 +348,7 @@ abstract class AbstractFinanceOpeningBalanceSupport {
             if (subject == null || !isLeaf(subject) || !hasAssist(subject)) {
                 continue;
             }
-            assistLineMap.computeIfAbsent(subject.getSubjectCode(), key -> new ArrayList<>()).add(toAssistDraftLineDTO(source));
+            assistLineMap.computeIfAbsent(subject.getSubjectCode(), key -> new ArrayList<>()).add(toAssistDraftLineDTO(subject, source));
         }
 
         OpeningBalanceCarryForwardPreviewVO preview = new OpeningBalanceCarryForwardPreviewVO();
@@ -374,16 +377,15 @@ abstract class AbstractFinanceOpeningBalanceSupport {
                 continue;
             }
             BigDecimal amount = money(sumMap.get(subject.getSubjectCode()) == null ? null : sumMap.get(subject.getSubjectCode()).getMb());
-            if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            if (FinanceBalanceDirectionSupport.naturalFromSigned(subject.getBalanceDirection(), amount).compareTo(ZERO) < 0) {
                 abnormal.add(toRowVO(subject, sumMap.get(subject.getSubjectCode())));
             }
-            if (isDebitDirection(subject.getBalanceDirection())) {
+            if (amount.compareTo(ZERO) >= 0) {
                 debit = debit.add(amount);
             } else {
-                credit = credit.add(amount);
+                credit = credit.subtract(amount);
             }
         }
-
         FinanceOpeningBalanceState state = findState(effectiveCompanyId, effectiveYear, effectivePeriod);
         if (state != null) {
             state.setLastTrialAt(LocalDateTime.now());
@@ -420,8 +422,8 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         if (lines != null) {
             for (OpeningAssistBalanceLineDTO line : lines) {
                 validateAssistLine(subject, companyId, line);
-                BigDecimal lineMb = sanitizeAmount(line.getMb());
-                BigDecimal lineMbF = sanitizeAmount(line.getMbF());
+                BigDecimal lineMb = FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), line.getMb());
+                BigDecimal lineMbF = FinanceBalanceDirectionSupport.signedFromNatural(subject.getBalanceDirection(), line.getMbF());
                 BigDecimal lineNbS = sanitizeQty(line.getNbS());
                 if (isAllZero(lineMb, lineMbF, lineNbS)) {
                     continue;
@@ -493,7 +495,7 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         return preview;
     }
 
-    protected OpeningAssistBalanceLineDTO toAssistDraftLineDTO(GlAccass entity) {
+    protected OpeningAssistBalanceLineDTO toAssistDraftLineDTO(FinanceAccountSubject subject, GlAccass entity) {
         OpeningAssistBalanceLineDTO dto = new OpeningAssistBalanceLineDTO();
         dto.setCdeptId(entity.getCdeptId());
         dto.setCpersonId(entity.getCpersonId());
@@ -501,8 +503,8 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         dto.setCsupId(entity.getCsupId());
         dto.setCitemClass(entity.getCitemClass());
         dto.setCitemId(entity.getCitemId());
-        dto.setMb(money(entity.getMe()));
-        dto.setMbF(money(entity.getMeF()));
+        dto.setMb(FinanceBalanceDirectionSupport.naturalFromSigned(subject.getBalanceDirection(), entity.getMe()));
+        dto.setMbF(FinanceBalanceDirectionSupport.naturalFromSigned(subject.getBalanceDirection(), entity.getMeF()));
         dto.setNbS(qty(entity.getNeS()));
         return dto;
     }
@@ -998,10 +1000,11 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         vo.setBdept(subject.getBdept());
         vo.setBitem(subject.getBitem());
         vo.setCassItem(subject.getCassItem());
-        vo.setMb(row == null ? ZERO : money(row.getMb()));
-        vo.setActualBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), vo.getMb()));
-        vo.setActualBalanceDirectionLabel(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), vo.getMb()));
-        vo.setDisplayBalance(FinanceBalanceDirectionSupport.displayAmount(vo.getMb()));
+        BigDecimal signed = row == null ? ZERO : money(row.getMb());
+        vo.setMb(FinanceBalanceDirectionSupport.naturalFromSigned(subject.getBalanceDirection(), signed));
+        vo.setActualBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionCode(signed));
+        vo.setActualBalanceDirectionLabel(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(signed));
+        vo.setDisplayBalance(FinanceBalanceDirectionSupport.displayAmount(signed));
         return vo;
     }
 
@@ -1013,11 +1016,12 @@ abstract class AbstractFinanceOpeningBalanceSupport {
         vo.setCsupId(entity.getCsupId());
         vo.setCitemClass(entity.getCitemClass());
         vo.setCitemId(entity.getCitemId());
-        vo.setMb(money(entity.getMb()));
-        vo.setActualBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionCode(subject.getBalanceDirection(), vo.getMb()));
-        vo.setActualBalanceDirectionLabel(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), vo.getMb()));
-        vo.setDisplayBalance(FinanceBalanceDirectionSupport.displayAmount(vo.getMb()));
-        vo.setMbF(money(entity.getMbF()));
+        BigDecimal signed = money(entity.getMb());
+        vo.setMb(FinanceBalanceDirectionSupport.naturalFromSigned(subject.getBalanceDirection(), signed));
+        vo.setActualBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionCode(signed));
+        vo.setActualBalanceDirectionLabel(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(signed));
+        vo.setDisplayBalance(FinanceBalanceDirectionSupport.displayAmount(signed));
+        vo.setMbF(FinanceBalanceDirectionSupport.naturalFromSigned(subject.getBalanceDirection(), entity.getMbF()));
         vo.setNbS(qty(entity.getNbS()));
         return vo;
     }
@@ -1160,10 +1164,6 @@ abstract class AbstractFinanceOpeningBalanceSupport {
 
     protected BigDecimal qty(BigDecimal value) {
         return value == null ? ZERO_QTY : value.setScale(6, RoundingMode.HALF_UP);
-    }
-
-    protected BigDecimal sanitizeAmount(BigDecimal value) {
-        return money(value);
     }
 
     protected BigDecimal sanitizeQty(BigDecimal value) {

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
+import java.math.BigDecimal;
 
 /**
  * 工作流执行结果。
@@ -20,4 +21,19 @@ public class WorkflowExecutionResult {
     private String traceId;
     private String mappingId;
     private List<String> evidenceRefs;
+    private Long digitalEmployeeId;
+    private Long responsibleUserId;
+    private Long agentVersionId;
+    private String queryPermissionCode;
+    private String authorizationDigest;
+    private Integer resultCount;
+    private BigDecimal totalAmount;
+    private Integer displayedCount;
+    private String queryDescriptorJson;
+    private String sourceDigest;
+    private List<ToolOrigin> toolOrigins;
+
+    public record ToolOrigin(String nodeKey, String toolCode, String permissionCode,
+                             String authorizationDigest, String queryDescriptorJson,
+                             String sourceDigest) { }
 }

@@ -20,7 +20,7 @@
           <el-button :loading="metaLoading || loading" @click="reloadCurrent">刷新</el-button>
           <el-button type="primary" :loading="loading" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button :loading="exporting" :disabled="!canExport" @click="handleExport">导出 Excel</el-button>
+          <el-button :loading="exporting" :disabled="!canExport || (isDetailLedgerReport && !hasQueried)" @click="handleExport">导出 Excel</el-button>
         </div>
       </div>
 
@@ -34,7 +34,7 @@
               :value="item.companyId"
             />
           </el-select>
-          <template v-if="isBalanceReport">
+          <template v-if="usesPeriodRange">
             <el-date-picker
               v-model="filters.periodFrom"
               class="finance-ledger-report-period-picker"
@@ -62,19 +62,15 @@
               <el-option v-for="item in monthOptions" :key="item" :label="`${item}月`" :value="item" />
             </el-select>
           </template>
-          <el-select v-model="filters.accountCodeFrom" filterable clearable placeholder="科目范围起">
-            <el-option v-for="item in accountOptions" :key="`from-${item.value}`" :label="item.label" :value="item.value" />
-          </el-select>
-          <el-select v-model="filters.accountCodeTo" filterable clearable placeholder="科目范围止">
-            <el-option v-for="item in accountOptions" :key="`to-${item.value}`" :label="item.label" :value="item.value" />
-          </el-select>
-          <template v-if="isBalanceReport">
+          <SubjectTreeSelect v-model="filters.accountCodeFrom" :options="accountOptions" clearable placeholder="科目范围起" />
+          <SubjectTreeSelect v-model="filters.accountCodeTo" :options="accountOptions" clearable placeholder="科目范围止" />
+          <template v-if="usesAssistDisplay">
             <el-select v-model="filters.balanceAssistDisplay" clearable placeholder="辅助项">
               <el-option label="名称" value="NAME" />
               <el-option label="编码" value="CODE" />
               <el-option label="编码+名称" value="CODE_NAME" />
             </el-select>
-            <el-select v-model="filters.subjectLevelRange" clearable placeholder="级次">
+            <el-select v-if="isBalanceReport" v-model="filters.subjectLevelRange" clearable placeholder="级次">
               <el-option
                 v-for="item in subjectLevelOptions"
                 :key="item.value"
@@ -83,23 +79,22 @@
               />
             </el-select>
           </template>
-          <template v-else>
-            <el-select v-model="filters.cdeptId" filterable clearable placeholder="部门">
+            <el-select v-if="visibleAssistFilters.includes('cdeptId')" v-model="filters.cdeptId" filterable clearable placeholder="部门">
               <el-option v-for="item in departmentOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
-            <el-select v-model="filters.cpersonId" filterable clearable placeholder="个人">
+            <el-select v-if="visibleAssistFilters.includes('cpersonId')" v-model="filters.cpersonId" filterable clearable :placeholder="isSequenceReport ? '个人' : '全部个人'">
               <el-option v-for="item in employeeOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
-            <el-select v-model="filters.ccusId" filterable clearable placeholder="客户">
+            <el-select v-if="visibleAssistFilters.includes('ccusId')" v-model="filters.ccusId" filterable clearable :placeholder="isSequenceReport ? '客户' : '全部客户'">
               <el-option v-for="item in customerOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
-            <el-select v-model="filters.csupId" filterable clearable placeholder="供应商">
+            <el-select v-if="visibleAssistFilters.includes('csupId')" v-model="filters.csupId" filterable clearable :placeholder="isSequenceReport ? '供应商' : '全部供应商'">
               <el-option v-for="item in supplierOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
-            <el-select v-model="filters.citemClass" filterable clearable placeholder="项目分类">
+            <el-select v-if="visibleAssistFilters.includes('citemClass')" v-model="filters.citemClass" filterable clearable :placeholder="isSequenceReport ? '项目分类' : '全部项目分类'">
               <el-option v-for="item in projectClassOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
-            <el-select v-model="filters.citemId" filterable clearable placeholder="项目">
+            <el-select v-if="visibleAssistFilters.includes('citemId')" v-model="filters.citemId" filterable clearable :placeholder="isSequenceReport ? '项目' : '全部项目'">
               <el-option
                 v-for="item in filteredProjectOptions"
                 :key="item.value"
@@ -107,7 +102,6 @@
                 :value="item.value"
               />
             </el-select>
-          </template>
           <template v-if="isSequenceReport">
             <el-input v-model="filters.voucherNo" clearable placeholder="凭证号" />
             <el-select v-model="filters.csign" clearable placeholder="凭证类型">
@@ -235,61 +229,18 @@
       </el-table>
     </el-card>
 
-    <el-card v-else class="expense-wb-panel expense-wb-table-shell finance-ledger-report-panel">
-      <el-table :data="detailItems" v-loading="loading" stripe>
-        <el-table-column prop="groupKey" label="分组" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="rowType" label="行类型" min-width="90" />
-        <el-table-column prop="subjectCode" label="科目编码" min-width="130" />
-        <el-table-column prop="subjectName" label="科目名称" min-width="180" />
-        <el-table-column prop="assistLabel" label="辅助项" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="dbillDate" label="日期" min-width="120" />
-        <el-table-column label="凭证号" min-width="130">
-          <template #default="{ row }">
-            <button
-              v-if="row.rowType === 'ENTRY' && row.voucherNo"
-              class="finance-ledger-report-link"
-              type="button"
-              @click="openSequenceLedger(row)"
-            >
-              {{ row.displayVoucherNo }}
-            </button>
-            <span v-else>{{ row.displayVoucherNo || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="summary" label="摘要" min-width="220" show-overflow-tooltip />
-        <el-table-column label="借方" min-width="120" align="right">
-          <template #default="{ row }">{{ formatMoney(row.debit) }}</template>
-        </el-table-column>
-        <el-table-column label="贷方" min-width="120" align="right">
-          <template #default="{ row }">{{ formatMoney(row.credit) }}</template>
-        </el-table-column>
-        <el-table-column label="余额" min-width="120" align="right">
-          <template #default="{ row }">{{ formatMoney(row.balance) }}</template>
-        </el-table-column>
-        <el-table-column prop="balanceDirection" label="方向" min-width="80" align="center" />
-        <template v-if="showQuantityColumns">
-          <el-table-column label="数量借方" min-width="120" align="right">
-            <template #default="{ row }">{{ formatMoney(row.quantityDebit) }}</template>
-          </el-table-column>
-          <el-table-column label="数量贷方" min-width="120" align="right">
-            <template #default="{ row }">{{ formatMoney(row.quantityCredit) }}</template>
-          </el-table-column>
-          <el-table-column label="数量余额" min-width="120" align="right">
-            <template #default="{ row }">{{ formatMoney(row.quantityBalance) }}</template>
-          </el-table-column>
-          <el-table-column prop="measureUnit" label="计量单位" min-width="100" />
-        </template>
-      </el-table>
-    </el-card>
+    <FinanceDetailLedgerRows v-else-if="hasQueried || !isDetailLedgerReport" :rows="detailItems" :ordinary="isOrdinaryDetail"
+      :loading="loading" :show-quantity="showQuantityColumns" :format-money="formatMoney"
+      @open-voucher="openSequenceLedger" />
 
-    <div class="expense-wb-pagination">
+    <div v-if="hasQueried || !isDetailLedgerReport" class="expense-wb-pagination">
       <el-pagination
         v-model:current-page="pager.page"
         v-model:page-size="pager.pageSize"
         :page-sizes="[10, 20, 50, 100]"
         :total="pager.total"
         layout="total, sizes, prev, pager, next"
-        @current-change="loadReport"
+        @current-change="handlePageChange"
         @size-change="handlePageSizeChange"
       />
     </div>
@@ -297,7 +248,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -314,6 +265,9 @@ import {
 import { useFinanceCompanyStore } from '@/stores/financeCompany'
 import { useFinancePeriodStore } from '@/stores/financePeriod'
 import { hasPermission, readStoredUser } from '@/utils/permissions'
+import FinanceDetailLedgerRows from './components/FinanceDetailLedgerRows.vue'
+import SubjectTreeSelect from '@/components/inputs/SubjectTreeSelect.vue'
+import { ledgerReportAssistFilters } from './composables/ledgerReportAssistFilters'
 
 const props = defineProps<{
   reportKind: LedgerReportKind
@@ -372,6 +326,7 @@ const REPORT_CONFIG: Record<LedgerReportKind, { title: string; detailKind?: Deta
 const metaLoading = ref(false)
 const loading = ref(false)
 const exporting = ref(false)
+const hasQueried = ref(false)
 const ledgerMeta = ref<FinanceLedgerReportMeta | null>(null)
 const pager = reactive({
   total: 0,
@@ -411,12 +366,15 @@ type YearMonthPoint = {
 const reportConfig = computed(() => REPORT_CONFIG[props.reportKind])
 const reportTitle = computed(() => reportConfig.value.title)
 const isBalanceReport = computed(() => props.reportKind === 'BALANCE_SHEET')
+const isOrdinaryDetail = computed(() => props.reportKind === 'DETAIL_LEDGER')
 const isGeneralLedgerReport = computed(() => props.reportKind === 'GENERAL_LEDGER')
 const isSequenceReport = computed(() => props.reportKind === 'SEQUENCE_LEDGER')
+const usesPeriodRange = computed(() => !isSequenceReport.value)
+const usesAssistDisplay = computed(() => isBalanceReport.value || isOrdinaryDetail.value || showQuantityColumns.value)
 const isDetailLedgerReport = computed(() => Boolean(reportConfig.value.detailKind))
 const showQuantityColumns = computed(() => reportConfig.value.detailKind === 'QUANTITY_AMOUNT')
+const visibleAssistFilters = computed(() => ledgerReportAssistFilters(props.reportKind))
 const canExport = computed(() => hasPermission(reportConfig.value.exportPermission, readStoredUser()))
-
 const companyOptions = computed(() => ledgerMeta.value?.companyOptions || [])
 const departmentOptions = computed(() => ledgerMeta.value?.departmentOptions || [])
 const employeeOptions = computed(() => ledgerMeta.value?.employeeOptions || [])
@@ -434,7 +392,7 @@ const filteredProjectOptions = computed(() => {
   return projectOptions.value.filter((item) => item.parentValue === filters.citemClass)
 })
 const localPeriodText = computed(() => {
-  if (isBalanceReport.value) {
+  if (usesPeriodRange.value) {
     const from = formatYearMonth(filters.periodFrom)
     const to = formatYearMonth(filters.periodTo)
     if (!from || !to) {
@@ -493,10 +451,13 @@ const sequenceItems = computed(() => pager.items as FinanceSequenceLedgerRow[])
 
 watch(
   () => [financeCompany.currentCompanyId, financePeriod.currentYear, financePeriod.currentPeriod] as const,
-  async () => {
+  async (next, previous) => {
+    if (previous && next[0] !== previous[0]) filters.companyId = next[0] || ''
     applyDefaultsFromStores(false)
+    applyRouteQuery()
+    clearResults()
     await loadMeta()
-    await loadReport()
+    if (!isDetailLedgerReport.value) await loadReport()
   },
   { immediate: true }
 )
@@ -505,10 +466,18 @@ watch(
   () => route.fullPath,
   async () => {
     applyRouteQuery()
+    clearResults()
     await loadMeta()
-    await loadReport()
+    if (!isDetailLedgerReport.value) await loadReport()
   }
 )
+
+watch(() => filters.companyId, async (next, previous) => {
+  if (!previous || next === previous) return
+  clearResults()
+  await loadMeta()
+  if (!isDetailLedgerReport.value) await loadReport()
+})
 
 watch(
   () => filters.iyear,
@@ -546,17 +515,18 @@ watch(
   }
 )
 
-onMounted(() => {
-  applyRouteQuery()
-  loadMeta()
-  loadReport()
-})
+function clearResults() {
+  hasQueried.value = false
+  pager.page = 1
+  pager.total = 0
+  pager.items = []
+}
 
 function applyDefaultsFromStores(force: boolean) {
   if (force || !filters.companyId) {
     filters.companyId = financeCompany.currentCompanyId || filters.companyId
   }
-  if (isBalanceReport.value) {
+  if (usesPeriodRange.value) {
     const currentPeriod = buildYearMonth(financePeriod.currentYear, financePeriod.currentPeriod)
     if (force || !filters.periodFrom) {
       filters.periodFrom = currentPeriod
@@ -584,7 +554,7 @@ function applyRouteQuery() {
   if (queryCompanyId) {
     filters.companyId = queryCompanyId
   }
-  if (isBalanceReport.value) {
+  if (usesPeriodRange.value) {
     if (queryPeriodFrom || queryPeriodTo) {
       filters.periodFrom = queryPeriodFrom
       filters.periodTo = queryPeriodTo
@@ -621,7 +591,7 @@ async function loadMeta() {
   if (!filters.companyId) {
     return
   }
-  const selectedPeriod = isBalanceReport.value
+  const selectedPeriod = usesPeriodRange.value
     ? parseYearMonth(filters.periodTo || filters.periodFrom)
     : filters.iyear && filters.iperiod
       ? { year: filters.iyear, month: filters.iperiod }
@@ -634,7 +604,7 @@ async function loadMeta() {
       iperiod: selectedPeriod?.month
     })
     ledgerMeta.value = res.data
-    if (isBalanceReport.value) {
+    if (usesPeriodRange.value) {
       normalizeBalanceRange()
     }
   } catch (error: unknown) {
@@ -648,31 +618,31 @@ function buildPayload(withPaging = true): FinanceLedgerReportQueryParams | null 
   if (!filters.companyId) {
     return null
   }
-  const balanceRange = isBalanceReport.value ? getBalancePeriodRange(false) : null
-  if (isBalanceReport.value && !balanceRange) {
+  const balanceRange = usesPeriodRange.value ? getBalancePeriodRange(false) : null
+  if (usesPeriodRange.value && !balanceRange) {
     return null
   }
-  if (!isBalanceReport.value && (!filters.iyear || !filters.iperiod)) {
+  if (!usesPeriodRange.value && (!filters.iyear || !filters.iperiod)) {
     return null
   }
   return {
     companyId: filters.companyId,
-    iyear: isBalanceReport.value ? undefined : filters.iyear,
-    iperiod: isBalanceReport.value ? undefined : filters.iperiod,
+    iyear: usesPeriodRange.value ? undefined : filters.iyear,
+    iperiod: usesPeriodRange.value ? undefined : filters.iperiod,
     iyearFrom: balanceRange?.from.year,
     iperiodFrom: balanceRange?.from.month,
     iyearTo: balanceRange?.to.year,
     iperiodTo: balanceRange?.to.month,
     ledgerKind: reportConfig.value.detailKind,
     accountCodeFrom: normalizeText(filters.accountCodeFrom) || undefined,
-    accountCodeTo: normalizeText(filters.accountCodeTo) || undefined,
-    cdeptId: isBalanceReport.value ? undefined : normalizeText(filters.cdeptId) || undefined,
-    cpersonId: isBalanceReport.value ? undefined : normalizeText(filters.cpersonId) || undefined,
-    ccusId: isBalanceReport.value ? undefined : normalizeText(filters.ccusId) || undefined,
-    csupId: isBalanceReport.value ? undefined : normalizeText(filters.csupId) || undefined,
-    citemClass: isBalanceReport.value ? undefined : normalizeText(filters.citemClass) || undefined,
-    citemId: isBalanceReport.value ? undefined : normalizeText(filters.citemId) || undefined,
-    balanceAssistDisplay: isBalanceReport.value ? filters.balanceAssistDisplay || undefined : undefined,
+    accountCodeTo: normalizeText(filters.accountCodeTo || (isOrdinaryDetail.value ? filters.accountCodeFrom : '')) || undefined,
+    cdeptId: visibleAssistFilters.value.includes('cdeptId') ? normalizeText(filters.cdeptId) || undefined : undefined,
+    cpersonId: visibleAssistFilters.value.includes('cpersonId') ? normalizeText(filters.cpersonId) || undefined : undefined,
+    ccusId: visibleAssistFilters.value.includes('ccusId') ? normalizeText(filters.ccusId) || undefined : undefined,
+    csupId: visibleAssistFilters.value.includes('csupId') ? normalizeText(filters.csupId) || undefined : undefined,
+    citemClass: visibleAssistFilters.value.includes('citemClass') ? normalizeText(filters.citemClass) || undefined : undefined,
+    citemId: visibleAssistFilters.value.includes('citemId') ? normalizeText(filters.citemId) || undefined : undefined,
+    balanceAssistDisplay: usesAssistDisplay.value ? filters.balanceAssistDisplay || undefined : undefined,
     subjectLevelRange: isBalanceReport.value ? normalizeText(filters.subjectLevelRange) || undefined : undefined,
     includeUnposted: filters.includeUnposted,
     voucherNo: isSequenceReport.value ? normalizeText(filters.voucherNo) || undefined : undefined,
@@ -724,14 +694,18 @@ function assignPage(data: { total: number; page: number; pageSize: number; items
 
 async function reloadCurrent() {
   await loadMeta()
-  await loadReport()
+  if (hasQueried.value || !isDetailLedgerReport.value) await loadReport()
 }
 
 function handleSearch() {
-  if (isBalanceReport.value && !getBalancePeriodRange(true)) {
+  if (usesPeriodRange.value && !getBalancePeriodRange(true)) {
     return
   }
+  if (isOrdinaryDetail.value && filters.accountCodeFrom && !filters.accountCodeTo) {
+    filters.accountCodeTo = filters.accountCodeFrom
+  }
   pager.page = 1
+  hasQueried.value = true
   loadReport()
 }
 
@@ -752,18 +726,22 @@ async function handleReset() {
   filters.csign = ''
   filters.summary = ''
   filters.cbill = ''
-  pager.page = 1
+  clearResults()
   await loadMeta()
-  loadReport()
+  if (!isDetailLedgerReport.value) loadReport()
 }
 
 function handlePageSizeChange() {
   pager.page = 1
-  loadReport()
+  if (hasQueried.value || !isDetailLedgerReport.value) loadReport()
+}
+
+function handlePageChange() {
+  if (hasQueried.value || !isDetailLedgerReport.value) loadReport()
 }
 
 async function handleExport() {
-  if (isBalanceReport.value && !getBalancePeriodRange(true)) {
+  if (usesPeriodRange.value && !getBalancePeriodRange(true)) {
     return
   }
   const payload = buildPayload(false)
@@ -794,16 +772,10 @@ function openDetailLedger(section: FinanceGeneralLedgerSection) {
     name: 'finance-detail-ledger',
     query: {
       companyId: filters.companyId,
-      iyear: String(filters.iyear),
-      iperiod: String(filters.iperiod),
+      periodFrom: filters.periodFrom,
+      periodTo: filters.periodTo,
       accountCodeFrom: section.subjectCode,
-      accountCodeTo: section.subjectCode,
-      cdeptId: filters.cdeptId || undefined,
-      cpersonId: filters.cpersonId || undefined,
-      ccusId: filters.ccusId || undefined,
-      csupId: filters.csupId || undefined,
-      citemClass: filters.citemClass || undefined,
-      citemId: filters.citemId || undefined
+      accountCodeTo: section.subjectCode
     }
   })
 }
@@ -812,12 +784,13 @@ function openSequenceLedger(row: FinanceDetailLedgerRow) {
   if (!row.voucherNo) {
     return
   }
+  const voucherKey = row.voucherNo.split('~')
   router.push({
     name: 'finance-sequence-ledger',
     query: {
       companyId: filters.companyId,
-      iyear: String(filters.iyear),
-      iperiod: String(filters.iperiod),
+      iyear: voucherKey.length === 5 ? voucherKey[1] : String(filters.iyear),
+      iperiod: voucherKey.length === 5 ? voucherKey[2] : String(filters.iperiod),
       voucherNo: row.displayVoucherNo || row.voucherNo
     }
   })
@@ -976,11 +949,11 @@ function getBalancePeriodRange(showMessage: boolean) {
     }
   }
   if (!from || !to) {
-    message('请选择完整的余额表期间起止范围')
+    message('请选择完整的会计期间起止范围')
     return null
   }
   if (from.year < 1990 || from.year > 2090 || to.year < 1990 || to.year > 2090) {
-    message('余额表期间年份必须在1990年至2090年之间')
+    message('会计期间年份必须在1990年至2090年之间')
     return null
   }
   if (compareYearMonthText(filters.periodFrom, filters.periodTo) > 0) {
@@ -988,7 +961,7 @@ function getBalancePeriodRange(showMessage: boolean) {
     return null
   }
   if (!bounds) {
-    message('当前账套没有可用的余额表期间')
+    message('当前账套没有可用的会计期间')
     return null
   }
   if (balancePeriodValue(from) < balancePeriodValue(bounds.from)) {

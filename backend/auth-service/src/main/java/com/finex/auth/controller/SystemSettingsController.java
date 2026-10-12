@@ -27,6 +27,7 @@ import com.finex.auth.dto.SystemSettingsBootstrapVO;
 import com.finex.auth.dto.UserRoleAssignDTO;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.SystemSettingsService;
+import com.finex.auth.service.queryauth.RoleQueryScopeService;
 import com.finex.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -69,6 +71,7 @@ public class SystemSettingsController {
     private static final String ROLE_DELETE = "settings:roles:delete";
     private static final String ROLE_ASSIGN_PERMISSION = "settings:roles:assign_permissions";
     private static final String ROLE_ASSIGN_USER = "settings:roles:assign_users";
+    private static final String ROLE_ASSIGN_DATA_SCOPE = "settings:roles:assign_data_scope";
     private static final String COMPANY_VIEW = "settings:companies:view";
     private static final String COMPANY_CREATE = "settings:companies:create";
     private static final String COMPANY_EDIT = "settings:companies:edit";
@@ -83,6 +86,7 @@ public class SystemSettingsController {
 
     private final SystemSettingsService systemSettingsService;
     private final AccessControlService accessControlService;
+    private final RoleQueryScopeService roleQueryScopeService;
 
     // 处理 bootstrap 请求。
     @GetMapping("/bootstrap")
@@ -195,6 +199,7 @@ public class SystemSettingsController {
 
     // 处理 assignRolePermissions 请求。
     @PostMapping("/roles/{id}/permissions")
+    @Transactional(rollbackFor = Exception.class)
     public Result<Boolean> assignRolePermissions(
             @PathVariable Long id,
             @RequestBody RolePermissionAssignDTO dto,
@@ -202,7 +207,25 @@ public class SystemSettingsController {
     ) {
         Long currentUserId = getCurrentUserId(request);
         accessControlService.requirePermission(currentUserId, ROLE_ASSIGN_PERMISSION);
-        return Result.success("角色权限分配成功", systemSettingsService.assignRolePermissions(id, dto, currentUserId));
+        Boolean saved = systemSettingsService.assignRolePermissions(id, dto, currentUserId);
+        roleQueryScopeService.pruneRevoked(id);
+        return Result.success("角色权限分配成功", saved);
+    }
+
+    @GetMapping("/roles/{id}/data-scopes")
+    public Result<List<RoleQueryScopeService.ScopeView>> roleDataScopes(@PathVariable Long id,
+                                                                         HttpServletRequest request) {
+        accessControlService.requirePermission(getCurrentUserId(request), ROLE_VIEW);
+        return Result.success(roleQueryScopeService.read(id));
+    }
+
+    @PutMapping("/roles/{id}/data-scopes")
+    public Result<List<RoleQueryScopeService.ScopeView>> saveRoleDataScopes(
+            @PathVariable Long id, @RequestBody RoleQueryScopeService.ScopeRequest payload,
+            HttpServletRequest request) {
+        Long actorId = getCurrentUserId(request);
+        accessControlService.requirePermission(actorId, ROLE_ASSIGN_DATA_SCOPE);
+        return Result.success("数据可见范围已保存", roleQueryScopeService.replace(id, payload, actorId));
     }
 
     // 处理 assignUserRoles 请求。
@@ -212,7 +235,9 @@ public class SystemSettingsController {
             @RequestBody UserRoleAssignDTO dto,
             HttpServletRequest request
     ) {
-        accessControlService.requirePermission(getCurrentUserId(request), ROLE_ASSIGN_USER);
+        Long actorId = getCurrentUserId(request);
+        accessControlService.requirePermission(actorId, ROLE_ASSIGN_USER);
+        roleQueryScopeService.assertCanDelegateRoles(actorId, dto == null ? List.of() : dto.getRoleIds());
         return Result.success("用户角色分配成功", systemSettingsService.assignUserRoles(id, dto));
     }
 

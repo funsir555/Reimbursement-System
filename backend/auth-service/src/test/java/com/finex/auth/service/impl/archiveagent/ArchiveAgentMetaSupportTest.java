@@ -57,7 +57,20 @@ class ArchiveAgentMetaSupportTest {
         ArchiveAgentMetaVO meta = support.getMeta();
 
         assertEquals(4, meta.getModelProviders().size());
-        assertEquals(6, meta.getTools().size());
+        assertEquals(12, meta.getTools().size());
+        assertEquals(1, meta.getTools().stream()
+                .filter(tool -> "finance.query_supplier_detail_ledger".equals(tool.get("toolCode")))
+                .count());
+        assertEquals(1, meta.getTools().stream()
+                .filter(tool -> "finance.query_unclosed_companies".equals(tool.get("toolCode")))
+                .count());
+        assertEquals(0, meta.getTools().stream()
+                .filter(tool -> "invoice.query_my_invoices".equals(tool.get("toolCode"))
+                        || "notify.send_message".equals(tool.get("toolCode"))
+                        || "http.mock_request".equals(tool.get("toolCode"))
+                        || "json.extract".equals(tool.get("toolCode"))
+                        || "async_task.submit".equals(tool.get("toolCode")))
+                .count());
         assertEquals(7, meta.getNodeTypes().size());
         assertEquals(3, meta.getTriggerTypes().size());
         assertEquals(3, meta.getIconOptions().size());

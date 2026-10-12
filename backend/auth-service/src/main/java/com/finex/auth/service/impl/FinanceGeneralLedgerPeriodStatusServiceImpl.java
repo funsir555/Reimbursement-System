@@ -15,6 +15,7 @@ import com.finex.auth.mapper.GlAccsumMapper;
 import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.FinanceGeneralLedgerPeriodStatusService;
 import com.finex.auth.service.FinancePeriodTransferService;
 import com.finex.auth.service.impl.closeledger.GeneralLedgerPeriodStatusSupport;
@@ -40,7 +41,8 @@ public class FinanceGeneralLedgerPeriodStatusServiceImpl implements FinanceGener
             GlAccassMapper glAccassMapper,
             UserMapper userMapper,
             FinanceAccountSetModuleEnableMapper financeAccountSetModuleEnableMapper,
-            FinancePeriodTransferService financePeriodTransferService
+            FinancePeriodTransferService financePeriodTransferService,
+            PasswordHashService passwordHashService
     ) {
         FinanceModuleEnableSupport financeModuleEnableSupport =
                 new FinanceModuleEnableSupport(financeAccountSetModuleEnableMapper);
@@ -65,7 +67,8 @@ public class FinanceGeneralLedgerPeriodStatusServiceImpl implements FinanceGener
                         return userId == null ? null : userMapper.selectById(userId);
                     }
                 },
-                financePeriodTransferService
+                financePeriodTransferService,
+                passwordHashService
         );
     }
 

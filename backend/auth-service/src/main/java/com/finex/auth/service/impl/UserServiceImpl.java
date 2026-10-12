@@ -14,10 +14,12 @@ import com.finex.auth.mapper.SystemRoleMapper;
 import com.finex.auth.mapper.SystemRolePermissionMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.auth.AuthAuthorizationDomainSupport;
 import com.finex.auth.service.impl.auth.AuthLoginDomainSupport;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -40,7 +42,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             SystemUserRoleMapper systemUserRoleMapper,
             SystemRoleMapper systemRoleMapper,
             SystemRolePermissionMapper systemRolePermissionMapper,
-            SystemPermissionMapper systemPermissionMapper
+            SystemPermissionMapper systemPermissionMapper,
+            PasswordHashService passwordHashService
     ) {
         this.authAuthorizationDomainSupport = new AuthAuthorizationDomainSupport(
                 userMapper,
@@ -55,7 +58,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 systemRoleMapper,
                 systemRolePermissionMapper,
                 systemPermissionMapper,
-                authAuthorizationDomainSupport
+                authAuthorizationDomainSupport,
+                passwordHashService
         );
     }
 
@@ -63,6 +67,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * 执行登录校验并返回登录结果。
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public LoginVO login(LoginDTO loginDTO) {
         return authLoginDomainSupport.login(loginDTO);
     }

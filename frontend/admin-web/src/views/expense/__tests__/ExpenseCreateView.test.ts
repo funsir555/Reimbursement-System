@@ -1189,10 +1189,10 @@ describe('ExpenseCreateView', () => {
     })
 
     const wrapper = await mountView()
-    const submitButtons = wrapper.findAll('button')
-    expect(submitButtons.length).toBeGreaterThan(0)
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+    expect(submitButton).toBeTruthy()
 
-    await submitButtons[submitButtons.length - 1]!.trigger('click')
+    await submitButton!.trigger('click')
     await flushPromises()
 
     expect(mocks.expenseCreateApi.submit).not.toHaveBeenCalled()
@@ -1218,10 +1218,10 @@ describe('ExpenseCreateView', () => {
     })
 
     const wrapper = await mountView()
-    const submitButtons = wrapper.findAll('button')
-    expect(submitButtons.length).toBeGreaterThan(0)
+    const submitButton = wrapper.findAll('button').find((item) => item.text().includes('提交审批单'))
+    expect(submitButton).toBeTruthy()
 
-    await submitButtons[submitButtons.length - 1]!.trigger('click')
+    await submitButton!.trigger('click')
     await flushPromises()
 
     expect(mocks.elMessage.warning).toHaveBeenCalledWith('请先完善费用明细“费用明细 1”：请先填写【费用说明】')

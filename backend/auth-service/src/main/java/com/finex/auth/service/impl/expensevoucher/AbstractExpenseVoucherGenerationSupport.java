@@ -25,7 +25,6 @@ import com.finex.auth.entity.ExpVoucherPushDocument;
 import com.finex.auth.entity.ExpVoucherPushEntry;
 import com.finex.auth.entity.ExpVoucherSubjectMapping;
 import com.finex.auth.entity.ExpVoucherTemplatePolicy;
-import com.finex.auth.entity.GlAccvouch;
 import com.finex.auth.entity.ProcessDocumentExpenseDetail;
 import com.finex.auth.entity.ProcessDocumentInstance;
 import com.finex.auth.entity.ProcessDocumentTemplate;
@@ -37,7 +36,6 @@ import com.finex.auth.mapper.ExpVoucherPushDocumentMapper;
 import com.finex.auth.mapper.ExpVoucherPushEntryMapper;
 import com.finex.auth.mapper.ExpVoucherSubjectMappingMapper;
 import com.finex.auth.mapper.ExpVoucherTemplatePolicyMapper;
-import com.finex.auth.mapper.GlAccvouchMapper;
 import com.finex.auth.service.impl.expense.ExpenseAmountResolver;
 import com.finex.auth.mapper.ProcessDocumentExpenseDetailMapper;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
@@ -46,6 +44,7 @@ import com.finex.auth.mapper.ProcessExpenseTypeMapper;
 import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.service.FinanceVoucherService;
+import com.finex.auth.service.port.FinanceReferenceQueryPort;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -78,7 +77,6 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
     protected static final String PUSH_STATUS_SUCCESS = "SUCCESS";
     protected static final String PUSH_STATUS_FAILED = "FAILED";
     protected static final String PUSH_STATUS_UNPUSHED = "UNPUSHED";
-    protected static final String PAYMENT_COMPANY_COMPONENT_CODE = "payment-company";
     protected static final String DEFAULT_VOUCHER_TYPE = "GENERAL";
     protected static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     protected static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -114,7 +112,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
     protected final ProcessExpenseTypeMapper expenseTypeMapper;
     protected final SystemCompanyMapper systemCompanyMapper;
     protected final UserMapper userMapper;
-    protected final GlAccvouchMapper glAccvouchMapper;
+    protected final FinanceReferenceQueryPort financeReferenceQueryPort;
     protected final FinanceVoucherService financeVoucherService;
     protected final ObjectMapper objectMapper;
     public static final class Dependencies {
@@ -129,7 +127,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         final ProcessExpenseTypeMapper expenseTypeMapper;
         final SystemCompanyMapper systemCompanyMapper;
         final UserMapper userMapper;
-        final GlAccvouchMapper glAccvouchMapper;
+        final FinanceReferenceQueryPort financeReferenceQueryPort;
         final FinanceVoucherService financeVoucherService;
         final ObjectMapper objectMapper;
 
@@ -145,7 +143,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
                 ProcessExpenseTypeMapper expenseTypeMapper,
                 SystemCompanyMapper systemCompanyMapper,
                 UserMapper userMapper,
-                GlAccvouchMapper glAccvouchMapper,
+                FinanceReferenceQueryPort financeReferenceQueryPort,
                 FinanceVoucherService financeVoucherService,
                 ObjectMapper objectMapper
         ) {
@@ -160,7 +158,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
             this.expenseTypeMapper = expenseTypeMapper;
             this.systemCompanyMapper = systemCompanyMapper;
             this.userMapper = userMapper;
-            this.glAccvouchMapper = glAccvouchMapper;
+            this.financeReferenceQueryPort = financeReferenceQueryPort;
             this.financeVoucherService = financeVoucherService;
             this.objectMapper = objectMapper;
         }
@@ -181,7 +179,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         this.expenseTypeMapper = dependencies.expenseTypeMapper;
         this.systemCompanyMapper = dependencies.systemCompanyMapper;
         this.userMapper = dependencies.userMapper;
-        this.glAccvouchMapper = dependencies.glAccvouchMapper;
+        this.financeReferenceQueryPort = dependencies.financeReferenceQueryPort;
         this.financeVoucherService = dependencies.financeVoucherService;
         this.objectMapper = dependencies.objectMapper;
     }
@@ -201,7 +199,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
             ProcessExpenseTypeMapper expenseTypeMapper,
             SystemCompanyMapper systemCompanyMapper,
             UserMapper userMapper,
-            GlAccvouchMapper glAccvouchMapper,
+            FinanceReferenceQueryPort financeReferenceQueryPort,
             FinanceVoucherService financeVoucherService,
             ObjectMapper objectMapper
     ) {
@@ -217,7 +215,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
                 expenseTypeMapper,
                 systemCompanyMapper,
                 userMapper,
-                glAccvouchMapper,
+                financeReferenceQueryPort,
                 financeVoucherService,
                 objectMapper
         );
@@ -498,19 +496,8 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
         for (OptionSeed seed : ACCOUNT_SEEDS) {
             labels.put(seed.value, seed.label);
         }
-        List<Object> dbCodes = glAccvouchMapper.selectObjs(
-                Wrappers.<GlAccvouch>lambdaQuery()
-                        .select(GlAccvouch::getCcode)
-                        .isNotNull(GlAccvouch::getCcode)
-                        .groupBy(GlAccvouch::getCcode)
-                        .orderByAsc(GlAccvouch::getCcode)
-                        .last("limit 200")
-        );
-        for (Object dbCode : dbCodes) {
-            if (dbCode == null) {
-                continue;
-            }
-            String code = trim(String.valueOf(dbCode));
+        for (String dbCode : financeReferenceQueryPort.listDistinctAccountCodes(200)) {
+            String code = trim(dbCode);
             if (code != null && !labels.containsKey(code)) {
                 labels.put(code, code + " 会计科目");
             }
@@ -552,19 +539,7 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
      * 解析单据公司Id。
      */
     protected String resolveDocumentCompanyId(ProcessDocumentInstance document) {
-        Map<String, Object> formData = readMap(document.getFormDataJson());
-        Map<String, Object> schema = readMap(document.getFormSchemaSnapshotJson());
-        String fieldKey = findBusinessComponentFieldKey(schema, PAYMENT_COMPANY_COMPONENT_CODE);
-        if (fieldKey != null && formData.get(fieldKey) != null) {
-            return trim(String.valueOf(formData.get(fieldKey)));
-        }
-        for (Map.Entry<String, Object> entry : formData.entrySet()) {
-            if (entry.getKey() != null && entry.getKey().startsWith(PAYMENT_COMPANY_COMPONENT_CODE) && entry.getValue() != null) {
-                return trim(String.valueOf(entry.getValue()));
-            }
-        }
-        User submitter = document.getSubmitterUserId() == null ? null : userMapper.selectById(document.getSubmitterUserId());
-        return submitter == null ? null : trim(submitter.getCompanyId());
+        return document == null ? null : trim(document.getCompanyId());
     }
 
     /**
@@ -576,32 +551,6 @@ public abstract class AbstractExpenseVoucherGenerationSupport {
             throw new IllegalStateException("单据未识别到付款公司，无法推送凭证");
         }
         return companyId;
-    }
-
-    /**
-     * 查询业务Component字段Key。
-     */
-    protected String findBusinessComponentFieldKey(Map<String, Object> schema, String componentCode) {
-        Object rawBlocks = schema.get("blocks");
-        if (!(rawBlocks instanceof List<?> blocks)) {
-            return null;
-        }
-        for (Object blockItem : blocks) {
-            if (!(blockItem instanceof Map<?, ?> block)) {
-                continue;
-            }
-            if (!Objects.equals("BUSINESS_COMPONENT", block.get("kind"))) {
-                continue;
-            }
-            Object props = block.get("props");
-            if (!(props instanceof Map<?, ?> propMap)) {
-                continue;
-            }
-            if (Objects.equals(componentCode, propMap.get("componentCode")) && block.get("fieldKey") != null) {
-                return String.valueOf(block.get("fieldKey"));
-            }
-        }
-        return null;
     }
 
     /**

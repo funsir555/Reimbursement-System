@@ -5,6 +5,7 @@
       :can-edit="permissions.canEdit"
       :can-delete="permissions.canDelete"
       :can-assign-permissions="permissions.canAssignPermissions"
+      :can-assign-data-scope="permissions.canAssignDataScope"
       :can-assign-users="permissions.canAssignUsers"
       :roles="state.roles"
       :selected-role="state.selectedRole"
@@ -15,6 +16,7 @@
       :permissions="state.permissions"
       :selected-role-user-ids="state.selectedRoleUserIds"
       :employees="state.employees"
+      :companies="state.companies"
       :is-super-admin-role="state.isSuperAdminRole"
       @select-role="actions.handleRoleSelect($event)"
       @create="actions.openRoleDialog()"
@@ -64,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import type { EmployeeRecord, PermissionTreeNode, RoleRecord } from '@/api'
+import type { CompanyRecord, EmployeeRecord, PermissionTreeNode, RoleRecord } from '@/api'
 import SystemSettingsRolesTab from './SystemSettingsRolesTab.vue'
 
 defineProps<{
@@ -73,6 +75,7 @@ defineProps<{
     canEdit: boolean
     canDelete: boolean
     canAssignPermissions: boolean
+    canAssignDataScope: boolean
     canAssignUsers: boolean
   }
   state: {
@@ -85,6 +88,7 @@ defineProps<{
     permissions: PermissionTreeNode[]
     selectedRoleUserIds: number[]
     employees: EmployeeRecord[]
+    companies: CompanyRecord[]
     isSuperAdminRole: (role?: Pick<RoleRecord, 'roleCode'>) => boolean
     roleDialogVisible: boolean
     roleForm: {

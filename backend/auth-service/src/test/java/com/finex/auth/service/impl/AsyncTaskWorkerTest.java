@@ -43,7 +43,8 @@ class AsyncTaskWorkerTest {
                 notificationService,
                 expenseDocumentService,
                 new ObjectMapper(),
-                downloadStorageService
+                downloadStorageService,
+                org.mockito.Mockito.mock(com.finex.auth.service.impl.expense.ExpenseExportSnapshotService.class)
         );
 
         ExpensePaymentOrderVO item = new ExpensePaymentOrderVO();
@@ -113,7 +114,8 @@ class AsyncTaskWorkerTest {
                 notificationService,
                 expenseDocumentService,
                 new ObjectMapper(),
-                downloadStorageService
+                downloadStorageService,
+                org.mockito.Mockito.mock(com.finex.auth.service.impl.expense.ExpenseExportSnapshotService.class)
         );
 
         ExpensePaymentOrderVO item = new ExpensePaymentOrderVO();
@@ -146,7 +148,8 @@ class AsyncTaskWorkerTest {
                 notificationService,
                 expenseDocumentService,
                 new ObjectMapper(),
-                downloadStorageService
+                downloadStorageService,
+                org.mockito.Mockito.mock(com.finex.auth.service.impl.expense.ExpenseExportSnapshotService.class)
         );
 
         ExpensePaymentOrderVO payingRow = new ExpensePaymentOrderVO();

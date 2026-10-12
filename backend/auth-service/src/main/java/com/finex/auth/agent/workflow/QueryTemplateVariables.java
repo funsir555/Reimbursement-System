@@ -16,6 +16,7 @@ public class QueryTemplateVariables {
 
     public static final String SCOPE_SUBMITTED_BY_ME = "SUBMITTED_BY_ME";
     public static final String SCOPE_ASSIGNED_TO_ME = "ASSIGNED_TO_ME";
+    public static final String SCOPE_VISIBLE = "VISIBLE";
 
     private String rawKeyword;
     private String normalizedKeyword;

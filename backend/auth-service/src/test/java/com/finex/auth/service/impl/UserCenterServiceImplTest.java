@@ -9,6 +9,7 @@ import com.finex.auth.entity.User;
 import com.finex.auth.entity.UserBankAccount;
 import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.support.AsyncTaskSupport;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,14 +41,18 @@ class UserCenterServiceImplTest {
     private DownloadStorageService downloadStorageService;
 
     private UserCenterServiceImpl userCenterService;
+    private PasswordHashService passwordHashService;
 
     @BeforeEach
     void setUp() {
+        passwordHashService = new PasswordHashService();
         userCenterService = new UserCenterServiceImpl(
                 userService,
                 userBankAccountMapper,
                 downloadRecordMapper,
-                downloadStorageService
+                downloadStorageService,
+                passwordHashService,
+                org.mockito.Mockito.mock(com.finex.auth.service.impl.expense.ExpenseExportSnapshotService.class)
         );
     }
 
@@ -130,6 +135,6 @@ class UserCenterServiceImplTest {
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userService).updateById(captor.capture());
-        assertEquals(DigestUtil.md5Hex("new-password"), captor.getValue().getPassword());
+        assertTrue(passwordHashService.matches("new-password", captor.getValue().getPassword()));
     }
 }

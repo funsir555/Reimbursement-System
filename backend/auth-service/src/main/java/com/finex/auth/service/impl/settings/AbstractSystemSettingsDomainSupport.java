@@ -6,7 +6,6 @@
 package com.finex.auth.service.impl.settings;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -53,6 +52,7 @@ import com.finex.auth.mapper.SystemSyncJobDetailMapper;
 import com.finex.auth.mapper.SystemSyncJobMapper;
 import com.finex.auth.mapper.SystemUserRoleMapper;
 import com.finex.auth.mapper.UserMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.AccessControlService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.support.UserDepartmentSupport;
@@ -127,6 +127,7 @@ abstract class AbstractSystemSettingsDomainSupport {
     private final SystemSyncJobDetailMapper systemSyncJobDetailMapper;
     private final ObjectMapper objectMapper;
     private final List<OrganizationSyncAdapter> syncAdapters;
+    private final PasswordHashService passwordHashService;
 
     /**
      * 获取初始化。
@@ -327,7 +328,7 @@ abstract class AbstractSystemSettingsDomainSupport {
 
         User user = new User();
         user.setUsername(dto.getUsername().trim());
-        user.setPassword(DigestUtil.md5Hex("123456"));
+        user.setPassword(passwordHashService.encode("123456"));
         user.setName(dto.getName().trim());
         user.setPhone(trimToNull(dto.getPhone()));
         user.setEmail(normalizeEmail(dto.getEmail()));
@@ -943,14 +944,15 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .collect(Collectors.toMap(SystemDepartment::getDeptCode, SystemDepartment::getId, (left, right) -> left));
 
         for (ExternalEmployeeData externalEmployee : externalEmployees) {
-            MatchResult matchResult = matchEmployee(phoneMap, emailMap, externalEmployee);
-            if (matchResult.conflictMessage != null) {
+            EmployeeSyncMatchPolicy.MatchResult matchResult = EmployeeSyncMatchPolicy.match(
+                    phoneMap, emailMap, normalizePhone(externalEmployee.getPhone()), normalizeEmail(externalEmployee.getEmail()));
+            if (matchResult.conflictMessage() != null) {
                 stats.failedCount.incrementAndGet();
-                appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_FAILED, matchResult.conflictMessage);
+                appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_FAILED, matchResult.conflictMessage());
                 continue;
             }
 
-            User matchedUser = matchResult.user;
+            User matchedUser = matchResult.user();
             if (matchedUser != null && SOURCE_MANUAL.equalsIgnoreCase(matchedUser.getSourceType()) && !isSyncManaged(matchedUser.getSyncManaged())) {
                 stats.skippedCount.incrementAndGet();
                 appendJobDetail(jobId, DETAIL_TYPE_EMPLOYEE, "UPSERT", resolveEmployeeBusinessKey(externalEmployee), DETAIL_STATUS_SKIPPED, "\u624b\u5de5\u7ef4\u62a4\u5458\u5de5\u5df2\u5b58\u5728\uff0c\u5df2\u8df3\u8fc7\u81ea\u52a8\u540c\u6b65\u8986\u76d6");
@@ -967,7 +969,7 @@ abstract class AbstractSystemSettingsDomainSupport {
             User target = matchedUser == null ? new User() : matchedUser;
             if (target.getId() == null) {
                 target.setUsername(buildSyncUsername(externalEmployee, platformCode));
-                target.setPassword(DigestUtil.md5Hex("123456"));
+                target.setPassword(passwordHashService.encode("123456"));
             }
             target.setName(StrUtil.blankToDefault(externalEmployee.getName(), target.getUsername()));
             target.setPhone(trimToNull(externalEmployee.getPhone()));
@@ -1405,25 +1407,6 @@ abstract class AbstractSystemSettingsDomainSupport {
                 .filter(adapter -> platformCode.equalsIgnoreCase(adapter.getPlatformCode()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("\u672a\u627e\u5230 " + resolvePlatformName(platformCode) + " \u540c\u6b65\u9002\u914d\u5668"));
-    }
-
-    private MatchResult matchEmployee(Map<String, List<User>> phoneMap, Map<String, List<User>> emailMap, ExternalEmployeeData externalEmployee) {
-        String phoneKey = normalizePhone(externalEmployee.getPhone());
-        String emailKey = normalizeEmail(externalEmployee.getEmail());
-        List<User> phoneMatches = StrUtil.isBlank(phoneKey) ? List.of() : phoneMap.getOrDefault(phoneKey, List.of());
-        List<User> emailMatches = StrUtil.isBlank(emailKey) ? List.of() : emailMap.getOrDefault(emailKey, List.of());
-        if (phoneMatches.size() > 1) {
-            return MatchResult.conflict("\u624b\u673a\u53f7\u5339\u914d\u5230\u591a\u540d\u5458\u5de5\uff0c\u8bf7\u5148\u6e05\u7406\u91cd\u590d\u624b\u673a\u53f7\u540e\u518d\u540c\u6b65");
-        }
-        if (emailMatches.size() > 1) {
-            return MatchResult.conflict("\u90ae\u7bb1\u5339\u914d\u5230\u591a\u540d\u5458\u5de5\uff0c\u8bf7\u5148\u6e05\u7406\u91cd\u590d\u90ae\u7bb1\u540e\u518d\u540c\u6b65");
-        }
-        User phoneUser = phoneMatches.isEmpty() ? null : phoneMatches.get(0);
-        User emailUser = emailMatches.isEmpty() ? null : emailMatches.get(0);
-        if (phoneUser != null && emailUser != null && !Objects.equals(phoneUser.getId(), emailUser.getId())) {
-            return MatchResult.conflict("\u624b\u673a\u53f7\u4e0e\u90ae\u7bb1\u5339\u914d\u5230\u4e0d\u540c\u5458\u5de5\uff0c\u8bf7\u5148\u5904\u7406\u5458\u5de5\u552f\u4e00\u6027\u540e\u518d\u540c\u6b65");
-        }
-        return MatchResult.success(phoneUser != null ? phoneUser : emailUser);
     }
 
     /**
@@ -2132,21 +2115,4 @@ abstract class AbstractSystemSettingsDomainSupport {
         private final AtomicInteger deletedCount = new AtomicInteger();
     }
 
-    private static class MatchResult {
-        private final User user;
-        private final String conflictMessage;
-
-        private MatchResult(User user, String conflictMessage) {
-            this.user = user;
-            this.conflictMessage = conflictMessage;
-        }
-
-        private static MatchResult success(User user) {
-            return new MatchResult(user, null);
-        }
-
-        private static MatchResult conflict(String conflictMessage) {
-            return new MatchResult(null, conflictMessage);
-        }
-    }
 }

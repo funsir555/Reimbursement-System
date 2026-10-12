@@ -98,6 +98,18 @@ vi.mock('element-plus', async () => ({
     emits: ['update:modelValue', 'change', 'visible-change'],
     template: '<div v-bind="$attrs"><slot /><slot name="empty" /><slot name="footer" /></div>'
   },
+  ElTreeSelect: {
+    name: 'ElTreeSelect',
+    inheritAttrs: false,
+    props: {
+      modelValue: {
+        type: [String, Number, Array, Object],
+        default: ''
+      }
+    },
+    emits: ['update:modelValue', 'change', 'visible-change'],
+    template: '<div v-bind="$attrs"><slot /></div>'
+  },
   ElOption: {
     name: 'ElOption',
     props: {
@@ -107,6 +119,16 @@ vi.mock('element-plus', async () => ({
       }
     },
     template: '<span class="option">{{ label }}</span>'
+  },
+  ElOptionGroup: {
+    name: 'ElOptionGroup',
+    props: {
+      label: {
+        type: String,
+        default: ''
+      }
+    },
+    template: '<div class="option-group"><slot /></div>'
   },
   ElRadioGroup: { name: 'ElRadioGroup', template: '<div><slot /></div>' },
   ElRadio: { name: 'ElRadio', template: '<div><slot /></div>' },
@@ -405,6 +427,7 @@ function createManagedSelectDouble() {
 
 function validPersonalBankForm() {
   return {
+    accountId: 1,
     accountName: '张三',
     accountNo: '6222020202020202',
     accountType: '对私账户',

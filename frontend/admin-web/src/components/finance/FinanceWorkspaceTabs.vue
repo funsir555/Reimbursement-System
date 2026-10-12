@@ -198,6 +198,9 @@ function resolveMonthsForYear(year: number) {
   ) {
     return [] as number[]
   }
+  if (year < props.periodStartYear || year > props.periodEndYear) {
+    return [] as number[]
+  }
 
   const startMonth = year === props.periodStartYear ? props.periodStartMonth : 1
   const endMonth = year === props.periodEndYear ? props.periodEndMonth : 12

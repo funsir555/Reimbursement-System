@@ -404,7 +404,8 @@ class ExpenseApprovalDomainSupportTest {
                 processDocumentInstanceMapper,
                 userMapper,
                 systemDepartmentMapper,
-                new ObjectMapper()
+                new ObjectMapper(),
+                org.mockito.Mockito.mock(ExpenseDocumentReadAuthorization.class)
         );
     }
 

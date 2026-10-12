@@ -1,14 +1,15 @@
 package com.finex.auth.agent.workflow;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.finex.auth.entity.ProcessDocumentInstance;
-import com.finex.auth.entity.ProcessDocumentTask;
-import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
-import com.finex.auth.mapper.ProcessDocumentTaskMapper;
+import com.finex.auth.agent.context.TenantContext;
+import com.finex.auth.service.port.ExpenseAgentQueryPort;
+import com.finex.auth.service.queryauth.QueryAuthorization;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -19,17 +20,20 @@ import static org.mockito.Mockito.when;
 
 class ExpenseDocumentControlledQueryToolTest {
 
-    private final ProcessDocumentInstanceMapper documentMapper = mock(ProcessDocumentInstanceMapper.class);
-    private final ProcessDocumentTaskMapper taskMapper = mock(ProcessDocumentTaskMapper.class);
-    private final ExpenseDocumentControlledQueryTool tool = new ExpenseDocumentControlledQueryTool(documentMapper, taskMapper);
+    private final ExpenseAgentQueryPort expenseQueryPort = mock(ExpenseAgentQueryPort.class);
+    private final ExpenseDocumentControlledQueryTool tool = new ExpenseDocumentControlledQueryTool(expenseQueryPort);
+
+    @AfterEach
+    void clearContext() {
+        TenantContext.clear();
+    }
 
     @Test
-    void queriesPendingTasksAssignedToCurrentUser() {
-        when(taskMapper.selectList(any())).thenReturn(List.of(
-                task("DOC-001"),
-                task("DOC-002")
-        ));
-        when(documentMapper.selectList(any())).thenReturn(List.of(
+    void queriesPendingTasksAssignedToCurrentUserThroughPort() {
+        when(expenseQueryPort.aggregateAuthorizedDocuments(any(), any()))
+                .thenReturn(new ExpenseAgentQueryPort.Aggregate(2L, new BigDecimal("200.00")));
+        when(expenseQueryPort.fingerprintAuthorizedDocuments(any(), any())).thenReturn("test-digest");
+        when(expenseQueryPort.queryAuthorizedDocuments(any(), any())).thenReturn(List.of(
                 document(1L, "DOC-001", "PENDING_APPROVAL"),
                 document(2L, "DOC-002", "PENDING_APPROVAL")
         ));
@@ -45,13 +49,23 @@ class ExpenseDocumentControlledQueryToolTest {
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getRecords()).hasSize(2);
         assertThat(result.getEvidenceRefs()).containsExactly("EXPENSE_DOCUMENT:1", "EXPENSE_DOCUMENT:2");
-        verify(taskMapper).selectList(any(Wrapper.class));
-        verify(documentMapper).selectList(any(Wrapper.class));
+        assertThat(result.getTotalCount()).isEqualTo(2L);
+        assertThat(result.getTotalAmount()).isEqualByComparingTo("200.00");
+
+        ArgumentCaptor<ExpenseAgentQueryPort.Query> queryCaptor = ArgumentCaptor.forClass(ExpenseAgentQueryPort.Query.class);
+        verify(expenseQueryPort).queryAuthorizedDocuments(queryCaptor.capture(), any());
+        assertThat(queryCaptor.getValue().scope()).isEqualTo(ExpenseAgentQueryPort.Scope.ASSIGNED_TO_USER);
+        assertThat(queryCaptor.getValue().companyId()).isNull();
+        assertThat(queryCaptor.getValue().excludeDeleted()).isTrue();
     }
 
     @Test
     void keepsLegacyTemplateScopedToDocumentsSubmittedByCurrentUser() {
-        when(documentMapper.selectList(any())).thenReturn(List.of(document(1L, "DOC-001", "DRAFT")));
+        when(expenseQueryPort.aggregateAuthorizedDocuments(any(), any()))
+                .thenReturn(new ExpenseAgentQueryPort.Aggregate(1L, new BigDecimal("100.00")));
+        when(expenseQueryPort.fingerprintAuthorizedDocuments(any(), any())).thenReturn("test-digest");
+        when(expenseQueryPort.queryAuthorizedDocuments(any(), any()))
+                .thenReturn(List.of(document(1L, "DOC-001", "DRAFT")));
 
         ControlledToolResult result = tool.execute(request(
                 ExpenseDocumentControlledQueryTool.QUERY_TEMPLATE_CODE,
@@ -63,7 +77,9 @@ class ExpenseDocumentControlledQueryToolTest {
 
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getRecords()).hasSize(1);
-        verify(taskMapper, never()).selectList(any(Wrapper.class));
+        ArgumentCaptor<ExpenseAgentQueryPort.Query> queryCaptor = ArgumentCaptor.forClass(ExpenseAgentQueryPort.Query.class);
+        verify(expenseQueryPort).queryAuthorizedDocuments(queryCaptor.capture(), any());
+        assertThat(queryCaptor.getValue().scope()).isEqualTo(ExpenseAgentQueryPort.Scope.SUBMITTED_BY_USER);
     }
 
     @Test
@@ -78,33 +94,44 @@ class ExpenseDocumentControlledQueryToolTest {
 
         assertThat(result.isSuccess()).isFalse();
         assertThat(result.getErrorMessage()).contains("不支持的报销单状态");
-        verify(documentMapper, never()).selectList(any(Wrapper.class));
+        verify(expenseQueryPort, never()).queryAuthorizedDocuments(any(), any());
+    }
+
+    @Test
+    void rejectsIdentityMismatchBeforeCallingExpensePort() {
+        TenantContext.setUserId(2L);
+        TenantContext.setCompanyId("GROUP_HQ");
+
+        ControlledToolResult result = tool.execute(request(
+                ExpenseDocumentControlledQueryTool.QUERY_TEMPLATE_CODE, null));
+
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getErrorMessage()).contains("上下文不一致");
+        verify(expenseQueryPort, never()).queryAuthorizedDocuments(any(), any());
     }
 
     private ToolExecutionRequest request(String templateCode, QueryTemplateVariables variables) {
         return ToolExecutionRequest.builder()
                 .userId(1L)
+                .companyId("GROUP_HQ")
                 .queryTemplateCode(templateCode)
                 .variables(variables)
+                .authorization(new QueryAuthorization(1L, 1L, "expense:agent:query",
+                        List.of(new QueryAuthorization.Grant("SELF", Set.of("GROUP_HQ"), Set.of(1L))),
+                        List.of(new QueryAuthorization.Grant("SELF", Set.of("GROUP_HQ"), Set.of(1L))), null))
                 .build();
     }
 
-    private ProcessDocumentTask task(String documentCode) {
-        ProcessDocumentTask task = new ProcessDocumentTask();
-        task.setDocumentCode(documentCode);
-        task.setAssigneeUserId(1L);
-        task.setStatus("PENDING");
-        return task;
-    }
-
-    private ProcessDocumentInstance document(Long id, String documentCode, String status) {
-        ProcessDocumentInstance document = new ProcessDocumentInstance();
-        document.setId(id);
-        document.setDocumentCode(documentCode);
-        document.setTemplateType("report");
-        document.setDocumentTitle("测试报销单");
-        document.setTotalAmount(new BigDecimal("100.00"));
-        document.setStatus(status);
-        return document;
+    private ExpenseAgentQueryPort.DocumentView document(Long id, String documentCode, String status) {
+        return new ExpenseAgentQueryPort.DocumentView(
+                id,
+                documentCode,
+                "测试报销单",
+                null,
+                new BigDecimal("100.00"),
+                status,
+                "测试模板",
+                null
+        );
     }
 }

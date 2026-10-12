@@ -12,6 +12,10 @@ public class FinanceDetailLedgerRowVO {
 
     private String rowType;
 
+    private String rootSubjectCode;
+
+    private String rootSubjectName;
+
     private String subjectCode;
 
     private String subjectName;

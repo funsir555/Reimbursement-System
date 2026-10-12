@@ -40,6 +40,7 @@ class ExpenseDocumentSubmitBootstrapSupport {
     private final UserMapper userMapper;
     private final ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     private final ExpenseManualApproverPreviewSupport expenseManualApproverPreviewSupport;
+    private final ExpenseDocumentCompanyResolver companyResolver;
 
     ExpenseDocumentSubmitResultVO submitDocument(Long userId, String username, ExpenseDocumentSubmitDTO dto) {
         String templateCode = dto == null ? null : dto.getTemplateCode();
@@ -93,6 +94,9 @@ class ExpenseDocumentSubmitBootstrapSupport {
             instance.setApprovalFlowCode(template.getApprovalFlow());
             instance.setFlowName(template.getFlowName());
             instance.setSubmitterUserId(userId);
+            instance.setCompanyId(companyResolver.resolve(
+                    formDesign == null ? support.defaultSchema() : support.readSchema(formDesign.getSchemaJson()),
+                    formData, currentUser));
             instance.setSubmitterName(submitterDisplayName);
             instance.setDocumentTitle(documentTitle);
             instance.setDocumentReason(expenseDocumentMetadataSupport.resolveDocumentReason(template, formData));
@@ -181,6 +185,9 @@ class ExpenseDocumentSubmitBootstrapSupport {
         instance.setApprovalFlowCode(template.getApprovalFlow());
         instance.setFlowName(template.getFlowName());
         instance.setSubmitterUserId(userId);
+        instance.setCompanyId(companyResolver.resolve(
+                formDesign == null ? support.defaultSchema() : support.readSchema(formDesign.getSchemaJson()),
+                formData, currentUser));
         instance.setSubmitterName(submitterDisplayName);
         instance.setDocumentTitle(documentTitle);
         instance.setDocumentReason(expenseDocumentMetadataSupport.resolveDocumentReason(template, formData));
@@ -243,4 +250,5 @@ class ExpenseDocumentSubmitBootstrapSupport {
         result.setStatus(instance.getStatus());
         return result;
     }
+
 }

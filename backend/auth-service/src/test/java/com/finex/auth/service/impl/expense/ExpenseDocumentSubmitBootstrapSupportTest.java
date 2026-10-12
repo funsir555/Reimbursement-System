@@ -1,8 +1,11 @@
 package com.finex.auth.service.impl.expense;
 
 import com.finex.auth.dto.ExpenseDocumentSubmitResultVO;
+import com.finex.auth.dto.ExpenseDocumentSubmitDTO;
 import com.finex.auth.dto.ExpenseDocumentUpdateDTO;
 import com.finex.auth.entity.ProcessDocumentInstance;
+import com.finex.auth.entity.ProcessDocumentTemplate;
+import com.finex.auth.entity.User;
 import com.finex.auth.mapper.ProcessDocumentInstanceMapper;
 import com.finex.auth.mapper.UserMapper;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,40 @@ class ExpenseDocumentSubmitBootstrapSupportTest {
     @Mock private UserMapper userMapper;
     @Mock private ExpenseWorkflowRuntimeSupport expenseWorkflowRuntimeSupport;
     @Mock private ExpenseManualApproverPreviewSupport expenseManualApproverPreviewSupport;
+    @Mock private ExpenseDocumentCompanyResolver companyResolver;
+
+    @Test
+    void createDraftCapturesCompanyAtCreationInsteadOfFollowingUserTransfers() {
+        ExpenseDocumentSubmitBootstrapSupport bootstrapSupport = new ExpenseDocumentSubmitBootstrapSupport(
+                support, expenseDocumentMetadataSupport, expenseDocumentActionLogSupport,
+                mutationApplySupport, processDocumentInstanceMapper, userMapper,
+                expenseWorkflowRuntimeSupport, expenseManualApproverPreviewSupport, companyResolver
+        );
+        ExpenseDocumentSubmitDTO dto = new ExpenseDocumentSubmitDTO();
+        dto.setTemplateCode("TPL-1");
+        ProcessDocumentTemplate template = new ProcessDocumentTemplate();
+        template.setTemplateCode("TPL-1");
+        User submitter = new User();
+        submitter.setCompanyId("COMPANY-A");
+        when(support.requireTemplate("TPL-1")).thenReturn(template);
+        when(support.normalizeExpenseDetails(null)).thenReturn(List.of());
+        when(userMapper.selectById(1L)).thenReturn(submitter);
+        when(companyResolver.resolve(any(), any(), any())).thenReturn("COMPANY-A");
+        when(support.buildDocumentCode()).thenReturn("DOC-NEW");
+        when(support.requireDocument("DOC-NEW")).thenAnswer(invocation -> {
+            org.mockito.ArgumentCaptor<ProcessDocumentInstance> captor =
+                    org.mockito.ArgumentCaptor.forClass(ProcessDocumentInstance.class);
+            verify(processDocumentInstanceMapper).insert(captor.capture());
+            assertEquals("COMPANY-A", captor.getValue().getCompanyId());
+            submitter.setCompanyId("COMPANY-B");
+            assertEquals("COMPANY-A", captor.getValue().getCompanyId());
+            return captor.getValue();
+        });
+
+        ProcessDocumentInstance draft = bootstrapSupport.createDraftDocument(1L, "tester", dto);
+
+        assertEquals("COMPANY-A", draft.getCompanyId());
+    }
 
     @Test
     void saveDraftDocumentUsesMutationApplyOwnerAndReloadsDocument() {
@@ -42,7 +79,8 @@ class ExpenseDocumentSubmitBootstrapSupportTest {
                 processDocumentInstanceMapper,
                 userMapper,
                 expenseWorkflowRuntimeSupport,
-                expenseManualApproverPreviewSupport
+                expenseManualApproverPreviewSupport,
+                companyResolver
         );
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setDocumentCode("DOC-1");
@@ -71,7 +109,8 @@ class ExpenseDocumentSubmitBootstrapSupportTest {
                 processDocumentInstanceMapper,
                 userMapper,
                 expenseWorkflowRuntimeSupport,
-                expenseManualApproverPreviewSupport
+                expenseManualApproverPreviewSupport,
+                companyResolver
         );
         ProcessDocumentInstance instance = new ProcessDocumentInstance();
         instance.setId(10L);

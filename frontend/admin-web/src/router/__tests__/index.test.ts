@@ -43,6 +43,7 @@ vi.mock('@/stores/financeCompany', () => ({
 
 import router from '@/router'
 import ArchiveAgentView from '@/views/archives/ArchiveAgentView.vue'
+import AgentToolConfigView from '@/views/agent/AgentToolConfigView.vue'
 import ExpenseDocumentBatchPrintView from '@/views/expense/ExpenseDocumentBatchPrintView.vue'
 import ExpensePaymentOrdersView from '@/views/expense/ExpensePaymentOrdersView.vue'
 import FinanceOpeningBalanceView from '@/views/finance/FinanceOpeningBalanceView.vue'
@@ -150,6 +151,14 @@ describe('router process management routes', () => {
 
     const module = await loader!()
     expect(module.default).toBe(ArchiveAgentView)
+  })
+
+  it('opens tool configuration as a separate workbench page', async () => {
+    const route = router.getRoutes().find((item) => item.name === 'agent-tool-config')
+    expect(route?.path).toBe('/agent/workbench/:id/tools')
+    expect(route?.meta.permissionCodes).toEqual(['agent:workbench:view', 'agents:view'])
+    const loader = route?.components?.default as (() => Promise<{ default: unknown }>) | undefined
+    expect((await loader!()).default).toBe(AgentToolConfigView)
   })
 
   it('registers opening balance, post voucher, close ledger, period transfer and ledger reports as real views', async () => {

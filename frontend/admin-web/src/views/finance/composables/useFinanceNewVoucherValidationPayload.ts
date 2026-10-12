@@ -10,8 +10,8 @@ import {
   resolveVoucherBalanceGap,
   resolveVoucherEffectiveCredit,
   resolveVoucherEffectiveDebit,
-  sumVoucherEffectiveCredit,
-  sumVoucherEffectiveDebit
+  sumVoucherSignedCredit,
+  sumVoucherSignedDebit
 } from '@/utils/financeVoucherAmounts'
 
 type VoucherFormStateLike = {
@@ -43,8 +43,8 @@ type UseFinanceNewVoucherValidationPayloadOptions = {
 
 export function useFinanceNewVoucherValidationPayload(options: UseFinanceNewVoucherValidationPayloadOptions) {
   const effectiveRows = computed(() => options.form.entries.filter((item) => !isEntryBlank(item)))
-  const totalDebit = computed(() => sumVoucherEffectiveDebit(effectiveRows.value))
-  const totalCredit = computed(() => sumVoucherEffectiveCredit(effectiveRows.value))
+  const totalDebit = computed(() => sumVoucherSignedDebit(effectiveRows.value))
+  const totalCredit = computed(() => sumVoucherSignedCredit(effectiveRows.value))
   const balanceGap = computed(() => resolveVoucherBalanceGap(effectiveRows.value))
 
   function buildPayload(includeBlankRows = false): FinanceVoucherSavePayload {

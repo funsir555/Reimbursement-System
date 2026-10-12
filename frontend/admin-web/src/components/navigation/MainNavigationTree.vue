@@ -5,23 +5,17 @@
       :index="node.index"
       :class="resolveLevelClass(level)"
     >
-      <span v-if="level === 1 && node.iconKey === 'Agent'" class="flex items-center gap-2">
-        <pixel-duck-bot-icon class="h-[18px] w-[18px] text-amber-600" />
+      <el-icon v-if="level === 1 && node.iconKey"><component :is="resolveMenuIcon(node.iconKey)" /></el-icon>
+      <el-badge
+        v-if="node.badgeCount && node.badgeCount > 0"
+        :value="node.badgeCount"
+        :max="9999"
+        class="navigation-node-badge"
+        :data-testid="`navigation-badge-${node.key}`"
+      >
         <span>{{ node.title }}</span>
-      </span>
-      <template v-else>
-        <el-icon v-if="level === 1 && node.iconKey"><component :is="resolveMenuIcon(node.iconKey)" /></el-icon>
-        <el-badge
-          v-if="node.badgeCount && node.badgeCount > 0"
-          :value="node.badgeCount"
-          :max="9999"
-          class="navigation-node-badge"
-          :data-testid="`navigation-badge-${node.key}`"
-        >
-          <span>{{ node.title }}</span>
-        </el-badge>
-        <span v-else>{{ node.title }}</span>
-      </template>
+      </el-badge>
+      <span v-else>{{ node.title }}</span>
     </el-menu-item>
 
     <el-sub-menu
@@ -61,9 +55,8 @@
 </template>
 
 <script setup lang="ts">
-import { House, Wallet, Coin, FolderOpened, Setting } from '@element-plus/icons-vue'
+import { House, Wallet, Coin, Cpu, FolderOpened, Setting } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import type { NavigationIconKey, NavigationMenuNode } from '@/router/navigation-config'
 
 defineOptions({
@@ -83,12 +76,13 @@ const MENU_ICON_MAP = {
   House,
   Wallet,
   Coin,
+  Cpu,
   FolderOpened,
   Setting
-} satisfies Record<Exclude<NavigationIconKey, 'Agent'>, unknown>
+} satisfies Record<NavigationIconKey, unknown>
 
 function resolveMenuIcon(iconKey?: NavigationIconKey) {
-  if (!iconKey || iconKey === 'Agent') {
+  if (!iconKey) {
     return null
   }
   return MENU_ICON_MAP[iconKey]

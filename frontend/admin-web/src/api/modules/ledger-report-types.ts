@@ -86,8 +86,10 @@ export interface FinanceBalanceSheetRow {
 
 export interface FinanceDetailLedgerRow {
   ledgerKind: string
-  groupKey: string
-  rowType: 'OPENING' | 'ENTRY' | 'TOTAL' | 'ENDING'
+  groupKey?: string
+  rowType: 'OPENING' | 'ENTRY' | 'TOTAL' | 'ENDING' | 'CARRY_FORWARD'
+  rootSubjectCode?: string
+  rootSubjectName?: string
   subjectCode: string
   subjectName: string
   assistLabel?: string

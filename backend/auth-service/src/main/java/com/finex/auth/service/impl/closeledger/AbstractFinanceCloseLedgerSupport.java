@@ -28,7 +28,6 @@ import com.finex.auth.mapper.SystemCompanyMapper;
 import com.finex.auth.mapper.UserMapper;
 import com.finex.auth.support.FinanceBalanceRowSupport;
 import com.finex.auth.support.FinanceModuleEnableSupport;
-import com.finex.auth.support.FinanceVoucherAmountSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -1623,10 +1622,10 @@ abstract class AbstractFinanceCloseLedgerSupport {
 
         static MovementTotals fromPostedVoucher(GlAccvouch row) {
             return new MovementTotals(
-                    scaleMoney(FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc())),
-                    scaleMoney(FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc())),
-                    scaleMoney(FinanceVoucherAmountSupport.effectiveDebit(row.getMdF(), row.getMcF())),
-                    scaleMoney(FinanceVoucherAmountSupport.effectiveCredit(row.getMdF(), row.getMcF())),
+                    scaleMoney(row.getMd()),
+                    scaleMoney(row.getMc()),
+                    scaleMoney(row.getMdF()),
+                    scaleMoney(row.getMcF()),
                     scaleQty(row.getNdS()),
                     scaleQty(row.getNcS())
             );

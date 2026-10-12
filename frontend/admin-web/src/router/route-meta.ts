@@ -574,6 +574,12 @@ export const ROUTE_META_REGISTRY = {
     description: 'Dify / Coze 风格的 Agent 低代码流程编排画布',
     permissionCodes: ['agent:workbench:view', 'agents:view']
   }),
+  'agent-tool-config': routeMeta({
+    title: '工具配置',
+    tabTitle: '工具配置',
+    description: 'Agent 受控工具绑定与单工具测试',
+    permissionCodes: ['agent:workbench:view', 'agents:view']
+  }),
   'agent-chat': routeMeta({
     title: 'FinWork',
     tabTitle: 'FinWork',

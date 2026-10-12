@@ -516,7 +516,8 @@ class ExpensePaymentDomainSupportTest {
                 financeVendorMapper,
                 userBankAccountMapper,
                 expenseAttachmentService,
-                new ObjectMapper()
+                new ObjectMapper(),
+                org.mockito.Mockito.mock(ExpenseDocumentReadAuthorization.class)
         );
     }
 }

@@ -42,6 +42,7 @@ desktop.ini
 *.swp
 *~
 download-*.xlsx
+/tmp-*-token.txt
 
 # 本地备份与下载产物
 backend/sql/backup/

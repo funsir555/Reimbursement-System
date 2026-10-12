@@ -142,8 +142,8 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
 
         FinanceLedgerReportMetaVO meta = new FinanceLedgerReportMetaVO();
         meta.setCompanyOptions(contextMeta.getCompanyOptions());
-        meta.setDepartmentOptions(loadEnabledDepartments().stream().map(this::toDepartmentOption).toList());
-        meta.setEmployeeOptions(loadEnabledUsers().stream().map(this::toEmployeeOption).toList());
+        meta.setDepartmentOptions(loadEnabledDepartments().stream().filter(item -> resolvedCompanyId.equals(item.getCompanyId())).map(this::toDepartmentOption).toList());
+        meta.setEmployeeOptions(loadEnabledUsers().stream().filter(item -> resolvedCompanyId.equals(item.getCompanyId())).map(this::toEmployeeOption).toList());
         meta.setMakerOptions(loadMakerOptions(resolvedCompanyId, effectiveYear, effectivePeriod));
         meta.setVoucherTypeOptions(toOptions(VOUCHER_TYPE_SEEDS));
         meta.setAccountOptions(loadAccountOptions(resolvedCompanyId));
@@ -170,12 +170,15 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     }
 
     public FinanceLedgerReportPageVO<FinanceGeneralLedgerSectionVO> queryGeneralLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false, false);
+        QueryContext context = normalizeQuery(dto, false, true);
         return buildLedgerPage(loadGeneralLedgerSections(context), context.page(), context.pageSize());
     }
 
     public FinanceLedgerReportPageVO<FinanceDetailLedgerRowVO> queryDetailLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, true, false);
+        QueryContext context = normalizeQuery(dto, true, true);
+        if (isOrdinaryDetail(dto)) {
+            return ordinaryDetailBuilder(context).page(context.page(), context.pageSize());
+        }
         return buildLedgerPage(loadDetailLedgerRows(context), context.page(), context.pageSize());
     }
 
@@ -190,13 +193,36 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     }
 
     public byte[] exportGeneralLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, false, false);
+        QueryContext context = normalizeQuery(dto, false, true);
         return exportGeneralLedgerWorkbook(context, loadGeneralLedgerSections(context));
     }
 
     public byte[] exportDetailLedger(FinanceLedgerReportQueryDTO dto) {
-        QueryContext context = normalizeQuery(dto, true, false);
+        QueryContext context = normalizeQuery(dto, true, true);
+        if (isOrdinaryDetail(dto)) {
+            return exportDetailLedgerWorkbook(context, ordinaryDetailBuilder(context).allRows());
+        }
         return exportDetailLedgerWorkbook(context, loadDetailLedgerRows(context));
+    }
+
+    private boolean isOrdinaryDetail(FinanceLedgerReportQueryDTO dto) {
+        String kind = dto == null ? null : trimToNull(dto.getLedgerKind());
+        return kind == null || LEDGER_KIND_DETAIL.equalsIgnoreCase(kind);
+    }
+
+    private DetailLedgerReportBuilder ordinaryDetailBuilder(QueryContext context) {
+        List<GlAccsum> openings = glAccsumMapper.selectList(Wrappers.<GlAccsum>lambdaQuery()
+                .eq(GlAccsum::getCompanyId, context.companyId())
+                .eq(GlAccsum::getIyear, context.iyearFrom())
+                .eq(GlAccsum::getIperiod, context.iperiodFrom()));
+        LedgerAssistLabels labels = context.balanceAssistDisplay() == null
+                ? null : loadBalanceAssistLabels(context.companyId());
+        return new DetailLedgerReportBuilder(loadSelectableAccountMap(context.companyId()), openings,
+                loadVoucherRowsForContext(context),
+                YearMonth.of(context.iyearFrom(), context.iperiodFrom()),
+                YearMonth.of(context.iyearTo(), context.iperiodTo()),
+                context.accountCodeFrom(), context.accountCodeTo(),
+                row -> labels == null ? "" : labels.format(LedgerAssistLabels.Key.from(row), context.balanceAssistDisplay()));
     }
 
     public byte[] exportSequenceLedger(FinanceLedgerReportQueryDTO dto) {
@@ -204,7 +230,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         return exportSequenceLedgerWorkbook(context, loadSequenceLedgerRows(context));
     }
 
-    private QueryContext normalizeQuery(FinanceLedgerReportQueryDTO dto, boolean detailLedger, boolean balanceSheet) {
+    private QueryContext normalizeQuery(FinanceLedgerReportQueryDTO dto, boolean detailLedger, boolean periodRange) {
         FinanceLedgerReportQueryDTO source = dto == null ? new FinanceLedgerReportQueryDTO() : dto;
         String companyId = trimToNull(source.getCompanyId());
         if (companyId == null) {
@@ -212,15 +238,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         }
         validateCompany(companyId);
         requireGeneralLedgerEnabled(companyId);
-        PeriodRange periodRange = balanceSheet
-                ? normalizeBalancePeriodRange(source, companyId)
+        PeriodRange selectedPeriod = periodRange
+                ? normalizePeriodRange(source, companyId)
                 : normalizeSinglePeriod(source);
         String ledgerKind = detailLedger ? normalizeLedgerKind(source.getLedgerKind()) : null;
-        if (Objects.equals(ledgerKind, LEDGER_KIND_PROJECT)
-                && trimToNull(source.getCitemClass()) == null
-                && trimToNull(source.getCitemId()) == null) {
-            throw new IllegalArgumentException("项目明细账至少需要选择项目分类或项目");
-        }
         boolean includeUnposted = Boolean.TRUE.equals(source.getIncludeUnposted());
         int page = source.getPage() == null || source.getPage() < 1 ? DEFAULT_PAGE : source.getPage();
         int pageSize = source.getPageSize() == null || source.getPageSize() < 1
@@ -228,13 +249,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 : Math.min(source.getPageSize(), 500);
         return new QueryContext(
                 companyId,
-                periodRange.to().getYear(),
-                periodRange.to().getMonthValue(),
-                periodRange.from().getYear(),
-                periodRange.from().getMonthValue(),
-                periodRange.to().getYear(),
-                periodRange.to().getMonthValue(),
-                balanceSheet,
+                selectedPeriod.from().getYear(),
+                selectedPeriod.from().getMonthValue(),
+                selectedPeriod.to().getYear(),
+                selectedPeriod.to().getMonthValue(),
                 ledgerKind,
                 trimToNull(source.getAccountCodeFrom()),
                 trimToNull(source.getAccountCodeTo()),
@@ -267,7 +285,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         return new PeriodRange(period, period);
     }
 
-    private PeriodRange normalizeBalancePeriodRange(FinanceLedgerReportQueryDTO source, String companyId) {
+    private PeriodRange normalizePeriodRange(FinanceLedgerReportQueryDTO source, String companyId) {
         boolean hasRangeValue = source.getIyearFrom() != null
                 || source.getIperiodFrom() != null
                 || source.getIyearTo() != null
@@ -278,7 +296,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             if (source.getIyear() == null) {
                 throw new IllegalArgumentException("会计年度不能为空");
             }
-            validateBalanceYear(source.getIyear());
+            validatePeriodYear(source.getIyear());
             YearMonth legacyPeriod = normalizeSinglePeriod(source).from();
             from = legacyPeriod;
             to = legacyPeriod;
@@ -287,19 +305,19 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                     || source.getIperiodFrom() == null
                     || source.getIyearTo() == null
                     || source.getIperiodTo() == null) {
-                throw new IllegalArgumentException("余额表期间范围不完整");
+                throw new IllegalArgumentException("会计期间范围不完整");
             }
-            validateBalanceYear(source.getIyearFrom());
-            validateBalanceYear(source.getIyearTo());
-            validateBalanceMonth(source.getIperiodFrom());
-            validateBalanceMonth(source.getIperiodTo());
+            validatePeriodYear(source.getIyearFrom());
+            validatePeriodYear(source.getIyearTo());
+            validatePeriodMonth(source.getIperiodFrom());
+            validatePeriodMonth(source.getIperiodTo());
             from = YearMonth.of(source.getIyearFrom(), source.getIperiodFrom());
             to = YearMonth.of(source.getIyearTo(), source.getIperiodTo());
         }
-        validateBalanceYear(from.getYear());
-        validateBalanceYear(to.getYear());
+        validatePeriodYear(from.getYear());
+        validatePeriodYear(to.getYear());
         if (from.isAfter(to)) {
-            throw new IllegalArgumentException("余额表期间起不能晚于期间止");
+            throw new IllegalArgumentException("会计期间起不能晚于期间止");
         }
 
         FinanceContextMetaVO contextMeta = voucherContextSupport.getMeta(null);
@@ -334,15 +352,15 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         return new PeriodRange(from, to);
     }
 
-    private void validateBalanceYear(Integer year) {
+    private void validatePeriodYear(Integer year) {
         if (year == null || year < 1990 || year > 2090) {
-            throw new IllegalArgumentException("余额表期间年份不合法");
+            throw new IllegalArgumentException("会计期间年份不合法");
         }
     }
 
-    private void validateBalanceMonth(Integer month) {
+    private void validatePeriodMonth(Integer month) {
         if (month == null || month < 1 || month > 12) {
-            throw new IllegalArgumentException("余额表期间月份不合法");
+            throw new IllegalArgumentException("会计期间月份不合法");
         }
     }
 
@@ -390,7 +408,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
 
     private List<FinanceBalanceSheetRowVO> loadBalanceSheetRows(QueryContext context) {
         Map<String, FinanceAccountSubject> subjectMap = loadSelectableAccountMap(context.companyId());
-        Map<String, BalanceAccumulator> accumulators = new LinkedHashMap<>();
+        Map<String, BalanceReportAccumulator> accumulators = new LinkedHashMap<>();
         LambdaQueryWrapper<GlAccsum> balanceQuery = Wrappers.<GlAccsum>lambdaQuery()
                 .eq(GlAccsum::getCompanyId, context.companyId());
         applyPeriodRange(balanceQuery, context, GlAccsum::getIyear, GlAccsum::getIperiod);
@@ -403,9 +421,9 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                     if (subject == null) {
                         return;
                     }
-                    BalanceAccumulator accumulator = accumulators.computeIfAbsent(
+                    BalanceReportAccumulator accumulator = accumulators.computeIfAbsent(
                             subject.getSubjectCode(),
-                            unused -> new BalanceAccumulator(subject)
+                            unused -> new BalanceReportAccumulator(subject)
                     );
                     if (isPeriod(item.getIyear(), item.getIperiod(), context.iyearFrom(), context.iperiodFrom())) {
                         accumulator.addOpeningBase(item.getMb());
@@ -416,7 +434,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                     }
                 });
 
-        Map<BalanceAssistKey, BalanceAccumulator> assistAccumulators = new LinkedHashMap<>();
+        Map<LedgerAssistLabels.Key, BalanceReportAccumulator> assistAccumulators = new LinkedHashMap<>();
         if (context.balanceAssistDisplay() != null) {
             LambdaQueryWrapper<GlAccass> assistBalanceQuery = Wrappers.<GlAccass>lambdaQuery()
                     .eq(GlAccass::getCompanyId, context.companyId());
@@ -431,10 +449,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                         if (subject == null) {
                             return;
                         }
-                        BalanceAssistKey key = BalanceAssistKey.from(item);
-                        BalanceAccumulator accumulator = assistAccumulators.computeIfAbsent(
+                        LedgerAssistLabels.Key key = LedgerAssistLabels.Key.from(item);
+                        BalanceReportAccumulator accumulator = assistAccumulators.computeIfAbsent(
                                 key,
-                                unused -> new BalanceAccumulator(subject)
+                                unused -> new BalanceReportAccumulator(subject)
                         );
                         if (isPeriod(item.getIyear(), item.getIperiod(), context.iyearFrom(), context.iperiodFrom())) {
                             accumulator.addOpeningBase(item.getMb());
@@ -452,11 +470,14 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 if (subject == null) {
                     return;
                 }
-                accumulators.computeIfAbsent(subject.getSubjectCode(), unused -> new BalanceAccumulator(subject))
-                        .addUnposted(row);
-                if (context.balanceAssistDisplay() != null && hasAssistValues(row)) {
-                    BalanceAssistKey key = BalanceAssistKey.from(row);
-                    assistAccumulators.computeIfAbsent(key, unused -> new BalanceAccumulator(subject))
+                BalanceReportAccumulator.addUnpostedHierarchy(row, subjectMap, accumulators,
+                        current -> matchesSubjectRange(current.getSubjectCode(), context)
+                                && matchesSubjectLevel(current.getSubjectCode(), current, context));
+                if (context.balanceAssistDisplay() != null && hasAssistValues(row)
+                        && matchesSubjectRange(subject.getSubjectCode(), context)
+                        && matchesSubjectLevel(subject.getSubjectCode(), subject, context)) {
+                    LedgerAssistLabels.Key key = LedgerAssistLabels.Key.from(row);
+                    assistAccumulators.computeIfAbsent(key, unused -> new BalanceReportAccumulator(subject))
                             .addUnposted(row);
                 }
             });
@@ -472,7 +493,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 assistAccumulators,
                 context
         );
-        Map<String, FinanceBalanceSheetRowVO> categoryTotals = buildBalanceCategoryTotals(subjectRows).stream()
+        Map<String, FinanceBalanceSheetRowVO> categoryTotals = BalanceCategoryTotalSupport.build(subjectRows, subjectMap).stream()
                 .collect(Collectors.toMap(
                         row -> resolveBalanceCategory(row.getSubjectCategory()),
                         row -> row,
@@ -496,13 +517,13 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     }
 
     private Map<String, List<FinanceBalanceSheetRowVO>> buildBalanceAssistRows(
-            Map<BalanceAssistKey, BalanceAccumulator> accumulators,
+            Map<LedgerAssistLabels.Key, BalanceReportAccumulator> accumulators,
             QueryContext context
     ) {
         if (accumulators.isEmpty()) {
             return Map.of();
         }
-        BalanceAssistLabels labels = loadBalanceAssistLabels(context.companyId());
+        LedgerAssistLabels labels = loadBalanceAssistLabels(context.companyId());
         return accumulators.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .map(entry -> {
@@ -519,58 +540,6 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
-    }
-
-    private List<FinanceBalanceSheetRowVO> buildBalanceCategoryTotals(List<FinanceBalanceSheetRowVO> subjectRows) {
-        Map<String, BalanceTotalAccumulator> totals = new LinkedHashMap<>();
-        for (FinanceBalanceSheetRowVO row : subjectRows) {
-            if (!isTopLevelBalanceSubject(row)) {
-                continue;
-            }
-            String category = resolveBalanceCategory(row.getSubjectCategory());
-            BalanceTotalAccumulator total = totals.computeIfAbsent(category, unused -> new BalanceTotalAccumulator());
-            total.addRow(row);
-        }
-        return List.of(
-                toCategoryTotalRow("ASSET", "资产合计", totals.get("ASSET")),
-                toCategoryTotalRow("LIABILITY", "负债合计", totals.get("LIABILITY")),
-                toCategoryTotalRow("EQUITY", "权益合计", totals.get("EQUITY")),
-                toCategoryTotalRow("COST", "成本合计", totals.get("COST")),
-                toCategoryTotalRow("PROFIT", "损益合计", totals.get("PROFIT"))
-        );
-    }
-
-    private boolean isTopLevelBalanceSubject(FinanceBalanceSheetRowVO row) {
-        return row != null
-                && "SUBJECT".equals(row.getRowType())
-                && Objects.equals(row.getSubjectLevel(), 1);
-    }
-
-    private FinanceBalanceSheetRowVO toCategoryTotalRow(
-            String category,
-            String label,
-            BalanceTotalAccumulator accumulator
-    ) {
-        FinanceBalanceSheetRowVO row = new FinanceBalanceSheetRowVO();
-        row.setRowType("CATEGORY_TOTAL");
-        row.setSubjectName(label);
-        row.setSubjectCategory(category);
-        if (accumulator != null) {
-            row.setBeginDebit(accumulator.beginDebit());
-            row.setBeginCredit(accumulator.beginCredit());
-            row.setPeriodDebit(normalizeMoney(accumulator.periodDebit()));
-            row.setPeriodCredit(normalizeMoney(accumulator.periodCredit()));
-            row.setEndDebit(accumulator.endDebit());
-            row.setEndCredit(accumulator.endCredit());
-        } else {
-            row.setBeginDebit(ZERO);
-            row.setBeginCredit(ZERO);
-            row.setPeriodDebit(ZERO);
-            row.setPeriodCredit(ZERO);
-            row.setEndDebit(ZERO);
-            row.setEndCredit(ZERO);
-        }
-        return row;
     }
 
     private String resolveBalanceCategory(String category) {
@@ -630,7 +599,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 || trimToNull(row.getCpersonId()) != null;
     }
 
-    private BalanceAssistLabels loadBalanceAssistLabels(String companyId) {
+    private LedgerAssistLabels loadBalanceAssistLabels(String companyId) {
         Map<String, FinanceVoucherOptionVO> customers = loadEnabledCustomerMap(companyId).values().stream()
                 .collect(Collectors.toMap(
                         FinanceCustomer::getCCusCode,
@@ -663,18 +632,18 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                         (left, right) -> left,
                         LinkedHashMap::new
                 ));
-        return new BalanceAssistLabels(customers, suppliers, projects, projectClasses, departments, employees);
+        return new LedgerAssistLabels(customers, suppliers, projects, projectClasses, departments, employees);
     }
 
-    private FinanceBalanceSheetRowVO toBalanceRow(BalanceAccumulator accumulator) {
+    private FinanceBalanceSheetRowVO toBalanceRow(BalanceReportAccumulator accumulator) {
         FinanceBalanceSheetRowVO row = new FinanceBalanceSheetRowVO();
         row.setRowType("SUBJECT");
         row.setSubjectCode(accumulator.subject().getSubjectCode());
         row.setSubjectName(accumulator.subject().getSubjectName());
         row.setSubjectLevel(accumulator.subject().getSubjectLevel());
         row.setSubjectCategory(resolveBalanceCategory(accumulator.subject()));
-        BalanceDisplay opening = splitSignedAmount(accumulator.subject().getBalanceDirection(), accumulator.beginSigned());
-        BalanceDisplay ending = splitSignedAmount(accumulator.subject().getBalanceDirection(), accumulator.endSigned());
+        BalanceDisplay opening = splitSignedAmount(accumulator.beginSigned());
+        BalanceDisplay ending = splitSignedAmount(accumulator.endSigned());
         row.setBeginDebit(opening.debit());
         row.setBeginCredit(opening.credit());
         row.setPeriodDebit(normalizeMoney(accumulator.periodDebit()));
@@ -712,10 +681,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             FinanceGeneralLedgerSectionVO section = new FinanceGeneralLedgerSectionVO();
             section.setSubjectCode(subject.getSubjectCode());
             section.setSubjectName(subject.getSubjectName());
-            List<FinanceDetailLedgerRowVO> detailRows = buildLedgerRows(groupKey, rows, subject, opening, context);
+            List<FinanceDetailLedgerRowVO> detailRows = buildLedgerRows(groupKey, rows, subject, opening, context, null);
             section.setRows(detailRows);
             section.setRowCount(detailRows.size());
-            BalanceDisplay begin = splitSignedAmount(subject.getBalanceDirection(), opening.amount());
+            BalanceDisplay begin = splitSignedAmount(opening.amount());
             BalanceDisplay end = computeEndingDisplay(detailRows, subject);
             section.setBeginDebit(begin.debit());
             section.setBeginCredit(begin.credit());
@@ -734,10 +703,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 FinanceGeneralLedgerSectionVO section = new FinanceGeneralLedgerSectionVO();
                 section.setSubjectCode(subject.getSubjectCode());
                 section.setSubjectName(subject.getSubjectName());
-                List<FinanceDetailLedgerRowVO> rows = buildLedgerRows(groupKey, List.of(), subject, opening, context);
+                List<FinanceDetailLedgerRowVO> rows = buildLedgerRows(groupKey, List.of(), subject, opening, context, null);
                 section.setRows(rows);
                 section.setRowCount(rows.size());
-                BalanceDisplay begin = splitSignedAmount(subject.getBalanceDirection(), opening.amount());
+                BalanceDisplay begin = splitSignedAmount(opening.amount());
                 section.setBeginDebit(begin.debit());
                 section.setBeginCredit(begin.credit());
                 section.setTotalDebit(ZERO);
@@ -753,6 +722,8 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     }
 
     private List<FinanceDetailLedgerRowVO> loadDetailLedgerRows(QueryContext context) {
+        LedgerAssistLabels labels = Objects.equals(context.ledgerKind(), LEDGER_KIND_QUANTITY_AMOUNT)
+                && context.balanceAssistDisplay() != null ? loadBalanceAssistLabels(context.companyId()) : null;
         Map<String, FinanceAccountSubject> subjectMap = loadSelectableAccountMap(context.companyId());
         Map<String, GroupBalanceSnapshot> openingMap = loadGroupOpeningMap(context, subjectMap);
         Map<String, List<GlAccvouch>> groupedRows = groupDetailRows(loadVisibleDetailVoucherRows(context, subjectMap), context, subjectMap);
@@ -760,22 +731,19 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         Set<String> seen = new java.util.LinkedHashSet<>();
         for (Map.Entry<String, List<GlAccvouch>> entry : groupedRows.entrySet()) {
             List<GlAccvouch> rows = entry.getValue();
-            if (rows.isEmpty()) {
-                continue;
-            }
             FinanceAccountSubject subject = subjectMap.get(rows.get(0).getCcode());
             if (subject == null) {
                 continue;
             }
             GroupBalanceSnapshot opening = openingMap.getOrDefault(entry.getKey(), GroupBalanceSnapshot.empty(subject));
-            result.addAll(buildLedgerRows(entry.getKey(), rows, subject, opening, context));
+            result.addAll(buildLedgerRows(entry.getKey(), rows, subject, opening, context, labels));
             seen.add(entry.getKey());
         }
         openingMap.forEach((groupKey, opening) -> {
             if (seen.contains(groupKey) || !isNonZero(opening.amount())) {
                 return;
             }
-            result.addAll(buildLedgerRows(groupKey, List.of(), opening.subject(), opening, context));
+            result.addAll(buildLedgerRows(groupKey, List.of(), opening.subject(), opening, context, labels));
         });
         return result;
     }
@@ -834,8 +802,8 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             List<GlAccass> balances = glAccassMapper.selectList(
                     Wrappers.<GlAccass>lambdaQuery()
                             .eq(GlAccass::getCompanyId, context.companyId())
-                            .eq(GlAccass::getIyear, context.iyear())
-                            .eq(GlAccass::getIperiod, context.iperiod())
+                            .eq(GlAccass::getIyear, context.iyearFrom())
+                            .eq(GlAccass::getIperiod, context.iperiodFrom())
             );
             for (GlAccass item : balances) {
                 FinanceAccountSubject subject = subjectMap.get(item.getCcode());
@@ -853,8 +821,8 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             List<GlAccsum> balances = glAccsumMapper.selectList(
                     Wrappers.<GlAccsum>lambdaQuery()
                             .eq(GlAccsum::getCompanyId, context.companyId())
-                            .eq(GlAccsum::getIyear, context.iyear())
-                            .eq(GlAccsum::getIperiod, context.iperiod())
+                            .eq(GlAccsum::getIyear, context.iyearFrom())
+                            .eq(GlAccsum::getIperiod, context.iperiodFrom())
             );
             for (GlAccsum item : balances) {
                 FinanceAccountSubject subject = subjectMap.get(item.getCcode());
@@ -895,7 +863,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 .filter(row -> matchesLedgerKind(row, subjectMap.get(row.getCcode()), context))
                 .sorted(Comparator
                         .comparing(GlAccvouch::getCcode, Comparator.nullsLast(String::compareTo))
+                        .thenComparing(GlAccvouch::getIyear, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(GlAccvouch::getIperiod, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(GlAccvouch::getDbillDate, Comparator.nullsLast(LocalDateTime::compareTo))
+                        .thenComparing(GlAccvouch::getCsign, Comparator.nullsLast(String::compareTo))
                         .thenComparing(GlAccvouch::getInoId, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(GlAccvouch::getInid, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(GlAccvouch::getId, Comparator.nullsLast(Integer::compareTo)))
@@ -908,7 +879,6 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                     String status = resolveStatus(row);
                     return Objects.equals(status, STATUS_UNPOSTED) || Objects.equals(status, STATUS_REVIEWED);
                 })
-                .filter(row -> matchesSubjectRange(row.getCcode(), context))
                 .filter(row -> matchesAssistFilters(row, context))
                 .filter(row -> matchesLedgerKind(row, subjectMap.get(row.getCcode()), context))
                 .toList();
@@ -917,17 +887,13 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     private List<GlAccvouch> loadVoucherRowsForContext(QueryContext context) {
         LambdaQueryWrapper<GlAccvouch> voucherQuery = Wrappers.<GlAccvouch>lambdaQuery()
                 .eq(GlAccvouch::getCompanyId, context.companyId());
-        if (context.balanceSheet()) {
-            applyPeriodRange(voucherQuery, context, GlAccvouch::getIyear, GlAccvouch::getIperiod);
-        } else {
-            voucherQuery
-                    .eq(GlAccvouch::getIyear, context.iyear())
-                    .eq(GlAccvouch::getIperiod, context.iperiod());
-        }
+        applyPeriodRange(voucherQuery, context, GlAccvouch::getIyear, GlAccvouch::getIperiod);
         List<GlAccvouch> rows = glAccvouchMapper.selectList(
                 voucherQuery
                         .eq(trimToNull(context.csign()) != null, GlAccvouch::getCsign, context.csign())
-                        .orderByAsc(GlAccvouch::getDbillDate, GlAccvouch::getInoId, GlAccvouch::getInid, GlAccvouch::getId)
+                        .orderByAsc(GlAccvouch::getIyear, GlAccvouch::getIperiod,
+                                GlAccvouch::getDbillDate, GlAccvouch::getCsign,
+                                GlAccvouch::getInoId, GlAccvouch::getInid, GlAccvouch::getId)
         );
         return rows.stream()
                 .filter(row -> includeRowByStatus(row, context.includeUnposted()))
@@ -1110,24 +1076,26 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             List<GlAccvouch> rows,
             FinanceAccountSubject subject,
             GroupBalanceSnapshot opening,
-            QueryContext context
+            QueryContext context, LedgerAssistLabels labels
     ) {
         List<FinanceDetailLedgerRowVO> result = new ArrayList<>();
         BigDecimal runningAmount = normalizeMoney(opening.amount());
         BigDecimal runningQuantity = normalizeQuantity(opening.quantity());
+        String staticAssistLabel = Objects.equals(context.ledgerKind(), LEDGER_KIND_QUANTITY_AMOUNT)
+                ? "" : resolveLedgerAssistLabel(rows, opening, context);
         result.add(buildStaticLedgerRow(
                 context.ledgerKind(),
                 groupKey,
                 "OPENING",
                 subject,
-                resolveLedgerAssistLabel(rows, opening, context),
+                staticAssistLabel,
                 "期初余额",
                 null,
                 null,
                 null,
                 null,
                 null,
-                splitSignedAmount(subject.getBalanceDirection(), runningAmount),
+                splitSignedAmount(runningAmount),
                 ZERO,
                 ZERO,
                 runningQuantity,
@@ -1139,11 +1107,11 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         BigDecimal totalQuantityDebit = ZERO;
         BigDecimal totalQuantityCredit = ZERO;
         for (GlAccvouch row : rows) {
-            BigDecimal debit = FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc());
-            BigDecimal credit = FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc());
-            BigDecimal quantityDebit = positivePortion(row.getNdS());
-            BigDecimal quantityCredit = positivePortion(row.getNcS());
-            runningAmount = applyMovement(subject.getBalanceDirection(), runningAmount, debit, credit);
+            BigDecimal debit = FinanceVoucherAmountSupport.zeroIfNull(row.getMd());
+            BigDecimal credit = FinanceVoucherAmountSupport.zeroIfNull(row.getMc());
+            BigDecimal quantityDebit = normalizeQuantity(row.getNdS());
+            BigDecimal quantityCredit = normalizeQuantity(row.getNcS());
+            runningAmount = FinanceBalanceDirectionSupport.ending(runningAmount, debit, credit);
             runningQuantity = runningQuantity.add(quantityDebit).subtract(quantityCredit).setScale(2, RoundingMode.HALF_UP);
             totalDebit = totalDebit.add(debit).setScale(2, RoundingMode.HALF_UP);
             totalCredit = totalCredit.add(credit).setScale(2, RoundingMode.HALF_UP);
@@ -1154,7 +1122,9 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                     groupKey,
                     row,
                     subject,
-                    resolveAssistLabel(row, context),
+                    Objects.equals(context.ledgerKind(), LEDGER_KIND_QUANTITY_AMOUNT)
+                            ? labels == null ? "" : labels.format(LedgerAssistLabels.Key.from(row), context.balanceAssistDisplay())
+                            : resolveAssistLabel(row, context),
                     runningAmount,
                     quantityDebit,
                     quantityCredit,
@@ -1167,14 +1137,15 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 groupKey,
                 "TOTAL",
                 subject,
-                resolveLedgerAssistLabel(rows, opening, context),
-                "本月合计",
+                staticAssistLabel,
+                isPeriod(context.iyearFrom(), context.iperiodFrom(), context.iyearTo(), context.iperiodTo())
+                        ? "本月合计" : "期间合计",
                 null,
                 null,
                 null,
                 normalizeMoney(totalDebit),
                 normalizeMoney(totalCredit),
-                splitSignedAmount(subject.getBalanceDirection(), runningAmount),
+                splitSignedAmount(runningAmount),
                 normalizeQuantity(totalQuantityDebit),
                 normalizeQuantity(totalQuantityCredit),
                 runningQuantity,
@@ -1185,14 +1156,14 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
                 groupKey,
                 "ENDING",
                 subject,
-                resolveLedgerAssistLabel(rows, opening, context),
+                staticAssistLabel,
                 "期末余额",
                 null,
                 null,
                 null,
                 null,
                 null,
-                splitSignedAmount(subject.getBalanceDirection(), runningAmount),
+                splitSignedAmount(runningAmount),
                 ZERO,
                 ZERO,
                 runningQuantity,
@@ -1225,10 +1196,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         item.setSummary(trimToNull(row.getCdigest()));
         item.setVoucherTypeLabel(resolveVoucherTypeLabel(row.getCsign()));
         item.setMakerName(trimToNull(row.getCbill()));
-        item.setDebit(FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc()));
-        item.setCredit(FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc()));
+        item.setDebit(FinanceVoucherAmountSupport.zeroIfNull(row.getMd()));
+        item.setCredit(FinanceVoucherAmountSupport.zeroIfNull(row.getMc()));
         item.setBalance(FinanceBalanceDirectionSupport.displayAmount(runningAmount));
-        item.setBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(subject.getBalanceDirection(), runningAmount));
+        item.setBalanceDirection(FinanceBalanceDirectionSupport.resolveActualDirectionLabel(runningAmount));
         item.setQuantityDebit(normalizeQuantity(quantityDebit));
         item.setQuantityCredit(normalizeQuantity(quantityCredit));
         item.setQuantityBalance(normalizeQuantity(quantityBalance));
@@ -1237,10 +1208,7 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     }
 
     private String resolveLedgerAssistLabel(List<GlAccvouch> rows, GroupBalanceSnapshot opening, QueryContext context) {
-        if (!rows.isEmpty()) {
-            return resolveAssistLabel(rows.get(0), context);
-        }
-        return resolveAssistLabel(opening.sample(), context);
+        return rows.isEmpty() ? resolveAssistLabel(opening.sample(), context) : resolveAssistLabel(rows.get(0), context);
     }
 
     private FinanceDetailLedgerRowVO buildStaticLedgerRow(
@@ -1286,19 +1254,18 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
     private BalanceDisplay computeEndingDisplay(List<FinanceDetailLedgerRowVO> rows, FinanceAccountSubject subject) {
         FinanceDetailLedgerRowVO last = rows.isEmpty() ? null : rows.get(rows.size() - 1);
         if (last == null) {
-            return splitSignedAmount(subject.getBalanceDirection(), ZERO);
+            return splitSignedAmount(ZERO);
         }
-        BigDecimal signedAmount = restoreSignedAmount(subject.getBalanceDirection(), last.getBalanceDirection(), last.getBalance());
-        return splitSignedAmount(subject.getBalanceDirection(), signedAmount);
+        BigDecimal signedAmount = restoreSignedAmount(last.getBalanceDirection(), last.getBalance());
+        return splitSignedAmount(signedAmount);
     }
 
-    private BigDecimal restoreSignedAmount(String defaultBalanceDirection, String actualDirectionLabel, BigDecimal displayAmount) {
+    private BigDecimal restoreSignedAmount(String actualDirectionLabel, BigDecimal displayAmount) {
         BigDecimal normalized = normalizeMoney(displayAmount);
         if (!isNonZero(normalized)) {
             return ZERO;
         }
-        String expectedPositiveDirection = FinanceBalanceDirectionSupport.isDebitDirection(defaultBalanceDirection) ? "借" : "贷";
-        return Objects.equals(expectedPositiveDirection, trimToNull(actualDirectionLabel))
+        return Objects.equals("借", trimToNull(actualDirectionLabel))
                 ? normalized
                 : normalized.negate().setScale(2, RoundingMode.HALF_UP);
     }
@@ -1406,26 +1373,16 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
         return "";
     }
 
-    private BalanceDisplay splitSignedAmount(String balanceDirection, BigDecimal signedAmount) {
+    private BalanceDisplay splitSignedAmount(BigDecimal signedAmount) {
         BigDecimal normalized = normalizeMoney(signedAmount);
         if (!isNonZero(normalized)) {
             return new BalanceDisplay(ZERO, ZERO, "");
         }
-        String direction = FinanceBalanceDirectionSupport.resolveActualDirectionLabel(balanceDirection, normalized);
+        String direction = FinanceBalanceDirectionSupport.resolveActualDirectionLabel(normalized);
         if (Objects.equals(direction, "贷")) {
             return new BalanceDisplay(ZERO, FinanceBalanceDirectionSupport.displayAmount(normalized), direction);
         }
         return new BalanceDisplay(FinanceBalanceDirectionSupport.displayAmount(normalized), ZERO, direction);
-    }
-
-    private BigDecimal applyMovement(String balanceDirection, BigDecimal current, BigDecimal debit, BigDecimal credit) {
-        BigDecimal base = normalizeMoney(current);
-        BigDecimal debitAmount = normalizeMoney(debit);
-        BigDecimal creditAmount = normalizeMoney(credit);
-        if (FinanceBalanceDirectionSupport.isDebitDirection(balanceDirection)) {
-            return base.add(debitAmount).subtract(creditAmount).setScale(2, RoundingMode.HALF_UP);
-        }
-        return base.subtract(debitAmount).add(creditAmount).setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal normalizeMoney(BigDecimal value) {
@@ -1434,11 +1391,6 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
 
     private BigDecimal normalizeQuantity(BigDecimal value) {
         return value == null ? ZERO : value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal positivePortion(BigDecimal value) {
-        BigDecimal normalized = normalizeQuantity(value);
-        return normalized.compareTo(BigDecimal.ZERO) > 0 ? normalized : ZERO;
     }
 
     private boolean isNonZero(BigDecimal value) {
@@ -1525,6 +1477,30 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             Sheet sheet = workbook.createSheet("明细账");
             CellStyle headerStyle = createHeaderStyle(workbook);
             CellStyle amountStyle = createAmountStyle(workbook);
+            if ("DETAIL".equals(context.ledgerKind())) {
+                String[] headers = {"一级科目编码", "一级科目名称", "行类型", "科目编码", "科目名称", "辅助项",
+                        "制单日期", "凭证号", "摘要", "借方发生额", "贷方发生额", "余额", "方向"};
+                writeHeaders(sheet, headers, headerStyle);
+                int rowIndex = 1;
+                for (FinanceDetailLedgerRowVO item : rows) {
+                    Row row = sheet.createRow(rowIndex++);
+                    setTextCell(row, 0, item.getRootSubjectCode());
+                    setTextCell(row, 1, item.getRootSubjectName());
+                    setTextCell(row, 2, item.getRowType());
+                    setTextCell(row, 3, item.getSubjectCode());
+                    setTextCell(row, 4, item.getSubjectName());
+                    setTextCell(row, 5, item.getAssistLabel());
+                    setTextCell(row, 6, item.getDbillDate());
+                    setTextCell(row, 7, item.getDisplayVoucherNo());
+                    setTextCell(row, 8, item.getSummary());
+                    setAmountCell(row, 9, item.getDebit(), amountStyle);
+                    setAmountCell(row, 10, item.getCredit(), amountStyle);
+                    setAmountCell(row, 11, item.getBalance(), amountStyle);
+                    setTextCell(row, 12, item.getBalanceDirection());
+                }
+                autosize(sheet, headers.length);
+                return;
+            }
             String[] headers = {"分组", "科目编码", "科目名称", "辅助项", "行类型", "日期", "凭证号", "摘要", "借方", "贷方", "余额", "方向", "数量借方", "数量贷方", "数量余额", "计量单位"};
             writeHeaders(sheet, headers, headerStyle);
             int rowIndex = 1;
@@ -1682,13 +1658,10 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
 
     private record QueryContext(
             String companyId,
-            Integer iyear,
-            Integer iperiod,
             Integer iyearFrom,
             Integer iperiodFrom,
             Integer iyearTo,
             Integer iperiodTo,
-            boolean balanceSheet,
             String ledgerKind,
             String accountCodeFrom,
             String accountCodeTo,
@@ -1727,238 +1700,6 @@ public final class LedgerReportDomainSupport extends AbstractFinanceVoucherSuppo
             String csign,
             Integer inoId
     ) {
-    }
-
-    private record BalanceAssistKey(
-            String subjectCode,
-            String ccusId,
-            String csupId,
-            String citemClass,
-            String citemId,
-            String cdeptId,
-            String cpersonId
-    ) implements Comparable<BalanceAssistKey> {
-        private static BalanceAssistKey from(GlAccass row) {
-            return new BalanceAssistKey(
-                    trim(row.getCcode()),
-                    trim(row.getCcusId()),
-                    trim(row.getCsupId()),
-                    trim(row.getCitemClass()),
-                    trim(row.getCitemId()),
-                    trim(row.getCdeptId()),
-                    trim(row.getCpersonId())
-            );
-        }
-
-        private static BalanceAssistKey from(GlAccvouch row) {
-            return new BalanceAssistKey(
-                    trim(row.getCcode()),
-                    trim(row.getCcusId()),
-                    trim(row.getCsupId()),
-                    trim(row.getCitemClass()),
-                    trim(row.getCitemId()),
-                    trim(row.getCdeptId()),
-                    trim(row.getCpersonId())
-            );
-        }
-
-        @Override
-        public int compareTo(BalanceAssistKey other) {
-            return Comparator
-                    .comparing(BalanceAssistKey::subjectCode, Comparator.nullsFirst(String::compareTo))
-                    .thenComparing(BalanceAssistKey::ccusId, Comparator.nullsFirst(String::compareTo))
-                    .thenComparing(BalanceAssistKey::csupId, Comparator.nullsFirst(String::compareTo))
-                    .thenComparing(BalanceAssistKey::citemClass, Comparator.nullsFirst(String::compareTo))
-                    .thenComparing(BalanceAssistKey::citemId, Comparator.nullsFirst(String::compareTo))
-                    .thenComparing(BalanceAssistKey::cdeptId, Comparator.nullsFirst(String::compareTo))
-                    .thenComparing(BalanceAssistKey::cpersonId, Comparator.nullsFirst(String::compareTo))
-                    .compare(this, other);
-        }
-
-        private static String trim(String value) {
-            return value == null || value.isBlank() ? null : value.trim();
-        }
-    }
-
-    private record BalanceAssistLabels(
-            Map<String, FinanceVoucherOptionVO> customers,
-            Map<String, FinanceVoucherOptionVO> suppliers,
-            Map<String, FinanceVoucherOptionVO> projects,
-            Map<String, FinanceVoucherOptionVO> projectClasses,
-            Map<String, FinanceVoucherOptionVO> departments,
-            Map<String, FinanceVoucherOptionVO> employees
-    ) {
-        private String format(BalanceAssistKey key, String displayMode) {
-            List<String> parts = new ArrayList<>();
-            add(parts, "客户", customers.get(key.ccusId()), key.ccusId(), displayMode);
-            add(parts, "供应商", suppliers.get(key.csupId()), key.csupId(), displayMode);
-            FinanceVoucherOptionVO project = projects.get(key.citemId());
-            if (project == null && key.citemClass != null) {
-                project = projectClasses.get(key.citemClass);
-            }
-            add(parts, "项目", project, firstNonBlank(key.citemId(), key.citemClass), displayMode);
-            add(parts, "部门", departments.get(key.cdeptId()), key.cdeptId(), displayMode);
-            add(parts, "个人", employees.get(key.cpersonId()), key.cpersonId(), displayMode);
-            return String.join("*", parts);
-        }
-
-        private void add(
-                List<String> parts,
-                String dimension,
-                FinanceVoucherOptionVO option,
-                String fallback,
-                String displayMode
-        ) {
-            String value = switch (normalizeMode(displayMode)) {
-                case "CODE" -> option == null ? fallback : firstNonBlank(option.getCode(), option.getValue(), fallback);
-                case "CODE_NAME" -> option == null
-                        ? fallback
-                        : joinCodeName(option.getCode(), option.getName(), option.getValue());
-                default -> option == null ? fallback : firstNonBlank(option.getName(), option.getLabel(), fallback);
-            };
-            if (value != null) {
-                parts.add(dimension + "：" + value);
-            }
-        }
-
-        private static String normalizeMode(String displayMode) {
-            return displayMode == null ? "NAME" : displayMode;
-        }
-
-        private static String joinCodeName(String code, String name, String fallback) {
-            String normalizedCode = firstNonBlank(code, fallback);
-            String normalizedName = trim(name);
-            if (normalizedCode == null) {
-                return normalizedName;
-            }
-            if (normalizedName == null || normalizedName.equals(normalizedCode)) {
-                return normalizedCode;
-            }
-            return normalizedCode + " " + normalizedName;
-        }
-
-        private static String firstNonBlank(String... values) {
-            for (String value : values) {
-                String normalized = trim(value);
-                if (normalized != null) {
-                    return normalized;
-                }
-            }
-            return null;
-        }
-
-        private static String trim(String value) {
-            return value == null || value.isBlank() ? null : value.trim();
-        }
-    }
-
-    private static final class BalanceTotalAccumulator {
-        private BigDecimal beginDebit = ZERO;
-        private BigDecimal beginCredit = ZERO;
-        private BigDecimal periodDebit = ZERO;
-        private BigDecimal periodCredit = ZERO;
-        private BigDecimal endDebit = ZERO;
-        private BigDecimal endCredit = ZERO;
-
-        private void addRow(FinanceBalanceSheetRowVO row) {
-            beginDebit = add(beginDebit, row.getBeginDebit());
-            beginCredit = add(beginCredit, row.getBeginCredit());
-            periodDebit = add(periodDebit, row.getPeriodDebit());
-            periodCredit = add(periodCredit, row.getPeriodCredit());
-            endDebit = add(endDebit, row.getEndDebit());
-            endCredit = add(endCredit, row.getEndCredit());
-        }
-
-        private BigDecimal beginDebit() {
-            return beginDebit;
-        }
-
-        private BigDecimal beginCredit() {
-            return beginCredit;
-        }
-
-        private BigDecimal periodDebit() {
-            return periodDebit;
-        }
-
-        private BigDecimal periodCredit() {
-            return periodCredit;
-        }
-
-        private BigDecimal endDebit() {
-            return endDebit;
-        }
-
-        private BigDecimal endCredit() {
-            return endCredit;
-        }
-
-        private static BigDecimal add(BigDecimal left, BigDecimal right) {
-            return left.add(right == null ? ZERO : right).setScale(2, RoundingMode.HALF_UP);
-        }
-    }
-
-    private static final class BalanceAccumulator {
-        private final FinanceAccountSubject subject;
-        private BigDecimal beginSigned = ZERO;
-        private BigDecimal periodDebit = ZERO;
-        private BigDecimal periodCredit = ZERO;
-        private BigDecimal endSigned = ZERO;
-
-        private BalanceAccumulator(FinanceAccountSubject subject) {
-            this.subject = subject;
-        }
-
-        private void addOpeningBase(BigDecimal mb) {
-            beginSigned = normalizeSigned(beginSigned, mb);
-        }
-
-        private void addPeriodBase(BigDecimal md, BigDecimal mc) {
-            periodDebit = normalizeSigned(periodDebit, md);
-            periodCredit = normalizeSigned(periodCredit, mc);
-        }
-
-        private void addEndingBase(BigDecimal me) {
-            endSigned = normalizeSigned(endSigned, me);
-        }
-
-        private void addUnposted(GlAccvouch row) {
-            BigDecimal debit = FinanceVoucherAmountSupport.effectiveDebit(row.getMd(), row.getMc());
-            BigDecimal credit = FinanceVoucherAmountSupport.effectiveCredit(row.getMd(), row.getMc());
-            periodDebit = periodDebit.add(debit).setScale(2, RoundingMode.HALF_UP);
-            periodCredit = periodCredit.add(credit).setScale(2, RoundingMode.HALF_UP);
-            if (FinanceBalanceDirectionSupport.isDebitDirection(subject.getBalanceDirection())) {
-                endSigned = endSigned.add(debit).subtract(credit).setScale(2, RoundingMode.HALF_UP);
-            } else {
-                endSigned = endSigned.subtract(debit).add(credit).setScale(2, RoundingMode.HALF_UP);
-            }
-        }
-
-        private FinanceAccountSubject subject() {
-            return subject;
-        }
-
-        private BigDecimal beginSigned() {
-            return beginSigned;
-        }
-
-        private BigDecimal periodDebit() {
-            return periodDebit;
-        }
-
-        private BigDecimal periodCredit() {
-            return periodCredit;
-        }
-
-        private BigDecimal endSigned() {
-            return endSigned;
-        }
-
-        private static BigDecimal normalizeSigned(BigDecimal current, BigDecimal addition) {
-            BigDecimal left = current == null ? ZERO : current.setScale(2, RoundingMode.HALF_UP);
-            BigDecimal right = addition == null ? ZERO : addition.setScale(2, RoundingMode.HALF_UP);
-            return left.add(right).setScale(2, RoundingMode.HALF_UP);
-        }
     }
 
     private static final class GroupBalanceSnapshot {

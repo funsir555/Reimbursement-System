@@ -4,13 +4,32 @@
 -- 版本：v3.0 - 幂等修复
 -- 日期：2026-09-13
 -- 说明：
---   - 只添加缺失的字段，不删除任何数据
---   - 可以安全地多次执行
---   - 不会产生数据冗余
+--   - 仅在活动表为空时添加缺失字段
+--   - 发现数据立即终止，不自动映射公司编码
 -- ============================================================================
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
+
+-- P0 安全前置：Agent 尚未正式启用，只允许空表结构修正。
+-- 若已有数据，必须停止并另行制定 company_id 映射，禁止把旧值 1 猜测为真实公司。
+DROP PROCEDURE IF EXISTS finex_assert_agent_tables_empty;
+DELIMITER //
+CREATE PROCEDURE finex_assert_agent_tables_empty()
+BEGIN
+  DECLARE agent_row_count BIGINT DEFAULT 0;
+  SELECT (SELECT COUNT(*) FROM ea_agent_conversation)
+       + (SELECT COUNT(*) FROM ea_agent_message)
+    INTO agent_row_count;
+  IF agent_row_count > 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Agent tables contain data; stop and prepare an explicit company mapping plan';
+  END IF;
+END//
+DELIMITER ;
+CALL finex_assert_agent_tables_empty();
+DROP PROCEDURE finex_assert_agent_tables_empty;
+
 
 -- ============================================================================
 -- 修复 ea_agent_conversation 表
@@ -88,7 +107,7 @@ WHERE TABLE_SCHEMA = @db_name
   AND COLUMN_NAME = 'company_id';
 
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE ea_agent_conversation ADD COLUMN company_id BIGINT NOT NULL DEFAULT 1 COMMENT ''公司ID'' AFTER tenant_id',
+    'ALTER TABLE ea_agent_conversation ADD COLUMN company_id VARCHAR(64) NOT NULL COMMENT ''业务公司主体编码'' AFTER tenant_id',
     'SELECT ''company_id 字段已存在'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
@@ -205,11 +224,25 @@ SELECT COUNT(*) INTO @idx_exists
 FROM information_schema.STATISTICS
 WHERE TABLE_SCHEMA = @db_name
   AND TABLE_NAME = 'ea_agent_conversation'
-  AND INDEX_NAME = 'idx_tenant_company';
+  AND INDEX_NAME = 'idx_tenant_company_session';
 
 SET @sql = IF(@idx_exists = 0,
-    'ALTER TABLE ea_agent_conversation ADD INDEX idx_tenant_company (tenant_id, company_id)',
-    'SELECT ''idx_tenant_company 索引已存在'' AS info');
+    'ALTER TABLE ea_agent_conversation ADD INDEX idx_tenant_company_session (tenant_id, company_id, session_id)',
+    'SELECT ''idx_tenant_company_session 索引已存在'' AS info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @idx_exists = 0;
+SELECT COUNT(*) INTO @idx_exists
+FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = @db_name
+  AND TABLE_NAME = 'ea_agent_conversation'
+  AND INDEX_NAME = 'idx_tenant_company_user';
+
+SET @sql = IF(@idx_exists = 0,
+    'ALTER TABLE ea_agent_conversation ADD INDEX idx_tenant_company_user (tenant_id, company_id, user_id, last_message_at)',
+    'SELECT ''idx_tenant_company_user 索引已存在'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
@@ -263,17 +296,32 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+-- 检查并添加 company_id 字段（message 表）。若表内已有数据，NOT NULL 会使脚本停止，禁止猜测映射。
+SET @col_exists = 0;
+SELECT COUNT(*) INTO @col_exists
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = @db_name
+  AND TABLE_NAME = 'ea_agent_message'
+  AND COLUMN_NAME = 'company_id';
+
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE ea_agent_message ADD COLUMN company_id VARCHAR(64) NOT NULL COMMENT ''业务公司主体编码'' AFTER tenant_id',
+    'SELECT ''company_id 字段已存在'' AS info');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 -- 添加索引（如果不存在）
 SET @idx_exists = 0;
 SELECT COUNT(*) INTO @idx_exists
 FROM information_schema.STATISTICS
 WHERE TABLE_SCHEMA = @db_name
   AND TABLE_NAME = 'ea_agent_message'
-  AND INDEX_NAME = 'idx_tenant_id';
+  AND INDEX_NAME = 'idx_tenant_company_session';
 
 SET @sql = IF(@idx_exists = 0,
-    'ALTER TABLE ea_agent_message ADD INDEX idx_tenant_id (tenant_id)',
-    'SELECT ''idx_tenant_id 索引已存在'' AS info');
+    'ALTER TABLE ea_agent_message ADD INDEX idx_tenant_company_session (tenant_id, company_id, session_id, created_at)',
+    'SELECT ''idx_tenant_company_session 索引已存在'' AS info');
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;

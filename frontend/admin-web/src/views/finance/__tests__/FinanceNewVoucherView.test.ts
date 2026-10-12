@@ -2329,8 +2329,8 @@ describe('FinanceNewVoucherView', () => {
     expect(vm.form.entries[0].mc).toBe('100.00')
     expect((firstDebitInput.element as HTMLInputElement).value).toBe('')
     expect((wrapper.findAll('input[data-voucher-field="mc"]')[0]?.element as HTMLInputElement).value).toBe('100.00')
-    expect(vm.totalDebit).toBe('100.00')
-    expect(vm.totalCredit).toBe('100.00')
+    expect(vm.totalDebit).toBe('0.00')
+    expect(vm.totalCredit).toBe('0.00')
     expect((document.activeElement as HTMLInputElement | null)?.getAttribute('data-voucher-field')).toBe('mc')
 
     const secondCreditInput = wrapper.findAll('input[data-voucher-field="mc"]')[1]
@@ -2342,8 +2342,8 @@ describe('FinanceNewVoucherView', () => {
     expect(vm.form.entries[1].mc).toBe('')
     expect((secondCreditInput.element as HTMLInputElement).value).toBe('')
     expect((wrapper.findAll('input[data-voucher-field="md"]')[1]?.element as HTMLInputElement).value).toBe('-100.00')
-    expect(vm.totalDebit).toBe('0.00')
-    expect(vm.totalCredit).toBe('200.00')
+    expect(vm.totalDebit).toBe('-100.00')
+    expect(vm.totalCredit).toBe('100.00')
     expect((document.activeElement as HTMLInputElement | null)?.getAttribute('data-voucher-field')).toBe('md')
 
     vm.form.entries[0].md = ''

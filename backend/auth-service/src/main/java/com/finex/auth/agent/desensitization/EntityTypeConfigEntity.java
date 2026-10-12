@@ -31,7 +31,7 @@ public class EntityTypeConfigEntity implements Serializable {
     /**
      * 公司ID
      */
-    private Long companyId;
+    private String companyId;
 
     /**
      * 实体类型编码

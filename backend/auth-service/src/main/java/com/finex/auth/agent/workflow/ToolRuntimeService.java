@@ -1,6 +1,9 @@
 package com.finex.auth.agent.workflow;
 
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.finex.auth.service.port.FinanceAgentQueryPort;
+import com.finex.auth.service.port.SystemAgentQueryPort;
 
 import java.util.List;
 import java.util.Map;
@@ -17,6 +20,16 @@ public class ToolRuntimeService {
 
     public ToolRuntimeService(List<ControlledTool> tools) {
         this.toolRegistry = tools.stream().collect(Collectors.toMap(ControlledTool::toolCode, Function.identity()));
+    }
+
+    @Autowired
+    public ToolRuntimeService(List<ControlledTool> tools, FinanceAgentQueryPort finance,
+                              SystemAgentQueryPort system) {
+        this.toolRegistry = new java.util.LinkedHashMap<>(tools.stream().collect(
+                Collectors.toMap(ControlledTool::toolCode, Function.identity())));
+        ControlledQueryCatalog.TOOLS.stream()
+                .filter(item -> !"EXPENSE".equals(item.kind()) && !"CLOSE".equals(item.kind()))
+                .forEach(item -> this.toolRegistry.put(item.code(), new RegisteredReadTool(item, finance, system)));
     }
 
     public ControlledToolResult execute(String toolCode, ToolExecutionRequest request) {

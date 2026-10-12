@@ -10,6 +10,9 @@ import com.finex.auth.mapper.ArchiveAgentDefinitionMapper;
 import com.finex.auth.mapper.ArchiveAgentToolBindingMapper;
 import com.finex.auth.mapper.ArchiveAgentVersionMapper;
 import com.finex.auth.support.archiveagent.ArchiveAgentSupport;
+import com.finex.auth.service.digitalemployee.DigitalEmployeeService;
+import com.finex.auth.service.queryauth.QueryAuthorizationService;
+import org.springframework.jdbc.core.JdbcTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,49 +31,84 @@ import java.util.Set;
 @Slf4j
 public class WorkflowSelectorService {
 
-    private static final String QUERY_INTENT = "query_expense";
-
     private final ArchiveAgentDefinitionMapper definitionMapper;
     private final ArchiveAgentVersionMapper versionMapper;
     private final ArchiveAgentToolBindingMapper toolBindingMapper;
     private final ObjectMapper objectMapper;
     private final ToolRuntimeService toolRuntimeService;
+    private final DigitalEmployeeService digitalEmployeeService;
+    private final QueryAuthorizationService authorizationService;
+    private final JdbcTemplate jdbc;
 
     public SelectedWorkflow select(Long userId, String intent, String message, String preferredProvider, String preferredModel) {
-        if (!QUERY_INTENT.equals(intent)) {
-            return null;
-        }
-
-        List<ArchiveAgentDefinition> candidates = definitionMapper.selectList(
-                Wrappers.<ArchiveAgentDefinition>lambdaQuery()
-                        .in(ArchiveAgentDefinition::getOwnerUserId, List.of(userId, 0L))
-                        .eq(ArchiveAgentDefinition::getStatus, ArchiveAgentSupport.AGENT_STATUS_READY)
-                        .isNotNull(ArchiveAgentDefinition::getPublishedVersionId)
-                        .orderByDesc(ArchiveAgentDefinition::getOwnerUserId, ArchiveAgentDefinition::getUpdatedAt, ArchiveAgentDefinition::getId)
-        );
-
-        for (ArchiveAgentDefinition definition : candidates) {
-            SelectedWorkflow selected = tryBuildSelection(definition, preferredProvider, preferredModel);
-            if (selected != null) {
-                return selected;
-            }
-        }
-
-        return builtInExpenseWorkflow(userId, preferredProvider, preferredModel);
+        return select(userId, intent, message, preferredProvider, preferredModel, null, null);
     }
 
-    private SelectedWorkflow tryBuildSelection(ArchiveAgentDefinition definition, String preferredProvider, String preferredModel) {
-        ArchiveAgentVersion version = versionMapper.selectById(definition.getPublishedVersionId());
-        if (version == null || version.getPublished() == null || version.getPublished() != 1) {
-            return null;
+    public SelectedWorkflow select(Long userId, String intent, String message, String preferredProvider,
+                                   String preferredModel, Long preferredEmployeeId, Long preferredBindingId) {
+        String requiredPermission = switch (intent) {
+            case "query_expense" -> QueryAuthorizationService.EXPENSE_QUERY;
+            case "query_finance_close" -> QueryAuthorizationService.FINANCE_CLOSE_QUERY;
+            default -> null;
+        };
+        if (requiredPermission == null) return null;
+        List<SelectedWorkflow> matches = new java.util.ArrayList<>();
+        for (SelectedWorkflow candidate : authorizedCandidates(userId, preferredEmployeeId, preferredBindingId)) {
+            if (requiredPermission.equals(candidate.getQueryPermissionCode())) matches.add(candidate);
         }
-        Map<String, Object> config = readMap(version.getConfigJson());
-        try {
-            return selectConfigured(definition, version, config, preferredProvider, preferredModel);
-        } catch (IllegalArgumentException ex) {
-            log.warn("跳过不可执行的已发布 Agent 工作流: agentId={}, reason={}", definition.getId(), ex.getMessage());
-            return null;
+        if (matches.size() > 1) throw new AmbiguousWorkflowException();
+        return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    /** Only reviewed, published, assigned and currently authorized fixed versions. */
+    public List<SelectedWorkflow> authorizedCandidates(Long userId, Long preferredEmployeeId,
+                                                        Long preferredBindingId) {
+        List<SelectedWorkflow> matches = new java.util.ArrayList<>();
+        for (Map<String, Object> candidate : digitalEmployeeService.availableFor(userId)) {
+            String requiredPermission = (String) candidate.get("permission_code");
+            if (!ControlledQueryCatalog.TOOLS.stream().anyMatch(item -> item.permission().equals(requiredPermission))) continue;
+            Long employeeId = ((Number) candidate.get("id")).longValue();
+            Long bindingId = ((Number) candidate.get("binding_id")).longValue();
+            if (preferredEmployeeId != null && !preferredEmployeeId.equals(employeeId)) continue;
+            if (preferredBindingId != null && !preferredBindingId.equals(bindingId)) continue;
+            Long responsibleId = ((Number) candidate.get("responsible_user_id")).longValue();
+            try {
+                List<String> requiredCodes = jdbc.queryForList("""
+                        SELECT permission_code FROM ea_workflow_share_capability
+                        WHERE share_id=(SELECT share_id FROM ea_digital_employee_workflow WHERE id=?)
+                        ORDER BY permission_code
+                        """, String.class, bindingId);
+                if (requiredCodes.isEmpty()) continue;
+                for (String code : requiredCodes) {
+                    List<String> limit = digitalEmployeeService.companyLimit(employeeId, code);
+                    authorizationService.resolve(userId, responsibleId, code,
+                            limit.isEmpty() ? null : Set.copyOf(limit));
+                }
+                ArchiveAgentDefinition definition = definitionMapper.selectById(
+                        ((Number) candidate.get("agent_id")).longValue());
+                ArchiveAgentVersion version = versionMapper.selectById(
+                        ((Number) candidate.get("agent_version_id")).longValue());
+                if (definition == null || version == null || version.getPublished() == null
+                        || version.getPublished() != 1
+                        || !ArchiveAgentSupport.AGENT_STATUS_READY.equals(definition.getStatus())
+                        || !definition.getId().equals(version.getAgentId())) continue;
+                // Controlled queries execute the reviewed fixed version, including its model choice.
+                SelectedWorkflow selected = selectConfigured(definition, version, readMap(version.getConfigJson()),
+                        null, null);
+                if (!Set.copyOf(requiredCodes).equals(Set.copyOf(selected.getQueryPermissionCodes()))) continue;
+                selected.setAgentDescription(definition.getAgentDescription());
+                selected.setDigitalEmployeeId(employeeId);
+                selected.setDigitalEmployeeName((String) candidate.get("name"));
+                selected.setResponsibleUserId(responsibleId);
+                selected.setQueryPermissionCode(requiredPermission);
+                selected.setQueryPermissionCodes(List.copyOf(requiredCodes));
+                selected.setWorkflowBindingId(bindingId);
+                matches.add(selected);
+            } catch (SecurityException | IllegalArgumentException ignored) {
+                // A revoked permission, invalid scope or invalid canvas removes this candidate.
+            }
         }
+        return List.copyOf(matches);
     }
 
     public SelectedWorkflow selectConfigured(
@@ -83,15 +121,16 @@ public class WorkflowSelectorService {
         if (definition == null || version == null) {
             throw new IllegalArgumentException("Agent 或版本不存在");
         }
-        List<Map<String, Object>> orderedNodes = WorkflowGraphPlan.from(readNestedMap(config, "workflow")).requireLinearNodes();
+        List<Map<String, Object>> orderedNodes = WorkflowGraphPlan.from(readNestedMap(config, "workflow"))
+                .requireControlledQueryPlan().orderedNodes();
         List<Map<String, Object>> toolNodes = orderedNodes.stream()
                 .filter(node -> "tool".equalsIgnoreCase(String.valueOf(node.get("nodeType"))))
                 .toList();
         List<Map<String, Object>> llmNodes = orderedNodes.stream()
                 .filter(node -> "llm".equalsIgnoreCase(String.valueOf(node.get("nodeType"))))
                 .toList();
-        if (toolNodes.size() != 1 || llmNodes.size() != 1) {
-            throw new IllegalArgumentException("受控查询流程必须包含且只能包含一个工具节点和一个 LLM 节点");
+        if (toolNodes.isEmpty() || toolNodes.size() > 9 || llmNodes.size() != 1) {
+            throw new IllegalArgumentException("受控查询流程需要 1 至 9 个工具节点和一个 LLM 节点");
         }
         Set<String> supportedTypes = Set.of("start", "tool", "llm", "end");
         for (Map<String, Object> node : orderedNodes) {
@@ -100,20 +139,25 @@ public class WorkflowSelectorService {
                 throw new IllegalArgumentException("受控查询流程暂不支持节点类型: " + nodeType);
             }
         }
-        int toolIndex = orderedNodes.indexOf(toolNodes.get(0));
         int llmIndex = orderedNodes.indexOf(llmNodes.get(0));
-        if (toolIndex >= llmIndex) {
-            throw new IllegalArgumentException("受控查询流程必须先执行工具节点，再执行 LLM 节点");
+        if (toolNodes.stream().anyMatch(node -> orderedNodes.indexOf(node) >= llmIndex)) {
+            throw new IllegalArgumentException("受控查询流程必须先执行全部工具节点，再执行 LLM 节点");
         }
-
-        Map<String, Object> toolConfig = WorkflowGraphPlan.nodeConfig(toolNodes.get(0));
-        String toolCode = String.valueOf(toolConfig.getOrDefault("toolCode", "")).trim();
-        if (toolCode.isBlank() || !toolRuntimeService.supports(toolCode)) {
-            throw new IllegalArgumentException("工具节点未配置已注册的受控工具: " + toolCode);
+        List<String> toolCodes = toolNodes.stream().map(node -> String.valueOf(
+                WorkflowGraphPlan.nodeConfig(node).getOrDefault("toolCode", "")).trim()).toList();
+        for (int index = 0; index < toolCodes.size(); index++) {
+            String code = toolCodes.get(index);
+            if (!toolRuntimeService.supports(code) || !isToolEnabled(config, definition.getId(), code))
+                throw new IllegalArgumentException("工具节点未绑定已注册的受控工具: " + code);
+            String template = String.valueOf(WorkflowGraphPlan.nodeConfig(toolNodes.get(index))
+                    .getOrDefault("queryTemplateCode", ""));
+            if (!ControlledQueryCatalog.require(code).template().equals(template)
+                    && !(ExpenseDocumentControlledQueryTool.TOOL_CODE.equals(code)
+                    && ExpenseDocumentControlledQueryTool.QUERY_TEMPLATE_CODE.equals(template)))
+                throw new IllegalArgumentException("工具节点查询模板不匹配: " + code);
         }
-        if (!isToolEnabled(config, definition.getId(), toolCode)) {
-            throw new IllegalArgumentException("工具节点引用的工具未在 Agent 中启用: " + toolCode);
-        }
+        List<String> permissions = toolCodes.stream().map(code -> ControlledQueryCatalog.require(code).permission())
+                .distinct().toList();
 
         Map<String, Object> modelConfig = readNestedMap(config, "modelConfig");
         return SelectedWorkflow.builder()
@@ -121,7 +165,11 @@ public class WorkflowSelectorService {
                 .agentVersionId(version.getId())
                 .ownerUserId(definition.getOwnerUserId())
                 .agentName(definition.getAgentName())
-                .toolCode(toolCode)
+                .agentDescription(definition.getAgentDescription())
+                .toolCode(toolCodes.get(0))
+                .toolCodes(toolCodes)
+                .queryPermissionCode(permissions.get(0))
+                .queryPermissionCodes(permissions)
                 .providerCode(resolveProvider(preferredProvider, modelConfig))
                 .model(resolveModel(preferredModel, modelConfig))
                 .config(config)
@@ -161,46 +209,8 @@ public class WorkflowSelectorService {
                 .orElse(null);
     }
 
-    private SelectedWorkflow builtInExpenseWorkflow(Long userId, String preferredProvider, String preferredModel) {
-        Map<String, Object> modelConfig = new LinkedHashMap<>();
-        modelConfig.put("provider", preferredProvider);
-        modelConfig.put("model", preferredModel);
-
-        Map<String, Object> config = new LinkedHashMap<>();
-        config.put("modelConfig", modelConfig);
-        config.put("workflow", Map.of(
-                "nodes", List.of(
-                        Map.of("nodeKey", "start_1", "nodeType", "start", "label", "开始"),
-                        Map.of("nodeKey", "tool_1", "nodeType", "tool", "label", "受控查询报销事项", "config", Map.of(
-                                "toolCode", ExpenseDocumentControlledQueryTool.TOOL_CODE,
-                                "queryTemplateCode", ExpenseDocumentControlledQueryTool.ACCESSIBLE_QUERY_TEMPLATE_CODE,
-                                "variableMapping", Map.of(
-                                        "scope", "{{user.scope}}",
-                                        "keyword", "{{user.keyword}}",
-                                        "status", "{{user.status}}"
-                                )
-                        )),
-                        Map.of("nodeKey", "llm_1", "nodeType", "llm", "label", "脱敏分析"),
-                        Map.of("nodeKey", "end_1", "nodeType", "end", "label", "结束")
-                ),
-                "edges", List.of(
-                        Map.of("source", "start_1", "target", "tool_1"),
-                        Map.of("source", "tool_1", "target", "llm_1"),
-                        Map.of("source", "llm_1", "target", "end_1")
-                )
-        ));
-
-        return SelectedWorkflow.builder()
-                .agentId(0L)
-                .agentVersionId(0L)
-                .ownerUserId(userId)
-                .agentName("内置报销查询工作流")
-                .toolCode(ExpenseDocumentControlledQueryTool.TOOL_CODE)
-                .providerCode(resolveProvider(preferredProvider, modelConfig))
-                .model(resolveModel(preferredModel, modelConfig))
-                .config(config)
-                .builtInFallback(true)
-                .build();
+    public static class AmbiguousWorkflowException extends RuntimeException {
+        public AmbiguousWorkflowException() { super("多个数字员工可处理此查询，请先选择数字员工或工作流"); }
     }
 
     private String resolveProvider(String preferredProvider, Map<String, Object> modelConfig) {

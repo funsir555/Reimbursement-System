@@ -32,6 +32,13 @@ describe('navigation configuration', () => {
     expect(fallbackMatch('agents:view')).toBe('/agent/workbench')
   })
 
+  it('uses the shared Element Plus CPU icon for the Agent navigation group', () => {
+    const agentGroup = MAIN_NAVIGATION_MENU.find((item) => item.index === '/agent')
+
+    expect(agentGroup?.title).toBe('Agent')
+    expect(agentGroup?.iconKey).toBe('Cpu')
+  })
+
   it('resolves finance tab titles and placeholder copy from route meta', () => {
     expect(resolveRouteTabTitle(resolveRouteMeta('finance-system-management-new-account-set'))).toBe('新建账套')
     expect(resolvePlaceholderTitle(resolveRouteMeta('finance-review-voucher'))).toBe('审核凭证')

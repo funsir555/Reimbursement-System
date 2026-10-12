@@ -23,6 +23,7 @@ public final class ArchiveAgentSupport {
     public static final String TRIGGER_TYPE_MANUAL = "MANUAL";
     public static final String TRIGGER_TYPE_SCHEDULE = "SCHEDULE";
     public static final String TRIGGER_TYPE_EVENT = "EVENT";
+    public static final String TRIGGER_SOURCE_WORKBENCH_TEST = "WORKBENCH_TEST";
 
     public static final String SCHEDULE_MODE_CRON = "CRON";
     public static final String SCHEDULE_MODE_INTERVAL = "INTERVAL";

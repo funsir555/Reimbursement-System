@@ -7,6 +7,7 @@ import com.finex.auth.entity.User;
 import com.finex.auth.entity.UserBankAccount;
 import com.finex.auth.mapper.DownloadRecordMapper;
 import com.finex.auth.mapper.UserBankAccountMapper;
+import com.finex.auth.security.PasswordHashService;
 import com.finex.auth.service.UserService;
 import com.finex.auth.service.impl.DownloadStorageService;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,9 +39,11 @@ class ProfileCenterDomainSupportTest {
     private DownloadStorageService downloadStorageService;
 
     private ProfileCenterDomainSupport support;
+    private PasswordHashService passwordHashService;
 
     @BeforeEach
     void setUp() {
+        passwordHashService = new PasswordHashService();
         ProfileBankAccountDomainSupport bankSupport = new ProfileBankAccountDomainSupport(
                 userService,
                 userBankAccountMapper,
@@ -51,7 +55,8 @@ class ProfileCenterDomainSupportTest {
                 userBankAccountMapper,
                 downloadRecordMapper,
                 downloadStorageService,
-                bankSupport
+                bankSupport,
+                passwordHashService
         );
     }
 
@@ -123,6 +128,6 @@ class ProfileCenterDomainSupportTest {
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userService).updateById(captor.capture());
-        assertEquals(DigestUtil.md5Hex("new-password"), captor.getValue().getPassword());
+        assertTrue(passwordHashService.matches("new-password", captor.getValue().getPassword()));
     }
 }

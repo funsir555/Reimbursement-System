@@ -31,7 +31,7 @@ public class AgentExecutionContext implements Serializable {
     /**
      * 公司ID
      */
-    private Long companyId;
+    private String companyId;
 
     /**
      * 用户ID
@@ -71,7 +71,7 @@ public class AgentExecutionContext implements Serializable {
                 .tenantId(TenantContext.getTenantId())
                 .companyId(TenantContext.getCompanyId())
                 .userId(TenantContext.getUserId())
-                .traceId(TraceContext.getCurrentTraceId())
+                .traceId(TraceContext.currentOrNull())
                 .createdAt(Instant.now())
                 .build();
     }
