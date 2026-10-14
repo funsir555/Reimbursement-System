@@ -11,10 +11,9 @@ $oneTimeCurrentLimit = 846
 
 Push-Location $root
 try {
-    $files = @(
-        rg --files 'backend' -g '*.java'
-        rg --files 'frontend/admin-web/src' -g '*.vue' -g '*.ts'
-    )
+    $files = @(git -c core.quotePath=false ls-files --cached --others --exclude-standard -- 'backend' 'frontend/admin-web/src' |
+        Where-Object { ($_ -match '^backend/.+\.java$' -or $_ -match '^frontend/admin-web/src/.+\.(vue|ts)$') -and
+            (Test-Path -LiteralPath $_) })
     foreach ($candidate in $files) {
         $path = $candidate.Replace('\', '/')
         if ($path.EndsWith('.java') -and $path -notmatch '/src/main/java/') { continue }
