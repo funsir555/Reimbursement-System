@@ -2,12 +2,12 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repositoryRoot
 try {
-    $trackedOutput = & git -c core.quotePath=false ls-files
+    $trackedOutput = & git ls-files -z
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to enumerate tracked files.'
     }
-    $trackedFiles = @($trackedOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $trackedFiles += & git -c core.quotePath=false ls-files --others --exclude-standard
+    $trackedFiles = @((($trackedOutput -join "`n") -split "`0") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $trackedFiles += & git ls-files --others --exclude-standard
     $trackedFiles = $trackedFiles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique
     $textExtensions = @('.bat', '.cmd', '.conf', '.env', '.java', '.js', '.json', '.md', '.properties', '.ps1', '.sql', '.ts', '.tsx', '.vue', '.xml', '.yaml', '.yml')
     $findings = [System.Collections.Generic.List[string]]::new()
@@ -28,7 +28,7 @@ try {
         if (-not (Test-Path -LiteralPath $absolutePath)) {
             continue
         }
-        $fileInfo = Get-Item -LiteralPath $absolutePath
+        $fileInfo = Get-Item -LiteralPath $absolutePath -Force
         if ($fileInfo.Length -gt 2MB) {
             continue
         }
