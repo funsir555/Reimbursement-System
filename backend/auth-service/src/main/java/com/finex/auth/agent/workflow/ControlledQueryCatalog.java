@@ -13,6 +13,59 @@ public final class ControlledQueryCatalog {
     public record Definition(String code, String label, String domain, String entry,
                              String permission, String template, String description,
                              String kind, List<Field> fields) {
+        /** FinWork reads this contract; execution still accepts only the fixed tool fields. */
+        public List<Map<String, Object>> semanticInputs() {
+            List<Field> inputs = "EXPENSE".equals(kind) ? List.of(
+                    new Field("scope", "报销单范围", "enum", false),
+                    new Field("status", "报销单状态", "enum", false),
+                    new Field("keyword", "单据关键词", "text", false),
+                    new Field("startDate", "起始日期", "date", false),
+                    new Field("endDate", "结束日期", "date", false),
+                    new Field("minAmount", "最低金额", "decimal", false),
+                    new Field("maxAmount", "最高金额", "decimal", false),
+                    new Field("limit", "展示条数", "integer", false)) : fields;
+            List<Field> described = new java.util.ArrayList<>(inputs);
+            if (inputs.stream().anyMatch(field -> "companyId".equals(field.key())))
+                described.add(new Field("companyName", "账套名称或简称", "text", false));
+            if (inputs.stream().anyMatch(field -> "accountCodeFrom".equals(field.key()))) {
+                described.add(new Field("accountNameFrom", "起始科目名称", "text", false));
+                described.add(new Field("accountNameTo", "结束科目名称", "text", false));
+            }
+            return described.stream().map(field -> {
+                Map<String, Object> input = new LinkedHashMap<>();
+                input.put("key", field.key());
+                input.put("label", field.label());
+                input.put("type", field.type());
+                input.put("required", field.required());
+                input.put("meaning", semanticMeaning(field.key()));
+                return input;
+            }).toList();
+        }
+
+        private String semanticMeaning(String key) {
+            return switch (key) {
+                case "companyId" -> "账套内部编码。用户可说公司全称或简称；先按授权账套名称匹配，不能猜编码。";
+                case "companyName" -> "用户提到的账套或公司名称、简称，原样保留供授权账套匹配。";
+                case "supplierCode" -> "供应商内部编码。用户通常说名称或简称；请另给 supplierName 供服务端授权档案匹配。";
+                case "supplierName" -> "用户提到的供应商名称或简称，原样保留；仅供应商明细账使用。";
+                case "yearFrom", "periodFrom", "yearTo", "periodTo" ->
+                        "会计期间起止。明确全部期间才按账套启用月到最新可查月；仅说期初期末仍需澄清。可识别去年、本季度等相对表达，但不得猜缺失年份。";
+                case "year", "period" -> "未结账公司数的单个会计年月，范围为 1990 至 2090 年、1 至 12 月。";
+                case "voucherStatus" -> "仅 POSTED_ONLY（仅已记账）或 INCLUDE_SAVED_UNPOSTED（包含已保存未记账）；未表达时留空，不默认。注意否定词。";
+                case "accountCodeFrom", "accountCodeTo" -> "余额表科目编码边界。用户说科目名称时保留名称供授权科目档案解析，不能猜编码。";
+                case "accountNameFrom", "accountNameTo" -> "用户提到的科目名称，原样保留供授权科目档案匹配。";
+                case "assistDisplay" -> "余额表辅助项展示：NAME、CODE、CODE_NAME；未说明则工具默认 NAME。";
+                case "subjectLevelRange" -> "余额表科目级次，仅 1-数字 或 1-n，例如 1-3、1-n；未说明则工具默认 1-n。";
+                case "page" -> "页码，从 1 开始；用户未指定时不填写。";
+                case "pageSize" -> "每页条数，1 至 200；未指定时不填写。一页并非全部结果。";
+                case "scope" -> "报销范围：SUBMITTED_BY_ME、ASSIGNED_TO_ME、VISIBLE；按用户说的我的单据、待我处理或有权查看区分。";
+                case "status" -> "报销单状态：DRAFT 草稿、PENDING_APPROVAL 待审批、APPROVED 已审批、REJECTED 已驳回、PENDING_PAYMENT 待付款、PAYING 付款中、PAYMENT_COMPLETED 已付款、PAYMENT_FINISHED 付款完成、EXCEPTION 异常、PAYMENT_EXCEPTION 付款异常；无法确定时澄清。";
+                case "startDate", "endDate" -> "报销单日期边界，YYYY-MM-DD；相对日期按服务端当前日期和 Asia/Shanghai 时区理解。";
+                case "minAmount", "maxAmount" -> "报销金额下限或上限，非负数字；严格大于/小于无法精确表达时澄清。";
+                case "limit" -> "报销单展示条数，1 至 50；不改变授权结果的合计。";
+                default -> "仅在用户明确表达该条件时填写，值必须符合工具类型与业务范围。";
+            };
+        }
         public Map<String, Object> metadata() {
             Map<String, Object> value = new LinkedHashMap<>();
             value.put("toolCode", code);

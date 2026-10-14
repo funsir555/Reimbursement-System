@@ -34,6 +34,16 @@ class FinanceAgentQueryServiceTest {
     }
 
     @Test
+    void subjectNameLookupRequiresBalancePermissionAndAuthorizedCompany() {
+        assertThatThrownBy(() -> service.subjects(grant("A"), "A", "应收账款"))
+                .isInstanceOf(SecurityException.class);
+        assertThatThrownBy(() -> service.subjects(
+                grant("A", FinanceLedgerReportPermissionCodes.BALANCE), "B", "应收账款"))
+                .isInstanceOf(SecurityException.class);
+        verifyNoInteractions(jdbc, reports);
+    }
+
+    @Test
     void archiveQueryUsesCompanyFilterAndFixedProjection() {
         when(jdbc.queryForObject(contains("fin_account_set"), eq(Integer.class), eq("A"), eq("ACTIVE")))
                 .thenReturn(1);

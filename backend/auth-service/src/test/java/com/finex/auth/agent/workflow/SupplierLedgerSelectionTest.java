@@ -73,4 +73,15 @@ class SupplierLedgerSelectionTest {
 
         assertEquals("V1", match.code());
     }
+
+    @Test
+    void latestClarificationCanReplaceAnEarlierValidSupplier() {
+        var replacement = new FinanceAgentQueryPort.Supplier("V2", "云之智");
+        when(finance.suppliers(grant, "C1", "云之智")).thenReturn(List.of(replacement));
+
+        var match = SupplierLedgerSelection.resolve(finance, grant, "C1",
+                "查询供应商6的明细\n补充说明：改成云之智", "云之智", null);
+
+        assertEquals("V2", match.code());
+    }
 }

@@ -28,7 +28,7 @@ try {
         if (-not (Test-Path -LiteralPath $absolutePath)) {
             continue
         }
-        $fileInfo = Get-Item -LiteralPath $absolutePath
+        $fileInfo = Get-Item -LiteralPath $absolutePath -Force
         if ($fileInfo.Length -gt 2MB) {
             continue
         }
