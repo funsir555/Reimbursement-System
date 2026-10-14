@@ -61,4 +61,31 @@ class QueryTemplateVariableMapperTest {
         assertEquals("APPROVED", mapped.getStatus());
         assertEquals(10, mapped.getLimit());
     }
+
+    @Test
+    void validatedFinWorkExpenseInputsOverrideTemplateMapping() {
+        QueryTemplateVariables defaults = QueryTemplateVariables.builder()
+                .scope(QueryTemplateVariables.SCOPE_SUBMITTED_BY_ME).limit(10).build();
+        QueryTemplateVariables mapped = mapper.withNodeParameters(defaults,
+                Map.of("parameters", Map.of("expense", Map.of(
+                        "scope", QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME,
+                        "startDate", "2026-09-01", "endDate", "2026-09-30",
+                        "minAmount", 100, "limit", 20))), "expense");
+
+        assertEquals(QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME, mapped.getScope());
+        assertEquals(LocalDate.of(2026, 9, 1).atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant(),
+                mapped.getStartDate());
+        assertEquals(LocalDate.of(2026, 10, 1).atStartOfDay(ZoneId.of("Asia/Shanghai"))
+                .minusNanos(1).toInstant(), mapped.getEndDate());
+        assertEquals(100d, mapped.getMinAmount());
+        assertEquals(20, mapped.getLimit());
+    }
+
+    @Test
+    void legacyExpenseScopeAliasesRemainAccepted() {
+        QueryTemplateVariables mapped = mapper.withNodeParameters(
+                QueryTemplateVariables.builder().limit(10).build(),
+                Map.of("parameters", Map.of("expense", Map.of("scope", "MY"))), "expense");
+        assertEquals(QueryTemplateVariables.SCOPE_SUBMITTED_BY_ME, mapped.getScope());
+    }
 }

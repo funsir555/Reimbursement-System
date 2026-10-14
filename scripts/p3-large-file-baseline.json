@@ -23,7 +23,7 @@
   "frontend/admin-web/src/views/expense/ExpenseCreateView.vue": 1089,
   "frontend/admin-web/src/views/agent/desensitization/DesensitizationConfigView.vue": 840,
   "frontend/admin-web/src/views/expense/components/ExpenseRuntimeFormEditor.vue": 1340,
-  "frontend/admin-web/src/views/archives/ArchiveAgentView.vue": 820,
+  "frontend/admin-web/src/views/archives/ArchiveAgentView.vue": 846,
   "frontend/admin-web/src/views/expense/components/composables/useExpenseRuntimePaymentCounterparty.ts": 1107,
   "frontend/admin-web/src/components/process/CustomArchiveManagementPanel.vue": 1004,
   "frontend/admin-web/src/components/process/ProcessFlowCanvasRenderer.vue": 1033

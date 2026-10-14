@@ -20,6 +20,13 @@ final class SupplierLedgerSelection {
     static Match resolve(FinanceAgentQueryPort finance, QueryAuthorization grant, String companyId,
                          String question, String proposedName, String selectedCode) {
         String words = question == null ? "" : question;
+        int supplement = words.lastIndexOf("\n补充说明：");
+        if (supplement >= 0 && proposedName != null && !proposedName.isBlank()
+                && words.substring(supplement).contains(proposedName.trim())) {
+            String latestName = proposedName.trim();
+            return choose(finance, grant, companyId, latestName,
+                    finance.suppliers(grant, companyId, latestName), selectedCode);
+        }
         String name = "";
         Matcher phrase = SUPPLIER_PHRASE.matcher(words);
         String matchedPhrase = null;

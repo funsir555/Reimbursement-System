@@ -56,29 +56,14 @@ public class ControlledWorkflowToolInvoker {
         Object all = input.get("parameters");
         Map<?, ?> node = all instanceof Map<?, ?> map && map.get(nodeKey) instanceof Map<?, ?> selected
                 ? selected : Map.of();
-        if (!Set.of("scope", "keyword", "status").containsAll(node.keySet()))
+        Set<String> accepted = Boolean.TRUE.equals(input.get("finworkPrepared"))
+                ? Set.of("scope", "keyword", "status", "startDate", "endDate",
+                        "minAmount", "maxAmount", "limit")
+                : Set.of("scope", "keyword", "status");
+        if (!accepted.containsAll(node.keySet()))
             throw new IllegalArgumentException("报销工具参数不在固定模板中");
         node.forEach((key, value) -> merged.put(String.valueOf(key), value));
         QueryTemplateVariables variables = queryTemplateVariableMapper.map(extracted, config, merged);
-        if (node.containsKey("scope")) {
-            variables.setScope(switch (String.valueOf(node.get("scope"))) {
-                case "MY", "SUBMITTED_BY_ME" -> QueryTemplateVariables.SCOPE_SUBMITTED_BY_ME;
-                case "ASSIGNED", "ASSIGNED_TO_ME" -> QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME;
-                case "VISIBLE" -> QueryTemplateVariables.SCOPE_VISIBLE;
-                default -> throw new IllegalArgumentException("报销查询范围参数无效");
-            });
-        }
-        if (node.containsKey("keyword")) {
-            String keyword = String.valueOf(node.get("keyword")).trim();
-            if (keyword.length() > 200) throw new IllegalArgumentException("报销关键词过长");
-            variables.setNormalizedKeyword(keyword.isBlank() ? null : keyword);
-            variables.setRawKeyword(keyword.isBlank() ? null : keyword);
-        }
-        if (node.containsKey("status")) {
-            String status = String.valueOf(node.get("status")).trim();
-            if (status.length() > 64) throw new IllegalArgumentException("单据状态参数无效");
-            variables.setStatus(status.isBlank() ? null : status);
-        }
-        return variables;
+        return queryTemplateVariableMapper.withNodeParameters(variables, input, nodeKey);
     }
 }

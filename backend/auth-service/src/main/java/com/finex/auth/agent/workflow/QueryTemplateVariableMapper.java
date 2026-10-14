@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Applies the canvas variable mapping to the canonical controlled-query variables.
@@ -19,6 +20,23 @@ import java.util.Map;
 public class QueryTemplateVariableMapper {
 
     private final ObjectMapper objectMapper;
+
+    public record PreparedQuery(QueryTemplateVariables variables, String message) { }
+
+    public PreparedQuery prepare(String toolCode, QueryTemplateVariables extracted,
+                                 Map<String, Object> config, Map<String, Object> input,
+                                 String nodeKey, String message) {
+        QueryTemplateVariables variables = map(extracted, config, input);
+        if (!Boolean.TRUE.equals(input.get("finworkPrepared"))) return new PreparedQuery(variables, message);
+        if (ExpenseDocumentControlledQueryTool.TOOL_CODE.equals(toolCode))
+            variables = withNodeParameters(variables, input, nodeKey);
+        if (FinanceUnclosedCompanyTool.TOOL_CODE.equals(toolCode)
+                && input.get("parameters") instanceof Map<?, ?> nodes
+                && nodes.get(nodeKey) instanceof Map<?, ?> period
+                && period.get("year") != null && period.get("period") != null)
+            message = period.get("year") + "年" + period.get("period") + "月";
+        return new PreparedQuery(variables, message);
+    }
 
     public QueryTemplateVariables map(
             QueryTemplateVariables extracted,
@@ -36,6 +54,33 @@ public class QueryTemplateVariableMapper {
         Map<String, Object> context = buildContext(source, inputPayload);
         MutableVariables target = new MutableVariables(source);
         mapping.forEach((targetName, expression) -> target.apply(targetName, resolve(expression, context)));
+        return target.build();
+    }
+
+    /** Applies already validated FinWork node inputs after canvas defaults and mappings. */
+    public QueryTemplateVariables withNodeParameters(QueryTemplateVariables source,
+                                                     Map<String, Object> inputPayload, String nodeKey) {
+        if (inputPayload == null || !(inputPayload.get("parameters") instanceof Map<?, ?> all)
+                || !(all.get(nodeKey) instanceof Map<?, ?> node) || node.isEmpty()) return source;
+        if (!Set.of("scope", "status", "keyword", "startDate", "endDate",
+                "minAmount", "maxAmount", "limit").containsAll(node.keySet()))
+            throw new IllegalArgumentException("报销工具参数不在固定模板中");
+        MutableVariables target = new MutableVariables(source);
+        for (Map.Entry<?, ?> entry : node.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            Object value = entry.getValue();
+            if ("scope".equals(key)) value = switch (String.valueOf(value)) {
+                case "MY", "SUBMITTED_BY_ME" -> QueryTemplateVariables.SCOPE_SUBMITTED_BY_ME;
+                case "ASSIGNED", "ASSIGNED_TO_ME" -> QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME;
+                case "VISIBLE" -> QueryTemplateVariables.SCOPE_VISIBLE;
+                default -> throw new IllegalArgumentException("报销查询范围参数无效");
+            };
+            if ("keyword".equals(key) && String.valueOf(value).trim().length() > 200)
+                throw new IllegalArgumentException("报销关键词过长");
+            if ("status".equals(key) && String.valueOf(value).trim().length() > 64)
+                throw new IllegalArgumentException("单据状态参数无效");
+            target.apply(key, value);
+        }
         return target.build();
     }
 
@@ -165,8 +210,8 @@ public class QueryTemplateVariableMapper {
                 try {
                     LocalDate date = LocalDate.parse(String.valueOf(value));
                     return endOfDay
-                            ? date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).minusNanos(1).toInstant()
-                            : date.atStartOfDay(ZoneId.systemDefault()).toInstant();
+                            ? date.plusDays(1).atStartOfDay(ZoneId.of("Asia/Shanghai")).minusNanos(1).toInstant()
+                            : date.atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant();
                 } catch (Exception ignored) {
                     return fallback;
                 }

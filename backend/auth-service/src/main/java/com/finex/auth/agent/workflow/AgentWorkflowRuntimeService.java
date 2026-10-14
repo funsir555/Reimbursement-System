@@ -113,8 +113,8 @@ public class AgentWorkflowRuntimeService {
                 ? "query_finance_close" : "query_expense";
         ArchiveAgentRun run = createRun(workflow, userId, sessionId, queryText, ensureTraceId());
         return executeSelectedWorkflow(run, workflow, normalizeSessionId(sessionId, run),
-                userId, queryText, intent, Map.of("query", queryText, "parameters",
-                        parameters == null ? Map.of() : parameters), true);
+                userId, queryText, intent, Map.of("query", queryText, "finworkPrepared", true,
+                        "parameters", parameters == null ? Map.of() : parameters), true);
     }
 
     public WorkflowExecutionResult executeQueryWorkflow(
@@ -221,7 +221,10 @@ public class AgentWorkflowRuntimeService {
             Map<String, Object> llmConfig = WorkflowGraphPlan.nodeConfig(llmNode);
 
             QueryTemplateVariables extracted = queryParameterExtractor.extract(userMessage);
-            QueryTemplateVariables variables = queryTemplateVariableMapper.map(extracted, toolConfig, inputPayload);
+            QueryTemplateVariableMapper.PreparedQuery prepared = queryTemplateVariableMapper.prepare(
+                    workflow.getToolCode(), extracted, toolConfig, inputPayload, nodeKey(toolNode), userMessage);
+            QueryTemplateVariables variables = prepared.variables();
+            String effectiveMessage = prepared.message();
             int stepNo = 1;
             if (includeSelectorStep) {
                 saveStep(run.getId(), stepNo++, "selector_1", "selector", "工作流选择",
@@ -242,7 +245,7 @@ public class AgentWorkflowRuntimeService {
                     .queryTemplateCode(queryTemplateCode)
                     .variables(variables)
                     .authorization(authorization)
-                    .userMessage(userMessage)
+                    .userMessage(effectiveMessage)
                     .build());
             if (!toolResult.isSuccess()) {
                 throw new IllegalStateException(toolResult.getErrorMessage());
@@ -470,7 +473,7 @@ public class AgentWorkflowRuntimeService {
                 SupplierLedgerAnswerFormatter.appendRows(content, item);
             }
             String explanation = extractAnswer(restored);
-            if (explanation != null && !explanation.isBlank())
+            if (explanation != null && !explanation.isBlank() && userMessage.matches("(?s).*(?:分析|解释|原因|为什么|对比|比较|趋势|总结|汇总).*"))
                 content.append("\n\n分析：").append(explanation);
             content.append("\n\n仅统计您有权查看的范围。");
             assertAllAuthorizations(workflow, userId, granted);

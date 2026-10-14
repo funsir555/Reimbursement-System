@@ -121,9 +121,14 @@ class AgentWorkflowRuntimeServiceTest {
             run.setId(31L);
             WorkflowExecutionResult success = service.executeWorkbenchWorkflow(run, definition, version, config);
             assertTrue(success.isSuccess());
+            assertTrue(!success.getContent().contains("分析："));
             assertEquals(List.of("a", "b"), success.getToolOrigins().stream()
                     .map(WorkflowExecutionResult.ToolOrigin::nodeKey).toList());
             assertEquals(null, success.getResultCount());
+            run.setId(32L);
+            run.setInputJson("{\"query\":\"分析科目\"}");
+            assertTrue(service.executeWorkbenchWorkflow(run, definition, version, config)
+                    .getContent().contains("分析：已完成"));
         } finally {
             TenantContext.clear();
             branches.shutdown();

@@ -95,6 +95,25 @@ public class FinanceAgentQueryService implements FinanceAgentQueryPort {
         return supplierLedger.suppliers(authorization, companyId, name);
     }
 
+    @Override
+    public List<Subject> subjects(QueryAuthorization authorization, String companyId, String nameOrCode) {
+        if (authorization == null || !FinanceLedgerReportPermissionCodes.BALANCE.equals(authorization.permissionCode())
+                || companyId == null || !authorization.allows(companyId, null))
+            throw new SecurityException(QueryAuthorizationService.NO_PERMISSION);
+        String term = nameOrCode == null ? "" : nameOrCode.trim();
+        if (term.isBlank() || term.length() > 100) return List.of();
+        String pattern = "%" + term.replace("!", "!!").replace("%", "!%")
+                .replace("_", "!_") + "%";
+        return jdbc.query("""
+                SELECT s.subject_code, s.subject_name FROM fin_account_subject s
+                JOIN fin_account_set a ON a.company_id=s.company_id AND a.status='ACTIVE'
+                JOIN sys_company c ON c.company_id=s.company_id AND c.status=1
+                WHERE s.company_id=? AND (s.subject_code=? OR s.subject_name LIKE ? ESCAPE '!')
+                ORDER BY s.subject_code LIMIT 51
+                """, (rs, row) -> new Subject(rs.getString(1), rs.getString(2)),
+                companyId, term, pattern);
+    }
+
     private Page balance(QueryAuthorization authorization, Map<String, Object> values,
                          String companyId, int page, int size) {
         FinanceLedgerReportQueryDTO query = new FinanceLedgerReportQueryDTO();
