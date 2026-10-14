@@ -38,8 +38,8 @@ class QueryTemplateVariableMapperTest {
         assertEquals("远智", mapped.getNormalizedKeyword());
         assertEquals(QueryTemplateVariables.SCOPE_ASSIGNED_TO_ME, mapped.getScope());
         assertEquals("PENDING_APPROVAL", mapped.getStatus());
-        assertEquals(LocalDate.of(2026, 9, 1).atStartOfDay(ZoneId.systemDefault()).toInstant(), mapped.getStartDate());
-        assertEquals(LocalDate.of(2026, 10, 1).atStartOfDay(ZoneId.systemDefault()).minusNanos(1).toInstant(), mapped.getEndDate());
+        assertEquals(LocalDate.of(2026, 9, 1).atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant(), mapped.getStartDate());
+        assertEquals(LocalDate.of(2026, 10, 1).atStartOfDay(ZoneId.of("Asia/Shanghai")).minusNanos(1).toInstant(), mapped.getEndDate());
         assertEquals(5, mapped.getLimit());
     }
 

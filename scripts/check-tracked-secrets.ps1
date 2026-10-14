@@ -2,12 +2,12 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repositoryRoot
 try {
-    $trackedOutput = & git ls-files -z
+    $trackedOutput = & git -c core.quotePath=false ls-files
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to enumerate tracked files.'
     }
-    $trackedFiles = @((($trackedOutput -join "`n") -split "`0") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $trackedFiles += & git ls-files --others --exclude-standard
+    $trackedFiles = @($trackedOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $trackedFiles += & git -c core.quotePath=false ls-files --others --exclude-standard
     $trackedFiles = $trackedFiles | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique
     $textExtensions = @('.bat', '.cmd', '.conf', '.env', '.java', '.js', '.json', '.md', '.properties', '.ps1', '.sql', '.ts', '.tsx', '.vue', '.xml', '.yaml', '.yml')
     $findings = [System.Collections.Generic.List[string]]::new()
