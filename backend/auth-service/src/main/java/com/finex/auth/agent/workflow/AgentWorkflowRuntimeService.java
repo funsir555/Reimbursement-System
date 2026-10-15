@@ -9,6 +9,7 @@ import com.finex.auth.agent.desensitization.DesensitizedData;
 import com.finex.auth.agent.model.ChatModelProvider;
 import com.finex.auth.agent.model.ModelCapability;
 import com.finex.auth.agent.model.ModelRoutingService;
+import com.finex.auth.agent.ontology.OntologyResultContextService;
 import com.finex.auth.entity.ArchiveAgentDefinition;
 import com.finex.auth.entity.ArchiveAgentRun;
 import com.finex.auth.entity.ArchiveAgentRunStep;
@@ -43,16 +44,11 @@ import java.util.UUID;
 public class AgentWorkflowRuntimeService {
 
     private static final Map<String, String> CLOUD_SENSITIVE_FIELDS = Map.ofEntries(
-            Map.entry("keyword", "KEYWORD"),
-            Map.entry("normalizedKeyword", "KEYWORD"),
-            Map.entry("documentId", "RECORD"),
-            Map.entry("documentCode", "DOC"),
-            Map.entry("title", "DETAIL"),
-            Map.entry("reason", "DETAIL"),
-            Map.entry("cdigest", "DETAIL"),
-            Map.entry("cbill", "DETAIL"),
-            Map.entry("cname", "DETAIL"),
-            Map.entry("cCusName", "DETAIL"),
+            Map.entry("keyword", "KEYWORD"), Map.entry("normalizedKeyword", "KEYWORD"),
+            Map.entry("documentId", "RECORD"), Map.entry("documentCode", "DOC"),
+            Map.entry("title", "DETAIL"), Map.entry("reason", "DETAIL"),
+            Map.entry("cdigest", "DETAIL"), Map.entry("cbill", "DETAIL"),
+            Map.entry("cname", "DETAIL"), Map.entry("cCusName", "DETAIL"),
             Map.entry("cVenName", "DETAIL"),
             Map.entry("cCusAbbName", "DETAIL"),
             Map.entry("cVenAbbName", "DETAIL"),
@@ -84,6 +80,7 @@ public class AgentWorkflowRuntimeService {
     private final ObjectMapper objectMapper;
     private final QueryAuthorizationService authorizationService;
     private final DigitalEmployeeService digitalEmployeeService;
+    private final OntologyResultContextService ontologyResultContextService;
 
     public WorkflowExecutionResult executeQueryWorkflow(
             String sessionId,
@@ -113,8 +110,8 @@ public class AgentWorkflowRuntimeService {
                 ? "query_finance_close" : "query_expense";
         ArchiveAgentRun run = createRun(workflow, userId, sessionId, queryText, ensureTraceId());
         return executeSelectedWorkflow(run, workflow, normalizeSessionId(sessionId, run),
-                userId, queryText, intent, Map.of("query", queryText, "parameters",
-                        parameters == null ? Map.of() : parameters), true);
+                userId, queryText, intent, Map.of("query", queryText, "finworkPrepared", true,
+                        "parameters", parameters == null ? Map.of() : parameters), true);
     }
 
     public WorkflowExecutionResult executeQueryWorkflow(
@@ -221,7 +218,10 @@ public class AgentWorkflowRuntimeService {
             Map<String, Object> llmConfig = WorkflowGraphPlan.nodeConfig(llmNode);
 
             QueryTemplateVariables extracted = queryParameterExtractor.extract(userMessage);
-            QueryTemplateVariables variables = queryTemplateVariableMapper.map(extracted, toolConfig, inputPayload);
+            QueryTemplateVariableMapper.PreparedQuery prepared = queryTemplateVariableMapper.prepare(
+                    workflow.getToolCode(), extracted, toolConfig, inputPayload, nodeKey(toolNode), userMessage);
+            QueryTemplateVariables variables = prepared.variables();
+            String effectiveMessage = prepared.message();
             int stepNo = 1;
             if (includeSelectorStep) {
                 saveStep(run.getId(), stepNo++, "selector_1", "selector", "工作流选择",
@@ -242,7 +242,7 @@ public class AgentWorkflowRuntimeService {
                     .queryTemplateCode(queryTemplateCode)
                     .variables(variables)
                     .authorization(authorization)
-                    .userMessage(userMessage)
+                    .userMessage(effectiveMessage)
                     .build());
             if (!toolResult.isSuccess()) {
                 throw new IllegalStateException(toolResult.getErrorMessage());
@@ -269,7 +269,8 @@ public class AgentWorkflowRuntimeService {
                         .sourceDigest(authorization.digest()).build();
             }
 
-            Map<String, Object> contextPayload = buildContextPayload(traceId, userMessage, inputPayload, variables, toolResult);
+            Map<String, Object> contextPayload = buildContextPayload(traceId, userMessage, inputPayload,
+                    variables, toolResult, workflow);
             String contextJson = writeJson(contextPayload);
             DesensitizedData desensitized = desensitizationService.desensitizeJsonFields(
                     sessionId,
@@ -449,7 +450,8 @@ public class AgentWorkflowRuntimeService {
                         branchResult == null ? null : branchResult.finishedAt());
             }
             assertAllAuthorizations(workflow, userId, granted);
-            String contextJson = writeJson(values("question", userMessage, "tools", modelInputs));
+            String contextJson = writeJson(values("question", userMessage, "tools", modelInputs,
+                    "businessOntology", ontologyResultContextService.forAnalysis(userMessage, workflow, modelInputs)));
             DesensitizedData masked = desensitizationService.desensitizeJsonFields(
                     sessionId, contextJson, CLOUD_SENSITIVE_FIELDS, Set.of("KEYWORD"));
             if (!masked.isSuccess() || masked.getMappingId() == null)
@@ -624,19 +626,18 @@ public class AgentWorkflowRuntimeService {
         return new ModelAnalysisResult(response.getContent(), response.getModel());
     }
 
-    private Map<String, Object> buildContextPayload(
-            String traceId,
-            String userMessage,
-            Map<String, Object> inputPayload,
-            QueryTemplateVariables variables,
-            ControlledToolResult toolResult
-    ) {
+    private Map<String, Object> buildContextPayload(String traceId, String userMessage,
+                                                    Map<String, Object> inputPayload,
+                                                    QueryTemplateVariables variables, ControlledToolResult toolResult,
+                                                    SelectedWorkflow workflow) {
         return values(
                 "traceId", traceId,
                 "question", userMessage,
                 "context", inputPayload == null ? null : text(inputPayload.get("context")),
                 "variables", variables.toMap(),
                 "records", safeRecords(toolResult),
+                "businessOntology", ontologyResultContextService.forAnalysis(userMessage, workflow,
+                        List.of(values("toolCode", workflow.getToolCode(), "records", safeRecords(toolResult)))),
                 "totalCount", toolResult.getTotalCount(),
                 "totalAmount", toolResult.getTotalAmount(),
                 "evidenceRefs", safeEvidenceRefs(toolResult)

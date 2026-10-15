@@ -90,4 +90,17 @@ public class AsyncTaskConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("finWorkStreamExecutor")
+    public Executor finWorkStreamExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(32);
+        executor.setThreadNamePrefix("finwork-stream-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
+    }
 }

@@ -14,6 +14,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 
@@ -49,7 +52,7 @@ public class LocalModelProvider implements ChatModelProvider {
     public ModelCapability getCapability() {
         return ModelCapability.builder()
                 .chatCompletion(true)
-                .streamingSupport(false)
+                .streamingSupport(true)
                 .maxContextTokens(8192)
                 .maxOutputTokens(2048)
                 .deployment(ModelCapability.ModelDeployment.ON_PREMISE)
@@ -74,22 +77,7 @@ public class LocalModelProvider implements ChatModelProvider {
             long startTime = System.currentTimeMillis();
 
             // 构建 Ollama API 请求
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", resolvedModelName);
-            requestBody.put("messages", convertMessages(request));
-            requestBody.put("stream", false);
-
-            // 添加可选参数
-            Map<String, Object> options = new HashMap<>();
-            if (request.getTemperature() != null) {
-                options.put("temperature", request.getTemperature());
-            }
-            if (request.getMaxTokens() != null) {
-                options.put("num_predict", request.getMaxTokens());
-            }
-            if (!options.isEmpty()) {
-                requestBody.put("options", options);
-            }
+            Map<String, Object> requestBody = requestBody(request, resolvedModelName, false);
 
             String requestJson = objectMapper.writeValueAsString(requestBody);
             log.debug("Ollama 请求体: {}", requestJson);
@@ -141,8 +129,61 @@ public class LocalModelProvider implements ChatModelProvider {
 
     @Override
     public ChatResponse chatStream(ChatRequest request, StreamHandler handler) {
-        log.warn("本地模型流式调用暂未实现，回退到同步调用");
-        return chat(request);
+        try {
+            long started = System.currentTimeMillis();
+            String model = resolveModelName(request);
+            HttpRequest httpRequest = HttpRequest.newBuilder().uri(URI.create(resolveEndpoint()))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(120))
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            objectMapper.writeValueAsString(requestBody(request, model, true)))).build();
+            HttpResponse<java.io.InputStream> response = httpClient.send(httpRequest,
+                    HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() != 200) {
+                response.body().close();
+                throw new IllegalStateException("本地模型返回错误: " + response.statusCode());
+            }
+            StringBuilder content = new StringBuilder();
+            Map<String, Object> last = Map.of();
+            boolean completed = false;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.isBlank()) continue;
+                    Map<String, Object> event = objectMapper.readValue(line, Map.class);
+                    last = event;
+                    Object message = event.get("message");
+                    if (message instanceof Map<?, ?> data && data.get("content") instanceof String part
+                            && !part.isEmpty()) {
+                        content.append(part);
+                        handler.onChunk(part);
+                    }
+                    if (Boolean.TRUE.equals(event.get("done"))) {
+                        completed = true;
+                        break;
+                    }
+                }
+            }
+            if (!completed) throw new IllegalStateException("本地模型流式响应未完整结束");
+            return ChatResponse.builder().content(content.toString()).model(model)
+                    .tokenUsage(extractTokenUsage(last)).success(true)
+                    .latencyMs((int) (System.currentTimeMillis() - started)).build();
+        } catch (Exception error) {
+            log.error("本地模型流式调用失败", error);
+            return ChatResponse.builder().success(false).errorMessage("本地模型流式调用失败").build();
+        }
+    }
+
+    private Map<String, Object> requestBody(ChatRequest request, String model, boolean stream) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", model);
+        body.put("messages", convertMessages(request));
+        body.put("stream", stream);
+        Map<String, Object> options = new HashMap<>();
+        if (request.getTemperature() != null) options.put("temperature", request.getTemperature());
+        if (request.getMaxTokens() != null) options.put("num_predict", request.getMaxTokens());
+        if (!options.isEmpty()) body.put("options", options);
+        return body;
     }
 
     private String resolveEndpoint() {

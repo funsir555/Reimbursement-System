@@ -1,8 +1,16 @@
 <template>
+  <div class="agent-chat-layout">
+    <FinWorkConversationSidebar :open="sidebarOpen" :selected-id="sessionId"
+      :pinned-conversations="pinnedConversations" :conversations="conversations"
+      :has-more="Boolean(conversationCursor)" :loading="loadingConversations" :busy="sending"
+      @new="handleCreateNewConversation" @select="handleOpenConversation"
+      @load-more="loadConversations()" @rename="renameConversation"
+      @pin="setConversationPinned" @delete="deleteConversation" />
   <div class="agent-chat-container">
     <!-- 会话头部 -->
     <header class="chat-header">
       <div class="chat-header-left">
+        <el-button class="mobile-history-button" text @click="sidebarOpen = !sidebarOpen">沟通记录</el-button>
         <pixel-duck-bot-icon class="h-8 w-8" />
         <div>
           <h2>AI 助手</h2>
@@ -59,6 +67,8 @@
 
     <!-- 消息列表 -->
     <div class="message-list-wrapper" ref="messageListRef">
+      <el-button v-if="messageCursor" class="load-older" text :loading="loading"
+        @click="handleLoadOlderMessages">加载更早消息</el-button>
       <chat-message-list
         v-if="messages.length > 0"
         :messages="messages"
@@ -93,32 +103,41 @@
     <chat-input-box
       v-model="userInput"
       :sending="sending"
-      :disabled="!sessionId"
       @send="handleSendMessage"
     />
     <FinWorkInboxDrawer v-model="inboxVisible" />
+  </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import PixelDuckBotIcon from '@/components/icons/PixelDuckBotIcon.vue'
 import ChatMessageList from '@/components/agent/ChatMessageList.vue'
 import ChatInputBox from '@/components/agent/ChatInputBox.vue'
 import { useAgentChatSession } from '@/composables/useAgentChatSession'
 import FinWorkInboxDrawer from './components/FinWorkInboxDrawer.vue'
+import FinWorkConversationSidebar from './components/FinWorkConversationSidebar.vue'
 
 const route = useRoute()
+const router = useRouter()
 const messageListRef = ref<HTMLElement>()
 const userInput = ref('')
 const inboxVisible = ref(false)
+const sidebarOpen = ref(false)
+const suppressAutoScroll = ref(false)
 
 // 使用 Composable 管理会话状态
 const {
   sessionId,
   messages,
+  conversations,
+  pinnedConversations,
+  conversationCursor,
+  messageCursor,
+  loadingConversations,
   loading,
   sending,
   metaLoading,
@@ -134,6 +153,12 @@ const {
   selectProvider,
   selectModel,
   createNewSession,
+  loadConversations,
+  renameConversation,
+  setConversationPinned,
+  deleteConversation,
+  loadOlderMessages,
+  openSession,
   retryMessage,
   getMessageKey
 } = useAgentChatSession()
@@ -147,10 +172,43 @@ onMounted(async () => {
   await initSession(urlSessionId)
 })
 
+watch(sessionId, id => {
+  if (route.query.sessionId === id || (!route.query.sessionId && !id)) return
+  router.replace({ query: { ...route.query, sessionId: id || undefined } })
+})
+
+watch(() => route.query.sessionId, async id => {
+  const requested = typeof id === 'string' ? id : undefined
+  if (requested === sessionId.value) return
+  if (requested) await openSession(requested)
+  else await createNewSession()
+})
+
 // 监听消息变化，自动滚动到底部
 watch(() => messages.value.length, () => {
-  scrollToBottom()
+  if (!suppressAutoScroll.value) scrollToBottom()
 })
+
+watch(() => messages.value.at(-1)?.content, () => {
+  const list = messageListRef.value
+  if (!list || suppressAutoScroll.value) return
+  if (list.scrollHeight - list.scrollTop - list.clientHeight < 140) scrollToBottom()
+})
+
+async function handleOpenConversation(id: string) {
+  await openSession(id)
+  sidebarOpen.value = false
+}
+
+async function handleLoadOlderMessages() {
+  suppressAutoScroll.value = true
+  const list = messageListRef.value
+  const previousHeight = list?.scrollHeight || 0
+  await loadOlderMessages()
+  await nextTick()
+  if (list) list.scrollTop += list.scrollHeight - previousHeight
+  suppressAutoScroll.value = false
+}
 
 async function handleSendMessage() {
   if (!userInput.value.trim()) return
@@ -164,6 +222,7 @@ async function handleSendMessage() {
 async function handleCreateNewConversation() {
   await createNewSession()
   userInput.value = ''
+  sidebarOpen.value = false
 }
 
 function handleProviderChange(value: string) {
@@ -201,6 +260,9 @@ function scrollToBottom() {
 </script>
 
 <style scoped>
+.agent-chat-layout { position: relative; display: flex; height: 100%; min-height: 0; background: #f8fafc; }
+.load-older { display: block; margin: 0 auto 12px; }
+.mobile-history-button { display: none; }
 /* 复用 Agent 工作台的 CSS 变量 */
 .agent-chat-container {
   --ink: #273047;
@@ -214,6 +276,8 @@ function scrollToBottom() {
   flex-direction: column;
   height: 100%;  /* 适应 MainLayout 提供的容器高度 */
   min-height: 0;
+  min-width: 0;
+  flex: 1;
   background: #f8fafc;
 }
 
@@ -318,6 +382,7 @@ function scrollToBottom() {
 }
 
 @media (max-width: 900px) {
+  .mobile-history-button { display: inline-flex; }
   .chat-header {
     align-items: flex-start;
     flex-direction: column;

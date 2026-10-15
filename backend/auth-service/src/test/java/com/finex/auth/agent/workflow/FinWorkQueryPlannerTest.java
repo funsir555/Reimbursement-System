@@ -80,8 +80,7 @@ class FinWorkQueryPlannerTest {
 
     @Test
     void leavesVoucherStatusToServerPreflightEvenWhenModelInventsADefault() {
-        SelectedWorkflow balance = candidate(31L, "余额表工具");
-        balance.setToolCodes(List.of("finance.query_balance_sheet"));
+        SelectedWorkflow balance = candidate(31L, "余额表工具", "finance.query_balance_sheet");
         when(selector.authorizedCandidates(9L, null, null)).thenReturn(List.of(balance));
         when(models.chatWithFallback(any(ModelCapability.ModelUseCase.class),
                 any(ModelRoutingService.DataSensitivity.class), any()))
@@ -95,9 +94,78 @@ class FinWorkQueryPlannerTest {
         assertThat(decision.mode()).isEqualTo(FinWorkQueryPlanner.Mode.EXECUTE);
     }
 
+    @Test
+    void clarificationUpdatesOnlyTheFixedWorkflowAndRecordsEvidence() {
+        SelectedWorkflow expense = candidate(21L, "报销查询");
+        when(selector.authorizedCandidates(9L, null, null)).thenReturn(List.of(expense));
+        when(models.chatWithFallback(any(ModelCapability.ModelUseCase.class),
+                any(ModelRoutingService.DataSensitivity.class), any()))
+                .thenReturn(ChatModelProvider.ChatResponse.builder().success(true).content("""
+                        {"newTask":false,"updates":[{"bindingId":21,
+                         "parameters":{"tool":{"scope":"ASSIGNED_TO_ME"}},
+                         "evidence":{"tool":{"scope":"待我审批"}}}]}
+                        """).build());
+        var current = new FinWorkQueryPlanner.PlannedStep(expense, "查询报销单");
+
+        var revision = planner.revise(9L, "查询报销单", "看待我审批的",
+                List.of(current), List.of(new FinWorkParameterService.Group("scope", "查询范围", List.of())),
+                "session");
+
+        assertThat(revision.newTask()).isFalse();
+        assertThat(revision.changedFields()).containsExactly("21:tool:scope");
+        assertThat(((Map<?, ?>) revision.steps().get(0).parameters().get("tool")).get("scope"))
+                .isEqualTo("ASSIGNED_TO_ME");
+        assertThat(revision.steps().get(0).evidence().get("tool")).containsEntry("scope", "待我审批");
+    }
+
+    @Test
+    void clarificationCanRemoveAnEarlierFilter() {
+        SelectedWorkflow expense = candidate(21L, "报销查询");
+        when(selector.authorizedCandidates(9L, null, null)).thenReturn(List.of(expense));
+        when(models.chatWithFallback(any(ModelCapability.ModelUseCase.class),
+                any(ModelRoutingService.DataSensitivity.class), any()))
+                .thenReturn(ChatModelProvider.ChatResponse.builder().success(true).content("""
+                        {"newTask":false,"updates":[{"bindingId":21,
+                         "parameters":{"tool":{"status":null}},
+                         "evidence":{"tool":{"status":"不限制状态"}}}]}
+                        """).build());
+        var current = new FinWorkQueryPlanner.PlannedStep(expense, "查询已审批报销单",
+                Map.of("tool", Map.of("status", "APPROVED")),
+                Map.of("tool", Map.of("status", "已审批")));
+
+        var revision = planner.revise(9L, "查询已审批报销单", "不限制状态",
+                List.of(current), List.of(), "session");
+
+        assertThat(revision.changedFields()).containsExactly("21:tool:status");
+        assertThat(((Map<?, ?>) revision.steps().get(0).parameters().get("tool"))
+                .containsKey("status")).isFalse();
+    }
+
+    @Test
+    void rejectsFieldsAssignedToTheWrongToolNode() {
+        SelectedWorkflow expense = candidate(21L, "报销查询");
+        when(selector.authorizedCandidates(9L, null, null)).thenReturn(List.of(expense));
+        when(models.chatWithFallback(any(ModelCapability.ModelUseCase.class),
+                any(ModelRoutingService.DataSensitivity.class), any()))
+                .thenReturn(ChatModelProvider.ChatResponse.builder().success(true).content("""
+                        {"mode":"EXECUTE","steps":[{"bindingId":21,"queryText":"查报销单",
+                         "parameters":{"tool":{"supplierCode":"V001"}},
+                         "evidence":{"tool":{"supplierCode":"供应商"}}}]}
+                        """).build());
+
+        assertThatThrownBy(() -> planner.plan(9L, "查供应商报销单", null, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("受控工具契约");
+    }
+
     private SelectedWorkflow candidate(Long bindingId, String name) {
+        return candidate(bindingId, name, "expense.query_my_expenses");
+    }
+
+    private SelectedWorkflow candidate(Long bindingId, String name, String toolCode) {
         return SelectedWorkflow.builder()
                 .workflowBindingId(bindingId)
+                .agentVersionId(31L)
                 .digitalEmployeeId(4L)
                 .agentName(name)
                 .agentDescription("查询授权报销单")
@@ -105,7 +173,7 @@ class FinWorkQueryPlannerTest {
                         "workflow", Map.of("nodes", List.of(
                                 Map.of("nodeKey", "start", "nodeType", "start"),
                                 Map.of("nodeKey", "tool", "nodeType", "tool", "config", Map.of(
-                                        "toolCode", "expense.query_my_expenses")),
+                                        "toolCode", toolCode)),
                                 Map.of("nodeKey", "llm", "nodeType", "llm"),
                                 Map.of("nodeKey", "end", "nodeType", "end")),
                                 "edges", List.of(Map.of("source", "start", "target", "tool"),

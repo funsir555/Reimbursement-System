@@ -2,12 +2,13 @@ package com.finex.auth.agent.controller;
 
 import com.finex.auth.agent.entity.AgentConversation;
 import com.finex.auth.agent.entity.AgentMessage;
+import com.finex.auth.agent.context.TenantContext;
+import com.finex.auth.agent.context.AgentExecutionContext;
 import com.finex.auth.agent.model.ChatModelProvider;
 import com.finex.auth.agent.model.ModelCapability;
 import com.finex.auth.agent.model.ModelRoutingConfig;
 import com.finex.auth.agent.model.ModelRoutingService;
 import com.finex.auth.agent.service.ConversationService;
-import com.finex.auth.agent.workflow.AgentWorkflowRuntimeService;
 import com.finex.auth.agent.workflow.FinWorkOrchestrationService;
 import com.finex.auth.agent.workflow.FinWorkParameterService;
 import com.finex.auth.service.digitalemployee.ControlledMessageAccessService;
@@ -15,9 +16,11 @@ import com.finex.auth.service.queryauth.QueryAuthorizationService;
 import com.finex.auth.agent.workflow.WorkflowExecutionResult;
 import com.finex.auth.util.SecurityUtils;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -25,6 +28,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -39,15 +46,28 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/auth/agent/chat")
-@RequiredArgsConstructor
 public class AgentChatController {
 
     private final ConversationService conversationService;
     private final ModelRoutingService modelRoutingService;
     private final ModelRoutingConfig modelRoutingConfig;
-    private final AgentWorkflowRuntimeService workflowRuntimeService;
     private final ControlledMessageAccessService controlledMessageAccessService;
     private final FinWorkOrchestrationService orchestrationService;
+    private final Executor streamExecutor;
+
+    public AgentChatController(ConversationService conversationService,
+                               ModelRoutingService modelRoutingService,
+                               ModelRoutingConfig modelRoutingConfig,
+                               ControlledMessageAccessService controlledMessageAccessService,
+                               FinWorkOrchestrationService orchestrationService,
+                               @Qualifier("finWorkStreamExecutor") Executor streamExecutor) {
+        this.conversationService = conversationService;
+        this.modelRoutingService = modelRoutingService;
+        this.modelRoutingConfig = modelRoutingConfig;
+        this.controlledMessageAccessService = controlledMessageAccessService;
+        this.orchestrationService = orchestrationService;
+        this.streamExecutor = streamExecutor;
+    }
 
     /**
      * 创建新会话
@@ -68,18 +88,70 @@ public class AgentChatController {
      * 获取用户的会话列表
      */
     @GetMapping("/conversations")
-    public Result<List<ConversationVO>> getConversations() {
+    public Result<ConversationPageVO> getConversations(@RequestParam(required = false) String cursor,
+                                                       @RequestParam(defaultValue = "false") boolean excludePinned) {
         Long userId = SecurityUtils.getCurrentUserId();
         if (userId == null) {
             return Result.error("用户未登录");
         }
 
-        List<AgentConversation> conversations = conversationService.getUserConversations(userId, 20);
-        List<ConversationVO> vos = conversations.stream()
-                .map(ConversationVO::from)
+        ConversationService.ConversationPage page = conversationService.listUserConversations(userId, cursor, excludePinned);
+        List<ConversationVO> vos = page.items().stream()
+                .map(this::toConversationVO)
                 .toList();
+        return Result.success(new ConversationPageVO(vos, page.nextCursor()));
+    }
 
-        return Result.success(vos);
+    @GetMapping("/conversations/pinned")
+    public Result<List<ConversationVO>> getPinnedConversations() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return Result.error("用户未登录");
+        return Result.success(conversationService.listPinnedConversations(userId).stream()
+                .map(this::toConversationVO).toList());
+    }
+
+    @PatchMapping("/conversations/{sessionId}/title")
+    public Result<Boolean> renameConversation(@PathVariable String sessionId, @RequestBody RenameConversationRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return Result.error("用户未登录");
+        try {
+            conversationService.renameConversation(sessionId, userId, request == null ? null : request.getTitle());
+            return Result.success(true);
+        } catch (IllegalArgumentException invalid) {
+            return Result.error(invalid.getMessage());
+        }
+    }
+
+    @PutMapping("/conversations/{sessionId}/pin")
+    public Result<Boolean> pinConversation(@PathVariable String sessionId, @RequestBody PinConversationRequest request) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return Result.error("用户未登录");
+        if (request == null || request.getPinned() == null) return Result.error("置顶状态无效");
+        try {
+            conversationService.setPinned(sessionId, userId, request.getPinned());
+            return Result.success(true);
+        } catch (IllegalArgumentException | IllegalStateException invalid) {
+            return Result.error(invalid.getMessage());
+        }
+    }
+
+    @DeleteMapping("/conversations/{sessionId}")
+    public Result<Boolean> deleteConversation(@PathVariable String sessionId) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return Result.error("用户未登录");
+        try {
+            conversationService.deleteConversation(sessionId, userId);
+            return Result.success(true);
+        } catch (IllegalArgumentException invalid) {
+            return Result.error(invalid.getMessage());
+        }
+    }
+
+    private ConversationVO toConversationVO(ConversationService.ConversationItem item) {
+        return ConversationVO.builder().sessionId(item.sessionId())
+                .companyId(item.companyId()).companyName(item.companyName()).title(item.title())
+                .pinned(item.pinned()).messageCount(item.messageCount())
+                .lastMessageAt(item.lastMessageAt()).createdAt(item.createdAt()).build();
     }
 
     /**
@@ -129,54 +201,8 @@ public class AgentChatController {
         }
 
         try {
-            // 检查会话是否存在
-            AgentConversation conversation = conversationService.getConversation(sessionId);
-            if (conversation == null) {
-                return Result.error("会话不存在");
-            }
-
-            // 检查权限
-            if (!conversation.getUserId().equals(userId)) {
-                return Result.error("无权访问此会话");
-            }
-
-            // 保存用户消息
-            conversationService.addMessage(conversation, "user", request.getMessage(), null);
-
-            // 获取上下文（最近10条消息）
-            List<AgentMessage> recentMessages = conversationService.getRecentMessages(sessionId, 10);
-
-            FinWorkOrchestrationService.Outcome outcome = orchestrationService.respond(
-                    sessionId, userId, request.getMessage(), request.getDigitalEmployeeId(),
-                    request.getWorkflowBindingId(), request.getSelectedOptions(), request.getSelectedAnswers());
-            String intent = "ANSWER".equals(outcome.kind()) ? "controlled_query"
-                    : "CLARIFY".equals(outcome.kind()) ? "clarification" : "chat";
-            String responseContent = "CHAT".equals(outcome.kind())
-                    ? callLLM(request, recentMessages) : outcome.content();
-
-            // 保存 assistant 消息
-            AgentMessage assistantMessage = conversationService.addMessage(conversation, "assistant", responseContent, intent);
-            if ("ANSWER".equals(outcome.kind())) {
-                controlledMessageAccessService.recordComposite(assistantMessage, outcome.executions());
-                if (!controlledMessageAccessService.canRead(userId, assistantMessage)) {
-                    responseContent = QueryAuthorizationService.NO_PERMISSION;
-                }
-            }
-
-            return Result.success(ChatResponseVO.builder()
-                    .sessionId(sessionId)
-                    .content(responseContent)
-                    .intent(intent)
-                    .digitalEmployeeId(outcome.executions().isEmpty() ? null
-                            : outcome.executions().get(0).result().getDigitalEmployeeId())
-                    .kind(outcome.kind())
-                    .options(outcome.options())
-                    .clarifications(outcome.clarifications())
-                    .sources(outcome.executions().stream().map(item -> new SourceVO(
-                            item.result().getDigitalEmployeeId(), item.bindingId(),
-                            item.result().getAgentVersionId(), item.result().getQueryPermissionCode())).toList())
-                    .timestamp(Instant.now())
-                    .build());
+            return Result.success(processMessage(sessionId, userId, request,
+                    ignored -> {}, null, ignored -> {}));
         } catch (SecurityException exception) {
             AgentConversation conversation = conversationService.getConversation(sessionId);
             if (conversation != null && conversation.getUserId().equals(userId)) {
@@ -189,6 +215,129 @@ public class AgentChatController {
         } catch (Exception e) {
             log.error("处理消息失败: sessionId={}", sessionId, e);
             return Result.error("处理消息失败，请稍后重试");
+        }
+    }
+
+    @PostMapping(value = "/conversations/{sessionId}/messages/stream",
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamMessage(@PathVariable String sessionId, @RequestBody ChatRequestDTO request) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        SseEmitter emitter = new SseEmitter(120_000L);
+        if (userId == null) {
+            emit(emitter, "error", "用户未登录", new AtomicBoolean());
+            emitter.complete();
+            return emitter;
+        }
+        AgentExecutionContext context = AgentExecutionContext.capture();
+        AtomicBoolean disconnected = new AtomicBoolean();
+        try {
+            streamExecutor.execute(() -> {
+                context.restore();
+                try {
+                    ChatResponseVO response = processMessage(sessionId, userId, request,
+                            status -> emit(emitter, "status", status, disconnected),
+                            chunk -> emit(emitter, "delta", chunk, disconnected),
+                            ready -> emit(emitter, "session", ready, disconnected));
+                    emit(emitter, "final", response, disconnected);
+                    emit(emitter, "done", Map.of(), disconnected);
+                } catch (SecurityException denied) {
+                    AgentConversation conversation = conversationService.getConversation(sessionId);
+                    if (conversation != null && userId.equals(conversation.getUserId())) {
+                        conversationService.addMessage(conversation, "assistant",
+                                QueryAuthorizationService.NO_PERMISSION, "denied");
+                        emit(emitter, "final", ChatResponseVO.builder().sessionId(sessionId)
+                                .content(QueryAuthorizationService.NO_PERMISSION).kind("DENIED")
+                                .options(List.of()).sources(List.of()).timestamp(Instant.now()).build(), disconnected);
+                        emit(emitter, "done", Map.of(), disconnected);
+                    } else {
+                        emit(emitter, "error", "无权访问此会话", disconnected);
+                    }
+                } catch (Exception failure) {
+                    log.error("FinWork 流式处理失败: sessionId={}", sessionId, failure);
+                    emit(emitter, "error", "处理消息失败，请稍后重试", disconnected);
+                } finally {
+                    emitter.complete();
+                    AgentExecutionContext.clear();
+                }
+            });
+        } catch (RejectedExecutionException rejected) {
+            emit(emitter, "error", "当前请求较多，请稍后重试", disconnected);
+            emitter.complete();
+        }
+        return emitter;
+    }
+
+    private void emit(SseEmitter emitter, String name, Object data, AtomicBoolean disconnected) {
+        if (disconnected.get()) return;
+        try {
+            emitter.send(SseEmitter.event().name(name).data(data));
+        } catch (Exception error) {
+            disconnected.set(true);
+        }
+    }
+
+    private ChatResponseVO processMessage(String sessionId, Long userId, ChatRequestDTO request,
+                                          Consumer<String> status, Consumer<String> delta,
+                                          Consumer<String> sessionReady) {
+        if (request == null || request.getMessage() == null || request.getMessage().isBlank())
+            throw new IllegalArgumentException("消息不能为空");
+        AgentConversation conversation = conversationService.getConversation(sessionId);
+        boolean firstMessage = conversation == null;
+        if (!firstMessage && !conversation.getUserId().equals(userId))
+            throw new SecurityException("无权访问此会话");
+        String companyId = firstMessage ? TenantContext.getEffectiveCompanyId() : conversation.getCompanyId();
+        if (!conversationService.isCompanyActive(companyId))
+            throw new IllegalStateException("原会话公司已停用，无法继续提问");
+        String previousCompany = TenantContext.getCompanyId();
+        try {
+            TenantContext.setCompanyId(companyId);
+            if (firstMessage) {
+                conversation = conversationService.createWithFirstMessage(
+                        sessionId, userId, request.getMessage());
+            } else {
+                conversationService.addMessage(conversation, "user", request.getMessage(), null);
+            }
+            sessionReady.accept(sessionId);
+            List<AgentMessage> recentMessages = conversationService.getRecentMessages(sessionId, 10);
+            status.accept("正在分析任务");
+            FinWorkOrchestrationService.Outcome outcome = orchestrationService.respond(
+                    sessionId, userId, request.getMessage(), request.getDigitalEmployeeId(),
+                    request.getWorkflowBindingId(), request.getSelectedOptions(), request.getSelectedAnswers(), status);
+            String intent = "ANSWER".equals(outcome.kind()) ? "controlled_query"
+                    : "CLARIFY".equals(outcome.kind()) ? "clarification" : "chat";
+            if ("CHAT".equals(outcome.kind())) status.accept("正在生成回答");
+            else if ("ANSWER".equals(outcome.kind())) status.accept("正在复核查询结果");
+            String content = "CHAT".equals(outcome.kind())
+                    ? callLLM(request, recentMessages, delta) : outcome.content();
+            AgentMessage assistant = conversationService.addMessage(conversation, "assistant", content, intent);
+            if ("ANSWER".equals(outcome.kind())) {
+                controlledMessageAccessService.recordComposite(assistant, outcome.executions());
+                if (!controlledMessageAccessService.canRead(userId, assistant))
+                    content = QueryAuthorizationService.NO_PERMISSION;
+                if (delta != null) {
+                    for (int offset = 0; offset < content.length(); offset += 200) {
+                        if (!QueryAuthorizationService.NO_PERMISSION.equals(content)
+                                && !controlledMessageAccessService.canRead(userId, assistant))
+                            throw new SecurityException(QueryAuthorizationService.NO_PERMISSION);
+                        delta.accept(content.substring(offset, Math.min(offset + 200, content.length())));
+                    }
+                }
+            } else if (delta != null && !"CHAT".equals(outcome.kind())) {
+                delta.accept(content);
+            }
+            boolean denied = "ANSWER".equals(outcome.kind())
+                    && QueryAuthorizationService.NO_PERMISSION.equals(content);
+            return ChatResponseVO.builder().sessionId(sessionId).content(content).intent(intent)
+                    .digitalEmployeeId(denied || outcome.executions().isEmpty() ? null
+                            : outcome.executions().get(0).result().getDigitalEmployeeId())
+                    .kind(denied ? "DENIED" : outcome.kind()).options(outcome.options())
+                    .clarifications(outcome.clarifications())
+                    .sources(denied ? List.of() : outcome.executions().stream().map(item -> new SourceVO(
+                            item.result().getDigitalEmployeeId(), item.bindingId(),
+                            item.result().getAgentVersionId(), item.result().getQueryPermissionCode())).toList())
+                    .timestamp(Instant.now()).build();
+        } finally {
+            TenantContext.setCompanyId(previousCompany);
         }
     }
 
@@ -211,7 +360,9 @@ public class AgentChatController {
         if (!conversation.getUserId().equals(userId)) {
             return Result.error("无权访问此会话");
         }
-
+        String previousCompany = TenantContext.getCompanyId();
+        TenantContext.setCompanyId(conversation.getCompanyId());
+        try {
         List<AgentMessage> messages = conversationService.getRecentMessages(sessionId, 50);
         List<MessageVO> vos = messages.stream()
                 .map(message -> {
@@ -239,27 +390,47 @@ public class AgentChatController {
         }
 
         return Result.success(vos);
+        } finally {
+            TenantContext.setCompanyId(previousCompany);
+        }
     }
 
-    /**
-     * 简单的意图识别（基于关键词）
-     */
-    private String detectIntent(String message) {
-        if (message == null) return "chat";
-        String lower = message.toLowerCase();
-
-        if (lower.contains("结账") || lower.contains("关账")) return "query_finance_close";
-
-        if (lower.contains("报销单") || lower.contains("报销") || lower.contains("费用")) {
-            if (lower.contains("查") || lower.contains("看") || lower.contains("显示")
-                    || lower.contains("有哪些") || lower.contains("多少") || lower.contains("几个")
-                    || lower.contains("我的") || lower.contains("当前") || lower.contains("本月")
-                    || lower.contains("部门") || lower.contains("公司") || lower.contains("统计")) {
-                return "query_expense";
+    @GetMapping("/conversations/{sessionId}/messages/page")
+    public Result<MessagePageVO> getMessagePage(@PathVariable String sessionId,
+                                                 @RequestParam(required = false) String cursor) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) return Result.error("用户未登录");
+        AgentConversation conversation = conversationService.getConversation(sessionId);
+        if (conversation == null) return Result.error("会话不存在");
+        if (!userId.equals(conversation.getUserId())) return Result.error("无权访问此会话");
+        String previousCompany = TenantContext.getCompanyId();
+        TenantContext.setCompanyId(conversation.getCompanyId());
+        try {
+        ConversationService.MessagePage page = conversationService.getMessagePage(conversation, cursor);
+        List<MessageVO> items = page.items().stream().map(message -> {
+            MessageVO item = MessageVO.from(message);
+            if ("assistant".equals(message.getRole()) && isProtectedIntent(message.getIntent())
+                    && !controlledMessageAccessService.canRead(userId, message)) {
+                item.setContent(QueryAuthorizationService.NO_PERMISSION);
+            }
+            return item;
+        }).toList();
+        if (cursor == null && !items.isEmpty()) {
+            List<FinWorkOrchestrationService.Option> options = orchestrationService.pendingOptions(sessionId, userId);
+            List<FinWorkParameterService.Group> groups = orchestrationService.pendingGroups(sessionId, userId);
+            for (int i = items.size() - 1; i >= 0; i--) {
+                MessageVO item = items.get(i);
+                if ("CLARIFY".equals(item.getKind())) {
+                    item.setOptions(options);
+                    item.setClarifications(groups);
+                    break;
+                }
             }
         }
-
-        return "chat";
+        return Result.success(new MessagePageVO(items, page.nextCursor()));
+        } finally {
+            TenantContext.setCompanyId(previousCompany);
+        }
     }
 
     private boolean isProtectedIntent(String intent) {
@@ -270,7 +441,8 @@ public class AgentChatController {
     /**
      * 调用大模型
      */
-    private String callLLM(ChatRequestDTO chatRequest, List<AgentMessage> recentMessages) {
+    private String callLLM(ChatRequestDTO chatRequest, List<AgentMessage> recentMessages,
+                           Consumer<String> delta) {
         // 构建消息列表
         List<ChatModelProvider.ChatMessage> messages = new ArrayList<>();
 
@@ -293,17 +465,25 @@ public class AgentChatController {
                 .build();
 
         // 调用模型路由服务
-        ChatModelProvider.ChatResponse response = modelRoutingService.chatWithPreferredProvider(
-                chatRequest.getProviderCode(),
-                ModelCapability.ModelUseCase.CHAT_QUERY,
-                ModelRoutingService.DataSensitivity.LOW,
-                request
-        );
+        AtomicBoolean sentChunk = new AtomicBoolean();
+        ChatModelProvider.ChatResponse response = delta == null
+                ? modelRoutingService.chatWithPreferredProvider(chatRequest.getProviderCode(),
+                        ModelCapability.ModelUseCase.CHAT_QUERY,
+                        ModelRoutingService.DataSensitivity.LOW, request)
+                : modelRoutingService.chatStreamWithPreferredProvider(chatRequest.getProviderCode(),
+                        ModelCapability.ModelUseCase.CHAT_QUERY,
+                        ModelRoutingService.DataSensitivity.LOW, request, chunk -> {
+                            sentChunk.set(true);
+                            delta.accept(chunk);
+                        });
 
         if (response.isSuccess()) {
             return response.getContent();
         } else {
-            return "抱歉，当前 AI 服务暂时不可用，请稍后再试。";
+            if (sentChunk.get()) throw new IllegalStateException("模型流式响应中断");
+            String unavailable = "抱歉，当前 AI 服务暂时不可用，请稍后再试。";
+            if (delta != null) delta.accept(unavailable);
+            return unavailable;
         }
     }
 
@@ -451,6 +631,10 @@ public class AgentChatController {
     @lombok.Builder
     public static class ConversationVO {
         private String sessionId;
+        private String companyId;
+        private String companyName;
+        private String title;
+        private boolean pinned;
         private Integer messageCount;
         private Instant lastMessageAt;
         private Instant createdAt;
@@ -466,8 +650,22 @@ public class AgentChatController {
     }
 
     @Data
+    public static class RenameConversationRequest {
+        private String title;
+    }
+
+    @Data
+    public static class PinConversationRequest {
+        private Boolean pinned;
+    }
+
+    public record ConversationPageVO(List<ConversationVO> items, String nextCursor) { }
+    public record MessagePageVO(List<MessageVO> items, String nextCursor) { }
+
+    @Data
     @lombok.Builder
     public static class MessageVO {
+        private Long id;
         private String role;
         private String content;
         private Instant createdAt;
@@ -477,6 +675,7 @@ public class AgentChatController {
 
         public static MessageVO from(AgentMessage message) {
             return MessageVO.builder()
+                    .id(message.getId())
                     .role(message.getRole())
                     .content(message.getContent())
                     .createdAt(message.getCreatedAt())

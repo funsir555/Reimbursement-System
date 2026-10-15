@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { agentChatApi } from '@/api'
-import type { ChatMetaVO, MessageVO } from '@/api/modules/agent-chat-types'
+import type { ChatMetaVO, ConversationVO, MessageVO, ChatResponseVO } from '@/api/modules/agent-chat-types'
 
 const MODEL_SELECTION_STORAGE_KEY = 'finwork-chat-model-selection'
 
@@ -12,6 +12,11 @@ const MODEL_SELECTION_STORAGE_KEY = 'finwork-chat-model-selection'
 export function useAgentChatSession() {
   const sessionId = ref<string>()
   const messages = ref<MessageVO[]>([])
+  const conversations = ref<ConversationVO[]>([])
+  const pinnedConversations = ref<ConversationVO[]>([])
+  const conversationCursor = ref<string>()
+  const messageCursor = ref<string>()
+  const loadingConversations = ref(false)
   const loading = ref(false)
   const sending = ref(false)
   const metaLoading = ref(false)
@@ -26,6 +31,7 @@ export function useAgentChatSession() {
   const selectedEmployeeId = ref<number>()
   const selectedWorkflowBindingId = ref<number>()
   const availableEmployees = ref<Awaited<ReturnType<typeof agentChatApi.availableEmployees>>['data']>([])
+  let conversationLoadVersion = 0
 
   const modelProviders = computed(() => chatMeta.value.modelProviders || [])
   const currentModelOptions = computed(() => {
@@ -39,16 +45,85 @@ export function useAgentChatSession() {
    * @param urlSessionId 从 URL 参数传入的 sessionId
    */
   async function initSession(urlSessionId?: string) {
-    await Promise.all([loadMeta(), loadAvailableEmployees()])
+    await Promise.all([loadMeta(), loadAvailableEmployees(), refreshConversationLists()])
+    const initial = urlSessionId || pinnedConversations.value[0]?.sessionId || conversations.value[0]?.sessionId
+    if (initial) await openSession(initial)
+  }
 
-    if (urlSessionId) {
-      // URL 指定了会话 ID，加载该会话
-      sessionId.value = urlSessionId
-      await loadMessages()
-    } else {
-      // 创建新会话
-      await createNewSession()
+  async function loadConversations(reset = false) {
+    if (!reset && (loadingConversations.value || !conversationCursor.value)) return
+    const version = ++conversationLoadVersion
+    loadingConversations.value = true
+    try {
+      const { data } = await agentChatApi.getConversations(reset ? undefined : conversationCursor.value, true)
+      if (version !== conversationLoadVersion) return
+      conversations.value = reset ? (data.items || [])
+        : [...conversations.value, ...(data.items || []).filter(item =>
+          !conversations.value.some(current => current.sessionId === item.sessionId))]
+      conversationCursor.value = data.nextCursor || undefined
+    } catch (error: any) {
+      if (version === conversationLoadVersion) ElMessage.error(error?.message || '加载历史会话失败')
+    } finally {
+      if (version === conversationLoadVersion) loadingConversations.value = false
     }
+  }
+
+  async function loadPinnedConversations() {
+    try {
+      pinnedConversations.value = (await agentChatApi.getPinnedConversations()).data || []
+    } catch (error: any) {
+      ElMessage.error(error?.message || '加载置顶会话失败')
+    }
+  }
+
+  async function refreshConversationLists() {
+    await Promise.all([loadPinnedConversations(), loadConversations(true)])
+  }
+
+  async function renameConversation(target: string, title: string): Promise<boolean> {
+    try {
+      await agentChatApi.renameConversation(target, title)
+      await refreshConversationLists()
+      return true
+    } catch (error: any) {
+      ElMessage.error(error?.message || '重命名失败')
+      return false
+    }
+  }
+
+  async function setConversationPinned(target: string, pinned: boolean): Promise<boolean> {
+    try {
+      await agentChatApi.setConversationPinned(target, pinned)
+      await refreshConversationLists()
+      return true
+    } catch (error: any) {
+      ElMessage.error(error?.message || '置顶操作失败')
+      return false
+    }
+  }
+
+  async function deleteConversation(target: string): Promise<boolean> {
+    try {
+      await agentChatApi.deleteConversation(target)
+      await refreshConversationLists()
+      if (sessionId.value === target) {
+        const next = pinnedConversations.value[0]?.sessionId || conversations.value[0]?.sessionId
+        if (next) await openSession(next)
+        else await createNewSession()
+      }
+      return true
+    } catch (error: any) {
+      ElMessage.error(error?.message || '删除会话失败')
+      return false
+    }
+  }
+
+  async function openSession(nextSessionId: string) {
+    if (sending.value) return
+    sessionId.value = nextSessionId
+    messages.value = []
+    messageCursor.value = undefined
+    await loadMessages()
   }
 
   /**
@@ -59,10 +134,38 @@ export function useAgentChatSession() {
 
     loading.value = true
     try {
-      const { data } = await agentChatApi.getMessages(sessionId.value)
-      messages.value = (data || []).map(ensureMessageKey)
+      const current = sessionId.value
+      const { data } = await agentChatApi.getMessagePage(current)
+      if (sessionId.value !== current) return
+      messages.value = (data.items || []).map(ensureMessageKey)
+      messageCursor.value = data.nextCursor || undefined
     } catch (error: any) {
-      ElMessage.error(error?.message || '加载消息失败')
+      if (error?.message === '会话不存在') {
+        const fallback = [...pinnedConversations.value, ...conversations.value]
+          .find(item => item.sessionId !== sessionId.value)?.sessionId
+        sessionId.value = fallback
+        messages.value = []
+        messageCursor.value = undefined
+        if (fallback) await loadMessages()
+      } else {
+        ElMessage.error(error?.message || '加载消息失败')
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!sessionId.value || !messageCursor.value || loading.value) return
+    loading.value = true
+    try {
+      const current = sessionId.value
+      const { data } = await agentChatApi.getMessagePage(current, messageCursor.value)
+      if (sessionId.value !== current) return
+      messages.value = [...(data.items || []).map(ensureMessageKey), ...messages.value]
+      messageCursor.value = data.nextCursor || undefined
+    } catch (error: any) {
+      ElMessage.error(error?.message || '加载更早消息失败')
     } finally {
       loading.value = false
     }
@@ -73,27 +176,37 @@ export function useAgentChatSession() {
    */
   async function sendMessage(content: string, selectedOptions?: string[],
     selectedAnswers?: Record<string, string>): Promise<boolean> {
-    if (!content.trim() || !sessionId.value || sending.value) {
+    if (!content.trim() || sending.value) {
       return false
     }
-
-    const messageText = content.trim()
-    const clientMessageId = generateClientMessageId()
-
-    // 1. 乐观更新：添加用户消息
-    const userMessage: MessageVO = {
-      clientMessageId,
-      role: 'user',
-      content: messageText,
-      status: 'pending',
-      createdAt: new Date()
-    }
-    messages.value.push(userMessage)
-
     sending.value = true
+    let confirmed = Boolean(sessionId.value)
+    let attemptedSession: string | undefined
     try {
+      const currentSession = sessionId.value
+        || (await agentChatApi.createConversation()).data.sessionId
+      attemptedSession = currentSession
+      const messageText = content.trim()
+      const clientMessageId = generateClientMessageId()
+
+      // 1. 乐观更新：添加用户消息
+      const userMessage: MessageVO = {
+        clientMessageId,
+        role: 'user',
+        content: messageText,
+        status: 'pending',
+        createdAt: new Date()
+      }
+      messages.value.push(userMessage)
+      const assistantMessage: MessageVO = {
+        clientMessageId: generateClientMessageId(), role: 'assistant', content: '',
+        status: 'pending', createdAt: new Date()
+      }
+      messages.value.push(assistantMessage)
+
       // 2. 调用后端 API
-      const { data } = await agentChatApi.sendMessage(sessionId.value, {
+      let finalResponse: ChatResponseVO | undefined
+      await agentChatApi.streamMessage(currentSession, {
         message: messageText,
         providerCode: selectedProviderCode.value,
         model: selectedModel.value,
@@ -101,37 +214,53 @@ export function useAgentChatSession() {
         workflowBindingId: selectedWorkflowBindingId.value,
         selectedOptions,
         selectedAnswers
+      }, (event, data) => {
+        if (event === 'session' && data === currentSession) {
+          confirmed = true
+          sessionId.value = currentSession
+        }
+        if (event === 'status') assistantMessage.progress = String(data)
+        if (event === 'delta') assistantMessage.content += String(data)
+        if (event === 'final') finalResponse = data as ChatResponseVO
       })
+      if (!finalResponse) throw new Error('未收到完整回答')
+      const data: ChatResponseVO = finalResponse
+      if (!confirmed && data.sessionId === currentSession) {
+        confirmed = true
+        sessionId.value = currentSession
+      }
 
       // 3. 标记用户消息为成功
       updateMessageStatus(clientMessageId, 'success')
 
-      // 4. 添加 AI 回复
-      messages.value.push({
-        clientMessageId: generateClientMessageId(),
-        role: 'assistant',
-        content: data.content,
-        kind: data.kind === 'CHAT' ? undefined : data.kind,
-        options: data.options || [],
-        clarifications: data.clarifications || [],
-        sources: data.sources || [],
-        status: 'success',
-        createdAt: data.timestamp || new Date()
-      })
+      assistantMessage.content = data.content
+      assistantMessage.kind = data.kind === 'CHAT' ? undefined : data.kind
+      assistantMessage.options = data.options || []
+      assistantMessage.clarifications = data.clarifications || []
+      assistantMessage.sources = data.sources || []
+      assistantMessage.status = 'success'
+      assistantMessage.progress = undefined
+      assistantMessage.createdAt = data.timestamp || new Date()
+      await refreshConversationLists()
 
       return true
     } catch (error: any) {
-      // 5. 标记用户消息为失败（不删除，允许重试）
-      updateMessageStatus(clientMessageId, 'failed', error?.message || '发送失败')
-
-      // 业务错误处理
-      if (error.message?.includes('会话不存在')) {
-        ElMessage.error('会话已失效，正在创建新会话...')
-        await createNewSession()
-      } else {
-        ElMessage.error(error?.message || '发送消息失败')
+      ElMessage.error(error?.message || '发送失败')
+      let recovered = false
+      if (!confirmed && attemptedSession) {
+        try {
+          const { data } = await agentChatApi.getMessagePage(attemptedSession)
+          confirmed = true
+          sessionId.value = attemptedSession
+          messages.value = (data.items || []).map(ensureMessageKey)
+          messageCursor.value = data.nextCursor || undefined
+          recovered = true
+        } catch { /* 首条消息尚未落库，保持空白输入页 */ }
       }
-
+      if (!confirmed) {
+        messages.value = []
+        messageCursor.value = undefined
+      } else if (sessionId.value && !recovered) await loadMessages()
       return false
     } finally {
       sending.value = false
@@ -142,14 +271,10 @@ export function useAgentChatSession() {
    * 创建新会话
    */
   async function createNewSession() {
-    try {
-      const { data } = await agentChatApi.createConversation()
-      sessionId.value = data.sessionId
-      messages.value = []
-      ElMessage.success('新会话已创建')
-    } catch (error: any) {
-      ElMessage.error(error?.message || '创建会话失败')
-    }
+    if (sending.value) return
+    sessionId.value = undefined
+    messages.value = []
+    messageCursor.value = undefined
   }
 
   /**
@@ -335,6 +460,11 @@ export function useAgentChatSession() {
     // 状态
     sessionId,
     messages,
+    conversations,
+    pinnedConversations,
+    conversationCursor,
+    messageCursor,
+    loadingConversations,
     loading,
     sending,
     metaLoading,
@@ -351,6 +481,13 @@ export function useAgentChatSession() {
     initSession,
     loadMeta,
     loadMessages,
+    loadConversations,
+    refreshConversationLists,
+    renameConversation,
+    setConversationPinned,
+    deleteConversation,
+    loadOlderMessages,
+    openSession,
     sendMessage,
     selectProvider,
     selectModel,

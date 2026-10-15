@@ -49,10 +49,10 @@ if not exist "%RUN_DIR%" (
 
 call :print_runtime_summary
 
-call :log "Compiling backend/common before startup..."
-call mvn -f "%ROOT%\backend\common\pom.xml" -DskipTests compile
+call :log "Building backend services and refreshing the local common dependency..."
+call mvn -f "%ROOT%\backend\pom.xml" -pl auth-service,gateway -am -DskipTests install
 if errorlevel 1 (
-  call :log "backend/common compilation failed. FinEx was not started."
+  call :log "Backend build failed. FinEx was not started."
   goto :failed
 )
 
@@ -63,10 +63,7 @@ if errorlevel 1 (
   goto :failed
 )
 
-call :log "FinEx startup command dispatched successfully."
-call :log "Auth service:   http://localhost:%FINEX_AUTH_SERVICE_PORT%"
-call :log "Gateway:        http://localhost:%FINEX_GATEWAY_PORT%"
-call :log "Admin web:      http://localhost:%FINEX_FRONTEND_PORT%"
+echo [finex] FinEx is ready: http://localhost:%FINEX_FRONTEND_PORT%
 endlocal
 exit /b 0
 

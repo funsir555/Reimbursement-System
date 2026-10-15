@@ -25,6 +25,14 @@
         <el-button v-if="canPublish && scope.row.status === 'PUBLISHED'" link type="danger" @click="retire(scope.row)">停用</el-button>
       </template></el-table-column>
     </el-table>
+    <div class="link-head"><h3>受控查询字段关系</h3><span>用工具返回的 JSON 字段解释关联；账套与期间仍以查询条件为准。</span></div>
+    <el-table v-loading="loading" :data="resultLinks" border>
+      <el-table-column label="来源字段" min-width="220"><template #default="scope">{{ scope.row.sourceLabel }} <code>{{ scope.row.sourceField }}</code><small>{{ scope.row.sourceToolCode }}</small></template></el-table-column>
+      <el-table-column label="目标字段" min-width="220"><template #default="scope">{{ scope.row.targetLabel }} <code>{{ scope.row.targetField }}</code><small>{{ scope.row.targetToolCode }}</small></template></el-table-column>
+      <el-table-column prop="explanation" label="业务关系" min-width="300" />
+      <el-table-column prop="scopeNote" label="适用范围" min-width="220" />
+      <el-table-column label="版本" width="75"><template #default="scope">v{{ scope.row.versionNo }}</template></el-table-column>
+    </el-table>
     <el-dialog v-model="detailOpen" title="业务本体定义" width="680px"><el-descriptions v-if="selected" :column="1" border>
       <el-descriptions-item label="名称">{{ selected.displayName }}</el-descriptions-item>
       <el-descriptions-item label="含义">{{ selected.description }}</el-descriptions-item>
@@ -65,7 +73,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { businessOntologyApi, type OntologyDraft, type OntologyItem, type OntologyKind, type OntologyStatus } from '@/api'
+import { businessOntologyApi, type OntologyDraft, type OntologyItem, type OntologyKind, type OntologyStatus, type OntologyResultLink } from '@/api'
 import { hasPermission } from '@/utils/permissions'
 
 const kinds: Array<{ value: OntologyKind; label: string }> = [
@@ -78,6 +86,7 @@ const domains = ['EXPENSE', 'FINANCE', 'PROCESS', 'SYSTEM', 'AGENT']
 const canEdit = hasPermission('agent:business_ontology:edit')
 const canPublish = hasPermission('agent:business_ontology:publish')
 const items = ref<OntologyItem[]>([])
+const resultLinks = ref<OntologyResultLink[]>([])
 const keyword = ref('')
 const kindFilter = ref('')
 const statusFilter = ref('')
@@ -100,7 +109,11 @@ function kindLabel(kind: OntologyKind) { return kinds.find(entry => entry.value 
 function statusLabel(status: OntologyStatus) { return { DRAFT: '草稿', PUBLISHED: '已发布', RETIRED: '已停用' }[status] }
 async function load() {
   loading.value = true
-  try { items.value = (await businessOntologyApi.list(keyword.value)).data || [] }
+  try {
+    const [terms, links] = await Promise.all([businessOntologyApi.list(keyword.value), businessOntologyApi.resultLinks()])
+    items.value = terms.data || []
+    resultLinks.value = links.data || []
+  }
   catch (error: any) { ElMessage.error(error?.message || '加载业务本体失败') }
   finally { loading.value = false }
 }
@@ -151,4 +164,8 @@ onMounted(load)
 .filters { display: flex; gap: 10px; align-items: center; }
 .filters .el-input { width: min(38vw, 380px); }
 .filters .el-select { width: 150px; }
+.link-head { display: flex; align-items: baseline; gap: 16px; }
+.link-head h3 { margin: 0; }
+.link-head span, small { color: var(--el-text-color-secondary); }
+small { display: block; }
 </style>

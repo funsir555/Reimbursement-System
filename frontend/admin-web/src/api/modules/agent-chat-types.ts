@@ -8,9 +8,18 @@
  */
 export interface ConversationVO {
   sessionId: string
+  companyId?: string
+  companyName?: string
+  title?: string
+  pinned?: boolean
   messageCount: number
   lastMessageAt?: string | Date
   createdAt?: string | Date
+}
+
+export interface ChatPage<T> {
+  items: T[]
+  nextCursor?: string | null
 }
 
 /**
@@ -29,6 +38,7 @@ export interface MessageVO {
   options?: ChatClarificationOption[]
   clarifications?: ChatClarificationGroup[]
   sources?: ChatWorkflowSource[]
+  progress?: string
 }
 
 export interface ChatClarificationOption {

@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 模型路由服务
@@ -120,6 +122,40 @@ public class ModelRoutingService {
             log.error("指定模型调用异常，准备降级: provider={}, error={}", providerCode, e.getMessage());
             return fallbackToNextProvider(useCase, sensitivity, request, providerCode);
         }
+    }
+
+    /** Stream only one provider after its first chunk; a fallback may replace a provider before output starts. */
+    public ChatModelProvider.ChatResponse chatStreamWithPreferredProvider(
+            String preferredProviderCode, ModelUseCase useCase, DataSensitivity sensitivity,
+            ChatModelProvider.ChatRequest request, ChatModelProvider.StreamHandler handler) {
+        LinkedHashSet<String> codes = new LinkedHashSet<>();
+        if (preferredProviderCode != null && !preferredProviderCode.isBlank())
+            codes.add(preferredProviderCode.trim());
+        ModelRoutingConfig.RoutingRule rule = findMatchingRule(useCase, sensitivity);
+        if (rule != null) {
+            codes.add(rule.getPrimary());
+            codes.addAll(rule.getFallback());
+        }
+        ChatModelProvider defaultProvider = selectProvider(useCase, sensitivity);
+        if (defaultProvider != null) codes.add(defaultProvider.getProviderCode());
+        for (String code : codes) {
+            ChatModelProvider provider = providerMap.get(code);
+            if (provider == null || !supportsUseCase(provider, useCase)) continue;
+            AtomicBoolean emitted = new AtomicBoolean();
+            try {
+                ChatModelProvider.ChatResponse response = provider.chatStream(request, chunk -> {
+                    if (chunk == null || chunk.isEmpty()) return;
+                    emitted.set(true);
+                    handler.onChunk(chunk);
+                });
+                if (response != null && response.isSuccess()) return response;
+            } catch (Exception failure) {
+                log.warn("模型流式调用失败: provider={}", code, failure);
+            }
+            if (emitted.get()) break;
+        }
+        return ChatModelProvider.ChatResponse.builder().success(false)
+                .errorMessage("模型流式调用失败").build();
     }
 
     /**

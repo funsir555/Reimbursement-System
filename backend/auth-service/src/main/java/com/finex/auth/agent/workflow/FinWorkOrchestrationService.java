@@ -33,13 +33,27 @@ public class FinWorkOrchestrationService {
     public Outcome respond(String sessionId, Long userId, String message,
                            Long employeeId, Long bindingId, List<String> selectedOptions,
                            Map<String, String> selectedAnswers) {
+        return respond(sessionId, userId, message, employeeId, bindingId,
+                selectedOptions, selectedAnswers, ignored -> {});
+    }
+
+    public Outcome respond(String sessionId, Long userId, String message,
+                           Long employeeId, Long bindingId, List<String> selectedOptions,
+                           Map<String, String> selectedAnswers,
+                           java.util.function.Consumer<String> status) {
         Pending pending = loadPending(sessionId, userId);
         if (pending != null && !pendingStillAuthorized(userId, pending)) {
             clearPending(sessionId, userId);
             throw new IllegalArgumentException("澄清状态已失效，请重新提问");
         }
-        Map<String, String> confirmed = checkedAnswers(pending, selectedAnswers);
-        String conversationQuestion = pending == null ? message : pending.originalQuestion() + "\n补充说明：" + message;
+        if (pending != null && !pending.groups().isEmpty() && pending.steps().isEmpty()) {
+            clearPending(sessionId, userId);
+            throw new IllegalArgumentException("旧澄清状态已失效，请重新提问");
+        }
+        Map<String, String> confirmed = new java.util.LinkedHashMap<>(checkedAnswers(pending, selectedAnswers));
+        String answerText = clarificationText(message, pending, selectedAnswers);
+        String conversationQuestion = pending == null ? answerText
+                : pending.originalQuestion() + "\n补充说明：" + answerText;
         if (conversationQuestion == null || conversationQuestion.length() > 3000)
             throw new IllegalArgumentException("澄清内容过长，请重新提问");
         String fullQuestion = conversationQuestion;
@@ -48,8 +62,33 @@ public class FinWorkOrchestrationService {
         if (!chosen.isEmpty()) fullQuestion += "\n用户明确选择的工作流绑定 ID：" + chosen;
         Long selectedBinding = pending != null && pending.bindingIds().size() == 1
                 ? pending.bindingIds().get(0) : bindingId;
-        FinWorkQueryPlanner.Decision decision = planner.plan(userId, fullQuestion,
-                employeeId, selectedBinding, sessionId);
+        FinWorkQueryPlanner.Decision decision;
+        if (pending != null && !pending.steps().isEmpty()) {
+            status.accept("正在理解补充条件");
+            List<FinWorkQueryPlanner.PlannedStep> current = restoreSteps(userId, pending);
+            FinWorkQueryPlanner.Revision revised = planner.revise(userId, pending.originalQuestion(),
+                    answerText, current, pending.groups(), sessionId);
+            if (revised.newTask()) {
+                clearPending(sessionId, userId);
+                return respond(sessionId, userId, message, employeeId, bindingId,
+                        List.of(), Map.of(), status);
+            }
+            if (revised.changedFields().isEmpty()
+                    && message.matches("(?s).*(?:改成|换成|改为|不是这个|重新查|不对).*"))
+                return new Outcome("CLARIFY", "请再说明要修改的查询条件。",
+                        List.of(), pending.groups(), List.of());
+            if (conflictingSelection(pending, selectedAnswers, revised, message))
+                return new Outcome("CLARIFY", "本轮文字与所选项不一致，请确认查询条件。",
+                        List.of(), pending.groups(), List.of());
+            clearOverriddenAnswers(confirmed, selectedAnswers, revised.changedFields());
+            decision = new FinWorkQueryPlanner.Decision(FinWorkQueryPlanner.Mode.EXECUTE,
+                    revised.steps(), "", pending.analysisGoal(),
+                    revised.steps().stream().map(FinWorkQueryPlanner.PlannedStep::workflow).toList());
+        } else {
+            status.accept("正在匹配可用工作流");
+            decision = planner.plan(userId, fullQuestion,
+                    employeeId, selectedBinding, sessionId);
+        }
         return switch (decision.mode()) {
             case CHAT -> {
                 clearPending(sessionId, userId);
@@ -70,10 +109,11 @@ public class FinWorkOrchestrationService {
                     displayed.add(new Option("all", "同时执行以上工作流"));
                 }
                 savePending(sessionId, userId, new Pending(
-                        conversationQuestion,
+                        pending == null ? message : pending.originalQuestion(),
                         decision.candidates().stream().map(SelectedWorkflow::getWorkflowBindingId).toList(),
                         confirmed, versionIds(decision.candidates()),
-                        parameters.authorizationSignatures(userId, decision.candidates()), List.of()));
+                        parameters.authorizationSignatures(userId, decision.candidates()), List.of(),
+                        List.of(), decision.analysisGoal()));
                 yield new Outcome("CLARIFY", decision.question(), displayed, List.of(), List.of());
             }
             case EXECUTE -> {
@@ -89,16 +129,18 @@ public class FinWorkOrchestrationService {
                             throw new IllegalStateException("工作流版本或授权已变化，请重新提问");
                     }
                 }
+                status.accept("正在核对查询条件");
                 FinWorkParameterService.Preparation prepared = parameters.prepare(
                         userId, fullQuestion, decision.steps(), confirmed);
                 if (!prepared.groups().isEmpty()) {
                     List<SelectedWorkflow> workflows = decision.steps().stream()
                             .map(FinWorkQueryPlanner.PlannedStep::workflow).toList();
                     savePending(sessionId, userId, new Pending(
-                            conversationQuestion,
+                            pending == null ? message : pending.originalQuestion(),
                             workflows.stream().map(SelectedWorkflow::getWorkflowBindingId).toList(),
                             confirmed, versionIds(workflows),
-                            parameters.authorizationSignatures(userId, workflows), prepared.groups()));
+                            parameters.authorizationSignatures(userId, workflows), prepared.groups(),
+                            states(decision.steps()), decision.analysisGoal()));
                     yield new Outcome("CLARIFY", "请补充查询条件后继续。", List.of(),
                             prepared.groups(), List.of());
                 }
@@ -109,6 +151,7 @@ public class FinWorkOrchestrationService {
                 int expenseWorkflowCount = 0;
                 boolean expenseTotalComplete = true;
                 for (FinWorkQueryPlanner.PlannedStep step : prepared.steps()) {
+                    status.accept("正在执行受控查询");
                     WorkflowExecutionResult result = runtime.executePlannedWorkflow(
                             sessionId, userId, step.workflow(), step.queryText(), step.parameters());
                     if (!result.isSuccess()) {
@@ -143,7 +186,9 @@ public class FinWorkOrchestrationService {
     }
 
     public List<Option> pendingOptions(String sessionId, Long userId) {
-        Pending pending = loadPending(sessionId, userId);
+        Pending pending;
+        try { pending = loadPending(sessionId, userId); }
+        catch (IllegalArgumentException invalid) { return List.of(); }
         if (pending == null) return List.of();
         if (!pendingStillAuthorized(userId, pending)) return List.of();
         if (!pending.groups().isEmpty()) return List.of();
@@ -154,7 +199,9 @@ public class FinWorkOrchestrationService {
     }
 
     public List<FinWorkParameterService.Group> pendingGroups(String sessionId, Long userId) {
-        Pending pending = loadPending(sessionId, userId);
+        Pending pending;
+        try { pending = loadPending(sessionId, userId); }
+        catch (IllegalArgumentException invalid) { return List.of(); }
         if (pending == null || pending.groups().isEmpty()) return List.of();
         if (!pendingStillAuthorized(userId, pending)) {
             clearPending(sessionId, userId);
@@ -175,15 +222,132 @@ public class FinWorkOrchestrationService {
             if (value.isBlank() || value.length() > 200 || (!group.options().isEmpty()
                     && !group.options().stream().anyMatch(item -> item.id().equals(value))))
                 throw new IllegalArgumentException("澄清选项无效");
-            confirmed.put(group.key(), value);
+            if (!group.options().isEmpty()) confirmed.put(group.key(), value);
         }
         return Map.copyOf(confirmed);
+    }
+
+    private String clarificationText(String message, Pending pending, Map<String, String> selected) {
+        if (pending == null || selected == null || selected.isEmpty()) return message;
+        String visible = message == null ? "" : message.trim();
+        for (FinWorkParameterService.Group group : pending.groups()) {
+            String value = selected.get(group.key());
+            if (value == null || value.isBlank()) continue;
+            String label = group.options().stream().filter(item -> item.id().equals(value))
+                    .map(FinWorkParameterService.Choice::label).findFirst().orElse(value);
+            visible = visible.replace(group.question() + "：" + label, "");
+        }
+        StringBuilder result = new StringBuilder(visible.replaceAll("^[；;\\s]+|[；;\\s]+$", ""));
+        for (FinWorkParameterService.Group group : pending.groups()) {
+            String value = selected.get(group.key());
+            if (value == null || value.isBlank()) continue;
+            String label = group.options().stream().filter(item -> item.id().equals(value))
+                    .map(FinWorkParameterService.Choice::label).findFirst().orElse(value);
+            result.append("\n").append(group.key()).append("：").append(label);
+        }
+        return result.toString();
+    }
+
+    private boolean conflictingSelection(Pending pending, Map<String, String> selected,
+                                         FinWorkQueryPlanner.Revision revised, String message) {
+        if (selected == null || selected.isEmpty()) return false;
+        for (FinWorkParameterService.Group group : pending.groups()) {
+            String value = selected.get(group.key());
+            if (value == null || group.options().isEmpty()) continue;
+            if (group.key().endsWith("voucherStatus")) {
+                String stated = parameters.detectVoucherStatus(message);
+                if (stated != null && !stated.equals(value)) return true;
+            } else {
+                String selectedName = group.options().stream().filter(item -> item.id().equals(value))
+                        .map(item -> item.label().split("（", 2)[0]).findFirst().orElse("");
+                for (FinWorkParameterService.Choice choice : group.options()) {
+                    if (choice.id().equals(value)) continue;
+                    String name = choice.label().split("（", 2)[0];
+                    if (name.length() >= 2 && message.contains(name)
+                            && (!message.contains(selectedName) || !selectedName.contains(name))) return true;
+                }
+            }
+        }
+        for (String path : revised.changedFields()) {
+            String[] parts = path.split(":", 3);
+            if (parts.length != 3) continue;
+            String optionField = optionField(parts[2]);
+            String selectedValue = selected.getOrDefault(pathKey(parts, optionField),
+                    selected.get(optionField));
+            if (selectedValue == null) continue;
+            FinWorkParameterService.Group group = pending.groups().stream().filter(item ->
+                    item.key().equals(pathKey(parts, optionField)) || item.key().equals(optionField))
+                    .findFirst().orElse(null);
+            if (group == null || group.options().isEmpty()) continue;
+            FinWorkParameterService.Choice choice = group.options().stream()
+                    .filter(item -> item.id().equals(selectedValue)).findFirst().orElse(null);
+            if (choice == null) continue;
+            FinWorkQueryPlanner.PlannedStep step = revised.steps().stream().filter(item ->
+                    String.valueOf(item.workflow().getWorkflowBindingId()).equals(parts[0]))
+                    .findFirst().orElse(null);
+            if (step == null) continue;
+            Object rawNode = step.parameters().get(parts[1]);
+            if (!(rawNode instanceof Map<?, ?> node)) continue;
+            String proposed = String.valueOf(node.get(parts[2]));
+            if (parts[2].endsWith("Name")) {
+                if (!choice.label().contains(proposed)) return true;
+            } else if (!choice.id().equals(proposed)) return true;
+        }
+        return false;
+    }
+
+    private void clearOverriddenAnswers(Map<String, String> confirmed, Map<String, String> selected,
+                                        Set<String> changed) {
+        for (String path : changed) {
+            String[] parts = path.split(":", 3);
+            if (parts.length != 3) continue;
+            String field = optionField(parts[2]);
+            String scoped = pathKey(parts, field);
+            if (selected != null && (selected.containsKey(scoped) || selected.containsKey(field))) continue;
+            confirmed.remove(scoped);
+            confirmed.remove(field);
+            if ("companyId".equals(field)) {
+                confirmed.remove(pathKey(parts, "supplierCode"));
+                confirmed.remove("supplierCode");
+            }
+        }
+    }
+
+    private String optionField(String field) {
+        return switch (field) {
+            case "companyName" -> "companyId";
+            case "supplierName" -> "supplierCode";
+            case "yearFrom", "periodFrom", "yearTo", "periodTo" -> "periodRange";
+            default -> field;
+        };
+    }
+
+    private String pathKey(String[] parts, String field) {
+        return parts[0] + ":" + parts[1] + ":" + field;
     }
 
     private Map<Long, Long> versionIds(List<SelectedWorkflow> workflows) {
         Map<Long, Long> result = new java.util.LinkedHashMap<>();
         workflows.forEach(item -> result.put(item.getWorkflowBindingId(), item.getAgentVersionId()));
         return Map.copyOf(result);
+    }
+
+    private List<StepState> states(List<FinWorkQueryPlanner.PlannedStep> steps) {
+        return steps.stream().map(step -> new StepState(step.workflow().getWorkflowBindingId(),
+                step.queryText(), step.parameters(), step.evidence())).toList();
+    }
+
+    private List<FinWorkQueryPlanner.PlannedStep> restoreSteps(Long userId, Pending pending) {
+        Map<Long, SelectedWorkflow> active = new java.util.LinkedHashMap<>();
+        selector.authorizedCandidates(userId, null, null).forEach(item ->
+                active.put(item.getWorkflowBindingId(), item));
+        return pending.steps().stream().map(state -> {
+            SelectedWorkflow workflow = active.get(state.bindingId());
+            if (workflow == null || !workflow.getAgentVersionId().equals(pending.versionIds().get(state.bindingId())))
+                throw new SecurityException("工作流版本或授权已变化，请重新提问");
+            return new FinWorkQueryPlanner.PlannedStep(workflow, state.queryText(),
+                    state.parameters(), state.evidence());
+        }).toList();
     }
 
     private boolean pendingStillAuthorized(Long userId, Pending pending) {
@@ -247,11 +411,14 @@ public class FinWorkOrchestrationService {
                         String.valueOf(value)));
             List<FinWorkParameterService.Group> groups = source.get("groups") == null ? List.of()
                     : json.convertValue(source.get("groups"), new TypeReference<>() { });
+            List<StepState> steps = source.get("steps") == null ? List.of()
+                    : json.convertValue(source.get("steps"), new TypeReference<>() { });
             return new Pending(original, ids, Map.copyOf(answers), Map.copyOf(versions),
-                    Map.copyOf(signatures), groups);
+                    Map.copyOf(signatures), groups, steps,
+                    String.valueOf(source.getOrDefault("analysisGoal", "")));
         } catch (Exception exception) {
             clearPending(sessionId, userId);
-            return null;
+            throw new IllegalArgumentException("澄清状态已失效，请重新提问", exception);
         }
     }
 
@@ -260,7 +427,8 @@ public class FinWorkOrchestrationService {
             String payload = json.writeValueAsString(Map.of(
                     "originalQuestion", pending.originalQuestion(), "bindingIds", pending.bindingIds(),
                     "answers", pending.answers(), "versionIds", pending.versionIds(),
-                    "signatures", pending.signatures(), "groups", pending.groups()));
+                    "signatures", pending.signatures(), "groups", pending.groups(),
+                    "steps", pending.steps(), "analysisGoal", pending.analysisGoal()));
             if (payload.length() > 12000) throw new IllegalArgumentException("澄清状态过大，请缩小查询范围");
             jdbc.update("""
                     INSERT INTO ea_agent_chat_pending_plan (session_id,user_id,pending_json,expires_at)
@@ -278,7 +446,10 @@ public class FinWorkOrchestrationService {
 
     private record Pending(String originalQuestion, List<Long> bindingIds, Map<String, String> answers,
                            Map<Long, Long> versionIds, Map<Long, String> signatures,
-                           List<FinWorkParameterService.Group> groups) { }
+                           List<FinWorkParameterService.Group> groups, List<StepState> steps,
+                           String analysisGoal) { }
+    private record StepState(Long bindingId, String queryText, Map<String, Object> parameters,
+                             Map<String, Map<String, String>> evidence) { }
     public record Option(String id, String label) { }
     public record Execution(WorkflowExecutionResult result, String queryText, Long bindingId) { }
     public record Outcome(String kind, String content, List<Option> options,

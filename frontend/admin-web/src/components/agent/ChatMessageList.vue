@@ -24,6 +24,7 @@
           }"
         >
           {{ msg.content }}
+          <span v-if="msg.progress && !msg.content" class="message-progress">{{ msg.progress }}…</span>
 
           <!-- 失败提示 -->
           <div v-if="msg.status === 'failed'" class="message-error">
@@ -62,7 +63,7 @@
               :placeholder="'请输入' + group.question" class="clarification-select" />
           </div>
           <el-button type="primary" size="small"
-            :disabled="!msg.clarifications.every(group => answersFor(msg)[group.key])"
+            :disabled="!msg.clarifications.some(group => answersFor(msg)[group.key]?.trim())"
             @click="submitClarification(msg)">确认选择</el-button>
         </div>
 
@@ -128,9 +129,13 @@ function answersFor(message: MessageVO): Record<string, string> {
 function submitClarification(message: MessageVO) {
   const groups = message.clarifications || []
   const answers = answersFor(message)
-  if (!groups.length || groups.some(group => !answers[group.key])) return
-  emit('clarify', { ...answers }, groups.map(group =>
-    group.options.find(option => option.id === answers[group.key])?.label || '').filter(Boolean))
+  if (!groups.length || !groups.some(group => answers[group.key]?.trim())) return
+  const selected = Object.fromEntries(Object.entries(answers).filter(([, value]) => value?.trim()))
+  emit('clarify', selected, groups.filter(group => selected[group.key]).map(group => {
+    const value = selected[group.key]
+    const label = group.options.find(option => option.id === value)?.label || value
+    return `${group.question}：${label}`
+  }))
 }
 
 function formatTime(timestamp?: Date | string) {
@@ -209,6 +214,8 @@ function formatTime(timestamp?: Date | string) {
 .message-pending {
   opacity: 0.6;
 }
+
+.message-progress { color: #66758a; }
 
 .message-failed {
   border-color: #f56c6c !important;

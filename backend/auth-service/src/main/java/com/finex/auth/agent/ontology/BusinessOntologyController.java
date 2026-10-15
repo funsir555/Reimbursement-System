@@ -19,6 +19,7 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class BusinessOntologyController {
     private final BusinessOntologyService ontology;
+    private final OntologyResultContextService resultContext;
     private final AccessControlService access;
 
     @GetMapping
@@ -34,6 +35,12 @@ public class BusinessOntologyController {
                         && !item.effectiveFrom().isAfter(today)
                         && (item.effectiveUntil() == null || !item.effectiveUntil().isBefore(today)))
                 .toList());
+    }
+
+    @GetMapping("/result-links")
+    public Result<?> resultLinks(HttpServletRequest request) {
+        access.requirePermission(userId(request), "agent:business_ontology:view");
+        return Result.success(resultContext.listPublished());
     }
 
     @PostMapping("/drafts")

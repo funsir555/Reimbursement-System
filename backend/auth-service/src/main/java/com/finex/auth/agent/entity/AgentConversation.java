@@ -27,6 +27,10 @@ public class AgentConversation extends TenantAwareEntity {
      */
     private String sessionId;
 
+    private String customTitle;
+
+    private Boolean isPinned;
+
     /**
      * 用户ID
      */

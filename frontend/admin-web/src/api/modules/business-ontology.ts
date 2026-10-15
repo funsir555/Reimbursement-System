@@ -29,9 +29,23 @@ export interface OntologyItem {
 
 export type OntologyDraft = Omit<OntologyItem, 'id' | 'versionNo' | 'status' | 'createdBy' | 'reviewedBy'>
 
+export interface OntologyResultLink {
+  sourceToolCode: string
+  sourceField: string
+  sourceLabel: string
+  targetToolCode: string
+  targetField: string
+  targetLabel: string
+  relationKind: 'REFERENCE' | 'HIERARCHY' | 'AGGREGATE'
+  explanation: string
+  scopeNote: string
+  versionNo: number
+}
+
 const base = '/auth/agent/business-ontology'
 export const businessOntologyApi = {
   list: (keyword = '') => request<OntologyItem[]>(`${base}?keyword=${encodeURIComponent(keyword)}`),
+  resultLinks: () => request<OntologyResultLink[]>(`${base}/result-links`),
   saveDraft: (item: OntologyDraft) => request<OntologyItem>(`${base}/drafts`, {
     method: 'POST', body: JSON.stringify(item)
   }),

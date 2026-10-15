@@ -103,7 +103,8 @@ function Get-ListeningProcessIds {
   param([int]$Port)
 
   $processIds = @()
-  $lines = netstat -ano -p tcp | Select-String 'LISTENING'
+  # netstat -p tcp omits IPv6 listeners on Windows; localhost may resolve to ::1.
+  $lines = netstat -ano | Select-String 'LISTENING'
   foreach ($line in $lines) {
     $columns = (($line.ToString() -replace '^\s+', '') -split '\s+')
     if ($columns.Count -lt 5) {
@@ -230,9 +231,9 @@ function Start-ServiceShell {
   param($Service)
 
   $commandText = "title {0} && cd /d ""{1}"" && {2}" -f $Service.Title, $Service.WorkingDirectory, $Service.StartCommand
-  $process = Start-Process -FilePath 'cmd.exe' -ArgumentList '/K', $commandText -WorkingDirectory $Service.WorkingDirectory -PassThru
+  $process = Start-Process -FilePath 'cmd.exe' -ArgumentList '/K', $commandText -WorkingDirectory $Service.WorkingDirectory -WindowStyle Normal -PassThru
   Set-Content -LiteralPath $Service.PidFile -Value $process.Id -Encoding ASCII
-  Write-Host ("[finex] Started {0} shell pid={1} port={2}" -f $Service.Title, $process.Id, $Service.Port)
+  Write-Host ("[finex] Started {0} window pid={1} port={2}" -f $Service.Name, $process.Id, $Service.Port)
 }
 
 function Ensure-AdminWebDependencies {
@@ -275,7 +276,7 @@ $services = @(
     WorkingDirectory    = $authServiceWorkingDirectory
     StartCommand        = 'mvn spring-boot:run'
     PidFile             = Join-Path $runDirectory 'finex-auth-service.pid'
-    ShellMatchTokens    = Join-SearchTokens @('title finex-auth-service', $authServiceWorkingDirectory, 'mvn spring-boot:run')
+    ShellMatchTokens    = Join-SearchTokens @($authServiceWorkingDirectory, 'mvn spring-boot:run')
     ListenerMatchTokens = Join-SearchTokens @((Join-Path $authServiceWorkingDirectory 'target\classes'), 'com.finex.auth.AuthApplication')
   },
   [pscustomobject]@{
@@ -285,7 +286,7 @@ $services = @(
     WorkingDirectory    = $gatewayWorkingDirectory
     StartCommand        = 'mvn spring-boot:run'
     PidFile             = Join-Path $runDirectory 'finex-gateway.pid'
-    ShellMatchTokens    = Join-SearchTokens @('title finex-gateway', $gatewayWorkingDirectory, 'mvn spring-boot:run')
+    ShellMatchTokens    = Join-SearchTokens @($gatewayWorkingDirectory, 'mvn spring-boot:run')
     ListenerMatchTokens = Join-SearchTokens @((Join-Path $gatewayWorkingDirectory 'target\classes'), 'com.finex.gateway.GatewayApplication')
   },
   [pscustomobject]@{
@@ -293,14 +294,30 @@ $services = @(
     Title               = 'finex-admin-web'
     Port                = [int]$env:FINEX_FRONTEND_PORT
     WorkingDirectory    = $adminWebWorkingDirectory
-    StartCommand        = 'npm run dev'
+    StartCommand        = 'npm run dev -- --host 127.0.0.1 --strictPort'
     PidFile             = Join-Path $runDirectory 'finex-admin-web.pid'
-    ShellMatchTokens    = Join-SearchTokens @('title finex-admin-web', $adminWebWorkingDirectory, 'npm run dev')
+    ShellMatchTokens    = Join-SearchTokens @($adminWebWorkingDirectory, 'npm run dev')
     ListenerMatchTokens = Join-SearchTokens @($adminWebWorkingDirectory, 'vite\bin\vite.js')
   }
 )
 
 Write-Host ("[finex] Runtime directory: {0}" -f $runDirectory)
+
+# Never replace a service from another checkout (or an unrelated process) implicitly.
+# Check every port before stopping any process owned by this checkout.
+$preflightConflicts = @()
+foreach ($service in $services) {
+  foreach ($listenerProcessId in (Get-ListeningProcessIds -Port $service.Port)) {
+    if (-not (Test-ServiceListenerOwnership -Service $service -ProcessId $listenerProcessId)) {
+      $preflightConflicts += ("{0} port={1} pid={2}" -f $service.Name, $service.Port, $listenerProcessId)
+    }
+  }
+}
+if ($preflightConflicts.Count -gt 0) {
+  Write-Host '[finex] Another checkout or application is using a required port; existing services were left untouched:'
+  $preflightConflicts | ForEach-Object { Write-Host ("[finex]   {0}" -f $_) }
+  exit 1
+}
 
 foreach ($service in $services) {
   $trackedProcessId = Read-PidFileValue -PidFile $service.PidFile
@@ -354,14 +371,11 @@ foreach ($service in $services) {
 
 if ($conflicts.Count -gt 0) {
   $distinctConflicts = $conflicts | Sort-Object Port, ProcessId -Unique
-  Write-Host '[finex] The following ports are occupied by non-FinEx processes:'
+  Write-Host '[finex] The following ports are occupied by other processes:'
   foreach ($conflict in $distinctConflicts) {
     Write-Host ("[finex]   port={0} service={1} pid={2} name={3}" -f $conflict.Port, $conflict.Service, $conflict.ProcessId, $conflict.ProcessName)
-    if ($conflict.CommandLine) {
-      Write-Host ("[finex]     command={0}" -f $conflict.CommandLine)
-    }
   }
-  Write-Host '[finex] Close the external process or change the port in backend\.env.local.cmd, then run start-finex.bat again.'
+  Write-Host '[finex] Close the conflicting process or change the port in backend\.env.local.cmd, then retry.'
   exit 1
 }
 
@@ -372,4 +386,35 @@ foreach ($service in $services) {
   Start-ServiceShell -Service $service
 }
 
-Write-Host '[finex] FinEx services are starting in separate windows.'
+foreach ($service in $services) {
+  $deadline = (Get-Date).AddSeconds(120)
+  $ready = $false
+  while ((Get-Date) -lt $deadline) {
+    $listenerProcessIds = Get-ListeningProcessIds -Port $service.Port
+    foreach ($listenerProcessId in $listenerProcessIds) {
+      $snapshot = Get-ProcessSnapshot -ProcessId $listenerProcessId
+      if ($snapshot -and (Test-ContainsAllTokens -Text $snapshot.SearchText -Tokens $service.ListenerMatchTokens)) {
+        $ready = $true
+        break
+      }
+    }
+    if ($ready) { break }
+    $trackedProcessId = Read-PidFileValue -PidFile $service.PidFile
+    if (-not $trackedProcessId -or -not (Get-ProcessSnapshot -ProcessId $trackedProcessId)) { break }
+    Start-Sleep -Seconds 1
+  }
+  if (-not $ready) {
+    Write-Host ("[finex] {0} did not become ready on port {1}. Check its CMD window for details." -f $service.Name, $service.Port)
+    foreach ($startedService in $services) {
+      $trackedProcessId = Read-PidFileValue -PidFile $startedService.PidFile
+      if ($trackedProcessId -and (Test-ServiceShellOwnership -Service $startedService -ProcessId $trackedProcessId)) {
+        Stop-ProcessTree -ProcessId $trackedProcessId -Reason 'failed startup cleanup'
+      }
+      Remove-PidFileIfExists -PidFile $startedService.PidFile
+    }
+    exit 1
+  }
+  Write-Host ("[finex] {0} is listening on port {1}" -f $service.Name, $service.Port)
+}
+
+Write-Host '[finex] All FinEx services are ready.'

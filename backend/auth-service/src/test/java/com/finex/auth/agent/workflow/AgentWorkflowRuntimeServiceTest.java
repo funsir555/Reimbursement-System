@@ -6,6 +6,7 @@ import com.finex.auth.agent.desensitization.DesensitizationService;
 import com.finex.auth.agent.desensitization.DesensitizedData;
 import com.finex.auth.agent.model.ChatModelProvider;
 import com.finex.auth.agent.model.ModelRoutingService;
+import com.finex.auth.agent.ontology.OntologyResultContextService;
 import com.finex.auth.entity.ArchiveAgentDefinition;
 import com.finex.auth.entity.ArchiveAgentRun;
 import com.finex.auth.entity.ArchiveAgentVersion;
@@ -95,7 +96,7 @@ class AgentWorkflowRuntimeServiceTest {
                 masking, model,
                 mock(ArchiveAgentRunMapper.class), mock(ArchiveAgentRunStepMapper.class),
                 mock(ArchiveAgentDefinitionMapper.class), json, authorization,
-                mock(DigitalEmployeeService.class));
+                mock(DigitalEmployeeService.class), mock(OntologyResultContextService.class));
         TenantContext.setTenantId("default");
         TenantContext.setCompanyId("COMPANY-A");
         TenantContext.setUserId(7L);
@@ -141,6 +142,9 @@ class AgentWorkflowRuntimeServiceTest {
         ArchiveAgentRunStepMapper stepMapper = mock(ArchiveAgentRunStepMapper.class);
         ArchiveAgentDefinitionMapper definitionMapper = mock(ArchiveAgentDefinitionMapper.class);
         QueryAuthorizationService authorizationService = mock(QueryAuthorizationService.class);
+        OntologyResultContextService ontologyContext = mock(OntologyResultContextService.class);
+        when(ontologyContext.forAnalysis(anyString(), any(), any()))
+                .thenReturn(Map.of("terms", List.of(Map.of("name", "报销单")), "fieldRelations", List.of()));
         QueryAuthorization authorization = new QueryAuthorization(7L, 7L,
                 QueryAuthorizationService.EXPENSE_QUERY,
                 List.of(new QueryAuthorization.Grant("SELF", Set.of("GROUP_HQ"), Set.of(7L))),
@@ -162,7 +166,8 @@ class AgentWorkflowRuntimeServiceTest {
                 definitionMapper,
                 objectMapper,
                 authorizationService,
-                mock(DigitalEmployeeService.class)
+                mock(DigitalEmployeeService.class),
+                ontologyContext
         );
 
         Map<String, Object> config = workflowConfig();
@@ -203,11 +208,14 @@ class AgentWorkflowRuntimeServiceTest {
                 .records(List.of(record))
                 .evidenceRefs(List.of("EXPENSE_DOCUMENT:1"))
                 .build());
-        when(desensitizationService.desensitizeJsonFields(anyString(), anyString(), any(), any())).thenReturn(DesensitizedData.builder()
-                .success(true)
-                .mappingId("mapping-1")
-                .maskedText("{\"title\":\"[PERSON_001]差旅费\"}")
-                .build());
+        when(desensitizationService.desensitizeJsonFields(anyString(), anyString(), any(), any()))
+                .thenAnswer(call -> {
+                    String payload = call.getArgument(1);
+                    assertTrue(payload.contains("\"businessOntology\""));
+                    assertTrue(payload.contains("报销单"));
+                    return DesensitizedData.builder().success(true).mappingId("mapping-1")
+                            .maskedText("{\"title\":\"[PERSON_001]差旅费\"}").build();
+                });
         when(modelRoutingService.chatWithPreferredProvider(any(), any(), any(), any())).thenReturn(
                 ChatModelProvider.ChatResponse.builder()
                         .success(true)

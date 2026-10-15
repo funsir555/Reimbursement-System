@@ -53,33 +53,9 @@ public class DeepSeekProvider implements ChatModelProvider {
     public ChatResponse chat(ChatRequest request) {
         try {
             long startTime = System.currentTimeMillis();
-
-            // 构建 InvocationContext
-            Map<String, Object> modelConfig = new HashMap<>();
-            modelConfig.put("temperature", request.getTemperature() != null ? request.getTemperature() : 0.7);
-            modelConfig.put("max_tokens", request.getMaxTokens() != null ? request.getMaxTokens() : 2000);
             String requestedModel = getStringExtraParam(request, "model");
-            if (!requestedModel.isBlank()) {
-                modelConfig.put("model", requestedModel);
-            }
-
-            Map<String, Object> promptConfig = new HashMap<>();
-            if (request.getSystemPrompt() != null) {
-                promptConfig.put("system_prompt", request.getSystemPrompt());
-            }
-            promptConfig.put("messages", convertMessages(request.getMessages()));
-
-            ModelProviderAdapter.InvocationContext context = new ModelProviderAdapter.InvocationContext(
-                    null,  // userId
-                    "finwork-chat",
-                    modelConfig,
-                    promptConfig,
-                    new HashMap<>(),
-                    new HashMap<>()
-            );
-
             // 调用现有的 ModelProviderAdapter
-            ModelProviderAdapter.InvocationResult result = modelProviderAdapter.invoke(context);
+            ModelProviderAdapter.InvocationResult result = modelProviderAdapter.invoke(context(request));
 
             long latency = System.currentTimeMillis() - startTime;
 
@@ -103,9 +79,32 @@ public class DeepSeekProvider implements ChatModelProvider {
 
     @Override
     public ChatResponse chatStream(ChatRequest request, StreamHandler handler) {
-        // 流式实现可以后续添加
-        log.warn("DeepSeek 流式调用暂未实现，回退到同步调用");
-        return chat(request);
+        try {
+            long started = System.currentTimeMillis();
+            ModelProviderAdapter.InvocationResult result = modelProviderAdapter.invokeStream(
+                    context(request), handler::onChunk);
+            String model = getStringExtraParam(request, "model");
+            return ChatResponse.builder().content(result.content())
+                    .model(model.isBlank() ? "deepseek-chat" : model)
+                    .tokenUsage(extractTokenUsage(result.outputPayload()))
+                    .success(true).latencyMs((int) (System.currentTimeMillis() - started)).build();
+        } catch (Exception error) {
+            log.error("DeepSeek 流式调用失败", error);
+            return ChatResponse.builder().success(false).errorMessage("DeepSeek 流式调用失败").build();
+        }
+    }
+
+    private ModelProviderAdapter.InvocationContext context(ChatRequest request) {
+        Map<String, Object> modelConfig = new HashMap<>();
+        modelConfig.put("temperature", request.getTemperature() != null ? request.getTemperature() : 0.7);
+        modelConfig.put("max_tokens", request.getMaxTokens() != null ? request.getMaxTokens() : 2000);
+        String model = getStringExtraParam(request, "model");
+        if (!model.isBlank()) modelConfig.put("model", model);
+        Map<String, Object> promptConfig = new HashMap<>();
+        if (request.getSystemPrompt() != null) promptConfig.put("system_prompt", request.getSystemPrompt());
+        promptConfig.put("messages", convertMessages(request.getMessages()));
+        return new ModelProviderAdapter.InvocationContext(null, "finwork-chat", modelConfig,
+                promptConfig, new HashMap<>(), new HashMap<>());
     }
 
     /**

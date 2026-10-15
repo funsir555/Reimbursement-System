@@ -86,7 +86,7 @@ finex:
           modelPath: "${LOCAL_MODEL_NAME:deepseek-r1:7b}"
           capabilities:
             chatCompletion: true
-            streamingSupport: false
+            streamingSupport: true
             maxContextTokens: 8192
             deployment: "ON_PREMISE"
             dataResidency: "ON_PREMISE"

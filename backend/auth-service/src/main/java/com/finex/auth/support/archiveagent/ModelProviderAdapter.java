@@ -8,6 +8,12 @@ public interface ModelProviderAdapter {
 
     InvocationResult invoke(InvocationContext context);
 
+    default InvocationResult invokeStream(InvocationContext context, java.util.function.Consumer<String> onChunk) {
+        InvocationResult result = invoke(context);
+        if (result.content() != null && !result.content().isEmpty()) onChunk.accept(result.content());
+        return result;
+    }
+
     record InvocationContext(
             Long userId,
             String agentName,

@@ -10,6 +10,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 
@@ -45,47 +48,7 @@ public class DeepSeekModelProviderAdapter implements ModelProviderAdapter {
     public InvocationResult invoke(InvocationContext context) {
         try {
             log.debug("调用 DeepSeek API: endpoint={}", endpoint);
-
-            // 构建请求体
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", context.modelConfig().getOrDefault("model", "deepseek-chat"));
-
-            // 构建消息列表
-            List<Map<String, String>> messages = new ArrayList<>();
-
-            // 添加系统提示
-            Object systemPrompt = context.promptConfig().get("system_prompt");
-            if (systemPrompt != null && !systemPrompt.toString().isEmpty()) {
-                Map<String, String> systemMsg = new HashMap<>();
-                systemMsg.put("role", "system");
-                systemMsg.put("content", systemPrompt.toString());
-                messages.add(systemMsg);
-            }
-
-            // 添加历史消息
-            Object messagesObj = context.promptConfig().get("messages");
-            if (messagesObj instanceof List) {
-                List<?> msgList = (List<?>) messagesObj;
-                for (Object msgObj : msgList) {
-                    if (msgObj instanceof Map) {
-                        Map<?, ?> msg = (Map<?, ?>) msgObj;
-                        Map<String, String> message = new HashMap<>();
-                        message.put("role", String.valueOf(msg.get("role")));
-                        message.put("content", String.valueOf(msg.get("content")));
-                        messages.add(message);
-                    }
-                }
-            }
-
-            requestBody.put("messages", messages);
-
-            // 添加可选参数
-            requestBody.put("temperature", context.modelConfig().getOrDefault("temperature", 0.7));
-            requestBody.put("max_tokens", context.modelConfig().getOrDefault("max_tokens", 2000));
-            requestBody.put("stream", false);
-
-            String requestJson = objectMapper.writeValueAsString(requestBody);
-            log.debug("DeepSeek 请求体: {}", requestJson);
+            String requestJson = objectMapper.writeValueAsString(buildRequestBody(context, false));
 
             // 发送 HTTP 请求
             HttpRequest httpRequest = HttpRequest.newBuilder()
@@ -120,6 +83,73 @@ public class DeepSeekModelProviderAdapter implements ModelProviderAdapter {
             log.error("DeepSeek API 调用失败", e);
             throw new RuntimeException("DeepSeek API 调用失败: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public InvocationResult invokeStream(InvocationContext context,
+                                         java.util.function.Consumer<String> onChunk) {
+        try {
+            String requestJson = objectMapper.writeValueAsString(buildRequestBody(context, true));
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(endpoint))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .timeout(Duration.ofSeconds(120))
+                    .POST(HttpRequest.BodyPublishers.ofString(requestJson)).build();
+            HttpResponse<java.io.InputStream> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() != 200) {
+                response.body().close();
+                throw new IllegalStateException("DeepSeek API 返回错误: " + response.statusCode());
+            }
+            StringBuilder content = new StringBuilder();
+            boolean completed = false;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("data:")) continue;
+                    String payload = line.substring(5).trim();
+                    if ("[DONE]".equals(payload)) {
+                        completed = true;
+                        break;
+                    }
+                    if (payload.isBlank()) continue;
+                    Map<?, ?> event = objectMapper.readValue(payload, Map.class);
+                    Object choices = event.get("choices");
+                    if (!(choices instanceof List<?> list) || list.isEmpty()
+                            || !(list.get(0) instanceof Map<?, ?> choice)
+                            || !(choice.get("delta") instanceof Map<?, ?> delta)) continue;
+                    Object part = delta.get("content");
+                    if (part instanceof String text && !text.isEmpty()) {
+                        content.append(text);
+                        onChunk.accept(text);
+                    }
+                }
+            }
+            if (!completed) throw new IllegalStateException("DeepSeek 流式响应未完整结束");
+            return new InvocationResult(content.toString(), Map.of());
+        } catch (Exception error) {
+            throw new IllegalStateException("DeepSeek 流式调用失败", error);
+        }
+    }
+
+    private Map<String, Object> buildRequestBody(InvocationContext context, boolean stream) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", context.modelConfig().getOrDefault("model", "deepseek-chat"));
+        List<Map<String, String>> messages = new ArrayList<>();
+        Object systemPrompt = context.promptConfig().get("system_prompt");
+        if (systemPrompt != null && !systemPrompt.toString().isEmpty())
+            messages.add(Map.of("role", "system", "content", systemPrompt.toString()));
+        Object history = context.promptConfig().get("messages");
+        if (history instanceof List<?> list) for (Object item : list) {
+            if (item instanceof Map<?, ?> message)
+                messages.add(Map.of("role", String.valueOf(message.get("role")),
+                        "content", String.valueOf(message.get("content"))));
+        }
+        body.put("messages", messages);
+        body.put("temperature", context.modelConfig().getOrDefault("temperature", 0.7));
+        body.put("max_tokens", context.modelConfig().getOrDefault("max_tokens", 2000));
+        body.put("stream", stream);
+        return body;
     }
 
     /**
